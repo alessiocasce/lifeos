@@ -38,6 +38,26 @@ const workoutSelect = `
   )
 `;
 
+const healthLogSelect = `
+  id,
+  user_id,
+  logged_on,
+  sleep_hours,
+  sleep_start,
+  wake_time,
+  sleep_quality,
+  energy,
+  coffee,
+  water,
+  mood,
+  social_time_minutes,
+  main_time_waster,
+  notes,
+  hygiene,
+  created_at,
+  updated_at
+`;
+
 export const authApi = {
   async getSession() {
     return throwIfError(await requireSupabase().auth.getSession());
@@ -146,15 +166,43 @@ export const workoutSetApi = {
   },
 };
 
+export const healthLogApi = {
+  async list(limit = 30) {
+    return throwIfError(
+      await requireSupabase()
+        .from('health_logs')
+        .select(healthLogSelect)
+        .order('logged_on', { ascending: false })
+        .limit(limit),
+    );
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('health_logs')
+        .insert(prepareHealthLogPayload(payload))
+        .select(healthLogSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('health_logs')
+        .update(prepareHealthLogPayload(patch))
+        .eq('id', id)
+        .select(healthLogSelect)
+        .single(),
+    );
+  },
+};
+
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
-  healthLogs: {
-    list: async () => throwIfError(await requireSupabase().from('health_logs').select('*').order('logged_on', { ascending: false })),
-    create: async (payload) => throwIfError(await requireSupabase().from('health_logs').insert(payload).select('*').single()),
-    update: async (id, patch) => throwIfError(await requireSupabase().from('health_logs').update(patch).eq('id', id).select('*').single()),
-    delete: async (id) => throwIfError(await requireSupabase().from('health_logs').delete().eq('id', id)),
-  },
+  healthLogs: healthLogApi,
   expenses: {
     list: async () => throwIfError(await requireSupabase().from('expenses').select('*').order('spent_on', { ascending: false })),
     create: async (payload) => throwIfError(await requireSupabase().from('expenses').insert(payload).select('*').single()),
@@ -174,6 +222,12 @@ export const lifeosApi = {
     delete: async (id) => throwIfError(await requireSupabase().from('chat_messages').delete().eq('id', id)),
   },
 };
+
+function prepareHealthLogPayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
 
 function normalizeWorkouts(rows = []) {
   return rows.map(normalizeWorkout);

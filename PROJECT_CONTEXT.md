@@ -100,20 +100,53 @@ Real/persisted today:
 - Workout session create/select/end/delete.
 - Workout set create/edit/delete.
 - Workout analytics are computed frontend-only from persisted workout/session data.
+- Health daily logs persisted in `health_logs`.
+- Health tab creates or updates one log per `user_id + logged_on` and shows persisted 7-day history/summaries.
 
 Partially wired but not fully used in UI:
 
-- `lifeosApi.js` has basic list/create/update/delete wrappers for `health_logs`, `expenses`, `daily_reviews`, and `chat_messages`.
+- `lifeosApi.js` has basic list/create/update/delete wrappers for `expenses`, `daily_reviews`, and `chat_messages`.
 - The database schema and RLS support these tables.
 
 Still mostly mock/local:
 
 - Home tab agenda, health snapshot, finance summary, and daily pulse data.
 - Calendar tab events and AI triage behavior.
-- Health tab sliders, steppers, hygiene checklist, and consistency graph.
 - Finances tab balance, ledger entries, rapid-entry form, and budget chart.
 - AI Assistant tab messages, markdown-like presentation, and accept/reject widgets.
 - Workout sample archive uses mock examples from `src/data/lifeosData.js`, visually separated from persisted data.
+
+## Health Module Current Status
+
+`src/tabs/HealthTab.jsx` is Supabase-backed and mobile-first.
+
+Current `health_logs` fields:
+
+- `logged_on`
+- `sleep_hours`
+- `sleep_start`
+- `wake_time`
+- `sleep_quality`
+- `energy`
+- `mood`
+- `water`
+- `coffee`
+- `social_time_minutes`
+- `main_time_waster`
+- `notes`
+- `hygiene`
+
+Current behavior:
+
+- Loads the current authenticated user's health logs through RLS.
+- Shows today's log first when it exists.
+- Saves today's log by updating the existing row when `logged_on` already exists.
+- Creates a new row when no log exists for the selected `logged_on`.
+- Uses the `user_id + logged_on` unique constraint to avoid duplicate daily logs.
+- Shows compact 7-day history from persisted rows only.
+- Shows simple persisted summaries: average sleep hours, mood, energy, sleep quality, and total social time.
+- Does not auto-calculate sleep time; `sleep_hours` is manually entered.
+- Does not use iPhone Screen Time integration yet.
 
 ## Workout Module Current Status
 
@@ -210,6 +243,11 @@ Workout mobile direction:
 
 - Test global Supabase Auth gate with fresh sign up, email-confirmation flow, sign in, sign out, and page reload.
 - Test app behavior when Supabase env vars are missing.
+- Test Health tab after running the latest `health_logs` migration:
+  - Create today's log when none exists.
+  - Save today's log again and confirm it updates instead of duplicating.
+  - Confirm 7-day summaries use persisted rows only.
+  - Confirm numeric fields reject out-of-range values.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
@@ -232,7 +270,7 @@ Workout mobile direction:
 
 1. Harden the workout vertical slice before expanding other tabs.
 2. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
-3. Convert the Health tab from local state to Supabase `health_logs`.
+3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
 4. Convert the Finances tab to Supabase `expenses`.
 5. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
 6. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.

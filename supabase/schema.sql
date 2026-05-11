@@ -35,10 +35,16 @@ create table if not exists public.health_logs (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   logged_on date not null default current_date,
   sleep_hours numeric(4,2),
+  sleep_start time,
+  wake_time time,
   sleep_quality integer check (sleep_quality between 0 and 100),
+  energy integer check (energy between 1 and 10),
   coffee integer not null default 0 check (coffee >= 0),
   water integer not null default 0 check (water >= 0),
   mood integer check (mood between 1 and 10),
+  social_time_minutes integer not null default 0 check (social_time_minutes >= 0),
+  main_time_waster text,
+  notes text,
   hygiene jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -96,6 +102,12 @@ alter table public.workout_sets alter column set_number set not null;
 
 alter table public.health_logs add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.health_logs alter column user_id set default auth.uid();
+alter table public.health_logs add column if not exists sleep_start time;
+alter table public.health_logs add column if not exists wake_time time;
+alter table public.health_logs add column if not exists energy integer check (energy between 1 and 10);
+alter table public.health_logs add column if not exists social_time_minutes integer not null default 0 check (social_time_minutes >= 0);
+alter table public.health_logs add column if not exists main_time_waster text;
+alter table public.health_logs add column if not exists notes text;
 
 alter table public.expenses add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.expenses alter column user_id set default auth.uid();

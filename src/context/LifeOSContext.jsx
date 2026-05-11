@@ -12,9 +12,10 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { authApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
+import { authApi, healthLogApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
+const today = () => new Date().toISOString().slice(0, 10);
 
 const toMinutes = (time) => {
   const [hours, minutes] = time.split(':').map(Number);
@@ -36,6 +37,9 @@ export function LifeOSProvider({ children }) {
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [workoutSessionsStatus, setWorkoutSessionsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [workoutSessionsError, setWorkoutSessionsError] = useState('');
+  const [healthLogs, setHealthLogs] = useState([]);
+  const [healthLogsStatus, setHealthLogsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [healthLogsError, setHealthLogsError] = useState('');
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -103,6 +107,37 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadWorkoutSessions();
   }, [loadWorkoutSessions]);
+
+  const loadHealthLogs = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setHealthLogsStatus('not-configured');
+      return;
+    }
+
+    if (!authUser) {
+      setHealthLogs([]);
+      setHealth(initialHealth);
+      setHealthLogsStatus('no-session');
+      return;
+    }
+
+    setHealthLogsStatus('loading');
+    setHealthLogsError('');
+    try {
+      const rows = await healthLogApi.list();
+      const sortedRows = sortHealthLogs(rows ?? []);
+      setHealthLogs(sortedRows);
+      setHealth(healthSnapshotFromLog(sortedRows.find((log) => log.logged_on === today()) ?? sortedRows[0]));
+      setHealthLogsStatus('ready');
+    } catch (error) {
+      setHealthLogsError(error.message || 'Failed to load health logs.');
+      setHealthLogsStatus('error');
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadHealthLogs();
+  }, [loadHealthLogs]);
 
   const activeWorkoutSession = useMemo(
     () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
@@ -182,6 +217,8 @@ export function LifeOSProvider({ children }) {
         setAuthUser(null);
         setWorkoutSessions([]);
         setActiveWorkoutId(null);
+        setHealthLogs([]);
+        setHealth(initialHealth);
       },
       reloadWorkoutSessions: loadWorkoutSessions,
       createWorkoutSession: async (payload) => {
@@ -258,6 +295,25 @@ export function LifeOSProvider({ children }) {
           })),
         );
       },
+      reloadHealthLogs: loadHealthLogs,
+      saveHealthLog: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before saving a health log.');
+        }
+
+        const normalizedPayload = normalizeHealthLogPayload(payload);
+        const existing = healthLogs.find((log) => log.logged_on === normalizedPayload.logged_on);
+        const saved = existing
+          ? await healthLogApi.update(existing.id, normalizedPayload)
+          : await healthLogApi.create(normalizedPayload);
+
+        setHealthLogs((prev) => sortHealthLogs([saved, ...prev.filter((log) => log.id !== saved.id)]));
+        if (saved.logged_on === today()) {
+          setHealth(healthSnapshotFromLog(saved));
+        }
+        setHealthLogsStatus('ready');
+        return saved;
+      },
       addTransaction: ({ amount, category }) =>
         setFinance((prev) => {
           const numericAmount = Number(amount);
@@ -304,7 +360,7 @@ export function LifeOSProvider({ children }) {
           ),
         ),
     }),
-    [activeWorkoutId, authUser, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, healthLogs, loadHealthLogs, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {
@@ -312,6 +368,9 @@ export function LifeOSProvider({ children }) {
     selectedDay,
     aiTriage,
     health,
+    healthLogs,
+    healthLogsError,
+    healthLogsStatus,
     finance,
     expandedWorkout,
     chatMessages,
@@ -340,6 +399,59 @@ export function LifeOSProvider({ children }) {
   };
 
   return <LifeOSContext.Provider value={value}>{children}</LifeOSContext.Provider>;
+}
+
+function sortHealthLogs(rows = []) {
+  return rows.slice().sort((a, b) => {
+    if (a.logged_on !== b.logged_on) return new Date(b.logged_on) - new Date(a.logged_on);
+    return new Date(b.updated_at ?? 0) - new Date(a.updated_at ?? 0);
+  });
+}
+
+function normalizeHealthLogPayload(payload) {
+  return {
+    logged_on: payload.logged_on,
+    sleep_hours: numberOrNull(payload.sleep_hours),
+    sleep_start: payload.sleep_start || null,
+    wake_time: payload.wake_time || null,
+    sleep_quality: integerOrNull(payload.sleep_quality),
+    energy: integerOrNull(payload.energy),
+    coffee: Math.max(0, integerOrZero(payload.coffee)),
+    water: Math.max(0, integerOrZero(payload.water)),
+    mood: integerOrNull(payload.mood),
+    social_time_minutes: Math.max(0, integerOrZero(payload.social_time_minutes)),
+    main_time_waster: payload.main_time_waster?.trim() || null,
+    notes: payload.notes?.trim() || null,
+    hygiene: Array.isArray(payload.hygiene) ? payload.hygiene : initialHealth.hygiene,
+  };
+}
+
+function healthSnapshotFromLog(log) {
+  if (!log) return initialHealth;
+  return {
+    ...initialHealth,
+    sleepHours: Number(log.sleep_hours ?? initialHealth.sleepHours),
+    sleepQuality: Number(log.sleep_quality ?? initialHealth.sleepQuality),
+    coffee: Number(log.coffee ?? initialHealth.coffee),
+    water: Number(log.water ?? initialHealth.water),
+    mood: Number(log.mood ?? initialHealth.mood),
+    hygiene: Array.isArray(log.hygiene) ? log.hygiene : initialHealth.hygiene,
+  };
+}
+
+function numberOrNull(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function integerOrNull(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function integerOrZero(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function useLifeOS() {
