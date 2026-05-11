@@ -12,7 +12,7 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { workoutSetApi } from '../services/lifeosApi';
+import { authApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
 
@@ -29,31 +29,90 @@ export function LifeOSProvider({ children }) {
   const [finance, setFinance] = useState(financeData);
   const [expandedWorkout, setExpandedWorkout] = useState(workoutData.history[0].date);
   const [chatMessages, setChatMessages] = useState(assistantMessages);
-  const [workoutSets, setWorkoutSets] = useState([]);
-  const [workoutSetsStatus, setWorkoutSetsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
-  const [workoutSetsError, setWorkoutSetsError] = useState('');
+  const [authUser, setAuthUser] = useState(null);
+  const [authStatus, setAuthStatus] = useState(isSupabaseConfigured ? 'loading' : 'not-configured');
+  const [authError, setAuthError] = useState('');
+  const [workoutSessions, setWorkoutSessions] = useState([]);
+  const [activeWorkoutId, setActiveWorkoutId] = useState(null);
+  const [workoutSessionsStatus, setWorkoutSessionsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [workoutSessionsError, setWorkoutSessionsError] = useState('');
 
-  const loadWorkoutSets = useCallback(async () => {
+  useEffect(() => {
     if (!isSupabaseConfigured) {
-      setWorkoutSetsStatus('not-configured');
+      setAuthStatus('not-configured');
       return;
     }
 
-    setWorkoutSetsStatus('loading');
-    setWorkoutSetsError('');
-    try {
-      const rows = await workoutSetApi.list();
-      setWorkoutSets(rows ?? []);
-      setWorkoutSetsStatus('ready');
-    } catch (error) {
-      setWorkoutSetsError(error.message || 'Failed to load workout sets.');
-      setWorkoutSetsStatus('error');
-    }
+    let active = true;
+
+    authApi
+      .getSession()
+      .then(({ session }) => {
+        if (!active) return;
+        setAuthUser(session?.user ?? null);
+        setAuthStatus('ready');
+      })
+      .catch((error) => {
+        if (!active) return;
+        setAuthError(error.message || 'Failed to load Supabase session.');
+        setAuthStatus('error');
+      });
+
+    const subscription = authApi.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      setAuthStatus('ready');
+      setAuthError('');
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
+  const loadWorkoutSessions = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setWorkoutSessionsStatus('not-configured');
+      return;
+    }
+
+    if (!authUser) {
+      setWorkoutSessions([]);
+      setActiveWorkoutId(null);
+      setWorkoutSessionsStatus('no-session');
+      return;
+    }
+
+    setWorkoutSessionsStatus('loading');
+    setWorkoutSessionsError('');
+    try {
+      const rows = await workoutApi.list();
+      setWorkoutSessions(rows ?? []);
+      setActiveWorkoutId((currentId) => {
+        if (currentId && rows.some((session) => session.id === currentId)) return currentId;
+        const todaysSession = rows.find((session) => session.performed_on === new Date().toISOString().slice(0, 10));
+        return todaysSession?.id ?? rows[0]?.id ?? null;
+      });
+      setWorkoutSessionsStatus('ready');
+    } catch (error) {
+      setWorkoutSessionsError(error.message || 'Failed to load workout sessions.');
+      setWorkoutSessionsStatus('error');
+    }
+  }, [authUser]);
+
   useEffect(() => {
-    loadWorkoutSets();
-  }, [loadWorkoutSets]);
+    loadWorkoutSessions();
+  }, [loadWorkoutSessions]);
+
+  const activeWorkoutSession = useMemo(
+    () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
+    [activeWorkoutId, workoutSessions],
+  );
+
+  const workoutSets = useMemo(
+    () => workoutSessions.flatMap((session) => session.workout_sets ?? []),
+    [workoutSessions],
+  );
 
   const workoutStatus = useMemo(() => {
     const workoutStart = toMinutes('15:00');
@@ -105,25 +164,80 @@ export function LifeOSProvider({ children }) {
           hygiene: prev.hygiene.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
         })),
       setExpandedWorkout,
-      reloadWorkoutSets: loadWorkoutSets,
-      createWorkoutSet: async (payload) => {
-        if (!isSupabaseConfigured) {
-          throw new Error('Supabase is not configured. Add .env.local values and restart the dev server.');
+      setActiveWorkoutId,
+      signIn: async (credentials) => {
+        setAuthError('');
+        const data = await authApi.signInWithPassword(credentials);
+        setAuthUser(data.user ?? data.session?.user ?? null);
+        return data;
+      },
+      signUp: async (credentials) => {
+        setAuthError('');
+        const data = await authApi.signUp(credentials);
+        setAuthUser(data.user ?? data.session?.user ?? null);
+        return data;
+      },
+      signOut: async () => {
+        await authApi.signOut();
+        setAuthUser(null);
+        setWorkoutSessions([]);
+        setActiveWorkoutId(null);
+      },
+      reloadWorkoutSessions: loadWorkoutSessions,
+      createWorkoutSession: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before creating a workout session.');
         }
-        setWorkoutSetsError('');
+        const created = await workoutApi.create(payload);
+        setWorkoutSessions((prev) => [created, ...prev]);
+        setActiveWorkoutId(created.id);
+        setWorkoutSessionsStatus('ready');
+        return created;
+      },
+      updateWorkoutSession: async (id, patch) => {
+        const updated = await workoutApi.update(id, patch);
+        setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
+        return updated;
+      },
+      createWorkoutSet: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before logging a set.');
+        }
+        setWorkoutSessionsError('');
         const created = await workoutSetApi.create(payload);
-        setWorkoutSets((prev) => [created, ...prev]);
-        setWorkoutSetsStatus('ready');
+        setWorkoutSessions((prev) =>
+          prev.map((session) =>
+            session.id === created.workout_id
+              ? {
+                  ...session,
+                  workout_sets: [created, ...(session.workout_sets ?? [])].sort(
+                    (a, b) => Number(a.set_number) - Number(b.set_number),
+                  ),
+                }
+              : session,
+          ),
+        );
+        setWorkoutSessionsStatus('ready');
         return created;
       },
       updateWorkoutSet: async (id, patch) => {
         const updated = await workoutSetApi.update(id, patch);
-        setWorkoutSets((prev) => prev.map((set) => (set.id === id ? updated : set)));
+        setWorkoutSessions((prev) =>
+          prev.map((session) => ({
+            ...session,
+            workout_sets: (session.workout_sets ?? []).map((set) => (set.id === id ? updated : set)),
+          })),
+        );
         return updated;
       },
       deleteWorkoutSet: async (id) => {
         await workoutSetApi.delete(id);
-        setWorkoutSets((prev) => prev.filter((set) => set.id !== id));
+        setWorkoutSessions((prev) =>
+          prev.map((session) => ({
+            ...session,
+            workout_sets: (session.workout_sets ?? []).filter((set) => set.id !== id),
+          })),
+        );
       },
       addTransaction: ({ amount, category }) =>
         setFinance((prev) => {
@@ -171,7 +285,7 @@ export function LifeOSProvider({ children }) {
           ),
         ),
     }),
-    [loadWorkoutSets],
+    [authUser, loadWorkoutSessions],
   );
 
   const value = {
@@ -182,6 +296,9 @@ export function LifeOSProvider({ children }) {
     finance,
     expandedWorkout,
     chatMessages,
+    authError,
+    authStatus,
+    authUser,
     isSupabaseConfigured,
     agendaBlocks,
     calendarWeeks,
@@ -191,9 +308,14 @@ export function LifeOSProvider({ children }) {
     tabs,
     timelineWindow,
     workout: workoutData,
+    activeWorkoutId,
+    activeWorkoutSession,
     workoutSets,
-    workoutSetsError,
-    workoutSetsStatus,
+    workoutSessions,
+    workoutSessionsError,
+    workoutSessionsStatus,
+    workoutSetsError: workoutSessionsError,
+    workoutSetsStatus: workoutSessionsStatus,
     workoutStatus,
     ...actions,
   };

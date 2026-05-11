@@ -12,61 +12,142 @@ const throwIfError = ({ data, error }) => {
   return data;
 };
 
-export const workoutSetApi = {
-  async list(limit = 50) {
-    const client = requireSupabase();
-    return throwIfError(
-      await client
-        .from('workout_sets')
-        .select('id, workout_id, exercise, weight, reps, rpe, performed_at, notes, created_at, updated_at')
-        .order('performed_at', { ascending: false })
+const workoutSelect = `
+  id,
+  user_id,
+  name,
+  performed_on,
+  started_at,
+  ended_at,
+  notes,
+  created_at,
+  updated_at,
+  workout_sets (
+    id,
+    user_id,
+    workout_id,
+    exercise,
+    set_number,
+    weight,
+    reps,
+    rpe,
+    performed_at,
+    notes,
+    created_at,
+    updated_at
+  )
+`;
+
+export const authApi = {
+  async getSession() {
+    return throwIfError(await requireSupabase().auth.getSession());
+  },
+
+  async signInWithPassword({ email, password }) {
+    return throwIfError(await requireSupabase().auth.signInWithPassword({ email, password }));
+  },
+
+  async signUp({ email, password }) {
+    return throwIfError(await requireSupabase().auth.signUp({ email, password }));
+  },
+
+  async signOut() {
+    return throwIfError(await requireSupabase().auth.signOut());
+  },
+
+  onAuthStateChange(callback) {
+    if (!isSupabaseConfigured || !supabase) return { unsubscribe: () => {} };
+    const { data } = supabase.auth.onAuthStateChange(callback);
+    return data.subscription;
+  },
+};
+
+export const workoutApi = {
+  async list(limit = 25) {
+    const rows = throwIfError(
+      await requireSupabase()
+        .from('workouts')
+        .select(workoutSelect)
+        .order('performed_on', { ascending: false })
+        .order('started_at', { ascending: false })
         .limit(limit),
     );
+
+    return normalizeWorkouts(rows);
   },
 
   async create(payload) {
-    const client = requireSupabase();
+    const row = throwIfError(
+      await requireSupabase()
+        .from('workouts')
+        .insert({
+          name: payload.name,
+          performed_on: payload.performed_on,
+          started_at: payload.started_at || new Date().toISOString(),
+          ended_at: payload.ended_at || null,
+          notes: payload.notes || null,
+        })
+        .select(workoutSelect)
+        .single(),
+    );
+
+    return normalizeWorkout(row);
+  },
+
+  async update(id, patch) {
+    const row = throwIfError(
+      await requireSupabase().from('workouts').update(patch).eq('id', id).select(workoutSelect).single(),
+    );
+    return normalizeWorkout(row);
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('workouts').delete().eq('id', id));
+  },
+};
+
+export const workoutSetApi = {
+  async create(payload) {
     return throwIfError(
-      await client
+      await requireSupabase()
         .from('workout_sets')
         .insert({
+          workout_id: payload.workout_id,
           exercise: payload.exercise,
+          set_number: Number(payload.set_number),
           weight: Number(payload.weight),
           reps: Number(payload.reps),
           rpe: Number(payload.rpe),
-          performed_at: new Date(payload.date).toISOString(),
+          performed_at: payload.performed_at,
           notes: payload.notes || null,
         })
-        .select('id, workout_id, exercise, weight, reps, rpe, performed_at, notes, created_at, updated_at')
+        .select(
+          'id, user_id, workout_id, exercise, set_number, weight, reps, rpe, performed_at, notes, created_at, updated_at',
+        )
         .single(),
     );
   },
 
   async update(id, patch) {
-    const client = requireSupabase();
     return throwIfError(
-      await client
+      await requireSupabase()
         .from('workout_sets')
         .update(patch)
         .eq('id', id)
-        .select('id, workout_id, exercise, weight, reps, rpe, performed_at, notes, created_at, updated_at')
+        .select(
+          'id, user_id, workout_id, exercise, set_number, weight, reps, rpe, performed_at, notes, created_at, updated_at',
+        )
         .single(),
     );
   },
 
   async delete(id) {
-    const client = requireSupabase();
-    return throwIfError(await client.from('workout_sets').delete().eq('id', id));
+    return throwIfError(await requireSupabase().from('workout_sets').delete().eq('id', id));
   },
 };
 
 export const lifeosApi = {
-  workouts: {
-    list: async () => throwIfError(await requireSupabase().from('workouts').select('*').order('performed_on', { ascending: false })),
-    create: async (payload) => throwIfError(await requireSupabase().from('workouts').insert(payload).select('*').single()),
-    update: async (id, patch) => throwIfError(await requireSupabase().from('workouts').update(patch).eq('id', id).select('*').single()),
-    delete: async (id) => throwIfError(await requireSupabase().from('workouts').delete().eq('id', id)),
-  },
+  workouts: workoutApi,
   workoutSets: workoutSetApi,
   healthLogs: {
     list: async () => throwIfError(await requireSupabase().from('health_logs').select('*').order('logged_on', { ascending: false })),
@@ -93,3 +174,17 @@ export const lifeosApi = {
     delete: async (id) => throwIfError(await requireSupabase().from('chat_messages').delete().eq('id', id)),
   },
 };
+
+function normalizeWorkouts(rows = []) {
+  return rows.map(normalizeWorkout);
+}
+
+function normalizeWorkout(row) {
+  return {
+    ...row,
+    workout_sets: [...(row.workout_sets ?? [])].sort((a, b) => {
+      if (a.performed_at !== b.performed_at) return new Date(b.performed_at) - new Date(a.performed_at);
+      return Number(a.set_number) - Number(b.set_number);
+    }),
+  };
+}
