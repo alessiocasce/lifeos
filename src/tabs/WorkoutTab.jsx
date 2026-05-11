@@ -31,6 +31,7 @@ export function WorkoutTab() {
     expandedWorkout,
     setActiveWorkoutId,
     setExpandedWorkout,
+    updateWorkoutSession,
     updateWorkoutSet,
     workout,
     workoutSessions,
@@ -58,6 +59,7 @@ export function WorkoutTab() {
   const [savingSession, setSavingSession] = useState(false);
   const [selectingToday, setSelectingToday] = useState(false);
   const [endingSessionId, setEndingSessionId] = useState(null);
+  const [reopeningSessionId, setReopeningSessionId] = useState(null);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [showMockArchive, setShowMockArchive] = useState(false);
@@ -98,14 +100,16 @@ export function WorkoutTab() {
   }, [nextSetNumber]);
 
   useEffect(() => {
-    if (!activeWorkoutSession) {
+    if (!activeWorkoutSession || activeWorkoutSession.ended_at) {
       setIsRestTimerRunning(false);
       setRestElapsedSeconds(0);
+      setEditingSetId(null);
+      setEditForm(null);
     }
   }, [activeWorkoutSession]);
 
   useEffect(() => {
-    if (!activeWorkoutSession || !isRestTimerRunning) return undefined;
+    if (!activeWorkoutSession || activeWorkoutSession.ended_at || !isRestTimerRunning) return undefined;
     const interval = window.setInterval(() => {
       setRestElapsedSeconds((seconds) => seconds + 1);
     }, 1000);
@@ -169,6 +173,11 @@ export function WorkoutTab() {
     event.preventDefault();
     setFormError('');
 
+    if (activeWorkoutSession?.ended_at) {
+      setFormError('This workout is ended. Reopen it to add more sets.');
+      return;
+    }
+
     const validationError = validateSetForm(setForm, activeWorkoutSession);
     if (validationError) {
       setFormError(validationError);
@@ -207,6 +216,11 @@ export function WorkoutTab() {
   };
 
   const beginEdit = (set) => {
+    if (activeWorkoutSession?.ended_at) {
+      setFormError('This workout is ended. Reopen it to edit sets.');
+      return;
+    }
+
     setEditingSetId(set.id);
     setEditForm({
       exercise: set.exercise,
@@ -221,6 +235,12 @@ export function WorkoutTab() {
 
   const saveEdit = async (setId) => {
     setFormError('');
+
+    if (activeWorkoutSession?.ended_at) {
+      setFormError('This workout is ended. Reopen it to edit sets.');
+      return;
+    }
+
     const validationError = validateSetForm(editForm, activeWorkoutSession);
     if (validationError) {
       setFormError(validationError);
@@ -270,6 +290,18 @@ export function WorkoutTab() {
       setFormError(error.message || 'Failed to end workout.');
     } finally {
       setEndingSessionId(null);
+    }
+  };
+
+  const reopenSession = async (sessionId) => {
+    setReopeningSessionId(sessionId);
+    setFormError('');
+    try {
+      await updateWorkoutSession(sessionId, { ended_at: null });
+    } catch (error) {
+      setFormError(error.message || 'Failed to reopen workout.');
+    } finally {
+      setReopeningSessionId(null);
     }
   };
 
@@ -348,8 +380,10 @@ export function WorkoutTab() {
           endingSessionId={endingSessionId}
           onDeleteSession={removeSession}
           onEndSession={endSession}
+          onReopenSession={reopenSession}
           onSelectToday={selectOrStartToday}
           onStartWorkout={startWorkout}
+          reopeningSessionId={reopeningSessionId}
           savingSession={savingSession}
           selectingToday={selectingToday}
           sessionForm={sessionForm}
@@ -463,8 +497,10 @@ function SessionControlCard({
   endingSessionId,
   onDeleteSession,
   onEndSession,
+  onReopenSession,
   onSelectToday,
   onStartWorkout,
+  reopeningSessionId,
   savingSession,
   selectingToday,
   sessionForm,
@@ -526,15 +562,27 @@ function SessionControlCard({
 
         {activeSession ? (
           <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => onEndSession(activeSession.id)}
-              disabled={Boolean(activeSession.ended_at) || endingSessionId === activeSession.id}
-              className="flex h-9 items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-            >
-              {endingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-              {activeSession.ended_at ? 'Ended' : 'End'}
-            </button>
+            {activeSession.ended_at ? (
+              <button
+                type="button"
+                onClick={() => onReopenSession(activeSession.id)}
+                disabled={reopeningSessionId === activeSession.id}
+                className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              >
+                {reopeningSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                Reopen Workout
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onEndSession(activeSession.id)}
+                disabled={endingSessionId === activeSession.id}
+                className="flex h-9 items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              >
+                {endingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+                End
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onDeleteSession(activeSession.id)}
@@ -591,11 +639,17 @@ function SetLogger({
   setFormValue,
   updateSetForm,
 }) {
+  const isEnded = Boolean(activeSession?.ended_at);
+
   return (
     <Panel>
       <PanelHeader eyebrow="Active Logging" title="Set Logger" />
       <div className="p-3">
-        {activeSession ? (
+        {activeSession && isEnded ? (
+          <div className="rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-100">
+            This workout is ended. Reopen it to add more sets.
+          </div>
+        ) : activeSession ? (
           <div className="grid gap-3">
             <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
             <form onSubmit={onSetSubmit} className="grid gap-2">
@@ -764,7 +818,7 @@ function TodaySetsLog({
                     {!collapsed ? (
                       <div className="grid gap-1 border-t border-white/5 p-2">
                         {(session.workout_sets ?? []).map((set) => (
-                          <div key={set.id} className="grid grid-cols-[40px_1fr_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-1.5">
+                            <div key={set.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-1.5 sm:grid-cols-[40px_minmax(0,1fr)_auto]">
                             <span className="data-text text-xs text-cyan-300">#{set.set_number}</span>
                             <span className="truncate text-xs text-zinc-200">{set.exercise}</span>
                             <span className="data-text text-xs text-zinc-400">
@@ -801,6 +855,7 @@ function ExerciseSetGroup({
   workoutSessions,
 }) {
   const volume = sets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+  const isEnded = Boolean(session?.ended_at);
 
   return (
     <div className="rounded-md border border-white/5 bg-black/25">
@@ -836,10 +891,10 @@ function ExerciseSetGroup({
           }
 
           return (
-            <div key={set.id} className="grid grid-cols-[40px_1fr_auto_72px] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2">
+            <div key={set.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2 sm:grid-cols-[40px_minmax(0,1fr)_auto_72px]">
               <span className="data-text text-sm font-bold text-cyan-300">#{set.set_number}</span>
               <div className="min-w-0">
-                <div className="flex items-center gap-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
                   <p className="truncate text-xs font-medium text-zinc-100">{formatNumber(set.weight)}kg x {set.reps}</p>
                   <PrTags prs={prs} />
                 </div>
@@ -847,9 +902,9 @@ function ExerciseSetGroup({
                   RPE {formatNumber(set.rpe)} / {formatDate(set.performed_at)}
                 </p>
               </div>
-              <span className="data-text text-xs text-zinc-400">{Math.round(parseDecimal(set.weight) * parseInteger(set.reps))} vol</span>
+              <span className="hidden data-text text-xs text-zinc-400 sm:block">{Math.round(parseDecimal(set.weight) * parseInteger(set.reps))} vol</span>
               <div className="flex gap-1">
-                <IconButton icon={Pencil} onClick={() => beginEdit(set)} title="Edit set" tone="zinc" size="sm" />
+                <IconButton disabled={isEnded} icon={Pencil} onClick={() => beginEdit(set)} title={isEnded ? 'Reopen workout to edit' : 'Edit set'} tone="zinc" size="sm" />
                 <IconButton icon={Trash2} loading={deletingSetId === set.id} onClick={() => onDeleteSet(set.id)} title="Delete set" tone="red" size="sm" />
               </div>
             </div>

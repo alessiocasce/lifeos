@@ -134,6 +134,8 @@ Current behavior:
 - Selects an existing session or creates a session for today.
 - Supports custom session creation behind a toggle.
 - Ended sessions cannot use the local rest timer.
+- Ended sessions cannot add or edit sets. The logger shows: "This workout is ended. Reopen it to add more sets."
+- Ended sessions can be reopened from Session Control, which sets `ended_at` back to `null`.
 - Deleting a session requires confirmation and cascades sets through the database relationship.
 - Sets belong to workout sessions.
 - Sets include exercise, set number, weight, reps, RPE, performed date/time, and notes.
@@ -163,6 +165,7 @@ Rest timer status:
 - Does not persist to Supabase.
 - Inactive when there is no active workout session or the active session has `ended_at`.
 - Ending a workout stops and resets the timer.
+- Reopening a workout does not automatically start the timer; it stays at 0 until the user starts it or logs another set.
 
 ## Mobile/iPhone UI Direction
 
@@ -214,7 +217,10 @@ Workout mobile direction:
 - Test ended sessions:
   - Timer should be inactive.
   - Start should not work.
-  - Adding sets to ended sessions should be reviewed; current UX may still need stricter guardrails if desired.
+  - Adding sets should be blocked.
+  - Editing sets should be blocked.
+  - Delete session should still work.
+  - Reopen Workout should clear `ended_at` and restore logging.
 - Test iPhone Safari:
   - Sticky shell header plus workout header should not overlap.
   - Bottom nav should not cover Save Set.
@@ -225,12 +231,11 @@ Workout mobile direction:
 ## Next Recommended Steps
 
 1. Harden the workout vertical slice before expanding other tabs.
-2. Add stricter UX around ended sessions if sets should never be added after `ended_at`.
-3. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
-4. Convert the Health tab from local state to Supabase `health_logs`.
-5. Convert the Finances tab to Supabase `expenses`.
-6. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
-7. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+2. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
+3. Convert the Health tab from local state to Supabase `health_logs`.
+4. Convert the Finances tab to Supabase `expenses`.
+5. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
+6. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 
