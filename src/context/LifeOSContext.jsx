@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   agendaBlocks,
   assistantMessages,
@@ -11,6 +11,8 @@ import {
   tabs,
   workoutData,
 } from '../data/lifeosData';
+import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { workoutSetApi } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
 
@@ -27,6 +29,31 @@ export function LifeOSProvider({ children }) {
   const [finance, setFinance] = useState(financeData);
   const [expandedWorkout, setExpandedWorkout] = useState(workoutData.history[0].date);
   const [chatMessages, setChatMessages] = useState(assistantMessages);
+  const [workoutSets, setWorkoutSets] = useState([]);
+  const [workoutSetsStatus, setWorkoutSetsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [workoutSetsError, setWorkoutSetsError] = useState('');
+
+  const loadWorkoutSets = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setWorkoutSetsStatus('not-configured');
+      return;
+    }
+
+    setWorkoutSetsStatus('loading');
+    setWorkoutSetsError('');
+    try {
+      const rows = await workoutSetApi.list();
+      setWorkoutSets(rows ?? []);
+      setWorkoutSetsStatus('ready');
+    } catch (error) {
+      setWorkoutSetsError(error.message || 'Failed to load workout sets.');
+      setWorkoutSetsStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadWorkoutSets();
+  }, [loadWorkoutSets]);
 
   const workoutStatus = useMemo(() => {
     const workoutStart = toMinutes('15:00');
@@ -78,6 +105,26 @@ export function LifeOSProvider({ children }) {
           hygiene: prev.hygiene.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
         })),
       setExpandedWorkout,
+      reloadWorkoutSets: loadWorkoutSets,
+      createWorkoutSet: async (payload) => {
+        if (!isSupabaseConfigured) {
+          throw new Error('Supabase is not configured. Add .env.local values and restart the dev server.');
+        }
+        setWorkoutSetsError('');
+        const created = await workoutSetApi.create(payload);
+        setWorkoutSets((prev) => [created, ...prev]);
+        setWorkoutSetsStatus('ready');
+        return created;
+      },
+      updateWorkoutSet: async (id, patch) => {
+        const updated = await workoutSetApi.update(id, patch);
+        setWorkoutSets((prev) => prev.map((set) => (set.id === id ? updated : set)));
+        return updated;
+      },
+      deleteWorkoutSet: async (id) => {
+        await workoutSetApi.delete(id);
+        setWorkoutSets((prev) => prev.filter((set) => set.id !== id));
+      },
       addTransaction: ({ amount, category }) =>
         setFinance((prev) => {
           const numericAmount = Number(amount);
@@ -124,7 +171,7 @@ export function LifeOSProvider({ children }) {
           ),
         ),
     }),
-    [],
+    [loadWorkoutSets],
   );
 
   const value = {
@@ -135,6 +182,7 @@ export function LifeOSProvider({ children }) {
     finance,
     expandedWorkout,
     chatMessages,
+    isSupabaseConfigured,
     agendaBlocks,
     calendarWeeks,
     currentDate,
@@ -143,6 +191,9 @@ export function LifeOSProvider({ children }) {
     tabs,
     timelineWindow,
     workout: workoutData,
+    workoutSets,
+    workoutSetsError,
+    workoutSetsStatus,
     workoutStatus,
     ...actions,
   };
