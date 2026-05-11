@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-11
 Current branch: `main`
-Recent head: `68467b6 Fix workout sticky header offset`
+Recent context: authentication moved to a global app gate; Workout tab no longer owns login/register UI.
 
 ## Project Goal
 
@@ -34,11 +34,13 @@ npm.cmd run dev -- --host 0.0.0.0
 
 ## Current Architecture
 
-- `src/App.jsx` selects the active tab and wraps the app in `LifeOSProvider`.
+- `src/App.jsx` gates entry into the app. It shows Supabase setup, auth loading, or global auth screens before rendering `Shell`.
 - `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, local mock-backed state, Supabase auth state, workout session state, and workout CRUD actions.
+- `src/components/AuthScreen.jsx` owns global sign in, sign up, loading, and Supabase setup screens.
 - `src/components/Shell.jsx` owns the global app shell:
   - Desktop/tablet uses the fixed left sidebar and full top metrics header.
   - Mobile uses a compact sticky top header and fixed bottom tab navigation.
+  - Sign out lives in the shell header, not in an individual tab.
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
@@ -78,19 +80,21 @@ RLS is enabled on all six tables. Current policies are user-scoped for authentic
 - Users can only read/write rows where `auth.uid() = user_id`.
 - `workout_sets` also checks that the referenced `workouts` row belongs to the same authenticated user.
 
-The frontend currently uses Supabase Auth for workout access:
+The frontend currently uses Supabase Auth as a global app gate:
 
 - Sign in
 - Sign up
+- Sign-up email confirmation messaging when Supabase returns no session
 - Sign out
 - Session restoration through `getSession`
 - Auth state subscription through `onAuthStateChange`
+- The app shell and tabs render only after `authUser` exists.
 
 ## Real Features Vs Mock Features
 
 Real/persisted today:
 
-- Supabase Auth in the workout tab.
+- Supabase Auth as a global app gate before the shell/tabs render.
 - Workout sessions persisted in `workouts`.
 - Workout sets persisted in `workout_sets`.
 - Workout session create/select/end/delete.
@@ -125,7 +129,7 @@ Still mostly mock/local:
 
 Current behavior:
 
-- Requires Supabase configuration and user auth before real workout logging.
+- Assumes the user is already authenticated by the global app gate.
 - Loads persisted workout sessions with nested sets.
 - Selects an existing session or creates a session for today.
 - Supports custom session creation behind a toggle.
@@ -139,6 +143,7 @@ Current behavior:
 - Today's active session sets are shown immediately under the logger, grouped by exercise.
 - Other sessions are kept visually separate/collapsed in history.
 - Persisted workout data is visually separated from mock sample data.
+- Login/register controls are intentionally absent from the Workout tab.
 
 Workout analytics are frontend-only:
 
@@ -200,7 +205,7 @@ Workout mobile direction:
 
 ## Known Issues / Things To Test
 
-- Test Supabase Auth with fresh sign up, sign in, sign out, and page reload.
+- Test global Supabase Auth gate with fresh sign up, email-confirmation flow, sign in, sign out, and page reload.
 - Test app behavior when Supabase env vars are missing.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
@@ -236,6 +241,7 @@ Workout mobile direction:
 - Prioritize one vertical slice at a time.
 - Keep changes scoped to the requested module/tab.
 - Do not touch unrelated tabs, schema, or app logic unless required by the requested change.
+- Keep authentication global unless explicitly asked to change the app access model.
 - Prefer existing component patterns and LifeOS visual language over new abstractions.
 - Treat persisted Supabase data as the source of truth for completed real workflows.
 - Keep mock data only where the tab has not yet been converted or where it is clearly labeled as sample/archive data.

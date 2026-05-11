@@ -168,13 +168,13 @@ export function LifeOSProvider({ children }) {
       signIn: async (credentials) => {
         setAuthError('');
         const data = await authApi.signInWithPassword(credentials);
-        setAuthUser(data.user ?? data.session?.user ?? null);
+        setAuthUser(data.session?.user ?? data.user ?? null);
         return data;
       },
       signUp: async (credentials) => {
         setAuthError('');
         const data = await authApi.signUp(credentials);
-        setAuthUser(data.user ?? data.session?.user ?? null);
+        setAuthUser(data.session?.user ?? null);
         return data;
       },
       signOut: async () => {

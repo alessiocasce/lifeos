@@ -5,11 +5,9 @@ import {
   Dumbbell,
   History,
   Loader2,
-  LogIn,
   Medal,
   Pencil,
   Plus,
-  Power,
   Square,
   Timer,
   Trash2,
@@ -25,20 +23,14 @@ export function WorkoutTab() {
   const {
     activeWorkoutId,
     activeWorkoutSession,
-    authError,
-    authUser,
     createWorkoutSession,
     createWorkoutSet,
     deleteWorkoutSession,
     deleteWorkoutSet,
     endWorkoutSession,
     expandedWorkout,
-    isSupabaseConfigured,
     setActiveWorkoutId,
     setExpandedWorkout,
-    signIn,
-    signOut,
-    signUp,
     updateWorkoutSet,
     workout,
     workoutSessions,
@@ -47,10 +39,6 @@ export function WorkoutTab() {
     workoutSets,
   } = useLifeOS();
 
-  const [authMode, setAuthMode] = useState('sign-in');
-  const [authForm, setAuthForm] = useState({ email: '', password: '' });
-  const [authMessage, setAuthMessage] = useState('');
-  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [sessionForm, setSessionForm] = useState({ name: 'Push Day A', performed_on: today, notes: '' });
   const [showCustomSession, setShowCustomSession] = useState(false);
   const [setForm, setSetForm] = useState({
@@ -123,24 +111,6 @@ export function WorkoutTab() {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [activeWorkoutSession, isRestTimerRunning]);
-
-  const submitAuth = async (event) => {
-    event.preventDefault();
-    setAuthMessage('');
-    setFormError('');
-    setAuthSubmitting(true);
-    try {
-      const action = authMode === 'sign-up' ? signUp : signIn;
-      const data = await action(authForm);
-      if (authMode === 'sign-up' && !data.session) {
-        setAuthMessage('Account created. Confirm your email if Supabase requires confirmation, then sign in.');
-      }
-    } catch (error) {
-      setFormError(error.message || 'Authentication failed.');
-    } finally {
-      setAuthSubmitting(false);
-    }
-  };
 
   const startWorkout = async (event) => {
     event.preventDefault();
@@ -342,21 +312,11 @@ export function WorkoutTab() {
         <div className="grid gap-3">
           <SetLogger
             activeSession={activeWorkoutSession}
-            authError={authError}
-            authForm={authForm}
-            authMessage={authMessage}
-            authMode={authMode}
-            authSubmitting={authSubmitting}
-            authUser={authUser}
             draftPrs={draftPrs}
             formError={formError}
-            isSupabaseConfigured={isSupabaseConfigured}
-            onAuthSubmit={submitAuth}
             onSetSubmit={submitSet}
             previousPerformance={previousPerformance}
             savingSet={savingSet}
-            setAuthForm={setAuthForm}
-            setAuthMode={setAuthMode}
             setFormValue={setForm}
             updateSetForm={(field, value) => setSetForm((prev) => ({ ...prev, [field]: value }))}
           />
@@ -383,15 +343,12 @@ export function WorkoutTab() {
         <SessionControlCard
           activeSession={activeWorkoutSession}
           activeWorkoutId={activeWorkoutId}
-          authUser={authUser}
           deleteConfirmId={deleteConfirmId}
           deletingSessionId={deletingSessionId}
           endingSessionId={endingSessionId}
-          isSupabaseConfigured={isSupabaseConfigured}
           onDeleteSession={removeSession}
           onEndSession={endSession}
           onSelectToday={selectOrStartToday}
-          onSignOut={signOut}
           onStartWorkout={startWorkout}
           savingSession={savingSession}
           selectingToday={selectingToday}
@@ -501,15 +458,12 @@ function ActiveWorkoutHeader({
 function SessionControlCard({
   activeSession,
   activeWorkoutId,
-  authUser,
   deleteConfirmId,
   deletingSessionId,
   endingSessionId,
-  isSupabaseConfigured,
   onDeleteSession,
   onEndSession,
   onSelectToday,
-  onSignOut,
   onStartWorkout,
   savingSession,
   selectingToday,
@@ -529,7 +483,7 @@ function SessionControlCard({
       <PanelHeader
         eyebrow="Session"
         title="Control"
-        right={<SourceStatus status={workoutSessionsStatus} configured={isSupabaseConfigured} authed={Boolean(authUser)} />}
+        right={<SourceStatus status={workoutSessionsStatus} />}
       />
       <button
         type="button"
@@ -540,20 +494,10 @@ function SessionControlCard({
         <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
-        {authUser ? (
-          <div className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-black/25 px-3 py-2">
-            <div className="min-w-0">
-              <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Signed In</p>
-              <p className="truncate text-xs text-zinc-300">{authUser.email}</p>
-            </div>
-            <IconButton icon={Power} onClick={onSignOut} title="Sign out" tone="red" />
-          </div>
-        ) : null}
-
         <button
           type="button"
           onClick={onSelectToday}
-          disabled={!authUser || selectingToday}
+          disabled={selectingToday}
           className="flex w-full items-center justify-between rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-left text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
         >
           <span>
@@ -568,7 +512,7 @@ function SessionControlCard({
           <select
             value={activeWorkoutId ?? ''}
             onChange={(event) => setActiveWorkoutId(event.target.value || null)}
-            disabled={!authUser || !workoutSessions.length}
+            disabled={!workoutSessions.length}
             className="mt-1 w-full rounded border border-white/10 bg-black px-2 py-2 text-xs text-zinc-100 outline-none focus:border-cyan-400/40 disabled:text-zinc-600"
           >
             <option value="">No session selected</option>
@@ -622,7 +566,7 @@ function SessionControlCard({
             <CompactField label="Notes" value={sessionForm.notes} onChange={(value) => setSessionForm((prev) => ({ ...prev, notes: value }))} />
             <button
               type="submit"
-              disabled={!authUser || savingSession}
+              disabled={savingSession}
               className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
             >
               {savingSession ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
@@ -639,21 +583,11 @@ function SessionControlCard({
 
 function SetLogger({
   activeSession,
-  authError,
-  authForm,
-  authMessage,
-  authMode,
-  authSubmitting,
-  authUser,
   draftPrs,
   formError,
-  isSupabaseConfigured,
-  onAuthSubmit,
   onSetSubmit,
   previousPerformance,
   savingSet,
-  setAuthForm,
-  setAuthMode,
   setFormValue,
   updateSetForm,
 }) {
@@ -661,83 +595,41 @@ function SetLogger({
     <Panel>
       <PanelHeader eyebrow="Active Logging" title="Set Logger" />
       <div className="p-3">
-        {!isSupabaseConfigured ? (
-          <ConfigNotice />
-        ) : !authUser ? (
-          <AuthGate
-            authError={authError}
-            authForm={authForm}
-            authMessage={authMessage}
-            authMode={authMode}
-            formError={formError}
-            loading={authSubmitting}
-            onSubmit={onAuthSubmit}
-            setAuthForm={setAuthForm}
-            setAuthMode={setAuthMode}
-          />
+        {activeSession ? (
+          <div className="grid gap-3">
+            <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
+            <form onSubmit={onSetSubmit} className="grid gap-2">
+              <div className="grid grid-cols-[1fr_72px] gap-2 md:grid-cols-[1fr_92px]">
+                <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
+                <CompactField label="Set" type="number" inputMode="numeric" value={setFormValue.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <CompactField label="Weight" inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
+                <CompactField label="Reps" inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
+                <CompactField label="RPE" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
+              </div>
+              <div className="grid gap-2 md:grid-cols-[180px_1fr]">
+                <CompactField label="Date" type="date" value={setFormValue.date} onChange={(value) => updateSetForm('date', value)} />
+                <CompactField label="Notes" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
+              </div>
+              <button
+                type="submit"
+                disabled={savingSet || !activeSession}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              >
+                {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                {savingSet ? 'Saving Set' : 'Save Set'}
+              </button>
+              {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
+            </form>
+          </div>
         ) : (
-          <>
-            {activeSession ? (
-              <div className="grid gap-3">
-                <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
-                <form onSubmit={onSetSubmit} className="grid gap-2">
-                  <div className="grid grid-cols-[1fr_72px] gap-2 md:grid-cols-[1fr_92px]">
-                    <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
-                    <CompactField label="Set" type="number" inputMode="numeric" value={setFormValue.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <CompactField label="Weight" inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
-                    <CompactField label="Reps" inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
-                    <CompactField label="RPE" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-[180px_1fr]">
-                    <CompactField label="Date" type="date" value={setFormValue.date} onChange={(value) => updateSetForm('date', value)} />
-                    <CompactField label="Notes" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={savingSet || !activeSession}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-                  >
-                    {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                    {savingSet ? 'Saving Set' : 'Save Set'}
-                  </button>
-                  {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
-                </form>
-              </div>
-            ) : (
-              <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-                Select or start a workout session to log sets.
-              </div>
-            )}
-          </>
+          <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
+            Select or start a workout session.
+          </div>
         )}
       </div>
     </Panel>
-  );
-}
-
-function AuthGate({ authError, authForm, authMessage, authMode, formError, loading, onSubmit, setAuthForm, setAuthMode }) {
-  if (!authForm) return null;
-  return (
-    <form onSubmit={onSubmit} className="mb-3 grid grid-cols-1 gap-2 rounded-md border border-white/5 bg-black/25 p-2 md:grid-cols-[1fr_1fr_44px]">
-      <CompactField label="Email" type="email" value={authForm.email} onChange={(value) => setAuthForm((prev) => ({ ...prev, email: value }))} />
-      <CompactField label="Password" type="password" value={authForm.password} onChange={(value) => setAuthForm((prev) => ({ ...prev, password: value }))} />
-      <IconButton type="submit" loading={loading} icon={LogIn} title={authMode === 'sign-up' ? 'Sign up' : 'Sign in'} tone="cyan" className="mt-5" />
-      <div className="col-span-full flex items-center justify-between gap-2">
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => setAuthMode(authMode === 'sign-up' ? 'sign-in' : 'sign-up')}
-          className="data-text text-[11px] text-cyan-300 disabled:text-zinc-600"
-        >
-          {authMode === 'sign-up' ? 'Use existing account' : 'Create account'}
-        </button>
-        <span className="data-text text-[10px] text-zinc-500">{loading ? 'Authenticating' : 'Supabase Auth required'}</span>
-      </div>
-      {authMessage ? <p className="col-span-full data-text text-[11px] text-emerald-300">{authMessage}</p> : null}
-      {authError || formError ? <p className="col-span-full data-text text-[11px] text-red-300">{authError || formError}</p> : null}
-    </form>
   );
 }
 
@@ -1072,18 +964,6 @@ function SampleDataArchive({ expandedWorkout, setExpandedWorkout, setShowMockArc
   );
 }
 
-function ConfigNotice() {
-  return (
-    <div className="rounded-md border border-amber-400/20 bg-amber-400/10 p-3">
-      <p className="text-sm font-medium text-amber-200">Supabase env missing</p>
-      <p className="mt-1 text-xs leading-5 text-amber-100/70">
-        Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local`, run `supabase/schema.sql`,
-        then restart the dev server.
-      </p>
-    </div>
-  );
-}
-
 function PrTags({ prs }) {
   const active = Object.entries(prs).filter(([, value]) => value);
   if (!active.length) return null;
@@ -1225,13 +1105,11 @@ function LoadingCard({ label }) {
   );
 }
 
-function SourceStatus({ status, configured, authed }) {
-  const label = !configured ? 'OFFLINE' : !authed ? 'AUTH' : status === 'loading' ? 'SYNCING' : status === 'error' ? 'ERROR' : 'LIVE';
-  const tone = !configured || !authed
-    ? 'border-amber-400/20 bg-amber-400/10 text-amber-300'
-    : status === 'error'
-      ? 'border-red-400/20 bg-red-400/10 text-red-300'
-      : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
+function SourceStatus({ status }) {
+  const label = status === 'loading' ? 'SYNCING' : status === 'error' ? 'ERROR' : 'LIVE';
+  const tone = status === 'error'
+    ? 'border-red-400/20 bg-red-400/10 text-red-300'
+    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
 
   return (
     <span className={`data-text inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] ${tone}`}>

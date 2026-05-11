@@ -1,4 +1,5 @@
 import { LifeOSProvider, useLifeOS } from './context/LifeOSContext';
+import { AuthConfigScreen, AuthLoadingScreen, AuthScreen } from './components/AuthScreen';
 import { Shell } from './components/Shell';
 import { AIAssistantTab } from './tabs/AIAssistantTab';
 import { CalendarTab } from './tabs/CalendarTab';
@@ -17,7 +18,20 @@ const tabViews = {
 };
 
 function LifeOSApp() {
-  const { activeTab } = useLifeOS();
+  const { activeTab, authStatus, authUser, isSupabaseConfigured } = useLifeOS();
+
+  if (!isSupabaseConfigured) {
+    return <AuthConfigScreen />;
+  }
+
+  if (authStatus === 'loading') {
+    return <AuthLoadingScreen />;
+  }
+
+  if (!authUser) {
+    return <AuthScreen />;
+  }
+
   const ActiveView = tabViews[activeTab] ?? HomeTab;
   return (
     <Shell>

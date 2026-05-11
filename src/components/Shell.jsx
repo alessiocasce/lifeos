@@ -6,8 +6,10 @@ import {
   HeartPulse,
   Home,
   Landmark,
+  LogOut,
   RadioTower,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 
 const icons = {
@@ -20,8 +22,18 @@ const icons = {
 };
 
 export function Shell({ children }) {
-  const { activeTab, setActiveTab, tabs, health, finance, workoutStatus, currentDate } = useLifeOS();
+  const { activeTab, authUser, currentDate, finance, health, setActiveTab, signOut, tabs, workoutStatus } = useLifeOS();
+  const [signingOut, setSigningOut] = useState(false);
   const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label ?? 'Pulse';
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100">
@@ -77,11 +89,22 @@ export function Shell({ children }) {
             <p className="data-text mt-1 hidden text-[11px] text-zinc-500 md:block">{currentDate} / 13:42 LOCAL / LATENCY 18ms</p>
           </div>
 
-          <div className="hidden grid-cols-4 gap-2 text-right md:grid">
-            <HeaderMetric label="Mood" value={`${health.mood}/10`} tone="text-emerald-300" />
-            <HeaderMetric label="Sleep" value={`${health.sleepQuality}%`} tone="text-cyan-300" />
-            <HeaderMetric label="Spend" value={`EUR ${Math.round(finance.monthlySpend)}`} tone="text-amber-300" />
-            <HeaderMetric label="Training" value={workoutStatus.mode.toUpperCase()} tone={workoutStatus.accent} />
+          <div className="flex items-center gap-2">
+            <div className="hidden grid-cols-4 gap-2 text-right md:grid">
+              <HeaderMetric label="Mood" value={`${health.mood}/10`} tone="text-emerald-300" />
+              <HeaderMetric label="Sleep" value={`${health.sleepQuality}%`} tone="text-cyan-300" />
+              <HeaderMetric label="Spend" value={`EUR ${Math.round(finance.monthlySpend)}`} tone="text-amber-300" />
+              <HeaderMetric label="Training" value={workoutStatus.mode.toUpperCase()} tone={workoutStatus.accent} />
+            </div>
+            <button
+              type="button"
+              title={authUser?.email ? `Sign out ${authUser.email}` : 'Sign out'}
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="grid h-10 w-10 place-items-center rounded-md border border-white/10 bg-[#121212] text-zinc-400 transition hover:border-red-400/30 hover:bg-red-400/10 hover:text-red-300 disabled:cursor-not-allowed disabled:text-zinc-700 md:h-11 md:w-11"
+            >
+              <LogOut size={17} />
+            </button>
           </div>
         </header>
 
