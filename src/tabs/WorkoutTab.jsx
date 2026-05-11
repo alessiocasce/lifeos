@@ -3,7 +3,6 @@ import {
   ChevronDown,
   Database,
   Dumbbell,
-  Flame,
   History,
   Loader2,
   LogIn,
@@ -18,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
-import { MiniMetric, Panel, PanelHeader, Sparkline, Tag } from '../components/ui';
+import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -47,17 +46,19 @@ export function WorkoutTab() {
     workoutSessionsStatus,
     workoutSets,
   } = useLifeOS();
+
   const [authMode, setAuthMode] = useState('sign-in');
   const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [authMessage, setAuthMessage] = useState('');
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [sessionForm, setSessionForm] = useState({ name: 'Push Day A', performed_on: today, notes: '' });
+  const [showCustomSession, setShowCustomSession] = useState(false);
   const [setForm, setSetForm] = useState({
     exercise: workout.current.name,
     set_number: 1,
-    weight: workout.current.inputs.weight,
-    reps: workout.current.inputs.reps,
-    rpe: workout.current.inputs.rpe,
+    weight: String(workout.current.inputs.weight),
+    reps: String(workout.current.inputs.reps),
+    rpe: String(workout.current.inputs.rpe),
     date: today,
     notes: '',
   });
@@ -72,55 +73,41 @@ export function WorkoutTab() {
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [showMockArchive, setShowMockArchive] = useState(false);
+  const [collapsedSessions, setCollapsedSessions] = useState({});
   const [formError, setFormError] = useState('');
-  const minutes = Math.floor(workout.restTimerSeconds / 60);
-  const seconds = String(workout.restTimerSeconds % 60).padStart(2, '0');
 
-  const recentVolume = useMemo(
-    () => workoutSets.reduce((total, set) => total + Number(set.weight) * Number(set.reps), 0),
-    [workoutSets],
-  );
-
-  const todaysSessions = useMemo(
-    () => workoutSessions.filter((session) => session.performed_on === today),
-    [workoutSessions],
-  );
-
+  const restMinutes = Math.floor(workout.restTimerSeconds / 60);
+  const restSeconds = String(workout.restTimerSeconds % 60).padStart(2, '0');
+  const activeSets = activeWorkoutSession?.workout_sets ?? [];
+  const activeVolume = activeSets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+  const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions]);
   const exerciseAnalytics = useMemo(() => buildExerciseAnalytics(workoutSessions), [workoutSessions]);
-  const selectedExerciseKey = normalizeExercise(setForm.exercise);
-  const selectedExerciseAnalytics = selectedExerciseKey
-    ? getExerciseAnalyticsBeforeSession(workoutSessions, activeWorkoutSession, setForm.exercise)
-    : null;
+  const selectedExerciseAnalytics = useMemo(
+    () => getExerciseAnalyticsBeforeSession(workoutSessions, activeWorkoutSession, setForm.exercise),
+    [activeWorkoutSession, setForm.exercise, workoutSessions],
+  );
   const previousPerformance = useMemo(
     () => getPreviousPerformance(workoutSessions, activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise, workoutSessions],
   );
-  const draftPrs = useMemo(
-    () => detectPrs(
-      {
-        exercise: setForm.exercise,
-        weight: Number(setForm.weight),
-        reps: Number(setForm.reps),
-      },
-      selectedExerciseAnalytics,
-      activeWorkoutSession
-        ? getSessionExerciseVolume(activeWorkoutSession, setForm.exercise) + Number(setForm.weight) * Number(setForm.reps)
-        : 0,
-      true,
-    ),
-    [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.reps, setForm.weight],
-  );
-
   const nextSetNumber = useMemo(
     () => getNextSetNumber(activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise],
   );
+  const draftPrs = useMemo(() => {
+    const weight = parseDecimal(setForm.weight);
+    const reps = parseInteger(setForm.reps);
+    return detectPrs(
+      { exercise: setForm.exercise, weight, reps },
+      selectedExerciseAnalytics,
+      activeWorkoutSession ? getSessionExerciseVolume(activeWorkoutSession, setForm.exercise) + weight * reps : 0,
+      true,
+    );
+  }, [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.reps, setForm.weight]);
 
   useEffect(() => {
     setSetForm((prev) => ({ ...prev, set_number: nextSetNumber }));
   }, [nextSetNumber]);
-
-  const updateSetForm = (field, value) => setSetForm((prev) => ({ ...prev, [field]: value }));
 
   const submitAuth = async (event) => {
     event.preventDefault();
@@ -162,6 +149,7 @@ export function WorkoutTab() {
         started_at: new Date().toISOString(),
         notes: sessionForm.notes.trim(),
       });
+      setShowCustomSession(false);
     } catch (error) {
       setFormError(error.message || 'Failed to start workout session.');
     } finally {
@@ -202,15 +190,19 @@ export function WorkoutTab() {
       return;
     }
 
+    const weight = parseDecimal(setForm.weight);
+    const reps = parseInteger(setForm.reps);
+    const rpe = parseDecimal(setForm.rpe);
+
     setSavingSet(true);
     try {
       await createWorkoutSet({
         workout_id: activeWorkoutSession.id,
         exercise: setForm.exercise.trim(),
         set_number: nextSetNumber,
-        weight: Number(setForm.weight),
-        reps: Number(setForm.reps),
-        rpe: Number(setForm.rpe),
+        weight,
+        reps,
+        rpe,
         performed_at: dateToPerformedAt(setForm.date),
         notes: setForm.notes.trim(),
       });
@@ -232,9 +224,9 @@ export function WorkoutTab() {
     setEditForm({
       exercise: set.exercise,
       set_number: set.set_number,
-      weight: set.weight,
-      reps: set.reps,
-      rpe: set.rpe,
+      weight: String(set.weight),
+      reps: String(set.reps),
+      rpe: String(set.rpe),
       date: new Date(set.performed_at).toISOString().slice(0, 10),
       notes: set.notes ?? '',
     });
@@ -252,10 +244,10 @@ export function WorkoutTab() {
     try {
       await updateWorkoutSet(setId, {
         exercise: editForm.exercise.trim(),
-        set_number: Number(editForm.set_number),
-        weight: Number(editForm.weight),
-        reps: Number(editForm.reps),
-        rpe: Number(editForm.rpe),
+        set_number: parseInteger(editForm.set_number),
+        weight: parseDecimal(editForm.weight),
+        reps: parseInteger(editForm.reps),
+        rpe: parseDecimal(editForm.rpe),
         performed_at: dateToPerformedAt(editForm.date),
         notes: editForm.notes.trim() || null,
       });
@@ -312,324 +304,339 @@ export function WorkoutTab() {
 
   return (
     <div className="grid grid-cols-12 gap-3">
-      <Panel className="col-span-12 overflow-hidden">
-        <div className="grid min-h-44 grid-cols-1 border-b border-white/5 bg-black md:grid-cols-[1fr_2fr]">
-          <div className="flex items-center gap-4 border-b border-white/5 p-5 md:border-b-0 md:border-r">
-            <div className="grid h-16 w-16 place-items-center rounded-md border border-red-400/30 bg-red-400/10 text-red-300 shadow-ember">
-              <Timer size={30} />
-            </div>
-            <div>
-              <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Rest Timer</p>
-              <p className="data-text text-7xl font-black leading-none text-red-300">
-                {minutes}:{seconds}
-              </p>
-            </div>
-          </div>
+      <ActiveWorkoutHeader
+        activeSession={activeWorkoutSession}
+        activeVolume={activeVolume}
+        fallbackName={workout.current.name}
+        restTimer={`${restMinutes}:${restSeconds}`}
+        setCount={activeSets.length}
+      />
 
-          <div className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-[0.9fr_1.4fr]">
-            <div>
-              <div className="flex items-center gap-2">
-                <Dumbbell size={18} className="text-cyan-300" />
-                <p className="text-lg font-semibold text-zinc-100">
-                  {activeWorkoutSession?.name ?? workout.current.name}
-                </p>
-              </div>
-              <p className="data-text mt-1 text-xs text-zinc-500">
-                {activeWorkoutSession
-                  ? `${activeWorkoutSession.performed_on} / next ${setForm.exercise || 'exercise'} set #${nextSetNumber}`
-                  : `${workout.current.block} / ${workout.current.target}`}
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <MiniMetric label="Sessions" value={workoutSessions.length} tone="text-cyan-300" sub="loaded" />
-                <MiniMetric label="Sets" value={workoutSets.length} tone="text-emerald-300" sub="persisted" />
-                <MiniMetric label="Volume" value={Math.round(recentVolume).toLocaleString()} tone="text-amber-300" sub="kg x reps" />
-              </div>
-            </div>
+      <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
+        <div className="grid gap-3">
+          <SetLogger
+            activeSession={activeWorkoutSession}
+            authError={authError}
+            authForm={authForm}
+            authMessage={authMessage}
+            authMode={authMode}
+            authSubmitting={authSubmitting}
+            authUser={authUser}
+            draftPrs={draftPrs}
+            formError={formError}
+            isSupabaseConfigured={isSupabaseConfigured}
+            onAuthSubmit={submitAuth}
+            onSetSubmit={submitSet}
+            previousPerformance={previousPerformance}
+            savingSet={savingSet}
+            setAuthForm={setAuthForm}
+            setAuthMode={setAuthMode}
+            setFormValue={setForm}
+            updateSetForm={(field, value) => setSetForm((prev) => ({ ...prev, [field]: value }))}
+          />
 
-            {!isSupabaseConfigured ? (
-              <ConfigNotice />
-            ) : !authUser ? (
-              <AuthPanel
-                authError={authError}
-                authForm={authForm}
-                authMessage={authMessage}
-                authMode={authMode}
-                formError={formError}
-                loading={authSubmitting}
-                setAuthForm={setAuthForm}
-                setAuthMode={setAuthMode}
-                submitAuth={submitAuth}
-              />
-            ) : (
-              <div className="grid gap-2">
-                <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
-                <form onSubmit={submitSet} className="grid grid-cols-2 gap-2 xl:grid-cols-[1.1fr_0.45fr_0.55fr_0.45fr_0.45fr_0.65fr_1fr_44px]">
-                  <SetField label="Exercise" value={setForm.exercise} onChange={(value) => updateSetForm('exercise', value)} />
-                  <SetField label="Set" type="number" value={setForm.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
-                  <SetField label="Weight" type="number" value={setForm.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
-                  <SetField label="Reps" type="number" value={setForm.reps} onChange={(value) => updateSetForm('reps', value)} />
-                  <SetField label="RPE" type="number" step="0.5" value={setForm.rpe} onChange={(value) => updateSetForm('rpe', value)} />
-                  <SetField label="Date" type="date" value={setForm.date} onChange={(value) => updateSetForm('date', value)} />
-                  <SetField label="Notes" value={setForm.notes} onChange={(value) => updateSetForm('notes', value)} />
-                  <IconButton
-                    type="submit"
-                    disabled={savingSet || !activeWorkoutSession}
-                    loading={savingSet}
-                    icon={Plus}
-                    title="Save set"
-                    tone="emerald"
-                    className="mt-5 h-[54px]"
-                  />
-                  {formError ? <p className="col-span-full data-text text-[11px] text-red-300">{formError}</p> : null}
-                </form>
-              </div>
-            )}
-          </div>
+          <TodaySetsLog
+            activeSession={activeWorkoutSession}
+            beginEdit={beginEdit}
+            collapsedSessions={collapsedSessions}
+            deletingSetId={deletingSetId}
+            editForm={editForm}
+            editingSetId={editingSetId}
+            onDeleteSet={removeSet}
+            onSaveEdit={saveEdit}
+            savingEditId={savingEditId}
+            setActiveWorkoutId={setActiveWorkoutId}
+            setCollapsedSessions={setCollapsedSessions}
+            setEditForm={setEditForm}
+            setEditingSetId={setEditingSetId}
+            workoutSessions={workoutSessions}
+            workoutSessionsStatus={workoutSessionsStatus}
+          />
         </div>
-      </Panel>
 
-      <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader
-          eyebrow="Session Control"
-          title="Start Or Select Workout"
-          right={<SourceStatus status={workoutSessionsStatus} configured={isSupabaseConfigured} authed={Boolean(authUser)} />}
+        <SessionControlCard
+          activeSession={activeWorkoutSession}
+          activeWorkoutId={activeWorkoutId}
+          authUser={authUser}
+          deleteConfirmId={deleteConfirmId}
+          deletingSessionId={deletingSessionId}
+          endingSessionId={endingSessionId}
+          isSupabaseConfigured={isSupabaseConfigured}
+          onDeleteSession={removeSession}
+          onEndSession={endSession}
+          onSelectToday={selectOrStartToday}
+          onSignOut={signOut}
+          onStartWorkout={startWorkout}
+          savingSession={savingSession}
+          selectingToday={selectingToday}
+          sessionForm={sessionForm}
+          setActiveWorkoutId={setActiveWorkoutId}
+          setSessionForm={setSessionForm}
+          setShowCustomSession={setShowCustomSession}
+          showCustomSession={showCustomSession}
+          workoutSessions={workoutSessions}
+          workoutSessionsError={workoutSessionsError}
+          workoutSessionsStatus={workoutSessionsStatus}
         />
-        <div className="space-y-3 p-3">
-          {authUser ? (
-            <div className="flex items-center justify-between rounded-md border border-white/5 bg-black/25 px-3 py-2">
-              <div className="min-w-0">
-                <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Authenticated</p>
-                <p className="truncate text-sm text-zinc-200">{authUser.email}</p>
-              </div>
-              <IconButton icon={Power} onClick={signOut} title="Sign out" tone="red" />
-            </div>
-          ) : null}
+      </div>
 
-          <button
-            type="button"
-            onClick={selectOrStartToday}
-            disabled={!authUser || selectingToday}
-            className="flex w-full items-center justify-between rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-3 text-left text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-          >
-            <span>
-              <span className="block text-sm font-semibold">
-                {selectingToday ? 'Syncing today session' : 'Select or start today'}
-              </span>
-              <span className="data-text text-[10px] text-cyan-300/70">{today}</span>
-            </span>
-            {selectingToday ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-          </button>
+      <ExerciseHistoryPanel exerciseAnalytics={exerciseAnalytics} />
 
-          <form onSubmit={startWorkout} className="grid gap-2">
-            <SetField label="Workout Name" value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
-            <SetField label="Performed On" type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
-            <SetField label="Session Notes" value={sessionForm.notes} onChange={(value) => setSessionForm((prev) => ({ ...prev, notes: value }))} />
-            <button
-              type="submit"
-              disabled={!authUser || savingSession}
-              className="flex h-10 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-sm font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-            >
-              {savingSession ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              {savingSession ? 'Starting' : 'Start Session'}
-            </button>
-          </form>
-
-          <label className="block rounded-md border border-white/5 bg-black/25 p-3">
-            <span className="text-xs uppercase tracking-wider text-zinc-500">Active Session</span>
-            <select
-              value={activeWorkoutId ?? ''}
-              onChange={(event) => setActiveWorkoutId(event.target.value || null)}
-              disabled={!authUser || !workoutSessions.length}
-              className="mt-2 w-full rounded-md border border-white/10 bg-black px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400/40 disabled:text-zinc-600"
-            >
-              <option value="">No session selected</option>
-              {workoutSessions.map((session) => (
-                <option key={session.id} value={session.id}>
-                  {session.performed_on} / {session.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {activeWorkoutSession ? (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => endSession(activeWorkoutSession.id)}
-                disabled={Boolean(activeWorkoutSession.ended_at) || endingSessionId === activeWorkoutSession.id}
-                className="flex h-10 items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-sm font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-              >
-                {endingSessionId === activeWorkoutSession.id ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />}
-                {activeWorkoutSession.ended_at ? 'Ended' : 'End Workout'}
-              </button>
-              <button
-                type="button"
-                onClick={() => removeSession(activeWorkoutSession.id)}
-                disabled={deletingSessionId === activeWorkoutSession.id}
-                className={`flex h-10 items-center justify-center gap-2 rounded-md border text-sm font-medium disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
-                  deleteConfirmId === activeWorkoutSession.id
-                    ? 'border-red-400/40 bg-red-400/20 text-red-200'
-                    : 'border-red-400/20 bg-red-400/10 text-red-300'
-                }`}
-              >
-                {deletingSessionId === activeWorkoutSession.id ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                {deleteConfirmId === activeWorkoutSession.id ? 'Confirm Delete' : 'Delete Session'}
-              </button>
-            </div>
-          ) : null}
-
-          {workoutSessionsError ? <p className="data-text text-[11px] text-red-300">{workoutSessionsError}</p> : null}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-7">
-        <PanelHeader eyebrow="Persisted Log" title="Sets Grouped By Workout Session" right={<History size={16} className="text-cyan-300" />} />
-        <div className="thin-scrollbar max-h-[560px] space-y-2 overflow-y-auto p-3">
-          {workoutSessionsStatus === 'loading' ? (
-            <LoadingCard label="Loading workout sessions" />
-          ) : workoutSessions.length ? (
-            workoutSessions.map((session) => (
-              <SessionLog
-                key={session.id}
-                active={session.id === activeWorkoutId}
-                beginEdit={beginEdit}
-                deletingSetId={deletingSetId}
-                deleteWorkoutSet={removeSet}
-                editForm={editForm}
-                editingSetId={editingSetId}
-                savingEditId={savingEditId}
-                session={session}
-                setActiveWorkoutId={setActiveWorkoutId}
-                setEditForm={setEditForm}
-                setEditingSetId={setEditingSetId}
-                saveEdit={saveEdit}
-                workoutSessions={workoutSessions}
-              />
-            ))
-          ) : (
-            <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-              {authUser ? 'No persisted workout sessions yet.' : 'Sign in to load user-scoped workout sessions.'}
-            </div>
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12">
-        <PanelHeader eyebrow="Exercise History" title="Progression Over Time" right={<Medal size={16} className="text-amber-300" />} />
-        <div className="grid gap-2 p-3 xl:grid-cols-2">
-          {exerciseAnalytics.exercises.length ? (
-            exerciseAnalytics.exercises.map((exercise) => <ExerciseHistoryCard key={exercise.key} exercise={exercise} />)
-          ) : (
-            <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-              Log persisted sets to build exercise progression.
-            </div>
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Performance Center" title="Exercise Trend HUD" right={<Flame size={16} className="text-amber-300" />} />
-        <div className="divide-y divide-white/5">
-          {workout.exercises.map((exercise) => (
-            <div key={exercise.name} className="flex items-center justify-between gap-3 px-3 py-3">
-              <div>
-                <p className="text-sm font-medium text-zinc-100">{exercise.name}</p>
-                <p className="data-text text-[10px] text-zinc-500">6-week volume trend</p>
-              </div>
-              <Sparkline data={exercise.trend} color="#22c55e" />
-              <Tag tone="emerald">{exercise.status}</Tag>
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-7 border-zinc-800/70 bg-[#0d0d0d] opacity-80">
-        <PanelHeader
-          eyebrow="Sample Data"
-          title="Mock Workout Archive"
-          right={
-            <button
-              type="button"
-              onClick={() => setShowMockArchive((value) => !value)}
-              className="rounded border border-white/10 px-2 py-1 data-text text-[10px] text-zinc-400"
-            >
-              {showMockArchive ? 'HIDE' : 'SHOW'}
-            </button>
-          }
-        />
-        {showMockArchive ? (
-          <div className="space-y-2 p-3">
-            {workout.history.map((session) => {
-              const open = expandedWorkout === session.date;
-              return (
-                <div key={session.date} className="rounded-md border border-white/5 bg-black/25">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedWorkout(open ? null : session.date)}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-zinc-300">{session.title}</p>
-                      <p className="data-text text-[11px] text-zinc-600">
-                        {session.date} / {session.duration} / {session.volume.toLocaleString()}kg mock volume
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Tag tone="zinc">MOCK</Tag>
-                      <ChevronDown size={16} className={`text-zinc-600 transition ${open ? 'rotate-180' : ''}`} />
-                    </div>
-                  </button>
-                  {open ? (
-                    <div className="grid gap-2 border-t border-white/5 p-3">
-                      {session.exercises.map((exercise) => (
-                        <div key={exercise.name} className="grid grid-cols-[180px_1fr] gap-2 rounded border border-white/5 bg-[#121212] p-2">
-                          <p className="text-xs font-medium text-zinc-400">{exercise.name}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {exercise.sets.map((set) => (
-                              <span key={set} className="data-text rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-zinc-500">
-                                {set}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="p-3 text-sm text-zinc-600">Mock examples are hidden so persisted Supabase data stays visually primary.</div>
-        )}
-      </Panel>
+      <SampleDataArchive
+        expandedWorkout={expandedWorkout}
+        setExpandedWorkout={setExpandedWorkout}
+        setShowMockArchive={setShowMockArchive}
+        showMockArchive={showMockArchive}
+        workout={workout}
+      />
     </div>
   );
 }
 
-function AuthPanel({ authError, authForm, authMessage, authMode, formError, loading, setAuthForm, setAuthMode, submitAuth }) {
+function ActiveWorkoutHeader({ activeSession, activeVolume, fallbackName, restTimer, setCount }) {
+  const status = activeSession?.ended_at ? 'ENDED' : activeSession ? 'LIVE' : 'NO SESSION';
+  const tone = activeSession?.ended_at ? 'zinc' : activeSession ? 'emerald' : 'amber';
+
   return (
-    <form onSubmit={submitAuth} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_44px]">
-      <SetField
-        label="Email"
-        type="email"
-        value={authForm.email}
-        onChange={(value) => setAuthForm((prev) => ({ ...prev, email: value }))}
+    <Panel className="col-span-12">
+      <div className="grid items-center gap-3 p-3 lg:grid-cols-[1fr_96px]">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Dumbbell size={18} className="text-cyan-300" />
+            <h2 className="truncate text-lg font-semibold text-zinc-100">{activeSession?.name ?? fallbackName}</h2>
+            <Tag tone={tone}>{status}</Tag>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MiniMetric label="Date" value={activeSession?.performed_on ?? today} tone="text-zinc-100" sub="active day" />
+            <MiniMetric label="Sets" value={setCount} tone="text-cyan-300" sub="active session" />
+            <MiniMetric label="Volume" value={Math.round(activeVolume).toLocaleString()} tone="text-emerald-300" sub="kg x reps" />
+            <MiniMetric label="Started" value={formatTime(activeSession?.started_at)} tone="text-amber-300" sub="local" />
+          </div>
+        </div>
+        <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-center">
+          <div className="flex items-center justify-center gap-1 text-red-300">
+            <Timer size={14} />
+            <span className="data-text text-[10px] uppercase tracking-wider">Rest</span>
+          </div>
+          <p className="data-text text-2xl font-black text-red-300">{restTimer}</p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function SessionControlCard({
+  activeSession,
+  activeWorkoutId,
+  authUser,
+  deleteConfirmId,
+  deletingSessionId,
+  endingSessionId,
+  isSupabaseConfigured,
+  onDeleteSession,
+  onEndSession,
+  onSelectToday,
+  onSignOut,
+  onStartWorkout,
+  savingSession,
+  selectingToday,
+  sessionForm,
+  setActiveWorkoutId,
+  setSessionForm,
+  setShowCustomSession,
+  showCustomSession,
+  workoutSessions,
+  workoutSessionsError,
+  workoutSessionsStatus,
+}) {
+  return (
+    <Panel className="h-fit">
+      <PanelHeader
+        eyebrow="Session"
+        title="Control"
+        right={<SourceStatus status={workoutSessionsStatus} configured={isSupabaseConfigured} authed={Boolean(authUser)} />}
       />
-      <SetField
-        label="Password"
-        type="password"
-        value={authForm.password}
-        onChange={(value) => setAuthForm((prev) => ({ ...prev, password: value }))}
-      />
-      <IconButton
-        type="submit"
-        loading={loading}
-        icon={LogIn}
-        title={authMode === 'sign-up' ? 'Sign up' : 'Sign in'}
-        tone="cyan"
-        className="mt-5 h-[54px]"
-      />
+      <div className="space-y-2 p-3">
+        {authUser ? (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-black/25 px-3 py-2">
+            <div className="min-w-0">
+              <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Signed In</p>
+              <p className="truncate text-xs text-zinc-300">{authUser.email}</p>
+            </div>
+            <IconButton icon={Power} onClick={onSignOut} title="Sign out" tone="red" />
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={onSelectToday}
+          disabled={!authUser || selectingToday}
+          className="flex w-full items-center justify-between rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-left text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+        >
+          <span>
+            <span className="block text-sm font-semibold">{selectingToday ? 'Syncing' : 'Select/start today'}</span>
+            <span className="data-text text-[10px] text-cyan-300/70">{today}</span>
+          </span>
+          {selectingToday ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+        </button>
+
+        <label className="block rounded-md border border-white/5 bg-black/25 p-2">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-500">Active Session</span>
+          <select
+            value={activeWorkoutId ?? ''}
+            onChange={(event) => setActiveWorkoutId(event.target.value || null)}
+            disabled={!authUser || !workoutSessions.length}
+            className="mt-1 w-full rounded border border-white/10 bg-black px-2 py-2 text-xs text-zinc-100 outline-none focus:border-cyan-400/40 disabled:text-zinc-600"
+          >
+            <option value="">No session selected</option>
+            {workoutSessions.map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.performed_on} / {session.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {activeSession ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => onEndSession(activeSession.id)}
+              disabled={Boolean(activeSession.ended_at) || endingSessionId === activeSession.id}
+              className="flex h-9 items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+            >
+              {endingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+              {activeSession.ended_at ? 'Ended' : 'End'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteSession(activeSession.id)}
+              disabled={deletingSessionId === activeSession.id}
+              className={`flex h-9 items-center justify-center gap-2 rounded-md border text-xs font-medium disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
+                deleteConfirmId === activeSession.id
+                  ? 'border-red-400/40 bg-red-400/20 text-red-200'
+                  : 'border-red-400/20 bg-red-400/10 text-red-300'
+              }`}
+            >
+              {deletingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              {deleteConfirmId === activeSession.id ? 'Confirm' : 'Delete'}
+            </button>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setShowCustomSession((value) => !value)}
+          className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-zinc-300"
+        >
+          Create Custom Session
+        </button>
+
+        {showCustomSession ? (
+          <form onSubmit={onStartWorkout} className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2">
+            <CompactField label="Name" value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
+            <CompactField label="Date" type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
+            <CompactField label="Notes" value={sessionForm.notes} onChange={(value) => setSessionForm((prev) => ({ ...prev, notes: value }))} />
+            <button
+              type="submit"
+              disabled={!authUser || savingSession}
+              className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+            >
+              {savingSession ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              {savingSession ? 'Starting' : 'Start Session'}
+            </button>
+          </form>
+        ) : null}
+
+        {workoutSessionsError ? <p className="data-text text-[11px] text-red-300">{workoutSessionsError}</p> : null}
+      </div>
+    </Panel>
+  );
+}
+
+function SetLogger({
+  activeSession,
+  authError,
+  authForm,
+  authMessage,
+  authMode,
+  authSubmitting,
+  authUser,
+  draftPrs,
+  formError,
+  isSupabaseConfigured,
+  onAuthSubmit,
+  onSetSubmit,
+  previousPerformance,
+  savingSet,
+  setAuthForm,
+  setAuthMode,
+  setFormValue,
+  updateSetForm,
+}) {
+  return (
+    <Panel>
+      <PanelHeader eyebrow="Active Logging" title="Set Logger" />
+      <div className="p-3">
+        {!isSupabaseConfigured ? (
+          <ConfigNotice />
+        ) : !authUser ? (
+          <AuthGate
+            authError={authError}
+            authForm={authForm}
+            authMessage={authMessage}
+            authMode={authMode}
+            formError={formError}
+            loading={authSubmitting}
+            onSubmit={onAuthSubmit}
+            setAuthForm={setAuthForm}
+            setAuthMode={setAuthMode}
+          />
+        ) : (
+          <>
+            {activeSession ? (
+              <div className="grid gap-3">
+                <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
+                <form onSubmit={onSetSubmit} className="grid gap-2">
+                  <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+                    <CompactField label="Set" type="number" value={setFormValue.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
+                    <CompactField label="Weight" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
+                    <CompactField label="Reps" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
+                    <CompactField label="RPE" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
+                    <CompactField label="Date" type="date" value={setFormValue.date} onChange={(value) => updateSetForm('date', value)} />
+                  </div>
+                  <CompactField label="Notes" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
+                  <button
+                    type="submit"
+                    disabled={savingSet || !activeSession}
+                    className="flex h-11 items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-sm font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                  >
+                    {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                    {savingSet ? 'Saving Set' : 'Save Set'}
+                  </button>
+                  {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
+                </form>
+              </div>
+            ) : (
+              <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
+                Select or start a workout session to log sets.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function AuthGate({ authError, authForm, authMessage, authMode, formError, loading, onSubmit, setAuthForm, setAuthMode }) {
+  if (!authForm) return null;
+  return (
+    <form onSubmit={onSubmit} className="mb-3 grid grid-cols-1 gap-2 rounded-md border border-white/5 bg-black/25 p-2 md:grid-cols-[1fr_1fr_44px]">
+      <CompactField label="Email" type="email" value={authForm.email} onChange={(value) => setAuthForm((prev) => ({ ...prev, email: value }))} />
+      <CompactField label="Password" type="password" value={authForm.password} onChange={(value) => setAuthForm((prev) => ({ ...prev, password: value }))} />
+      <IconButton type="submit" loading={loading} icon={LogIn} title={authMode === 'sign-up' ? 'Sign up' : 'Sign in'} tone="cyan" className="mt-5" />
       <div className="col-span-full flex items-center justify-between gap-2">
         <button
           type="button"
@@ -639,25 +646,11 @@ function AuthPanel({ authError, authForm, authMessage, authMode, formError, load
         >
           {authMode === 'sign-up' ? 'Use existing account' : 'Create account'}
         </button>
-        <span className="data-text text-[10px] text-zinc-500">
-          {loading ? 'Authenticating' : 'Supabase Auth required by RLS'}
-        </span>
+        <span className="data-text text-[10px] text-zinc-500">{loading ? 'Authenticating' : 'Supabase Auth required'}</span>
       </div>
       {authMessage ? <p className="col-span-full data-text text-[11px] text-emerald-300">{authMessage}</p> : null}
       {authError || formError ? <p className="col-span-full data-text text-[11px] text-red-300">{authError || formError}</p> : null}
     </form>
-  );
-}
-
-function ConfigNotice() {
-  return (
-    <div className="rounded-md border border-amber-400/20 bg-amber-400/10 p-3">
-      <p className="text-sm font-medium text-amber-200">Supabase env missing</p>
-      <p className="mt-1 text-xs leading-5 text-amber-100/70">
-        Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local`, run `supabase/schema.sql`,
-        then restart the dev server.
-      </p>
-    </div>
   );
 }
 
@@ -691,7 +684,7 @@ function PreviousPerformanceCard({ performance, prs }) {
           {prList.length ? prList.map((pr) => <Tag key={pr} tone="emerald">{formatPrLabel(pr)} PR</Tag>) : <Tag tone="zinc">NO PR</Tag>}
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <MiniMetric label="Heaviest" value={`${performance.heaviestSet.weight}kg`} tone="text-cyan-300" sub={`${performance.heaviestSet.reps} reps @ ${performance.heaviestSet.rpe}`} />
         <MiniMetric label="Best Volume" value={performance.bestVolumeSet.volume.toLocaleString()} tone="text-emerald-300" sub={`${performance.bestVolumeSet.weight}kg x ${performance.bestVolumeSet.reps}`} />
         <MiniMetric label="Est 1RM" value={`${formatNumber(performance.bestEstimated1Rm.estimated1Rm)}kg`} tone="text-violet-300" sub="Epley best" />
@@ -701,96 +694,283 @@ function PreviousPerformanceCard({ performance, prs }) {
   );
 }
 
-function SessionLog({
-  active,
+function TodaySetsLog({
+  activeSession,
   beginEdit,
+  collapsedSessions,
   deletingSetId,
-  deleteWorkoutSet,
   editForm,
   editingSetId,
+  onDeleteSet,
+  onSaveEdit,
   savingEditId,
-  session,
   setActiveWorkoutId,
+  setCollapsedSessions,
   setEditForm,
   setEditingSetId,
-  saveEdit,
   workoutSessions,
+  workoutSessionsStatus,
 }) {
-  const sets = session.workout_sets ?? [];
-  const volume = sets.reduce((total, set) => total + Number(set.weight) * Number(set.reps), 0);
+  const activeSets = activeSession?.workout_sets ?? [];
+  const groupedActiveSets = groupSetsByExercise(activeSets);
+  const otherSessions = workoutSessions.filter((session) => session.id !== activeSession?.id);
 
   return (
-    <div className={`rounded-md border bg-black/25 ${active ? 'border-cyan-400/30' : 'border-white/5'}`}>
-      <button
-        type="button"
-        onClick={() => setActiveWorkoutId(session.id)}
-        className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-      >
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-zinc-100">{session.name}</p>
-          <p className="data-text mt-1 text-[11px] text-zinc-500">
-            {session.performed_on} / {sets.length} sets / {Math.round(volume).toLocaleString()}kg volume
+    <Panel>
+      <PanelHeader eyebrow="Today" title="Logged Sets" right={<History size={16} className="text-cyan-300" />} />
+      <div className="space-y-3 p-3">
+        {workoutSessionsStatus === 'loading' ? (
+          <LoadingCard label="Loading workout sessions" />
+        ) : activeSession ? (
+          Object.keys(groupedActiveSets).length ? (
+            Object.entries(groupedActiveSets).map(([exercise, sets]) => (
+              <ExerciseSetGroup
+                key={exercise}
+                beginEdit={beginEdit}
+                deletingSetId={deletingSetId}
+                editForm={editForm}
+                editingSetId={editingSetId}
+                exercise={exercise}
+                onDeleteSet={onDeleteSet}
+                onSaveEdit={onSaveEdit}
+                savingEditId={savingEditId}
+                session={activeSession}
+                setEditForm={setEditForm}
+                setEditingSetId={setEditingSetId}
+                sets={sets}
+                workoutSessions={workoutSessions}
+              />
+            ))
+          ) : (
+            <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">No sets logged in this session.</p>
+          )
+        ) : (
+          <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">No active session selected.</p>
+        )}
+
+        {otherSessions.length ? (
+          <div className="border-t border-white/5 pt-3">
+            <p className="mb-2 data-text text-[10px] uppercase tracking-wider text-zinc-500">Other Sessions</p>
+            <div className="space-y-2">
+              {otherSessions.map((session) => {
+                const collapsed = collapsedSessions[session.id] ?? true;
+                const volume = getSessionVolume(session);
+                return (
+                  <div key={session.id} className="rounded-md border border-white/5 bg-black/25">
+                    <div className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-zinc-200">{session.name}</p>
+                        <p className="data-text text-[10px] text-zinc-500">
+                          {session.performed_on} / {(session.workout_sets ?? []).length} sets / {Math.round(volume).toLocaleString()} volume
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveWorkoutId(session.id)}
+                          className="rounded border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 data-text text-[10px] text-cyan-300"
+                        >
+                          SELECT
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedSessions((prev) => ({ ...prev, [session.id]: !collapsed }))}
+                          className="grid h-7 w-7 place-items-center rounded border border-white/10 bg-white/[0.03] text-zinc-500"
+                          title={collapsed ? 'Expand session' : 'Collapse session'}
+                        >
+                          <ChevronDown size={15} className={`transition ${collapsed ? '' : 'rotate-180'}`} />
+                        </button>
+                      </div>
+                    </div>
+                    {!collapsed ? (
+                      <div className="grid gap-1 border-t border-white/5 p-2">
+                        {(session.workout_sets ?? []).map((set) => (
+                          <div key={set.id} className="grid grid-cols-[40px_1fr_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-1.5">
+                            <span className="data-text text-xs text-cyan-300">#{set.set_number}</span>
+                            <span className="truncate text-xs text-zinc-200">{set.exercise}</span>
+                            <span className="data-text text-xs text-zinc-400">
+                              {formatNumber(set.weight)}kg x {set.reps} @ {formatNumber(set.rpe)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function ExerciseSetGroup({
+  beginEdit,
+  deletingSetId,
+  editForm,
+  editingSetId,
+  exercise,
+  onDeleteSet,
+  onSaveEdit,
+  savingEditId,
+  session,
+  setEditForm,
+  setEditingSetId,
+  sets,
+  workoutSessions,
+}) {
+  const volume = sets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+
+  return (
+    <div className="rounded-md border border-white/5 bg-black/25">
+      <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
+        <div>
+          <p className="text-sm font-semibold text-zinc-100">{exercise}</p>
+          <p className="data-text text-[10px] text-zinc-500">
+            {sets.length} sets / {Math.round(volume).toLocaleString()} volume
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          {active ? <Tag tone="cyan">ACTIVE</Tag> : null}
-          <Tag tone={session.ended_at ? 'zinc' : 'emerald'}>{session.ended_at ? 'ENDED' : 'LIVE'}</Tag>
-        </div>
-      </button>
-      <div className="grid gap-1 border-t border-white/5 p-2">
-        {sets.length ? (
-          sets.map((set) => {
-            const priorAnalytics = getExerciseAnalyticsBeforeSession(workoutSessions, session, set.exercise);
-            const sessionExercise = getSessionExerciseSummary(session, set.exercise);
-            const isLastSet = sessionExercise.lastSet?.id === set.id;
-            const prs = detectPrs(set, priorAnalytics, sessionExercise.totalVolume, isLastSet);
-            if (editingSetId === set.id) {
-              return (
-                <EditSetRow
-                  key={set.id}
-                  editForm={editForm}
-                  loading={savingEditId === set.id}
-                  setEditForm={setEditForm}
-                  onCancel={() => {
-                    setEditingSetId(null);
-                    setEditForm(null);
-                  }}
-                  onSave={() => saveEdit(set.id)}
-                />
-              );
-            }
+      </div>
+      <div className="grid gap-1 p-2">
+        {sets.map((set) => {
+          const priorAnalytics = getExerciseAnalyticsBeforeSession(workoutSessions, session, set.exercise);
+          const sessionExercise = getSessionExerciseSummary(session, set.exercise);
+          const isLastSet = sessionExercise.lastSet?.id === set.id;
+          const prs = detectPrs(set, priorAnalytics, sessionExercise.totalVolume, isLastSet);
 
+          if (editingSetId === set.id) {
             return (
-              <div key={set.id} className="grid grid-cols-[40px_1fr_auto_72px] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2">
-                <span className="data-text text-sm font-bold text-cyan-300">#{set.set_number}</span>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1">
-                    <p className="truncate text-xs font-medium text-zinc-100">{set.exercise}</p>
-                    <PrTags prs={prs} />
-                  </div>
-                  <p className="data-text text-[10px] text-zinc-500">{formatDate(set.performed_at)}</p>
-                </div>
-                <span className="data-text text-xs text-zinc-200">
-                  {Number(set.weight)}kg x {set.reps} @ {Number(set.rpe)}
-                </span>
-                <div className="flex gap-1">
-                  <IconButton icon={Pencil} onClick={() => beginEdit(set)} title="Edit set" tone="zinc" size="sm" />
-                  <IconButton
-                    icon={Trash2}
-                    loading={deletingSetId === set.id}
-                    onClick={() => deleteWorkoutSet(set.id)}
-                    title="Delete set"
-                    tone="red"
-                    size="sm"
-                  />
-                </div>
-              </div>
+              <EditSetRow
+                key={set.id}
+                editForm={editForm}
+                loading={savingEditId === set.id}
+                onCancel={() => {
+                  setEditingSetId(null);
+                  setEditForm(null);
+                }}
+                onSave={() => onSaveEdit(set.id)}
+                setEditForm={setEditForm}
+              />
             );
-          })
+          }
+
+          return (
+            <div key={set.id} className="grid grid-cols-[40px_1fr_auto_72px] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2">
+              <span className="data-text text-sm font-bold text-cyan-300">#{set.set_number}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <p className="truncate text-xs font-medium text-zinc-100">{formatNumber(set.weight)}kg x {set.reps}</p>
+                  <PrTags prs={prs} />
+                </div>
+                <p className="data-text text-[10px] text-zinc-500">
+                  RPE {formatNumber(set.rpe)} / {formatDate(set.performed_at)}
+                </p>
+              </div>
+              <span className="data-text text-xs text-zinc-400">{Math.round(parseDecimal(set.weight) * parseInteger(set.reps))} vol</span>
+              <div className="flex gap-1">
+                <IconButton icon={Pencil} onClick={() => beginEdit(set)} title="Edit set" tone="zinc" size="sm" />
+                <IconButton icon={Trash2} loading={deletingSetId === set.id} onClick={() => onDeleteSet(set.id)} title="Delete set" tone="red" size="sm" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ExerciseHistoryPanel({ exerciseAnalytics }) {
+  return (
+    <Panel className="col-span-12">
+      <PanelHeader eyebrow="Exercise History" title="Progression" right={<Medal size={16} className="text-amber-300" />} />
+      <div className="grid gap-2 p-3 xl:grid-cols-2">
+        {exerciseAnalytics.exercises.length ? (
+          exerciseAnalytics.exercises.map((exercise) => <ExerciseHistoryCard key={exercise.key} exercise={exercise} />)
         ) : (
-          <p className="px-2 py-2 text-sm text-zinc-500">No sets logged in this session.</p>
+          <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
+            Log persisted sets to build exercise progression.
+          </div>
         )}
       </div>
+    </Panel>
+  );
+}
+
+function SampleDataArchive({ expandedWorkout, setExpandedWorkout, setShowMockArchive, showMockArchive, workout }) {
+  return (
+    <Panel className="col-span-12 border-zinc-800/70 bg-[#0d0d0d] opacity-80">
+      <PanelHeader
+        eyebrow="Sample Data"
+        title="Mock Workout Archive"
+        right={
+          <button
+            type="button"
+            onClick={() => setShowMockArchive((value) => !value)}
+            className="rounded border border-white/10 px-2 py-1 data-text text-[10px] text-zinc-400"
+          >
+            {showMockArchive ? 'HIDE' : 'SHOW'}
+          </button>
+        }
+      />
+      {showMockArchive ? (
+        <div className="space-y-2 p-3">
+          {workout.history.map((session) => {
+            const open = expandedWorkout === session.date;
+            return (
+              <div key={session.date} className="rounded-md border border-white/5 bg-black/25">
+                <button
+                  type="button"
+                  onClick={() => setExpandedWorkout(open ? null : session.date)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-300">{session.title}</p>
+                    <p className="data-text text-[11px] text-zinc-600">
+                      {session.date} / {session.duration} / {session.volume.toLocaleString()}kg mock volume
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Tag tone="zinc">MOCK</Tag>
+                    <ChevronDown size={16} className={`text-zinc-600 transition ${open ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                {open ? (
+                  <div className="grid gap-2 border-t border-white/5 p-3">
+                    {session.exercises.map((exercise) => (
+                      <div key={exercise.name} className="grid grid-cols-[180px_1fr] gap-2 rounded border border-white/5 bg-[#121212] p-2">
+                        <p className="text-xs font-medium text-zinc-400">{exercise.name}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {exercise.sets.map((set) => (
+                            <span key={set} className="data-text rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-zinc-500">
+                              {set}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="p-3 text-sm text-zinc-600">Mock examples are hidden so persisted Supabase data stays visually primary.</div>
+      )}
+    </Panel>
+  );
+}
+
+function ConfigNotice() {
+  return (
+    <div className="rounded-md border border-amber-400/20 bg-amber-400/10 p-3">
+      <p className="text-sm font-medium text-amber-200">Supabase env missing</p>
+      <p className="mt-1 text-xs leading-5 text-amber-100/70">
+        Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local`, run `supabase/schema.sql`,
+        then restart the dev server.
+      </p>
     </div>
   );
 }
@@ -805,7 +985,7 @@ function PrTags({ prs }) {
     reps: 'REPS',
   };
   return (
-    <span className="flex gap-1">
+    <span className="flex flex-wrap gap-1">
       {active.map(([key]) => (
         <span key={key} className="data-text rounded border border-emerald-400/20 bg-emerald-400/10 px-1 text-[9px] text-emerald-300">
           {labels[key] ?? key.toUpperCase()}
@@ -828,20 +1008,8 @@ function ExerciseHistoryCard({ exercise }) {
         <Tag tone="emerald">BEST 1RM {formatNumber(exercise.bestEstimated1Rm.estimated1Rm)}kg</Tag>
       </div>
       <div className="mb-3 grid grid-cols-2 gap-2">
-        <TrendBars
-          color="emerald"
-          max={exercise.peakSessionVolume}
-          sessions={exercise.sessions}
-          title="Session Volume"
-          valueKey="totalVolume"
-        />
-        <TrendBars
-          color="cyan"
-          max={exercise.peakEstimated1Rm}
-          sessions={exercise.sessions}
-          title="Best Est 1RM"
-          valueKey="bestEstimated1Rm"
-        />
+        <TrendBars color="emerald" max={exercise.peakSessionVolume} sessions={exercise.sessions} title="Session Volume" valueKey="totalVolume" />
+        <TrendBars color="cyan" max={exercise.peakEstimated1Rm} sessions={exercise.sessions} title="Best Est 1RM" valueKey="bestEstimated1Rm" />
       </div>
       <div className="grid gap-1">
         {exercise.sessions.slice(-4).reverse().map((session) => (
@@ -869,11 +1037,7 @@ function TrendBars({ color, max, sessions, title, valueKey }) {
           const height = Math.max(8, Math.round((value / Math.max(max, 1)) * 48));
           return (
             <div key={`${title}-${session.sessionId}`} className="flex flex-1 flex-col items-center gap-1">
-              <div
-                className={`w-full rounded-sm border ${barColor}`}
-                style={{ height }}
-                title={`${session.date}: ${formatNumber(value)}`}
-              />
+              <div className={`w-full rounded-sm border ${barColor}`} style={{ height }} title={`${session.date}: ${formatNumber(value)}`} />
               <span className="data-text text-[8px] text-zinc-600">{session.date.slice(5)}</span>
             </div>
           );
@@ -887,13 +1051,13 @@ function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
   const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }));
   return (
     <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.4fr_0.55fr_0.45fr_0.45fr_0.7fr_1fr_72px]">
-      <SetField label="Exercise" value={editForm.exercise} onChange={(value) => update('exercise', value)} compact />
-      <SetField label="Set" type="number" value={editForm.set_number} onChange={(value) => update('set_number', value)} compact />
-      <SetField label="Weight" type="number" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} compact />
-      <SetField label="Reps" type="number" value={editForm.reps} onChange={(value) => update('reps', value)} compact />
-      <SetField label="RPE" type="number" step="0.5" value={editForm.rpe} onChange={(value) => update('rpe', value)} compact />
-      <SetField label="Date" type="date" value={editForm.date} onChange={(value) => update('date', value)} compact />
-      <SetField label="Notes" value={editForm.notes} onChange={(value) => update('notes', value)} compact />
+      <CompactField label="Exercise" value={editForm.exercise} onChange={(value) => update('exercise', value)} />
+      <CompactField label="Set" type="number" value={editForm.set_number} onChange={(value) => update('set_number', value)} />
+      <CompactField label="Weight" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
+      <CompactField label="Reps" value={editForm.reps} onChange={(value) => update('reps', value)} />
+      <CompactField label="RPE" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
+      <CompactField label="Date" type="date" value={editForm.date} onChange={(value) => update('date', value)} />
+      <CompactField label="Notes" value={editForm.notes} onChange={(value) => update('notes', value)} />
       <div className="flex items-end gap-1">
         <IconButton icon={Check} loading={loading} onClick={onSave} title="Save edit" tone="emerald" size="sm" />
         <IconButton icon={X} onClick={onCancel} title="Cancel edit" tone="zinc" size="sm" />
@@ -902,22 +1066,19 @@ function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
   );
 }
 
-function SetField({ label, value, onChange, type = 'text', step, suffix, readOnly = false, compact = false }) {
+function CompactField({ label, value, onChange, type = 'text', suffix, readOnly = false }) {
   return (
-    <label className={`rounded-md border border-white/5 bg-[#121212] ${compact ? 'p-2' : 'p-3'}`}>
-      <span className="text-xs uppercase tracking-wider text-zinc-500">{label}</span>
-      <div className="mt-2 flex items-end gap-1">
+    <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+      <div className="mt-1 flex items-center gap-1">
         <input
           type={type}
-          step={step}
           value={value}
           readOnly={readOnly}
           onChange={(event) => onChange(event.target.value)}
-          className={`data-text min-w-0 flex-1 bg-transparent font-black text-zinc-100 outline-none ${
-            compact ? 'text-sm' : 'text-base md:text-lg'
-          } ${readOnly ? 'text-cyan-300' : ''}`}
+          className={`data-text min-w-0 flex-1 bg-transparent text-sm font-semibold text-zinc-100 outline-none ${readOnly ? 'text-cyan-300' : ''}`}
         />
-        {suffix ? <span className="data-text pb-1 text-sm text-zinc-500">{suffix}</span> : null}
+        {suffix ? <span className="data-text text-xs text-zinc-500">{suffix}</span> : null}
       </div>
     </label>
   );
@@ -970,13 +1131,21 @@ function SourceStatus({ status, configured, authed }) {
   );
 }
 
+function groupSetsByExercise(sets) {
+  return sets.reduce((groups, set) => {
+    const key = set.exercise || 'Unknown Exercise';
+    groups[key] = groups[key] ?? [];
+    groups[key].push(set);
+    groups[key].sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
+    return groups;
+  }, {});
+}
+
 function getNextSetNumber(session, exercise) {
   if (!session || !exercise.trim()) return 1;
-  const normalizedExercise = exercise.trim().toLowerCase();
-  const matchingSets = (session.workout_sets ?? []).filter(
-    (set) => set.exercise.trim().toLowerCase() === normalizedExercise,
-  );
-  return matchingSets.length ? Math.max(...matchingSets.map((set) => Number(set.set_number))) + 1 : 1;
+  const normalizedExercise = normalizeExercise(exercise);
+  const matchingSets = (session.workout_sets ?? []).filter((set) => normalizeExercise(set.exercise) === normalizedExercise);
+  return matchingSets.length ? Math.max(...matchingSets.map((set) => parseInteger(set.set_number))) + 1 : 1;
 }
 
 function getSessionExerciseSummary(session, exercise) {
@@ -984,7 +1153,7 @@ function getSessionExerciseSummary(session, exercise) {
   const sets = (session?.workout_sets ?? [])
     .filter((set) => normalizeExercise(set.exercise) === key)
     .map(normalizeSet)
-    .sort((a, b) => Number(a.set_number) - Number(b.set_number));
+    .sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
   return {
     sets,
     totalVolume: sets.reduce((total, set) => total + set.volume, 0),
@@ -994,6 +1163,10 @@ function getSessionExerciseSummary(session, exercise) {
 
 function getSessionExerciseVolume(session, exercise) {
   return getSessionExerciseSummary(session, exercise).totalVolume;
+}
+
+function getSessionVolume(session) {
+  return (session?.workout_sets ?? []).reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
 }
 
 function buildExerciseAnalytics(sessions) {
@@ -1091,7 +1264,7 @@ function getPreviousPerformance(sessions, activeSession, exercise) {
   const sets = previousSession.workout_sets
     .filter((set) => normalizeExercise(set.exercise) === key)
     .map(normalizeSet)
-    .sort((a, b) => Number(a.set_number) - Number(b.set_number));
+    .sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
   const totalVolume = sets.reduce((total, set) => total + set.volume, 0);
   const bestVolumeSet = sets.reduce((best, set) => (set.volume > best.volume ? set : best), sets[0]);
   const heaviestSet = sets.reduce((best, set) => (set.weight > best.weight ? set : best), sets[0]);
@@ -1125,14 +1298,13 @@ function getExerciseAnalyticsBeforeSession(sessions, activeSession, exercise) {
 }
 
 function detectPrs(set, analytics, sessionExerciseVolume = 0, includeSessionVolume = false) {
-  if (!analytics || !set.exercise || !Number.isFinite(Number(set.weight)) || !Number.isFinite(Number(set.reps))) {
+  const weight = parseDecimal(set.weight);
+  const reps = parseInteger(set.reps);
+  if (!analytics || !set.exercise || !Number.isFinite(weight) || !Number.isFinite(reps)) {
     return { setVolume: false, sessionVolume: false, weight: false, reps: false };
   }
 
-  const weight = Number(set.weight);
-  const reps = Number(set.reps);
   const volume = weight * reps;
-
   return {
     setVolume: volume > analytics.maxSetVolume,
     sessionVolume: includeSessionVolume && Number(sessionExerciseVolume) > analytics.maxSessionVolume,
@@ -1142,14 +1314,14 @@ function detectPrs(set, analytics, sessionExerciseVolume = 0, includeSessionVolu
 }
 
 function normalizeSet(set) {
-  const weight = Number(set.weight);
-  const reps = Number(set.reps);
+  const weight = parseDecimal(set.weight);
+  const reps = parseInteger(set.reps);
   const estimated1Rm = weight * (1 + reps / 30);
   return {
     ...set,
     weight,
     reps,
-    rpe: Number(set.rpe),
+    rpe: parseDecimal(set.rpe),
     volume: weight * reps,
     estimated1Rm,
   };
@@ -1157,6 +1329,15 @@ function normalizeSet(set) {
 
 function normalizeExercise(exercise) {
   return String(exercise ?? '').trim().toLowerCase();
+}
+
+function parseDecimal(value) {
+  if (typeof value === 'number') return value;
+  return Number(String(value ?? '').trim().replace(',', '.'));
+}
+
+function parseInteger(value) {
+  return Number(String(value ?? '').trim());
 }
 
 function formatPrLabel(key) {
@@ -1176,6 +1357,11 @@ function formatNumber(value) {
   });
 }
 
+function formatTime(value) {
+  if (!value) return '--:--';
+  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 function compareSessionsAscending(a, b) {
   return compareSessionPosition(a, b);
 }
@@ -1192,12 +1378,17 @@ function compareSessionPosition(a, b) {
 }
 
 function validateSetForm(form, activeWorkoutSession) {
+  const weight = parseDecimal(form.weight);
+  const reps = parseInteger(form.reps);
+  const rpe = parseDecimal(form.rpe);
+  const setNumber = parseInteger(form.set_number);
+
   if (!activeWorkoutSession) return 'Select or start a workout session first.';
   if (!form.exercise.trim()) return 'Exercise is required.';
-  if (!Number.isFinite(Number(form.set_number)) || Number(form.set_number) <= 0) return 'Set number must be greater than 0.';
-  if (!Number.isFinite(Number(form.weight)) || Number(form.weight) < 0) return 'Weight must be 0 or greater.';
-  if (!Number.isInteger(Number(form.reps)) || Number(form.reps) <= 0) return 'Reps must be a positive whole number.';
-  if (!Number.isFinite(Number(form.rpe)) || Number(form.rpe) < 0 || Number(form.rpe) > 10) return 'RPE must be between 0 and 10.';
+  if (!Number.isFinite(setNumber) || setNumber <= 0) return 'Set number must be greater than 0.';
+  if (!Number.isFinite(weight) || weight < 0) return 'Weight must be 0 or greater.';
+  if (!Number.isInteger(reps) || reps <= 0) return 'Reps must be a positive whole number.';
+  if (!Number.isFinite(rpe) || rpe < 0 || rpe > 10) return 'RPE must be between 0 and 10.';
   if (!isValidDate(form.date)) return 'Date is invalid.';
   return '';
 }
