@@ -322,7 +322,7 @@ export function WorkoutTab() {
   };
 
   return (
-    <div className="grid grid-cols-12 gap-3">
+    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <ActiveWorkoutHeader
         activeSession={activeWorkoutSession}
         activeVolume={activeVolume}
@@ -435,23 +435,27 @@ function ActiveWorkoutHeader({
   const timerInactive = !activeSession || Boolean(activeSession.ended_at);
 
   return (
-    <Panel className="col-span-12">
-      <div className="grid items-center gap-3 p-3 lg:grid-cols-[1fr_190px]">
+      <Panel className="sticky top-[72px] z-20 col-span-12 md:static md:z-auto">
+      <div className="grid items-center gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[1fr_190px]">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Dumbbell size={18} className="text-cyan-300" />
-            <h2 className="truncate text-lg font-semibold text-zinc-100">{activeSession?.name ?? fallbackName}</h2>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-zinc-100 md:text-lg">{activeSession?.name ?? fallbackName}</h2>
             <Tag tone={tone}>{status}</Tag>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <MiniMetric label="Date" value={activeSession?.performed_on ?? today} tone="text-zinc-100" sub="active day" />
+            <div className="hidden md:block">
+              <MiniMetric label="Date" value={activeSession?.performed_on ?? today} tone="text-zinc-100" sub="active day" />
+            </div>
             <MiniMetric label="Sets" value={setCount} tone="text-cyan-300" sub="active session" />
             <MiniMetric label="Volume" value={Math.round(activeVolume).toLocaleString()} tone="text-emerald-300" sub="kg x reps" />
-            <MiniMetric label="Started" value={formatTime(activeSession?.started_at)} tone="text-amber-300" sub="local" />
+            <div className="hidden md:block">
+              <MiniMetric label="Started" value={formatTime(activeSession?.started_at)} tone="text-amber-300" sub="local" />
+            </div>
           </div>
         </div>
         <div
-          className={`rounded-md border px-3 py-2 ${
+          className={`rounded-md border px-2 py-2 md:px-3 ${
             timerInactive ? 'border-white/10 bg-white/[0.03]' : 'border-red-400/20 bg-red-400/10'
           }`}
         >
@@ -459,7 +463,7 @@ function ActiveWorkoutHeader({
             <Timer size={14} />
             <span className="data-text text-[10px] uppercase tracking-wider">Rest</span>
           </div>
-          <p className={`data-text text-center text-2xl font-black ${timerInactive ? 'text-zinc-600' : 'text-red-300'}`}>
+          <p className={`data-text text-center text-xl font-black md:text-2xl ${timerInactive ? 'text-zinc-600' : 'text-red-300'}`}>
             {formatElapsed(restElapsedSeconds)}
           </p>
           <div className="mt-2 grid grid-cols-3 gap-1">
@@ -467,7 +471,7 @@ function ActiveWorkoutHeader({
               type="button"
               onClick={onStartRestTimer}
               disabled={timerInactive || isRestTimerRunning}
-              className="rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 data-text text-[10px] text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              className="min-h-9 rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 data-text text-[10px] text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
             >
               START
             </button>
@@ -475,7 +479,7 @@ function ActiveWorkoutHeader({
               type="button"
               onClick={onPauseRestTimer}
               disabled={timerInactive || !isRestTimerRunning}
-              className="rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 data-text text-[10px] text-amber-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              className="min-h-9 rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 data-text text-[10px] text-amber-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
             >
               PAUSE
             </button>
@@ -483,7 +487,7 @@ function ActiveWorkoutHeader({
               type="button"
               onClick={onResetRestTimer}
               disabled={timerInactive || (!isRestTimerRunning && restElapsedSeconds === 0)}
-              className="rounded border border-white/10 bg-white/[0.03] px-2 py-1 data-text text-[10px] text-zinc-300 disabled:text-zinc-600"
+              className="min-h-9 rounded border border-white/10 bg-white/[0.03] px-2 py-1 data-text text-[10px] text-zinc-300 disabled:text-zinc-600"
             >
               RESET
             </button>
@@ -518,6 +522,8 @@ function SessionControlCard({
   workoutSessionsError,
   workoutSessionsStatus,
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <Panel className="h-fit">
       <PanelHeader
@@ -525,7 +531,15 @@ function SessionControlCard({
         title="Control"
         right={<SourceStatus status={workoutSessionsStatus} configured={isSupabaseConfigured} authed={Boolean(authUser)} />}
       />
-      <div className="space-y-2 p-3">
+      <button
+        type="button"
+        onClick={() => setMobileOpen((value) => !value)}
+        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
+      >
+        <span>Session controls</span>
+        <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
         {authUser ? (
           <div className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-black/25 px-3 py-2">
             <div className="min-w-0">
@@ -667,19 +681,23 @@ function SetLogger({
               <div className="grid gap-3">
                 <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
                 <form onSubmit={onSetSubmit} className="grid gap-2">
-                  <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
-                  <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-                    <CompactField label="Set" type="number" value={setFormValue.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
-                    <CompactField label="Weight" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
-                    <CompactField label="Reps" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
-                    <CompactField label="RPE" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
-                    <CompactField label="Date" type="date" value={setFormValue.date} onChange={(value) => updateSetForm('date', value)} />
+                  <div className="grid grid-cols-[1fr_72px] gap-2 md:grid-cols-[1fr_92px]">
+                    <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
+                    <CompactField label="Set" type="number" inputMode="numeric" value={setFormValue.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
                   </div>
-                  <CompactField label="Notes" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
+                  <div className="grid grid-cols-3 gap-2">
+                    <CompactField label="Weight" inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
+                    <CompactField label="Reps" inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
+                    <CompactField label="RPE" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-[180px_1fr]">
+                    <CompactField label="Date" type="date" value={setFormValue.date} onChange={(value) => updateSetForm('date', value)} />
+                    <CompactField label="Notes" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
+                  </div>
                   <button
                     type="submit"
                     disabled={savingSet || !activeSession}
-                    className="flex h-11 items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-sm font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
                   >
                     {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                     {savingSet ? 'Saving Set' : 'Save Set'}
@@ -951,10 +969,20 @@ function ExerciseSetGroup({
 }
 
 function ExerciseHistoryPanel({ exerciseAnalytics }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <Panel className="col-span-12">
       <PanelHeader eyebrow="Exercise History" title="Progression" right={<Medal size={16} className="text-amber-300" />} />
-      <div className="grid gap-2 p-3 xl:grid-cols-2">
+      <button
+        type="button"
+        onClick={() => setMobileOpen((value) => !value)}
+        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
+      >
+        <span>Show exercise history</span>
+        <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <div className={`${mobileOpen ? 'grid' : 'hidden'} gap-2 p-3 md:grid xl:grid-cols-2`}>
         {exerciseAnalytics.exercises.length ? (
           exerciseAnalytics.exercises.map((exercise) => <ExerciseHistoryCard key={exercise.key} exercise={exercise} />)
         ) : (
@@ -968,6 +996,8 @@ function ExerciseHistoryPanel({ exerciseAnalytics }) {
 }
 
 function SampleDataArchive({ expandedWorkout, setExpandedWorkout, setShowMockArchive, showMockArchive, workout }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <Panel className="col-span-12 border-zinc-800/70 bg-[#0d0d0d] opacity-80">
       <PanelHeader
@@ -983,6 +1013,15 @@ function SampleDataArchive({ expandedWorkout, setExpandedWorkout, setShowMockArc
           </button>
         }
       />
+      <button
+        type="button"
+        onClick={() => setMobileOpen((value) => !value)}
+        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-500 md:hidden"
+      >
+        <span>Sample archive</span>
+        <ChevronDown size={16} className={`text-zinc-600 transition ${mobileOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <div className={`${mobileOpen ? 'block' : 'hidden'} md:block`}>
       {showMockArchive ? (
         <div className="space-y-2 p-3">
           {workout.history.map((session) => {
@@ -1028,6 +1067,7 @@ function SampleDataArchive({ expandedWorkout, setExpandedWorkout, setShowMockArc
       ) : (
         <div className="p-3 text-sm text-zinc-600">Mock examples are hidden so persisted Supabase data stays visually primary.</div>
       )}
+      </div>
     </Panel>
   );
 }
@@ -1121,10 +1161,10 @@ function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
   return (
     <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.4fr_0.55fr_0.45fr_0.45fr_0.7fr_1fr_72px]">
       <CompactField label="Exercise" value={editForm.exercise} onChange={(value) => update('exercise', value)} />
-      <CompactField label="Set" type="number" value={editForm.set_number} onChange={(value) => update('set_number', value)} />
-      <CompactField label="Weight" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
-      <CompactField label="Reps" value={editForm.reps} onChange={(value) => update('reps', value)} />
-      <CompactField label="RPE" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
+      <CompactField label="Set" type="number" inputMode="numeric" value={editForm.set_number} onChange={(value) => update('set_number', value)} />
+      <CompactField label="Weight" inputMode="decimal" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
+      <CompactField label="Reps" inputMode="numeric" value={editForm.reps} onChange={(value) => update('reps', value)} />
+      <CompactField label="RPE" inputMode="decimal" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
       <CompactField label="Date" type="date" value={editForm.date} onChange={(value) => update('date', value)} />
       <CompactField label="Notes" value={editForm.notes} onChange={(value) => update('notes', value)} />
       <div className="flex items-end gap-1">
@@ -1135,17 +1175,18 @@ function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
   );
 }
 
-function CompactField({ label, value, onChange, type = 'text', suffix, readOnly = false }) {
+function CompactField({ inputMode, label, value, onChange, type = 'text', suffix, readOnly = false }) {
   return (
     <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
       <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
       <div className="mt-1 flex items-center gap-1">
         <input
           type={type}
+          inputMode={inputMode}
           value={value}
           readOnly={readOnly}
           onChange={(event) => onChange(event.target.value)}
-          className={`data-text min-w-0 flex-1 bg-transparent text-sm font-semibold text-zinc-100 outline-none ${readOnly ? 'text-cyan-300' : ''}`}
+          className={`data-text min-w-0 flex-1 bg-transparent text-base font-semibold text-zinc-100 outline-none ${readOnly ? 'text-cyan-300' : ''}`}
         />
         {suffix ? <span className="data-text text-xs text-zinc-500">{suffix}</span> : null}
       </div>
