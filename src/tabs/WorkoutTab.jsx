@@ -88,7 +88,9 @@ export function WorkoutTab() {
 
   const exerciseAnalytics = useMemo(() => buildExerciseAnalytics(workoutSessions), [workoutSessions]);
   const selectedExerciseKey = normalizeExercise(setForm.exercise);
-  const selectedExerciseAnalytics = selectedExerciseKey ? exerciseAnalytics.byExercise[selectedExerciseKey] : null;
+  const selectedExerciseAnalytics = selectedExerciseKey
+    ? getExerciseAnalyticsBeforeSession(workoutSessions, activeWorkoutSession, setForm.exercise)
+    : null;
   const previousPerformance = useMemo(
     () => getPreviousPerformance(workoutSessions, activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise, workoutSessions],
@@ -101,8 +103,12 @@ export function WorkoutTab() {
         reps: Number(setForm.reps),
       },
       selectedExerciseAnalytics,
+      activeWorkoutSession
+        ? getSessionExerciseVolume(activeWorkoutSession, setForm.exercise) + Number(setForm.weight) * Number(setForm.reps)
+        : 0,
+      true,
     ),
-    [selectedExerciseAnalytics, setForm.exercise, setForm.reps, setForm.weight],
+    [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.reps, setForm.weight],
   );
 
   const nextSetNumber = useMemo(
@@ -682,14 +688,14 @@ function PreviousPerformanceCard({ performance, prs }) {
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
-          {prList.length ? prList.map((pr) => <Tag key={pr} tone="emerald">{pr.toUpperCase()} PR</Tag>) : <Tag tone="zinc">NO PR</Tag>}
+          {prList.length ? prList.map((pr) => <Tag key={pr} tone="emerald">{formatPrLabel(pr)} PR</Tag>) : <Tag tone="zinc">NO PR</Tag>}
         </div>
       </div>
       <div className="grid grid-cols-4 gap-2">
-        <MiniMetric label="Last" value={`${performance.last.weight}x${performance.last.reps}`} tone="text-cyan-300" sub={`RPE ${performance.last.rpe}`} />
-        <MiniMetric label="Best Set" value={`${performance.bestSet.weight}x${performance.bestSet.reps}`} tone="text-emerald-300" sub={`${performance.bestSet.volume} vol`} />
-        <MiniMetric label="Volume" value={performance.totalVolume.toLocaleString()} tone="text-amber-300" sub="session kg" />
-        <MiniMetric label="Sets" value={performance.sets.length} tone="text-zinc-100" sub="prior session" />
+        <MiniMetric label="Heaviest" value={`${performance.heaviestSet.weight}kg`} tone="text-cyan-300" sub={`${performance.heaviestSet.reps} reps @ ${performance.heaviestSet.rpe}`} />
+        <MiniMetric label="Best Volume" value={performance.bestVolumeSet.volume.toLocaleString()} tone="text-emerald-300" sub={`${performance.bestVolumeSet.weight}kg x ${performance.bestVolumeSet.reps}`} />
+        <MiniMetric label="Est 1RM" value={`${formatNumber(performance.bestEstimated1Rm.estimated1Rm)}kg`} tone="text-violet-300" sub="Epley best" />
+        <MiniMetric label="Exercise Vol" value={performance.totalVolume.toLocaleString()} tone="text-amber-300" sub="prior session" />
       </div>
     </div>
   );
@@ -734,7 +740,10 @@ function SessionLog({
       <div className="grid gap-1 border-t border-white/5 p-2">
         {sets.length ? (
           sets.map((set) => {
-            const prs = detectPrs(set, getExerciseAnalyticsBeforeSet(workoutSessions, set));
+            const priorAnalytics = getExerciseAnalyticsBeforeSession(workoutSessions, session, set.exercise);
+            const sessionExercise = getSessionExerciseSummary(session, set.exercise);
+            const isLastSet = sessionExercise.lastSet?.id === set.id;
+            const prs = detectPrs(set, priorAnalytics, sessionExercise.totalVolume, isLastSet);
             return (
             editingSetId === set.id ? (
               <EditSetRow
@@ -787,11 +796,17 @@ function SessionLog({
 function PrTags({ prs }) {
   const active = Object.entries(prs).filter(([, value]) => value);
   if (!active.length) return null;
+  const labels = {
+    setVolume: 'SET VOLUME',
+    sessionVolume: 'SESSION VOLUME',
+    weight: 'WEIGHT',
+    reps: 'REPS',
+  };
   return (
     <span className="flex gap-1">
       {active.map(([key]) => (
         <span key={key} className="data-text rounded border border-emerald-400/20 bg-emerald-400/10 px-1 text-[9px] text-emerald-300">
-          {key.toUpperCase()}
+          {labels[key] ?? key.toUpperCase()}
         </span>
       ))}
     </span>
@@ -808,22 +823,23 @@ function ExerciseHistoryCard({ exercise }) {
             {exercise.sessions.length} sessions / {exercise.totalSets} sets / {exercise.totalVolume.toLocaleString()} volume
           </p>
         </div>
-        <Tag tone="emerald">BEST {exercise.bestSet.weight}x{exercise.bestSet.reps}</Tag>
+        <Tag tone="emerald">BEST 1RM {formatNumber(exercise.bestEstimated1Rm.estimated1Rm)}kg</Tag>
       </div>
-      <div className="mb-3 flex items-end gap-1">
-        {exercise.sessions.slice(-12).map((session) => {
-          const height = Math.max(8, Math.round((session.totalVolume / exercise.peakSessionVolume) * 54));
-          return (
-            <div key={`${exercise.key}-${session.sessionId}`} className="flex flex-1 flex-col items-center gap-1">
-              <div
-                className="w-full rounded-sm border border-emerald-400/20 bg-emerald-400/50"
-                style={{ height }}
-                title={`${session.date}: ${session.totalVolume} volume`}
-              />
-              <span className="data-text text-[8px] text-zinc-600">{session.date.slice(5)}</span>
-            </div>
-          );
-        })}
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <TrendBars
+          color="emerald"
+          max={exercise.peakSessionVolume}
+          sessions={exercise.sessions}
+          title="Session Volume"
+          valueKey="totalVolume"
+        />
+        <TrendBars
+          color="cyan"
+          max={exercise.peakEstimated1Rm}
+          sessions={exercise.sessions}
+          title="Best Est 1RM"
+          valueKey="bestEstimated1Rm"
+        />
       </div>
       <div className="grid gap-1">
         {exercise.sessions.slice(-4).reverse().map((session) => (
@@ -831,10 +847,35 @@ function ExerciseHistoryCard({ exercise }) {
             <span className="data-text text-[10px] text-zinc-500">{session.date}</span>
             <span className="truncate text-xs text-zinc-200">{session.sessionName}</span>
             <span className="data-text text-xs text-cyan-300">
-              {session.bestSet.weight}kg x {session.bestSet.reps} / {session.totalVolume}
+              {session.totalVolume.toLocaleString()} vol / {formatNumber(session.bestEstimated1Rm.estimated1Rm)}kg e1RM
             </span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function TrendBars({ color, max, sessions, title, valueKey }) {
+  const barColor = color === 'cyan' ? 'border-cyan-400/20 bg-cyan-400/50' : 'border-emerald-400/20 bg-emerald-400/50';
+  return (
+    <div className="rounded border border-white/5 bg-[#121212] p-2">
+      <p className="mb-2 data-text text-[10px] uppercase tracking-wider text-zinc-500">{title}</p>
+      <div className="flex h-16 items-end gap-1">
+        {sessions.slice(-12).map((session) => {
+          const value = valueKey === 'bestEstimated1Rm' ? session.bestEstimated1Rm.estimated1Rm : session[valueKey];
+          const height = Math.max(8, Math.round((value / Math.max(max, 1)) * 48));
+          return (
+            <div key={`${title}-${session.sessionId}`} className="flex flex-1 flex-col items-center gap-1">
+              <div
+                className={`w-full rounded-sm border ${barColor}`}
+                style={{ height }}
+                title={`${session.date}: ${formatNumber(value)}`}
+              />
+              <span className="data-text text-[8px] text-zinc-600">{session.date.slice(5)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -936,6 +977,23 @@ function getNextSetNumber(session, exercise) {
   return matchingSets.length ? Math.max(...matchingSets.map((set) => Number(set.set_number))) + 1 : 1;
 }
 
+function getSessionExerciseSummary(session, exercise) {
+  const key = normalizeExercise(exercise);
+  const sets = (session?.workout_sets ?? [])
+    .filter((set) => normalizeExercise(set.exercise) === key)
+    .map(normalizeSet)
+    .sort((a, b) => Number(a.set_number) - Number(b.set_number));
+  return {
+    sets,
+    totalVolume: sets.reduce((total, set) => total + set.volume, 0),
+    lastSet: sets[sets.length - 1] ?? null,
+  };
+}
+
+function getSessionExerciseVolume(session, exercise) {
+  return getSessionExerciseSummary(session, exercise).totalVolume;
+}
+
 function buildExerciseAnalytics(sessions) {
   const map = {};
 
@@ -954,7 +1012,12 @@ function buildExerciseAnalytics(sessions) {
       Object.entries(groupedSets).forEach(([key, sets]) => {
         const normalizedSets = sets.map(normalizeSet);
         const totalVolume = normalizedSets.reduce((total, set) => total + set.volume, 0);
-        const bestSet = normalizedSets.reduce((best, set) => (set.volume > best.volume ? set : best), normalizedSets[0]);
+        const bestVolumeSet = normalizedSets.reduce((best, set) => (set.volume > best.volume ? set : best), normalizedSets[0]);
+        const heaviestSet = normalizedSets.reduce((best, set) => (set.weight > best.weight ? set : best), normalizedSets[0]);
+        const bestEstimated1Rm = normalizedSets.reduce(
+          (best, set) => (set.estimated1Rm > best.estimated1Rm ? set : best),
+          normalizedSets[0],
+        );
         const last = normalizedSets.slice().sort((a, b) => new Date(b.performed_at) - new Date(a.performed_at))[0];
 
         map[key] = map[key] ?? {
@@ -963,11 +1026,16 @@ function buildExerciseAnalytics(sessions) {
           sessions: [],
           totalSets: 0,
           totalVolume: 0,
-          bestSet,
+          bestVolumeSet,
+          heaviestSet,
+          bestEstimated1Rm,
           maxWeight: 0,
           maxReps: 0,
-          maxVolume: 0,
+          maxSetVolume: 0,
+          maxSessionVolume: 0,
+          maxEstimated1Rm: 0,
           peakSessionVolume: 1,
+          peakEstimated1Rm: 1,
         };
 
         map[key].sessions.push({
@@ -977,16 +1045,28 @@ function buildExerciseAnalytics(sessions) {
           startedAt: session.started_at,
           sets: normalizedSets,
           last,
-          bestSet,
+          bestVolumeSet,
+          bestSet: bestVolumeSet,
+          heaviestSet,
+          bestEstimated1Rm,
           totalVolume,
         });
         map[key].totalSets += normalizedSets.length;
         map[key].totalVolume += totalVolume;
-        map[key].bestSet = bestSet.volume > map[key].bestSet.volume ? bestSet : map[key].bestSet;
+        map[key].bestVolumeSet = bestVolumeSet.volume > map[key].bestVolumeSet.volume ? bestVolumeSet : map[key].bestVolumeSet;
+        map[key].bestSet = map[key].bestVolumeSet;
+        map[key].heaviestSet = heaviestSet.weight > map[key].heaviestSet.weight ? heaviestSet : map[key].heaviestSet;
+        map[key].bestEstimated1Rm =
+          bestEstimated1Rm.estimated1Rm > map[key].bestEstimated1Rm.estimated1Rm
+            ? bestEstimated1Rm
+            : map[key].bestEstimated1Rm;
         map[key].maxWeight = Math.max(map[key].maxWeight, ...normalizedSets.map((set) => set.weight));
         map[key].maxReps = Math.max(map[key].maxReps, ...normalizedSets.map((set) => set.reps));
-        map[key].maxVolume = Math.max(map[key].maxVolume, ...normalizedSets.map((set) => set.volume));
+        map[key].maxSetVolume = Math.max(map[key].maxSetVolume, ...normalizedSets.map((set) => set.volume));
+        map[key].maxSessionVolume = Math.max(map[key].maxSessionVolume, totalVolume);
+        map[key].maxEstimated1Rm = Math.max(map[key].maxEstimated1Rm, ...normalizedSets.map((set) => set.estimated1Rm));
         map[key].peakSessionVolume = Math.max(map[key].peakSessionVolume, totalVolume);
+        map[key].peakEstimated1Rm = Math.max(map[key].peakEstimated1Rm, bestEstimated1Rm.estimated1Rm);
       });
     });
 
@@ -1011,7 +1091,9 @@ function getPreviousPerformance(sessions, activeSession, exercise) {
     .map(normalizeSet)
     .sort((a, b) => Number(a.set_number) - Number(b.set_number));
   const totalVolume = sets.reduce((total, set) => total + set.volume, 0);
-  const bestSet = sets.reduce((best, set) => (set.volume > best.volume ? set : best), sets[0]);
+  const bestVolumeSet = sets.reduce((best, set) => (set.volume > best.volume ? set : best), sets[0]);
+  const heaviestSet = sets.reduce((best, set) => (set.weight > best.weight ? set : best), sets[0]);
+  const bestEstimated1Rm = sets.reduce((best, set) => (set.estimated1Rm > best.estimated1Rm ? set : best), sets[0]);
   const last = sets[sets.length - 1];
 
   return {
@@ -1019,28 +1101,30 @@ function getPreviousPerformance(sessions, activeSession, exercise) {
     date: previousSession.performed_on,
     sets,
     last,
-    bestSet,
+    bestSet: bestVolumeSet,
+    bestVolumeSet,
+    heaviestSet,
+    bestEstimated1Rm,
     totalVolume,
   };
 }
 
-function getExerciseAnalyticsBeforeSet(sessions, targetSet) {
-  const key = normalizeExercise(targetSet.exercise);
-  const targetTime = new Date(targetSet.performed_at).getTime();
-  const priorSessions = sessions.map((session) => ({
-    ...session,
-    workout_sets: (session.workout_sets ?? []).filter((set) => {
-      if (set.id === targetSet.id) return false;
-      if (normalizeExercise(set.exercise) !== key) return false;
-      return new Date(set.performed_at).getTime() <= targetTime;
-    }),
-  }));
+function getExerciseAnalyticsBeforeSession(sessions, activeSession, exercise) {
+  const key = normalizeExercise(exercise);
+  if (!key || !activeSession) return null;
+  const priorSessions = sessions
+    .filter((session) => session.id !== activeSession.id)
+    .filter((session) => compareSessionPosition(session, activeSession) < 0)
+    .map((session) => ({
+      ...session,
+      workout_sets: (session.workout_sets ?? []).filter((set) => normalizeExercise(set.exercise) === key),
+    }));
   return buildExerciseAnalytics(priorSessions).byExercise[key] ?? null;
 }
 
-function detectPrs(set, analytics) {
+function detectPrs(set, analytics, sessionExerciseVolume = 0, includeSessionVolume = false) {
   if (!analytics || !set.exercise || !Number.isFinite(Number(set.weight)) || !Number.isFinite(Number(set.reps))) {
-    return { volume: false, weight: false, reps: false };
+    return { setVolume: false, sessionVolume: false, weight: false, reps: false };
   }
 
   const weight = Number(set.weight);
@@ -1048,7 +1132,8 @@ function detectPrs(set, analytics) {
   const volume = weight * reps;
 
   return {
-    volume: volume > analytics.maxVolume,
+    setVolume: volume > analytics.maxSetVolume,
+    sessionVolume: includeSessionVolume && Number(sessionExerciseVolume) > analytics.maxSessionVolume,
     weight: weight > analytics.maxWeight,
     reps: reps > analytics.maxReps,
   };
@@ -1057,17 +1142,36 @@ function detectPrs(set, analytics) {
 function normalizeSet(set) {
   const weight = Number(set.weight);
   const reps = Number(set.reps);
+  const estimated1Rm = weight * (1 + reps / 30);
   return {
     ...set,
     weight,
     reps,
     rpe: Number(set.rpe),
     volume: weight * reps,
+    estimated1Rm,
   };
 }
 
 function normalizeExercise(exercise) {
   return String(exercise ?? '').trim().toLowerCase();
+}
+
+function formatPrLabel(key) {
+  const labels = {
+    setVolume: 'SET VOLUME',
+    sessionVolume: 'SESSION VOLUME',
+    weight: 'WEIGHT',
+    reps: 'REPS',
+  };
+  return labels[key] ?? key.toUpperCase();
+}
+
+function formatNumber(value) {
+  return Number(value).toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: Number.isInteger(Number(value)) ? 0 : 1,
+  });
 }
 
 function compareSessionsAscending(a, b) {
