@@ -143,9 +143,12 @@ Current behavior:
 - Saves today's log by updating the existing row when `logged_on` already exists.
 - Creates a new row when no log exists for the selected `logged_on`.
 - Uses the `user_id + logged_on` unique constraint to avoid duplicate daily logs.
+- If a duplicate-key insert happens, the app fetches the existing log for that date and updates it.
+- Changing the form date loads the persisted log for that date or clears the form for a new date.
 - Shows compact 7-day history from persisted rows only.
 - Shows simple persisted summaries: average sleep hours, mood, energy, sleep quality, and total social time.
 - Does not auto-calculate sleep time; `sleep_hours` is manually entered.
+- `sleep_hours`, `sleep_quality`, `energy`, and `mood` may be left blank; water, coffee, and social time must be non-negative numbers.
 - Does not use iPhone Screen Time integration yet.
 
 ## Workout Module Current Status
@@ -246,8 +249,10 @@ Workout mobile direction:
 - Test Health tab after running the latest `health_logs` migration:
   - Create today's log when none exists.
   - Save today's log again and confirm it updates instead of duplicating.
+  - Create yesterday's log and switch between dates to confirm the form loads the correct persisted row.
   - Confirm 7-day summaries use persisted rows only.
   - Confirm numeric fields reject out-of-range values.
+  - Run `docs/QA_HEALTH.md`.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.

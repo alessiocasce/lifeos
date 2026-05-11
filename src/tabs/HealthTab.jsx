@@ -43,6 +43,12 @@ export function HealthTab() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [savedMessage, setSavedMessage] = useState('');
+  const selectedLog = useMemo(
+    () => sortedLogs.find((log) => log.logged_on === form.logged_on) ?? null,
+    [form.logged_on, sortedLogs],
+  );
+  const selectedIsToday = form.logged_on === today;
+  const panelTitle = `${selectedLog ? 'Update' : 'Create'} ${selectedIsToday ? 'Today' : 'Selected Date'}`;
 
   useEffect(() => {
     setForm(formFromLog(todaysLog));
@@ -50,6 +56,13 @@ export function HealthTab() {
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setSavedMessage('');
+  };
+
+  const updateLoggedOn = (value) => {
+    const existing = sortedLogs.find((log) => log.logged_on === value);
+    setForm(existing ? formFromLog(existing) : emptyFormForDate(value));
+    setFormError('');
     setSavedMessage('');
   };
 
@@ -97,12 +110,12 @@ export function HealthTab() {
       <Panel className="col-span-12 xl:col-span-8">
         <PanelHeader
           eyebrow="Daily Check-In"
-          title={todaysLog ? 'Update Today' : 'Create Today'}
+          title={panelTitle}
           right={<SourceStatus status={healthLogsStatus} />}
         />
         <form onSubmit={submit} className="grid gap-3 p-3">
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <HealthField label="Date" type="date" value={form.logged_on} onChange={(value) => updateField('logged_on', value)} />
+            <HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} />
             <HealthField label="Sleep Hours" inputMode="decimal" value={form.sleep_hours} suffix="h" onChange={(value) => updateField('sleep_hours', value)} />
             <HealthField label="Sleep Start" type="time" value={form.sleep_start} onChange={(value) => updateField('sleep_start', value)} />
             <HealthField label="Wake Time" type="time" value={form.wake_time} onChange={(value) => updateField('wake_time', value)} />
@@ -171,7 +184,7 @@ export function HealthTab() {
             className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saving ? 'Saving Check-In' : todaysLog ? 'Update Check-In' : 'Save Check-In'}
+            {saving ? 'Saving Check-In' : selectedLog ? 'Update Check-In' : 'Save Check-In'}
           </button>
 
           {savedMessage ? <p className="data-text text-[11px] text-emerald-300">{savedMessage}</p> : null}
@@ -304,7 +317,7 @@ function SourceStatus({ status }) {
 }
 
 function formFromLog(log) {
-  if (!log) return emptyForm;
+  if (!log) return emptyFormForDate(today);
   return {
     logged_on: log.logged_on ?? today,
     sleep_hours: stringValue(log.sleep_hours),
@@ -318,22 +331,34 @@ function formFromLog(log) {
     social_time_minutes: stringValue(log.social_time_minutes ?? 0),
     main_time_waster: log.main_time_waster ?? '',
     notes: log.notes ?? '',
-    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? log.hygiene : defaultHygiene,
+    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? cloneHygiene(log.hygiene) : cloneHygiene(defaultHygiene),
   };
+}
+
+function emptyFormForDate(loggedOn) {
+  return {
+    ...emptyForm,
+    logged_on: loggedOn || today,
+    hygiene: cloneHygiene(defaultHygiene),
+  };
+}
+
+function cloneHygiene(items) {
+  return items.map((item) => ({ ...item }));
 }
 
 function toPayload(form) {
   return {
     logged_on: form.logged_on,
-    sleep_hours: parseDecimal(form.sleep_hours),
+    sleep_hours: parseOptionalDecimal(form.sleep_hours),
     sleep_start: form.sleep_start || null,
     wake_time: form.wake_time || null,
-    sleep_quality: parseInteger(form.sleep_quality),
-    energy: parseInteger(form.energy),
-    mood: parseInteger(form.mood),
-    water: parseInteger(form.water),
-    coffee: parseInteger(form.coffee),
-    social_time_minutes: parseInteger(form.social_time_minutes),
+    sleep_quality: parseOptionalInteger(form.sleep_quality),
+    energy: parseOptionalInteger(form.energy),
+    mood: parseOptionalInteger(form.mood),
+    water: parseOptionalInteger(form.water) ?? 0,
+    coffee: parseOptionalInteger(form.coffee) ?? 0,
+    social_time_minutes: parseOptionalInteger(form.social_time_minutes) ?? 0,
     main_time_waster: form.main_time_waster.trim(),
     notes: form.notes.trim(),
     hygiene: form.hygiene,
@@ -343,37 +368,37 @@ function toPayload(form) {
 function validateHealthForm(form) {
   if (!isValidDate(form.logged_on)) return 'Log date is invalid.';
 
-  const sleepHours = parseDecimal(form.sleep_hours);
-  if (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24) return 'Sleep hours must be between 0 and 24.';
+  const sleepHours = parseOptionalDecimal(form.sleep_hours);
+  if (sleepHours !== null && (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24)) return 'Sleep hours must be between 0 and 24.';
 
-  const sleepQuality = parseInteger(form.sleep_quality);
-  if (!Number.isInteger(sleepQuality) || sleepQuality < 1 || sleepQuality > 100) return 'Sleep quality must be between 1 and 100.';
+  const sleepQuality = parseOptionalInteger(form.sleep_quality);
+  if (sleepQuality !== null && (!Number.isInteger(sleepQuality) || sleepQuality < 0 || sleepQuality > 100)) return 'Sleep quality must be between 0 and 100.';
 
-  const energy = parseInteger(form.energy);
-  if (!Number.isInteger(energy) || energy < 1 || energy > 10) return 'Energy must be between 1 and 10.';
+  const energy = parseOptionalInteger(form.energy);
+  if (energy !== null && (!Number.isInteger(energy) || energy < 1 || energy > 10)) return 'Energy must be between 1 and 10.';
 
-  const mood = parseInteger(form.mood);
-  if (!Number.isInteger(mood) || mood < 1 || mood > 10) return 'Mood must be between 1 and 10.';
+  const mood = parseOptionalInteger(form.mood);
+  if (mood !== null && (!Number.isInteger(mood) || mood < 1 || mood > 10)) return 'Mood must be between 1 and 10.';
 
-  const water = parseInteger(form.water);
-  if (!Number.isInteger(water) || water < 0) return 'Water must be zero or higher.';
+  const water = parseOptionalInteger(form.water);
+  if (water === null || !Number.isInteger(water) || water < 0) return 'Water must be zero or higher.';
 
-  const coffee = parseInteger(form.coffee);
-  if (!Number.isInteger(coffee) || coffee < 0) return 'Coffee must be zero or higher.';
+  const coffee = parseOptionalInteger(form.coffee);
+  if (coffee === null || !Number.isInteger(coffee) || coffee < 0) return 'Coffee must be zero or higher.';
 
-  const social = parseInteger(form.social_time_minutes);
-  if (!Number.isInteger(social) || social < 0) return 'Social time must be zero or higher.';
+  const social = parseOptionalInteger(form.social_time_minutes);
+  if (social === null || !Number.isInteger(social) || social < 0) return 'Social time must be zero or higher.';
 
   return '';
 }
 
 function summarizeLogs(logs) {
   return {
-    avgSleep: average(logs.map((log) => Number(log.sleep_hours)).filter(Number.isFinite)),
-    avgMood: average(logs.map((log) => Number(log.mood)).filter(Number.isFinite)),
-    avgEnergy: average(logs.map((log) => Number(log.energy)).filter(Number.isFinite)),
-    avgSleepQuality: average(logs.map((log) => Number(log.sleep_quality)).filter(Number.isFinite)),
-    totalSocial: logs.reduce((total, log) => total + parseInteger(log.social_time_minutes), 0),
+    avgSleep: average(logs.map((log) => optionalLogNumber(log.sleep_hours)).filter(Number.isFinite)),
+    avgMood: average(logs.map((log) => optionalLogNumber(log.mood)).filter(Number.isFinite)),
+    avgEnergy: average(logs.map((log) => optionalLogNumber(log.energy)).filter(Number.isFinite)),
+    avgSleepQuality: average(logs.map((log) => optionalLogNumber(log.sleep_quality)).filter(Number.isFinite)),
+    totalSocial: logs.reduce((total, log) => total + (parseOptionalInteger(log.social_time_minutes) ?? 0), 0),
   };
 }
 
@@ -391,9 +416,27 @@ function parseDecimal(value) {
   return Number(normalized);
 }
 
+function parseOptionalDecimal(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+  return parseDecimal(trimmed);
+}
+
+function parseOptionalInteger(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) ? parsed : NaN;
+}
+
 function parseInteger(value) {
-  const parsed = Number.parseInt(value, 10);
+  const parsed = parseOptionalInteger(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function optionalLogNumber(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  return Number(value);
 }
 
 function isValidDate(value) {

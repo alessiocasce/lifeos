@@ -177,6 +177,16 @@ export const healthLogApi = {
     );
   },
 
+  async getByDate(loggedOn) {
+    return throwIfError(
+      await requireSupabase()
+        .from('health_logs')
+        .select(healthLogSelect)
+        .eq('logged_on', loggedOn)
+        .maybeSingle(),
+    );
+  },
+
   async create(payload) {
     return throwIfError(
       await requireSupabase()

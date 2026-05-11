@@ -302,10 +302,20 @@ export function LifeOSProvider({ children }) {
         }
 
         const normalizedPayload = normalizeHealthLogPayload(payload);
-        const existing = healthLogs.find((log) => log.logged_on === normalizedPayload.logged_on);
-        const saved = existing
-          ? await healthLogApi.update(existing.id, normalizedPayload)
-          : await healthLogApi.create(normalizedPayload);
+        const existing = healthLogs.find((log) => log.logged_on === normalizedPayload.logged_on)
+          ?? await healthLogApi.getByDate(normalizedPayload.logged_on);
+        let saved;
+
+        try {
+          saved = existing
+            ? await healthLogApi.update(existing.id, normalizedPayload)
+            : await healthLogApi.create(normalizedPayload);
+        } catch (error) {
+          if (!isDuplicateKeyError(error)) throw error;
+          const duplicate = await healthLogApi.getByDate(normalizedPayload.logged_on);
+          if (!duplicate) throw error;
+          saved = await healthLogApi.update(duplicate.id, normalizedPayload);
+        }
 
         setHealthLogs((prev) => sortHealthLogs([saved, ...prev.filter((log) => log.id !== saved.id)]));
         if (saved.logged_on === today()) {
@@ -440,18 +450,25 @@ function healthSnapshotFromLog(log) {
 }
 
 function numberOrNull(value) {
-  const parsed = Number(value);
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(String(value).replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 function integerOrNull(value) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
 }
 
 function integerOrZero(value) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
+  if (value === '' || value === null || value === undefined) return 0;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : 0;
+}
+
+function isDuplicateKeyError(error) {
+  return error?.code === '23505' || String(error?.message ?? '').toLowerCase().includes('duplicate key');
 }
 
 export function useLifeOS() {
