@@ -199,6 +199,19 @@ export function LifeOSProvider({ children }) {
         setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
         return updated;
       },
+      endWorkoutSession: async (id) => {
+        const updated = await workoutApi.update(id, { ended_at: new Date().toISOString() });
+        setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
+        return updated;
+      },
+      deleteWorkoutSession: async (id) => {
+        await workoutApi.delete(id);
+        const remaining = workoutSessions.filter((session) => session.id !== id);
+        setWorkoutSessions(remaining);
+        if (activeWorkoutId === id) {
+          setActiveWorkoutId(remaining[0]?.id ?? null);
+        }
+      },
       createWorkoutSet: async (payload) => {
         if (!authUser) {
           throw new Error('Sign in before logging a set.');
@@ -223,10 +236,16 @@ export function LifeOSProvider({ children }) {
       updateWorkoutSet: async (id, patch) => {
         const updated = await workoutSetApi.update(id, patch);
         setWorkoutSessions((prev) =>
-          prev.map((session) => ({
-            ...session,
-            workout_sets: (session.workout_sets ?? []).map((set) => (set.id === id ? updated : set)),
-          })),
+          prev.map((session) =>
+            session.id === updated.workout_id
+              ? {
+                  ...session,
+                  workout_sets: (session.workout_sets ?? [])
+                    .map((set) => (set.id === id ? updated : set))
+                    .sort((a, b) => Number(a.set_number) - Number(b.set_number)),
+                }
+              : session,
+          ),
         );
         return updated;
       },
@@ -285,7 +304,7 @@ export function LifeOSProvider({ children }) {
           ),
         ),
     }),
-    [authUser, loadWorkoutSessions],
+    [activeWorkoutId, authUser, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {
