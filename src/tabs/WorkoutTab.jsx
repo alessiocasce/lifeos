@@ -744,20 +744,23 @@ function SessionLog({
             const sessionExercise = getSessionExerciseSummary(session, set.exercise);
             const isLastSet = sessionExercise.lastSet?.id === set.id;
             const prs = detectPrs(set, priorAnalytics, sessionExercise.totalVolume, isLastSet);
+            if (editingSetId === set.id) {
+              return (
+                <EditSetRow
+                  key={set.id}
+                  editForm={editForm}
+                  loading={savingEditId === set.id}
+                  setEditForm={setEditForm}
+                  onCancel={() => {
+                    setEditingSetId(null);
+                    setEditForm(null);
+                  }}
+                  onSave={() => saveEdit(set.id)}
+                />
+              );
+            }
+
             return (
-            editingSetId === set.id ? (
-              <EditSetRow
-                key={set.id}
-                editForm={editForm}
-                loading={savingEditId === set.id}
-                setEditForm={setEditForm}
-                onCancel={() => {
-                  setEditingSetId(null);
-                  setEditForm(null);
-                }}
-                onSave={() => saveEdit(set.id)}
-              />
-            ) : (
               <div key={set.id} className="grid grid-cols-[40px_1fr_auto_72px] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2">
                 <span className="data-text text-sm font-bold text-cyan-300">#{set.set_number}</span>
                 <div className="min-w-0">
@@ -782,7 +785,6 @@ function SessionLog({
                   />
                 </div>
               </div>
-            ),
             );
           })
         ) : (
