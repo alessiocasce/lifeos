@@ -75,9 +75,9 @@ export function WorkoutTab() {
   const [showMockArchive, setShowMockArchive] = useState(false);
   const [collapsedSessions, setCollapsedSessions] = useState({});
   const [formError, setFormError] = useState('');
+  const [restElapsedSeconds, setRestElapsedSeconds] = useState(0);
+  const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
 
-  const restMinutes = Math.floor(workout.restTimerSeconds / 60);
-  const restSeconds = String(workout.restTimerSeconds % 60).padStart(2, '0');
   const activeSets = activeWorkoutSession?.workout_sets ?? [];
   const activeVolume = activeSets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions]);
@@ -108,6 +108,21 @@ export function WorkoutTab() {
   useEffect(() => {
     setSetForm((prev) => ({ ...prev, set_number: nextSetNumber }));
   }, [nextSetNumber]);
+
+  useEffect(() => {
+    if (!activeWorkoutSession) {
+      setIsRestTimerRunning(false);
+      setRestElapsedSeconds(0);
+    }
+  }, [activeWorkoutSession]);
+
+  useEffect(() => {
+    if (!activeWorkoutSession || !isRestTimerRunning) return undefined;
+    const interval = window.setInterval(() => {
+      setRestElapsedSeconds((seconds) => seconds + 1);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [activeWorkoutSession, isRestTimerRunning]);
 
   const submitAuth = async (event) => {
     event.preventDefault();
@@ -212,6 +227,8 @@ export function WorkoutTab() {
         reps: '',
         notes: '',
       }));
+      setRestElapsedSeconds(0);
+      setIsRestTimerRunning(true);
     } catch (error) {
       setFormError(error.message || 'Failed to save set.');
     } finally {
@@ -308,7 +325,14 @@ export function WorkoutTab() {
         activeSession={activeWorkoutSession}
         activeVolume={activeVolume}
         fallbackName={workout.current.name}
-        restTimer={`${restMinutes}:${restSeconds}`}
+        isRestTimerRunning={isRestTimerRunning}
+        onPauseRestTimer={() => setIsRestTimerRunning(false)}
+        onResetRestTimer={() => {
+          setIsRestTimerRunning(false);
+          setRestElapsedSeconds(0);
+        }}
+        onStartRestTimer={() => activeWorkoutSession && setIsRestTimerRunning(true)}
+        restElapsedSeconds={restElapsedSeconds}
         setCount={activeSets.length}
       />
 
@@ -393,13 +417,24 @@ export function WorkoutTab() {
   );
 }
 
-function ActiveWorkoutHeader({ activeSession, activeVolume, fallbackName, restTimer, setCount }) {
+function ActiveWorkoutHeader({
+  activeSession,
+  activeVolume,
+  fallbackName,
+  isRestTimerRunning,
+  onPauseRestTimer,
+  onResetRestTimer,
+  onStartRestTimer,
+  restElapsedSeconds,
+  setCount,
+}) {
   const status = activeSession?.ended_at ? 'ENDED' : activeSession ? 'LIVE' : 'NO SESSION';
   const tone = activeSession?.ended_at ? 'zinc' : activeSession ? 'emerald' : 'amber';
+  const timerInactive = !activeSession;
 
   return (
     <Panel className="col-span-12">
-      <div className="grid items-center gap-3 p-3 lg:grid-cols-[1fr_96px]">
+      <div className="grid items-center gap-3 p-3 lg:grid-cols-[1fr_190px]">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Dumbbell size={18} className="text-cyan-300" />
@@ -413,12 +448,44 @@ function ActiveWorkoutHeader({ activeSession, activeVolume, fallbackName, restTi
             <MiniMetric label="Started" value={formatTime(activeSession?.started_at)} tone="text-amber-300" sub="local" />
           </div>
         </div>
-        <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-center">
-          <div className="flex items-center justify-center gap-1 text-red-300">
+        <div
+          className={`rounded-md border px-3 py-2 ${
+            timerInactive ? 'border-white/10 bg-white/[0.03]' : 'border-red-400/20 bg-red-400/10'
+          }`}
+        >
+          <div className={`flex items-center justify-center gap-1 ${timerInactive ? 'text-zinc-500' : 'text-red-300'}`}>
             <Timer size={14} />
             <span className="data-text text-[10px] uppercase tracking-wider">Rest</span>
           </div>
-          <p className="data-text text-2xl font-black text-red-300">{restTimer}</p>
+          <p className={`data-text text-center text-2xl font-black ${timerInactive ? 'text-zinc-600' : 'text-red-300'}`}>
+            {formatElapsed(restElapsedSeconds)}
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-1">
+            <button
+              type="button"
+              onClick={onStartRestTimer}
+              disabled={timerInactive || isRestTimerRunning}
+              className="rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 data-text text-[10px] text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+            >
+              START
+            </button>
+            <button
+              type="button"
+              onClick={onPauseRestTimer}
+              disabled={timerInactive || !isRestTimerRunning}
+              className="rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 data-text text-[10px] text-amber-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+            >
+              PAUSE
+            </button>
+            <button
+              type="button"
+              onClick={onResetRestTimer}
+              disabled={timerInactive || (!isRestTimerRunning && restElapsedSeconds === 0)}
+              className="rounded border border-white/10 bg-white/[0.03] px-2 py-1 data-text text-[10px] text-zinc-300 disabled:text-zinc-600"
+            >
+              RESET
+            </button>
+          </div>
         </div>
       </div>
     </Panel>
@@ -1360,6 +1427,12 @@ function formatNumber(value) {
 function formatTime(value) {
   if (!value) return '--:--';
   return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatElapsed(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
 }
 
 function compareSessionsAscending(a, b) {
