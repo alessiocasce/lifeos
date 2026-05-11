@@ -294,6 +294,8 @@ export function WorkoutTab() {
     setFormError('');
     try {
       await endWorkoutSession(sessionId);
+      setIsRestTimerRunning(false);
+      setRestElapsedSeconds(0);
     } catch (error) {
       setFormError(error.message || 'Failed to end workout.');
     } finally {
@@ -331,7 +333,7 @@ export function WorkoutTab() {
           setIsRestTimerRunning(false);
           setRestElapsedSeconds(0);
         }}
-        onStartRestTimer={() => activeWorkoutSession && setIsRestTimerRunning(true)}
+        onStartRestTimer={() => activeWorkoutSession && !activeWorkoutSession.ended_at && setIsRestTimerRunning(true)}
         restElapsedSeconds={restElapsedSeconds}
         setCount={activeSets.length}
       />
@@ -430,7 +432,7 @@ function ActiveWorkoutHeader({
 }) {
   const status = activeSession?.ended_at ? 'ENDED' : activeSession ? 'LIVE' : 'NO SESSION';
   const tone = activeSession?.ended_at ? 'zinc' : activeSession ? 'emerald' : 'amber';
-  const timerInactive = !activeSession;
+  const timerInactive = !activeSession || Boolean(activeSession.ended_at);
 
   return (
     <Panel className="col-span-12">
