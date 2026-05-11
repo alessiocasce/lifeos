@@ -21,10 +21,11 @@ const icons = {
 
 export function Shell({ children }) {
   const { activeTab, setActiveTab, tabs, health, finance, workoutStatus, currentDate } = useLifeOS();
+  const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label ?? 'Pulse';
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-100">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-[76px] flex-col border-r border-white/5 bg-black">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[76px] flex-col border-r border-white/5 bg-black md:flex">
         <div className="grid h-[72px] place-items-center border-b border-white/5">
           <div className="grid h-10 w-10 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
             <RadioTower size={20} />
@@ -60,20 +61,23 @@ export function Shell({ children }) {
         </div>
       </aside>
 
-      <main className="ml-[76px] min-h-screen">
-        <header className="sticky top-0 z-10 flex h-[72px] items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-5 backdrop-blur">
+      <main className="min-h-screen w-full md:ml-[76px]">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-3 backdrop-blur md:h-[72px] md:px-5">
           <div>
             <div className="flex items-center gap-2">
               <Activity size={18} className="text-cyan-400" />
               <h1 className="text-lg font-semibold tracking-wide">LifeOS</h1>
-              <span className="data-text rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500">
+              <span className="data-text rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-300 md:hidden">
+                {activeTabLabel}
+              </span>
+              <span className="data-text hidden rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500 md:inline-flex">
                 MIDNIGHT OPS
               </span>
             </div>
-            <p className="data-text mt-1 text-[11px] text-zinc-500">{currentDate} / 13:42 LOCAL / LATENCY 18ms</p>
+            <p className="data-text mt-1 hidden text-[11px] text-zinc-500 md:block">{currentDate} / 13:42 LOCAL / LATENCY 18ms</p>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-right">
+          <div className="hidden grid-cols-4 gap-2 text-right md:grid">
             <HeaderMetric label="Mood" value={`${health.mood}/10`} tone="text-emerald-300" />
             <HeaderMetric label="Sleep" value={`${health.sleepQuality}%`} tone="text-cyan-300" />
             <HeaderMetric label="Spend" value={`EUR ${Math.round(finance.monthlySpend)}`} tone="text-amber-300" />
@@ -81,10 +85,40 @@ export function Shell({ children }) {
           </div>
         </header>
 
-        <div className="p-4">{children}</div>
+        <div className="p-2 pb-[calc(env(safe-area-inset-bottom)+80px)] md:p-4 md:pb-4">{children}</div>
       </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <div className="grid h-16 grid-cols-6">
+          {tabs.map((tab) => {
+            const Icon = icons[tab.id];
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex min-w-0 flex-col items-center justify-center gap-1 border-t text-[9px] transition ${
+                  active
+                    ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300'
+                    : 'border-transparent text-zinc-500'
+                }`}
+              >
+                <Icon size={18} />
+                <span className="w-full truncate px-0.5 text-center font-mono uppercase leading-none">{mobileLabel(tab.id, tab.label)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
+}
+
+function mobileLabel(id, label) {
+  if (id === 'assistant') return 'AI';
+  if (id === 'finances') return 'Money';
+  return label;
 }
 
 function HeaderMetric({ label, value, tone }) {
