@@ -363,7 +363,9 @@ function CompactEvent({ deleting, event, onEdit, onRemove }) {
         <Tag tone={statusTone(event.status)}>{event.status}</Tag>
       </div>
       <div className="flex items-center justify-between gap-2">
-        {event.category ? <Tag tone="cyan">#{event.category}</Tag> : <span className="text-[10px] text-zinc-700">No category</span>}
+        <div className="min-w-0">
+          {event.category ? <CategoryBadge category={event.category} /> : <span className="text-[10px] text-zinc-700">No category</span>}
+        </div>
         <div className="flex shrink-0 items-center gap-1">
           <MiniButton label="Edit event" onClick={onEdit}><Pencil size={13} /></MiniButton>
           <MiniButton label="Delete event" onClick={onRemove} disabled={deleting}>
@@ -382,12 +384,12 @@ function EventCard({ deleting, event, onEdit, onRemove }) {
         <div className="min-w-0">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <Tag tone={statusTone(event.status)}>{event.status}</Tag>
-            {event.category ? <Tag tone="cyan">#{event.category}</Tag> : null}
+            {event.category ? <CategoryBadge category={event.category} /> : null}
           </div>
           <h3 className="break-words text-sm font-semibold text-zinc-100">{event.title}</h3>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="data-text inline-flex items-center gap-1"><Clock size={13} />{formatTimeRange(event)}</span>
-            {event.location ? <span className="inline-flex min-w-0 items-center gap-1"><MapPin size={13} /><span className="truncate">{event.location}</span></span> : null}
+            {event.location ? <span className="inline-flex max-w-full min-w-0 items-center gap-1"><MapPin size={13} className="shrink-0" /><span className="truncate">{event.location}</span></span> : null}
           </div>
           {event.notes ? <p className="mt-2 break-words text-sm text-zinc-400">{event.notes}</p> : null}
         </div>
@@ -414,6 +416,14 @@ function CalendarField({ label, onChange, placeholder = '', type = 'text', value
         className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/50"
       />
     </label>
+  );
+}
+
+function CategoryBadge({ category }) {
+  return (
+    <span className="data-text inline-flex max-w-full truncate rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-300">
+      #{category}
+    </span>
   );
 }
 
@@ -469,6 +479,8 @@ function validateEventForm(form) {
   if (!form.title.trim()) return 'Title is required.';
   if (!isValidDate(form.event_date)) return 'Choose a valid event date.';
   if (form.status && !statuses.includes(form.status)) return 'Choose a valid event status.';
+  if (form.start_time && !isValidTime(form.start_time)) return 'Choose a valid start time.';
+  if (form.end_time && !isValidTime(form.end_time)) return 'Choose a valid end time.';
   if (form.start_time && form.end_time && form.end_time < form.start_time) return 'End time must be after start time.';
   return '';
 }
@@ -519,7 +531,12 @@ function toDateString(date) {
 
 function isValidDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  return !Number.isNaN(parseDate(value).getTime());
+  const parsed = parseDate(value);
+  return !Number.isNaN(parsed.getTime()) && toDateString(parsed) === value;
+}
+
+function isValidTime(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function formatShortDate(dateString) {

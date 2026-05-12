@@ -146,6 +146,8 @@ Current behavior:
 - Creates, edits, and deletes events.
 - Shows events grouped by date in the week view and selected-date detail.
 - Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
+- Ignores stale week-range responses during fast week switching and clears calendar state on auth changes.
+- Shows a specific setup error if the `calendar_events` migration has not been applied.
 - Status is limited to `planned`, `done`, `skipped`, and `cancelled`.
 - Does not support recurring events yet.
 - Does not implement Google Calendar sync yet.

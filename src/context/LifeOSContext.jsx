@@ -59,6 +59,7 @@ export function LifeOSProvider({ children }) {
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
   const lastAuthUserId = useRef(null);
+  const lastCalendarRangeRequest = useRef(0);
 
   const clearUserScopedState = useCallback((status = 'idle') => {
     setWorkoutSessions([]);
@@ -78,6 +79,7 @@ export function LifeOSProvider({ children }) {
     setCalendarEvents([]);
     setCalendarEventsError('');
     setCalendarEventsStatus(status);
+    lastCalendarRangeRequest.current += 1;
     setDailyReviews([]);
     setDailyReviewsError('');
     setDailyReviewsStatus(status);
@@ -262,22 +264,26 @@ export function LifeOSProvider({ children }) {
     }
 
     if (!authUser) {
+      lastCalendarRangeRequest.current += 1;
       setCalendarEvents([]);
       setCalendarEventsStatus('no-session');
       return [];
     }
 
+    const requestId = lastCalendarRangeRequest.current + 1;
+    lastCalendarRangeRequest.current = requestId;
     setCalendarEventsStatus('loading');
     setCalendarEventsError('');
     try {
       const rows = await calendarEventApi.listByRange(startDate, endDate);
-      if (lastAuthUserId.current !== authUser.id) return [];
+      if (lastAuthUserId.current !== authUser.id || lastCalendarRangeRequest.current !== requestId) return [];
       const sortedRows = sortCalendarEvents(rows ?? []);
       setCalendarEvents(sortedRows);
       setCalendarEventsStatus('ready');
       return sortedRows;
     } catch (error) {
-      setCalendarEventsError(error.message || 'Failed to load calendar events.');
+      if (lastAuthUserId.current !== authUser.id || lastCalendarRangeRequest.current !== requestId) return [];
+      setCalendarEventsError(calendarErrorMessage(error, 'Failed to load calendar events.'));
       setCalendarEventsStatus('error');
       return [];
     }
@@ -526,24 +532,54 @@ export function LifeOSProvider({ children }) {
         if (!authUser) {
           throw new Error('Sign in before creating a calendar event.');
         }
+        const userId = authUser.id;
         setCalendarEventsError('');
-        const created = await calendarEventApi.create(normalizeCalendarEventPayload(payload));
-        setCalendarEvents((prev) => sortCalendarEvents([created, ...prev]));
-        setCalendarEventsStatus('ready');
-        return created;
+        try {
+          const created = await calendarEventApi.create(normalizeCalendarEventPayload(payload));
+          if (lastAuthUserId.current !== userId) return created;
+          setCalendarEvents((prev) => sortCalendarEvents([created, ...prev]));
+          setCalendarEventsStatus('ready');
+          return created;
+        } catch (error) {
+          const message = calendarErrorMessage(error, 'Failed to create calendar event.');
+          setCalendarEventsError(message);
+          throw new Error(message);
+        }
       },
       updateCalendarEvent: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating a calendar event.');
+        }
+        const userId = authUser?.id;
         setCalendarEventsError('');
-        const updated = await calendarEventApi.update(id, normalizeCalendarEventPayload(patch));
-        setCalendarEvents((prev) => sortCalendarEvents(prev.map((event) => (event.id === id ? updated : event))));
-        setCalendarEventsStatus('ready');
-        return updated;
+        try {
+          const updated = await calendarEventApi.update(id, normalizeCalendarEventPayload(patch));
+          if (lastAuthUserId.current !== userId) return updated;
+          setCalendarEvents((prev) => sortCalendarEvents(prev.map((event) => (event.id === id ? updated : event))));
+          setCalendarEventsStatus('ready');
+          return updated;
+        } catch (error) {
+          const message = calendarErrorMessage(error, 'Failed to update calendar event.');
+          setCalendarEventsError(message);
+          throw new Error(message);
+        }
       },
       deleteCalendarEvent: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting a calendar event.');
+        }
+        const userId = authUser?.id;
         setCalendarEventsError('');
-        await calendarEventApi.delete(id);
-        setCalendarEvents((prev) => prev.filter((event) => event.id !== id));
-        setCalendarEventsStatus('ready');
+        try {
+          await calendarEventApi.delete(id);
+          if (lastAuthUserId.current !== userId) return;
+          setCalendarEvents((prev) => prev.filter((event) => event.id !== id));
+          setCalendarEventsStatus('ready');
+        } catch (error) {
+          const message = calendarErrorMessage(error, 'Failed to delete calendar event.');
+          setCalendarEventsError(message);
+          throw new Error(message);
+        }
       },
       reloadDailyReviews: loadDailyReviews,
       saveDailyReview: async (payload) => {
@@ -761,6 +797,15 @@ function integerOrZero(value) {
 
 function isDuplicateKeyError(error) {
   return error?.code === '23505' || String(error?.message ?? '').toLowerCase().includes('duplicate key');
+}
+
+function calendarErrorMessage(error, fallback) {
+  const message = String(error?.message ?? '');
+  const isMissingTable = error?.code === '42P01' || /calendar_events/i.test(message) && /does not exist|not found|schema cache/i.test(message);
+  if (isMissingTable) {
+    return 'Calendar events table is missing. Apply supabase/schema.sql to create public.calendar_events, then reload.';
+  }
+  return message || fallback;
 }
 
 export function useLifeOS() {

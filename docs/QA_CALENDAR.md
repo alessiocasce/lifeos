@@ -28,15 +28,29 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 
 1. Use previous and next week controls.
 2. Create an event in a future week.
-3. Switch away and back to that week.
-4. Confirm only events in the selected week are shown.
-5. Use the date picker and confirm the selected date panel updates.
+3. Confirm the UI moves to or remains clearly oriented around the event's week.
+4. Switch away and back to that week.
+5. Confirm only events in the selected week are shown.
+6. Edit an event and change its date to another week.
+7. Confirm the UI loads the new week and the event appears on the new date.
+8. Use the date picker and confirm the selected date panel updates.
+9. Switch weeks rapidly several times and confirm old-week events do not appear after the final week finishes loading.
 
 ## Validation
 
 1. Try saving without a title and confirm a clear error.
 2. Try an end time earlier than the start time and confirm a clear error.
 3. Confirm status only allows planned, done, skipped, or cancelled.
+4. Confirm invalid dates are rejected.
+5. Confirm invalid manual time values are rejected if the browser allows entry.
+6. Confirm category, location, and notes can be left blank.
+
+## Migration / Error States
+
+1. Test against a Supabase project where `public.calendar_events` has not been created yet.
+2. Confirm the Calendar tab shows a clear message telling you to apply `supabase/schema.sql`.
+3. Restore the migration and confirm loading recovers after refresh.
+4. Temporarily force a create/update/delete failure, such as by disabling network, and confirm a clear error appears.
 
 ## User Scope
 
@@ -44,6 +58,14 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 2. Confirm the first user's events do not appear.
 3. Create an event as the second user.
 4. Sign back in as the first user and confirm only the first user's events appear.
+5. Start a week load, sign out quickly, and confirm previous-user events do not appear on the auth screen or after another user signs in.
+
+## Long Labels
+
+1. Create an event with a very long title.
+2. Add a long category and a long location.
+3. Confirm compact week cards truncate labels cleanly.
+4. Confirm the selected date detail stays inside the viewport.
 
 ## iPhone Safari
 
