@@ -137,7 +137,7 @@ export function AIAssistantTab() {
   };
 
   return (
-    <div className="grid grid-cols-12 gap-3 overflow-x-hidden pb-3">
+    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-3">
       <Panel className="col-span-12 xl:col-span-8">
         <PanelHeader
           eyebrow="Daily Review"

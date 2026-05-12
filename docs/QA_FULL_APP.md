@@ -86,6 +86,13 @@ Run the focused checklists after the full flow:
 5. Confirm bottom navigation does not cover primary save buttons.
 6. Confirm long labels truncate cleanly in ledger, review archive, and workout history rows.
 
+## Desktop / Laptop Layout
+
+1. Open the app on a laptop or desktop viewport.
+2. Visit Home, Calendar, Health, Workout, Finances, and Assistant.
+3. Confirm no page-level horizontal scrollbar appears on any tab.
+4. Confirm any intentional internal scroll areas still work normally.
+
 ## Known Non-Failing Build Warning
 
 The production build may warn that one JavaScript chunk is larger than 500 kB. This is currently expected and non-fatal; future tab-level code splitting can address it.

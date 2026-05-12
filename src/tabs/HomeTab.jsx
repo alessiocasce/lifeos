@@ -81,7 +81,7 @@ export function HomeTab() {
   const workoutStatus = getWorkoutStatus(liveWorkout, endedWorkout, todaysWorkoutSessions.length);
 
   return (
-    <div className="grid grid-cols-12 gap-3 overflow-x-hidden">
+    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden">
       <Panel className="col-span-12">
         <PanelHeader
           eyebrow="Daily Pulse"

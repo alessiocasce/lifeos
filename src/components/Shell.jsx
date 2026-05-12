@@ -56,7 +56,7 @@ export function Shell({ children }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100">
+    <div className="min-h-screen overflow-x-hidden bg-[#0a0a0a] text-zinc-100">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[76px] flex-col border-r border-white/5 bg-black md:flex">
         <div className="grid h-[72px] place-items-center border-b border-white/5">
           <div className="grid h-10 w-10 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
@@ -93,7 +93,7 @@ export function Shell({ children }) {
         </div>
       </aside>
 
-      <main className="min-h-screen w-full md:ml-[76px]">
+      <main className="min-h-screen min-w-0 w-full md:ml-[76px] md:w-[calc(100%-76px)]">
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-3 backdrop-blur md:h-[72px] md:px-5">
           <div>
             <div className="flex items-center gap-2">
