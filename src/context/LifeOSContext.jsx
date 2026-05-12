@@ -43,6 +43,9 @@ export function LifeOSProvider({ children }) {
   const [expenses, setExpenses] = useState([]);
   const [expensesStatus, setExpensesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [expensesError, setExpensesError] = useState('');
+  const [monthlyExpenses, setMonthlyExpenses] = useState([]);
+  const [monthlyExpensesStatus, setMonthlyExpensesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [monthlyExpensesError, setMonthlyExpensesError] = useState('');
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -170,6 +173,33 @@ export function LifeOSProvider({ children }) {
     loadExpenses();
   }, [loadExpenses]);
 
+  const loadExpenseMonth = useCallback(async (startDate, endDate) => {
+    if (!isSupabaseConfigured) {
+      setMonthlyExpensesStatus('not-configured');
+      return [];
+    }
+
+    if (!authUser) {
+      setMonthlyExpenses([]);
+      setMonthlyExpensesStatus('no-session');
+      return [];
+    }
+
+    setMonthlyExpensesStatus('loading');
+    setMonthlyExpensesError('');
+    try {
+      const rows = await expenseApi.listByDateRange(startDate, endDate);
+      const sortedRows = sortExpenses(rows ?? []);
+      setMonthlyExpenses(sortedRows);
+      setMonthlyExpensesStatus('ready');
+      return sortedRows;
+    } catch (error) {
+      setMonthlyExpensesError(error.message || 'Failed to load monthly expenses.');
+      setMonthlyExpensesStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
   const activeWorkoutSession = useMemo(
     () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
     [activeWorkoutId, workoutSessions],
@@ -251,6 +281,7 @@ export function LifeOSProvider({ children }) {
         setHealthLogs([]);
         setHealth(initialHealth);
         setExpenses([]);
+        setMonthlyExpenses([]);
       },
       reloadWorkoutSessions: loadWorkoutSessions,
       createWorkoutSession: async (payload) => {
@@ -357,6 +388,7 @@ export function LifeOSProvider({ children }) {
         return saved;
       },
       reloadExpenses: loadExpenses,
+      loadExpenseMonth,
       createExpense: async (payload) => {
         if (!authUser) {
           throw new Error('Sign in before creating an expense.');
@@ -426,7 +458,7 @@ export function LifeOSProvider({ children }) {
           ),
         ),
     }),
-    [activeWorkoutId, authUser, healthLogs, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, healthLogs, loadExpenseMonth, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {
@@ -441,6 +473,9 @@ export function LifeOSProvider({ children }) {
     expenses,
     expensesError,
     expensesStatus,
+    monthlyExpenses,
+    monthlyExpensesError,
+    monthlyExpensesStatus,
     expandedWorkout,
     chatMessages,
     authError,

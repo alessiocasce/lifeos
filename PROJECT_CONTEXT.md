@@ -134,9 +134,9 @@ Current behavior:
 - Loads the current authenticated user's expenses through RLS.
 - Creates, edits, and deletes expenses.
 - Amount input accepts comma decimals such as `12,50`.
-- Shows current month expenses and total monthly spend from persisted rows only.
-- Shows spend by category for current month persisted rows.
-- Shows recent persisted expense history.
+- Has a month selector that defaults to the current month.
+- Queries Supabase for the selected month range for monthly spend and category summaries.
+- Keeps recent persisted expense history separate from selected-month summaries.
 - Does not use mock finance ledger data inside the Finances tab.
 - No bank balance is persisted yet; the current finance slice is an expense tracker only.
 
@@ -280,7 +280,8 @@ Workout mobile direction:
 - Test Finances tab with `docs/QA_FINANCES.md`:
   - Create, edit, and delete persisted expenses.
   - Confirm comma decimal amounts save correctly.
-  - Confirm current-month totals exclude expenses outside the current month.
+  - Confirm selected-month totals exclude expenses outside the selected month.
+  - Confirm recent history remains separate from selected-month summaries.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.

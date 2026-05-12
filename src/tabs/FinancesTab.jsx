@@ -1,5 +1,5 @@
 import { Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis } from 'recharts';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -17,12 +17,26 @@ const emptyForm = {
 };
 
 export function FinancesTab() {
-  const { createExpense, deleteExpense, expenses, expensesError, expensesStatus, updateExpense } = useLifeOS();
+  const {
+    createExpense,
+    deleteExpense,
+    expenses,
+    expensesError,
+    expensesStatus,
+    loadExpenseMonth,
+    monthlyExpenses,
+    monthlyExpensesError,
+    monthlyExpensesStatus,
+    reloadExpenses,
+    updateExpense,
+  } = useLifeOS();
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
+  const selectedMonthRange = useMemo(() => getMonthRange(selectedMonth), [selectedMonth]);
   const sortedExpenses = useMemo(() => sortExpenses(expenses), [expenses]);
-  const currentMonthExpenses = useMemo(() => sortedExpenses.filter(isCurrentMonth), [sortedExpenses]);
-  const monthlySpend = useMemo(() => sumExpenses(currentMonthExpenses), [currentMonthExpenses]);
-  const categorySpend = useMemo(() => buildCategorySpend(currentMonthExpenses), [currentMonthExpenses]);
-  const categories = useMemo(() => mergeCategories(sortedExpenses), [sortedExpenses]);
+  const sortedMonthlyExpenses = useMemo(() => sortExpenses(monthlyExpenses), [monthlyExpenses]);
+  const monthlySpend = useMemo(() => sumExpenses(sortedMonthlyExpenses), [sortedMonthlyExpenses]);
+  const categorySpend = useMemo(() => buildCategorySpend(sortedMonthlyExpenses), [sortedMonthlyExpenses]);
+  const categories = useMemo(() => mergeCategories([...sortedExpenses, ...sortedMonthlyExpenses]), [sortedExpenses, sortedMonthlyExpenses]);
 
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
@@ -31,6 +45,10 @@ export function FinancesTab() {
   const [editForm, setEditForm] = useState(null);
   const [savingEditId, setSavingEditId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+
+  useEffect(() => {
+    loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end);
+  }, [loadExpenseMonth, selectedMonthRange.end, selectedMonthRange.start]);
 
   const updateForm = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -50,6 +68,10 @@ export function FinancesTab() {
     setSaving(true);
     try {
       await createExpense(toPayload(form));
+      await Promise.all([
+        reloadExpenses(),
+        loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end),
+      ]);
       setForm((prev) => ({ ...emptyForm, category: prev.category, spent_on: today }));
     } catch (error) {
       setFormError(error.message || 'Failed to save expense.');
@@ -75,6 +97,10 @@ export function FinancesTab() {
     setSavingEditId(id);
     try {
       await updateExpense(id, toPayload(editForm));
+      await Promise.all([
+        reloadExpenses(),
+        loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end),
+      ]);
       setEditingId(null);
       setEditForm(null);
     } catch (error) {
@@ -89,6 +115,10 @@ export function FinancesTab() {
     setFormError('');
     try {
       await deleteExpense(id);
+      await Promise.all([
+        reloadExpenses(),
+        loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end),
+      ]);
     } catch (error) {
       setFormError(error.message || 'Failed to delete expense.');
     } finally {
@@ -101,12 +131,12 @@ export function FinancesTab() {
       <Panel className="col-span-12">
         <div className="grid gap-3 p-3 xl:grid-cols-[1fr_520px]">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Current Month Spend</p>
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Selected Month Spend</p>
             <p className="data-text text-4xl font-black leading-none text-emerald-300 sm:text-6xl">
               EUR {formatMoney(monthlySpend)}
             </p>
             <p className="data-text mt-2 text-[11px] text-zinc-500">
-              {currentMonthExpenses.length} persisted expenses / {currentMonthLabel()}
+              {sortedMonthlyExpenses.length} persisted expenses / {formatMonthLabel(selectedMonth)}
             </p>
           </div>
 
@@ -140,12 +170,25 @@ export function FinancesTab() {
       </Panel>
 
       <Panel className="col-span-12 xl:col-span-7">
-        <PanelHeader eyebrow="Current Month" title="Spend By Category" right={<SourceStatus status={expensesStatus} />} />
+        <PanelHeader
+          eyebrow="Month Analysis"
+          title="Spend By Category"
+          right={<SourceStatus status={monthlyExpensesStatus} />}
+        />
         <div className="grid gap-3 p-3">
+          <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5 sm:max-w-56">
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Selected Month</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value || currentMonthValue())}
+              className="data-text mt-1 w-full bg-transparent text-base font-semibold text-zinc-100 outline-none"
+            />
+          </label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <MiniMetric label="Total Spend" value={`EUR ${formatMoney(monthlySpend)}`} tone="text-emerald-300" sub="month" />
-            <MiniMetric label="Entries" value={currentMonthExpenses.length} tone="text-cyan-300" sub="persisted" />
-            <MiniMetric label="Avg Ticket" value={`EUR ${formatMoney(currentMonthExpenses.length ? monthlySpend / currentMonthExpenses.length : 0)}`} tone="text-amber-300" sub="expense" />
+            <MiniMetric label="Entries" value={sortedMonthlyExpenses.length} tone="text-cyan-300" sub="persisted" />
+            <MiniMetric label="Avg Ticket" value={`EUR ${formatMoney(sortedMonthlyExpenses.length ? monthlySpend / sortedMonthlyExpenses.length : 0)}`} tone="text-amber-300" sub="expense" />
             <MiniMetric label="Top Category" value={categorySpend[0]?.category ?? '--'} tone="text-zinc-100" sub={categorySpend[0] ? `EUR ${formatMoney(categorySpend[0].total)}` : 'none'} />
           </div>
 
@@ -173,15 +216,16 @@ export function FinancesTab() {
               ))
             ) : (
               <p className="col-span-full rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-                No expenses logged for this month.
+                No expenses logged for the selected month.
               </p>
             )}
           </div>
+          {monthlyExpensesError ? <p className="data-text text-[11px] text-red-300">{monthlyExpensesError}</p> : null}
         </div>
       </Panel>
 
       <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Ledger" title="Recent Expenses" />
+        <PanelHeader eyebrow="Ledger" title="Recent Expenses" right={<SourceStatus status={expensesStatus} />} />
         <div className="grid gap-2 p-3">
           {expensesStatus === 'loading' ? (
             <LoadingRow label="Loading expenses" />
@@ -240,7 +284,7 @@ function LedgerField({ inputMode, label, list, onChange, placeholder = '', type 
 
 function ExpenseRow({ expense, loadingDelete, onDelete, onEdit }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-white/5 bg-black/25 p-2">
+    <div className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate text-sm font-medium text-zinc-100">{expense.vendor}</p>
@@ -250,7 +294,7 @@ function ExpenseRow({ expense, loadingDelete, onDelete, onEdit }) {
           {expense.spent_on} / {expense.notes || 'no notes'}
         </p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 sm:justify-end">
         <span className="data-text text-sm font-bold text-zinc-100">EUR {formatMoney(expense.amount)}</span>
         <IconButton icon={Pencil} onClick={onEdit} title="Edit expense" />
         <IconButton icon={Trash2} loading={loadingDelete} onClick={onDelete} title="Delete expense" tone="red" />
@@ -311,7 +355,7 @@ function IconButton({ icon: Icon, loading = false, onClick, title, tone = 'zinc'
       title={title}
       onClick={onClick}
       disabled={loading}
-      className={`grid h-8 w-8 place-items-center rounded border ${toneClass} disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600`}
+      className={`grid h-10 w-10 place-items-center rounded border sm:h-8 sm:w-8 ${toneClass} disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600`}
     >
       <DisplayIcon size={14} className={loading ? 'animate-spin' : ''} />
     </button>
@@ -390,12 +434,6 @@ function sortExpenses(expenses) {
   });
 }
 
-function isCurrentMonth(expense) {
-  const date = new Date(`${expense.spent_on}T00:00:00`);
-  const now = new Date();
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-}
-
 function parseDecimal(value) {
   return Number(String(value ?? '').replace(',', '.'));
 }
@@ -416,6 +454,23 @@ function formatMoney(value) {
   return Math.abs(numeric).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function currentMonthLabel() {
-  return new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+function currentMonthValue() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function getMonthRange(monthValue) {
+  const [year, month] = monthValue.split('-').map(Number);
+  if (!year || !month) return getMonthRange(currentMonthValue());
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
+}
+
+function formatMonthLabel(monthValue) {
+  const [year, month] = monthValue.split('-').map(Number);
+  if (!year || !month) return 'Selected month';
+  return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }

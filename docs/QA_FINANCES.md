@@ -30,6 +30,16 @@ Run this after signing in through the global auth gate. No extra schema migratio
 3. Confirm only this month's expense contributes to `Current Month Spend`.
 4. Confirm both expenses can still appear in recent history.
 
+## Month Selector
+
+1. Create an expense dated this month.
+2. Create an expense dated in the previous month.
+3. Use the month selector in `Spend By Category` to select this month.
+4. Confirm totals and category bars include this month's expense only.
+5. Switch to the previous month.
+6. Confirm totals and category bars update to include the previous month's expense only.
+7. Confirm `Recent Expenses` can still show expenses from both months.
+
 ## Validation
 
 Try each invalid value and confirm save is blocked:

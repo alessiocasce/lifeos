@@ -233,6 +233,19 @@ export const expenseApi = {
     );
   },
 
+  async listByDateRange(startDate, endDate, limit = 500) {
+    return throwIfError(
+      await requireSupabase()
+        .from('expenses')
+        .select(expenseSelect)
+        .gte('spent_on', startDate)
+        .lt('spent_on', endDate)
+        .order('spent_on', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(limit),
+    );
+  },
+
   async create(payload) {
     return throwIfError(
       await requireSupabase()
