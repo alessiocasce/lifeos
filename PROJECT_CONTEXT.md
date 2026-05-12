@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-12
 Current branch: `main`
-Recent context: Full-app integration audit added user-switch state guards and persisted shell metrics.
+Recent context: Calendar is now a Supabase-backed schedule module with user-scoped events.
 
 ## Project Goal
 
@@ -45,7 +45,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- `src/data/lifeosData.js` contains realistic mock data still used by non-workout tabs and by the workout sample archive.
+- `src/data/lifeosData.js` contains realistic mock data still used by unconverted/sample surfaces, including the workout sample archive.
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
   - `CalendarTab.jsx`
@@ -71,12 +71,13 @@ Current tables:
 - `workout_sets`
 - `health_logs`
 - `expenses`
+- `calendar_events`
 - `daily_reviews`
 - `chat_messages`
 
 All tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`.
 
-RLS is enabled on all six tables. Current policies are user-scoped for authenticated users:
+RLS is enabled on all user tables. Current policies are user-scoped for authenticated users:
 
 - Users can only read/write rows where `auth.uid() = user_id`.
 - `workout_sets` also checks that the referenced `workouts` row belongs to the same authenticated user.
@@ -107,6 +108,8 @@ Real/persisted today:
 - Expenses persisted in `expenses`.
 - Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
 - Home tab summarizes persisted workout sessions/sets, health logs, and expenses.
+- Calendar events persisted in `calendar_events`.
+- Calendar tab creates, edits, deletes, and groups persisted user-scoped events by date/week.
 - Daily reviews persisted in `daily_reviews`.
 - Assistant tab is currently a real Daily Review workflow, not AI chat.
 
@@ -117,9 +120,36 @@ Partially wired but not fully used in UI:
 
 Still mostly mock/local:
 
-- Calendar tab events and AI triage behavior.
 - Chat messages and AI assistant behavior; no fake AI chat is shown in the Assistant tab.
 - Workout sample archive uses mock examples from `src/data/lifeosData.js`, visually separated from persisted data.
+
+## Calendar Module Current Status
+
+`src/tabs/CalendarTab.jsx` is Supabase-backed and mobile-first.
+
+Current `calendar_events` fields:
+
+- `title`
+- `event_date`
+- `start_time`
+- `end_time`
+- `category`
+- `location`
+- `notes`
+- `status`
+
+Current behavior:
+
+- Loads the current authenticated user's calendar events through RLS.
+- Queries events by selected week range.
+- Supports selected date and selected week navigation.
+- Creates, edits, and deletes events.
+- Shows events grouped by date in the week view and selected-date detail.
+- Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
+- Status is limited to `planned`, `done`, `skipped`, and `cancelled`.
+- Does not support recurring events yet.
+- Does not implement Google Calendar sync yet.
+- Does not implement AI triage yet.
 
 ## Daily Review Module Current Status
 
@@ -335,6 +365,12 @@ Workout mobile direction:
   - Confirm duplicate-date saves update the existing row.
   - Confirm read-only context cards use persisted health, workout, and expense data.
   - Confirm blank wins/risks, empty next actions, fast date switching, and expense context errors behave correctly.
+- Test Calendar tab with `docs/QA_CALENDAR.md`:
+  - Create, edit, and delete persisted events.
+  - Switch selected dates and weeks.
+  - Refresh and confirm events persist.
+  - Confirm another user cannot see the first user's events.
+  - Confirm iPhone Safari has no horizontal overflow and controls remain thumb-friendly.
 - Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
@@ -362,8 +398,9 @@ Workout mobile direction:
 4. QA the Finances tab against a real Supabase project.
 5. QA the Home dashboard against a real Supabase project after creating records in Health, Workout, and Finances.
 6. Harden the Daily Review workflow against a real Supabase project.
-7. Convert Chat Messages only after the assistant behavior is clearly defined.
-8. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+7. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
+8. Convert Chat Messages only after the assistant behavior is clearly defined.
+9. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 

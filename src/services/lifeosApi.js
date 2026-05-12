@@ -70,6 +70,21 @@ const expenseSelect = `
   updated_at
 `;
 
+const calendarEventSelect = `
+  id,
+  user_id,
+  title,
+  event_date,
+  start_time,
+  end_time,
+  category,
+  location,
+  notes,
+  status,
+  created_at,
+  updated_at
+`;
+
 const dailyReviewSelect = `
   id,
   user_id,
@@ -284,6 +299,47 @@ export const expenseApi = {
   },
 };
 
+export const calendarEventApi = {
+  async listByRange(startDate, endDate, limit = 250) {
+    return throwIfError(
+      await requireSupabase()
+        .from('calendar_events')
+        .select(calendarEventSelect)
+        .gte('event_date', startDate)
+        .lt('event_date', endDate)
+        .order('event_date', { ascending: true })
+        .order('start_time', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(limit),
+    );
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('calendar_events')
+        .insert(prepareCalendarEventPayload(payload))
+        .select(calendarEventSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('calendar_events')
+        .update(prepareCalendarEventPayload(patch))
+        .eq('id', id)
+        .select(calendarEventSelect)
+        .single(),
+    );
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('calendar_events').delete().eq('id', id));
+  },
+};
+
 export const dailyReviewApi = {
   async list(limit = 30) {
     return throwIfError(
@@ -336,6 +392,7 @@ export const lifeosApi = {
   workoutSets: workoutSetApi,
   healthLogs: healthLogApi,
   expenses: expenseApi,
+  calendarEvents: calendarEventApi,
   dailyReviews: dailyReviewApi,
   chatMessages: {
     list: async () => throwIfError(await requireSupabase().from('chat_messages').select('*').order('created_at', { ascending: true })),
@@ -352,6 +409,12 @@ function prepareHealthLogPayload(payload) {
 }
 
 function prepareExpensePayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareCalendarEventPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   );

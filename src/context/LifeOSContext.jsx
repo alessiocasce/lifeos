@@ -11,7 +11,15 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { authApi, dailyReviewApi, expenseApi, healthLogApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
+import {
+  authApi,
+  calendarEventApi,
+  dailyReviewApi,
+  expenseApi,
+  healthLogApi,
+  workoutApi,
+  workoutSetApi,
+} from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -44,6 +52,9 @@ export function LifeOSProvider({ children }) {
   const [monthlyExpenses, setMonthlyExpenses] = useState([]);
   const [monthlyExpensesStatus, setMonthlyExpensesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [monthlyExpensesError, setMonthlyExpensesError] = useState('');
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarEventsStatus, setCalendarEventsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [calendarEventsError, setCalendarEventsError] = useState('');
   const [dailyReviews, setDailyReviews] = useState([]);
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
@@ -64,6 +75,9 @@ export function LifeOSProvider({ children }) {
     setMonthlyExpenses([]);
     setMonthlyExpensesError('');
     setMonthlyExpensesStatus(status);
+    setCalendarEvents([]);
+    setCalendarEventsError('');
+    setCalendarEventsStatus(status);
     setDailyReviews([]);
     setDailyReviewsError('');
     setDailyReviewsStatus(status);
@@ -239,6 +253,34 @@ export function LifeOSProvider({ children }) {
   const loadExpenseRange = useCallback(async (startDate, endDate) => {
     if (!isSupabaseConfigured || !authUser) return [];
     return sortExpenses(await expenseApi.listByDateRange(startDate, endDate));
+  }, [authUser]);
+
+  const loadCalendarRange = useCallback(async (startDate, endDate) => {
+    if (!isSupabaseConfigured) {
+      setCalendarEventsStatus('not-configured');
+      return [];
+    }
+
+    if (!authUser) {
+      setCalendarEvents([]);
+      setCalendarEventsStatus('no-session');
+      return [];
+    }
+
+    setCalendarEventsStatus('loading');
+    setCalendarEventsError('');
+    try {
+      const rows = await calendarEventApi.listByRange(startDate, endDate);
+      if (lastAuthUserId.current !== authUser.id) return [];
+      const sortedRows = sortCalendarEvents(rows ?? []);
+      setCalendarEvents(sortedRows);
+      setCalendarEventsStatus('ready');
+      return sortedRows;
+    } catch (error) {
+      setCalendarEventsError(error.message || 'Failed to load calendar events.');
+      setCalendarEventsStatus('error');
+      return [];
+    }
   }, [authUser]);
 
   const loadDailyReviews = useCallback(async () => {
@@ -479,6 +521,30 @@ export function LifeOSProvider({ children }) {
         setExpenses((prev) => prev.filter((expense) => expense.id !== id));
         setExpensesStatus('ready');
       },
+      loadCalendarRange,
+      createCalendarEvent: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before creating a calendar event.');
+        }
+        setCalendarEventsError('');
+        const created = await calendarEventApi.create(normalizeCalendarEventPayload(payload));
+        setCalendarEvents((prev) => sortCalendarEvents([created, ...prev]));
+        setCalendarEventsStatus('ready');
+        return created;
+      },
+      updateCalendarEvent: async (id, patch) => {
+        setCalendarEventsError('');
+        const updated = await calendarEventApi.update(id, normalizeCalendarEventPayload(patch));
+        setCalendarEvents((prev) => sortCalendarEvents(prev.map((event) => (event.id === id ? updated : event))));
+        setCalendarEventsStatus('ready');
+        return updated;
+      },
+      deleteCalendarEvent: async (id) => {
+        setCalendarEventsError('');
+        await calendarEventApi.delete(id);
+        setCalendarEvents((prev) => prev.filter((event) => event.id !== id));
+        setCalendarEventsStatus('ready');
+      },
       reloadDailyReviews: loadDailyReviews,
       saveDailyReview: async (payload) => {
         if (!authUser) {
@@ -525,7 +591,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {
@@ -543,6 +609,9 @@ export function LifeOSProvider({ children }) {
     monthlyExpenses,
     monthlyExpensesError,
     monthlyExpensesStatus,
+    calendarEvents,
+    calendarEventsError,
+    calendarEventsStatus,
     dailyReviews,
     dailyReviewsError,
     dailyReviewsStatus,
@@ -588,6 +657,14 @@ function sortExpenses(rows = []) {
   });
 }
 
+function sortCalendarEvents(rows = []) {
+  return rows.slice().sort((a, b) => {
+    if (a.event_date !== b.event_date) return new Date(a.event_date) - new Date(b.event_date);
+    if ((a.start_time || '') !== (b.start_time || '')) return String(a.start_time || '').localeCompare(String(b.start_time || ''));
+    return new Date(a.created_at ?? 0) - new Date(b.created_at ?? 0);
+  });
+}
+
 function sortDailyReviews(rows = []) {
   return rows.slice().sort((a, b) => {
     if (a.review_on !== b.review_on) return new Date(b.review_on) - new Date(a.review_on);
@@ -621,6 +698,21 @@ function normalizeExpensePayload(payload) {
     spent_on: payload.spent_on,
     notes: payload.notes?.trim() || null,
   };
+}
+
+function normalizeCalendarEventPayload(payload) {
+  const normalized = {};
+  if ('title' in payload) normalized.title = payload.title?.trim();
+  if ('event_date' in payload) normalized.event_date = payload.event_date;
+  if ('start_time' in payload) normalized.start_time = payload.start_time || null;
+  if ('end_time' in payload) normalized.end_time = payload.end_time || null;
+  if ('category' in payload) normalized.category = payload.category?.trim() || null;
+  if ('location' in payload) normalized.location = payload.location?.trim() || null;
+  if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  if (payload.status !== undefined) {
+    normalized.status = ['planned', 'done', 'skipped', 'cancelled'].includes(payload.status) ? payload.status : 'planned';
+  }
+  return normalized;
 }
 
 function normalizeDailyReviewPayload(payload) {

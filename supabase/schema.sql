@@ -63,6 +63,21 @@ create table if not exists public.expenses (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title text not null,
+  event_date date not null,
+  start_time time,
+  end_time time,
+  category text,
+  location text,
+  notes text,
+  status text not null default 'planned' check (status in ('planned', 'done', 'skipped', 'cancelled')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.daily_reviews (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -112,11 +127,34 @@ alter table public.health_logs add column if not exists notes text;
 alter table public.expenses add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.expenses alter column user_id set default auth.uid();
 
+alter table public.calendar_events add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.calendar_events alter column user_id set default auth.uid();
+alter table public.calendar_events add column if not exists title text;
+alter table public.calendar_events add column if not exists event_date date;
+alter table public.calendar_events add column if not exists start_time time;
+alter table public.calendar_events add column if not exists end_time time;
+alter table public.calendar_events add column if not exists category text;
+alter table public.calendar_events add column if not exists location text;
+alter table public.calendar_events add column if not exists notes text;
+alter table public.calendar_events add column if not exists status text not null default 'planned';
+
 alter table public.daily_reviews add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.daily_reviews alter column user_id set default auth.uid();
 
 alter table public.chat_messages add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.chat_messages alter column user_id set default auth.uid();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'calendar_events_status_check'
+  ) then
+    alter table public.calendar_events
+    add constraint calendar_events_status_check
+    check (status in ('planned', 'done', 'skipped', 'cancelled'));
+  end if;
+end $$;
 
 do $$
 begin
@@ -168,6 +206,11 @@ create trigger set_expenses_updated_at
 before update on public.expenses
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_calendar_events_updated_at on public.calendar_events;
+create trigger set_calendar_events_updated_at
+before update on public.calendar_events
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_daily_reviews_updated_at on public.daily_reviews;
 create trigger set_daily_reviews_updated_at
 before update on public.daily_reviews
@@ -184,6 +227,7 @@ create index if not exists workout_sets_workout_id_idx on public.workout_sets (w
 create index if not exists workout_sets_exercise_idx on public.workout_sets (user_id, exercise);
 create index if not exists health_logs_user_logged_on_idx on public.health_logs (user_id, logged_on desc);
 create index if not exists expenses_user_spent_on_idx on public.expenses (user_id, spent_on desc);
+create index if not exists calendar_events_user_event_date_idx on public.calendar_events (user_id, event_date desc);
 create index if not exists daily_reviews_user_review_on_idx on public.daily_reviews (user_id, review_on desc);
 create index if not exists chat_messages_user_created_at_idx on public.chat_messages (user_id, created_at asc);
 
@@ -191,6 +235,7 @@ alter table public.workouts enable row level security;
 alter table public.workout_sets enable row level security;
 alter table public.health_logs enable row level security;
 alter table public.expenses enable row level security;
+alter table public.calendar_events enable row level security;
 alter table public.daily_reviews enable row level security;
 alter table public.chat_messages enable row level security;
 
@@ -236,6 +281,14 @@ drop policy if exists "lifeos local read expenses" on public.expenses;
 drop policy if exists "lifeos local write expenses" on public.expenses;
 drop policy if exists "expenses are user scoped" on public.expenses;
 create policy "expenses are user scoped" on public.expenses
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "lifeos local read calendar_events" on public.calendar_events;
+drop policy if exists "lifeos local write calendar_events" on public.calendar_events;
+drop policy if exists "calendar_events are user scoped" on public.calendar_events;
+create policy "calendar_events are user scoped" on public.calendar_events
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);

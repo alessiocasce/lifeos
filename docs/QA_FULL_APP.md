@@ -19,8 +19,10 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 5. Add one set with exercise, weight, reps, RPE, and date.
 6. Open Finances.
 7. Create one expense dated today.
-8. Open Assistant.
-9. Create today's Daily Review with wins, risks, optional score, and next actions.
+8. Open Calendar.
+9. Create one event dated today.
+10. Open Assistant.
+11. Create today's Daily Review with wins, risks, optional score, and next actions.
 
 ## Home Integration
 
@@ -35,7 +37,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 
 1. Refresh the page.
 2. Confirm auth restores.
-3. Confirm Health, Workout, Finances, Home, and Daily Review reload persisted records from Supabase.
+3. Confirm Health, Workout, Finances, Calendar, Home, and Daily Review reload persisted records from Supabase.
 4. Confirm loading states appear before empty states.
 
 ## User Scope
@@ -43,7 +45,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Sign out.
 2. Confirm the app returns to the auth screen.
 3. Sign in as a different user.
-4. Confirm the previous user's health logs, workouts, expenses, and daily reviews do not appear.
+4. Confirm the previous user's health logs, workouts, expenses, calendar events, and daily reviews do not appear.
 5. Create one record as the second user.
 6. Sign out and sign back in as the first user.
 7. Confirm the first user's records are still present and the second user's records are hidden.
@@ -55,21 +57,22 @@ Run the focused checklists after the full flow:
 - `docs/QA_HEALTH.md`
 - `docs/QA_FINANCES.md`
 - `docs/QA_HOME.md`
+- `docs/QA_CALENDAR.md`
 - `docs/QA_DAILY_REVIEW.md`
 
-## Calendar And Mock Areas
+## Mock Areas
 
 1. Open Calendar.
-2. Confirm Calendar may still show mock planning data.
+2. Confirm Calendar uses persisted events only and no fake planning data is shown as real.
 3. Open Workout sample archive.
 4. Confirm mock workout examples are visually labeled as mock/archive data.
-5. Confirm Home, Health, Finances, and Daily Review do not show fake data as real persisted data.
+5. Confirm Home, Health, Finances, Calendar, and Daily Review do not show fake data as real persisted data.
 
 ## iPhone Safari Basics
 
 1. Open the app on iPhone Safari.
 2. Confirm the mobile shell uses the bottom tab bar.
-3. Confirm no horizontal scrolling on Home, Health, Workout, Finances, or Assistant.
+3. Confirm no horizontal scrolling on Home, Health, Workout, Finances, Calendar, or Assistant.
 4. Confirm inputs do not zoom when focused.
 5. Confirm bottom navigation does not cover primary save buttons.
 6. Confirm long labels truncate cleanly in ledger, review archive, and workout history rows.
