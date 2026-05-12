@@ -71,6 +71,18 @@ export function HealthTab() {
     setSavedMessage('');
   };
 
+  const stepEnergy = (delta) => {
+    setForm((prev) => {
+      const current = parseOptionalInteger(prev.energy);
+      if (current === null || !Number.isInteger(current)) {
+        return { ...prev, energy: delta > 0 ? '1' : '' };
+      }
+      const next = current + delta;
+      return { ...prev, energy: next < 1 ? '' : String(Math.min(10, next)) };
+    });
+    setSavedMessage('');
+  };
+
   const stepHygiene = (id, delta) => {
     setForm((prev) => ({
       ...prev,
@@ -129,22 +141,7 @@ export function HealthTab() {
           </section>
 
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-            <section className="rounded-md border border-amber-400/10 bg-amber-400/5 p-2">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
-                  <Zap size={15} className="text-amber-300" />
-                  Energy
-                </div>
-                <span className="data-text text-xl font-black text-amber-300">{form.energy || '--'}</span>
-              </div>
-              <HealthField
-                label="Energy"
-                inputMode="numeric"
-                value={form.energy}
-                suffix="/10"
-                onChange={(value) => updateField('energy', value)}
-              />
-            </section>
+            <EnergyControl value={form.energy} onStep={stepEnergy} />
 
             <section className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(124px,1fr))]">
               <Stepper label="Water" value={form.water} icon={Droplets} tone="cyan" onStep={(delta) => stepField('water', delta, 0, 16)} />
@@ -271,6 +268,31 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function EnergyControl({ onStep, value }) {
+  return (
+    <section className="min-w-0 rounded-md border border-amber-400/20 bg-amber-400/10 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-300">
+          <Zap size={15} className="shrink-0 text-amber-300" />
+          <span className="truncate">Energy</span>
+        </div>
+        <div className="text-right">
+          <p className="data-text text-2xl font-black leading-none text-amber-300">{value || '--'}</p>
+          <p className="data-text mt-0.5 text-[10px] text-zinc-500">{value ? '/10' : 'not set'}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => onStep(-1)} className="grid h-10 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
+          <Minus size={15} />
+        </button>
+        <button type="button" onClick={() => onStep(1)} className="grid h-10 place-items-center rounded border border-amber-400/20 bg-amber-400/10 text-amber-300">
+          <Plus size={15} />
+        </button>
+      </div>
+    </section>
   );
 }
 

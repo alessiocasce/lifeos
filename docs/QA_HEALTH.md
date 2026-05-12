@@ -8,13 +8,14 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 2. Confirm the main form does not show sleep quality, mood, social time, or main time waster.
 3. Confirm the Sleep card is compact and includes date, sleep hours, sleep start, and wake time.
 4. Enter sleep hours, optional sleep times, energy, water, coffee, ADC, notes, and hygiene counts.
-5. Click `Save Check-In`.
-6. Confirm today's row appears in `7-Day History` with the `TODAY` tag.
+5. Confirm Energy uses compact `-` and `+` controls, not a nested input card.
+6. Click `Save Check-In`.
+7. Confirm today's row appears in `7-Day History` with the `TODAY` tag.
 
 ## Update Today's Log
 
 1. Change at least one measurable value on today's form.
-2. Increment and decrement Water, Coffee, ADC, and at least one Hygiene counter.
+2. Increment and decrement Energy, Water, Coffee, ADC, and at least one Hygiene counter.
 3. Click `Update Check-In`.
 4. Confirm only one row exists for today.
 5. Refresh the page and confirm the updated values persist.
@@ -51,13 +52,21 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 3. Confirm ADC appears in the form, 7-day summary, and history.
 4. Decrease ADC repeatedly and confirm it never goes below 0.
 
+## Energy Control
+
+1. Leave Energy blank and save; confirm blank Energy is allowed.
+2. Press `+` from blank and confirm Energy becomes 1.
+3. Press `+` repeatedly and confirm Energy does not exceed 10.
+4. Press `-` from 1 and confirm Energy returns to blank.
+5. Save and refresh with Energy set, then confirm the value reloads.
+
 ## Invalid Values
 
 Try each invalid value and confirm save is blocked with a clear message:
 
 - Invalid `logged_on` date.
 - `sleep_hours` below 0 or above 24.
-- `energy` below 1 or above 10.
+- `energy` below 1 or above 10 through any forced/manual test path.
 - Negative water.
 - Negative coffee.
 - Negative ADC.
@@ -86,6 +95,6 @@ Try each invalid value and confirm save is blocked with a clear message:
 2. Confirm no horizontal scrolling.
 3. Confirm inputs do not zoom when focused.
 4. Confirm the bottom nav does not cover `Save Check-In`.
-5. Confirm Water, Coffee, and ADC cards wrap instead of feeling cramped on narrow screens.
+5. Confirm Energy, Water, Coffee, and ADC cards wrap instead of feeling cramped on narrow screens.
 6. Confirm the Sleep card, counters, and hygiene controls are thumb-friendly.
 7. Confirm date switching and saving works with the mobile keyboard.
