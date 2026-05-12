@@ -6,11 +6,12 @@ Run this after signing in through the global auth gate. No schema migration is n
 
 1. Sign in with a user that has no workout sessions, health logs, or expenses.
 2. Open the Home tab.
-3. Confirm Home shows clear empty states:
+3. Confirm loading states appear while persisted data is syncing.
+4. Confirm Home shows clear empty states:
    - No health log yet today.
    - No workout logged today.
    - No expenses this month.
-4. Confirm no fake agenda, balance, workout, or health values are shown as real data.
+5. Confirm no fake agenda, balance, workout, or health values are shown as real data.
 
 ## Health Summary
 
@@ -29,6 +30,23 @@ Run this after signing in through the global auth gate. No schema migration is n
 5. Confirm Workout status shows live or ended based on the session.
 6. Confirm Workout Summary shows the session name, set count, exercise count, and total volume.
 
+## Workout Edge Cases
+
+1. Create today's workout session but do not add sets.
+2. Return to Home.
+3. Confirm Workout Summary shows the session with `0` sets, `0` volume, and `0` exercises.
+4. Create multiple workout sessions dated today.
+5. Confirm Today Status reports a live session if one of today's sessions is not ended.
+6. End all of today's sessions.
+7. Confirm Today Status reports ended and includes the number of sessions today.
+8. Confirm Home prefers today's workout session over an older selected active session.
+
+## Health Edge Cases
+
+1. Create a health log with optional fields left blank, such as sleep hours, mood, or energy.
+2. Return to Home.
+3. Confirm blank optional fields render as `--`, not fake values.
+
 ## Finance Summary
 
 1. Open the Finances tab.
@@ -38,6 +56,17 @@ Run this after signing in through the global auth gate. No schema migration is n
 5. Confirm Today's Spend shows today's expense count and total.
 6. Confirm Current Month Finance shows current-month spend and top category from persisted expenses.
 7. Confirm Latest Expenses shows persisted recent expenses.
+
+## Finance Edge Cases
+
+1. Create an expense dated in a previous month only.
+2. Return to Home.
+3. Confirm Current Month Finance still says no expenses this month.
+4. Confirm Latest Expenses can show the older persisted expense.
+5. Create an expense with a very long vendor and category name.
+6. Confirm labels truncate cleanly and do not cause horizontal scrolling.
+7. If possible, temporarily break the monthly expenses request or use a user without access.
+8. Confirm the finance card shows a clear monthly expense error.
 
 ## Persistence
 

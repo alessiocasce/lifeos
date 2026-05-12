@@ -127,6 +127,8 @@ Current behavior:
 - Uses persisted `healthLogs` from context.
 - Uses persisted `expenses` for today's spend and latest expenses.
 - Loads the current month through `loadExpenseMonth` and uses persisted `monthlyExpenses` for current-month spend and category summaries.
+- Shows loading states while persisted lists are syncing and waits until statuses resolve before showing empty states.
+- Prioritizes today's live session, then another today's session, before falling back to an older selected active/latest session in the workout summary.
 - Shows clear empty states instead of mock values when data is missing.
 - Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
 - Remains mobile-first with compact cards and no wide fixed layout.
@@ -300,6 +302,7 @@ Workout mobile direction:
   - Confirm empty states when no persisted module data exists.
   - Create health, workout, and expense records and confirm Home updates.
   - Refresh and confirm persisted summaries reload.
+  - Confirm Home handles zero-set workouts, blank optional health fields, older-only expenses, long labels, and multiple sessions today.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
