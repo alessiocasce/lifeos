@@ -1,133 +1,421 @@
-import { ArrowDownLeft, ArrowUpRight, Banknote, Send } from 'lucide-react';
+import { Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis } from 'recharts';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
-export function FinancesTab() {
-  const { addTransaction, finance } = useLifeOS();
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(finance.categories[0]);
-  const spendPct = Math.min(100, Math.round((finance.monthlySpend / finance.monthlyBudget) * 100));
-  const chartData = useMemo(() => finance.budgetSegments.map((segment) => ({ ...segment })), [finance.budgetSegments]);
+const today = new Date().toISOString().slice(0, 10);
+const defaultCategories = ['Food', 'Training', 'Transport', 'Rent', 'Software', 'Books', 'Health', 'Other'];
+const categoryColors = ['#22d3ee', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#a3e635', '#06b6d4', '#71717a'];
 
-  const submit = (event) => {
+const emptyForm = {
+  vendor: '',
+  category: 'Food',
+  amount: '',
+  spent_on: today,
+  notes: '',
+};
+
+export function FinancesTab() {
+  const { createExpense, deleteExpense, expenses, expensesError, expensesStatus, updateExpense } = useLifeOS();
+  const sortedExpenses = useMemo(() => sortExpenses(expenses), [expenses]);
+  const currentMonthExpenses = useMemo(() => sortedExpenses.filter(isCurrentMonth), [sortedExpenses]);
+  const monthlySpend = useMemo(() => sumExpenses(currentMonthExpenses), [currentMonthExpenses]);
+  const categorySpend = useMemo(() => buildCategorySpend(currentMonthExpenses), [currentMonthExpenses]);
+  const categories = useMemo(() => mergeCategories(sortedExpenses), [sortedExpenses]);
+
+  const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [savingEditId, setSavingEditId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const updateForm = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setFormError('');
+  };
+
+  const submit = async (event) => {
     event.preventDefault();
-    addTransaction({ amount, category });
-    setAmount('');
+    setFormError('');
+
+    const validationError = validateExpenseForm(form);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createExpense(toPayload(form));
+      setForm((prev) => ({ ...emptyForm, category: prev.category, spent_on: today }));
+    } catch (error) {
+      setFormError(error.message || 'Failed to save expense.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const beginEdit = (expense) => {
+    setEditingId(expense.id);
+    setEditForm(formFromExpense(expense));
+    setFormError('');
+  };
+
+  const saveEdit = async (id) => {
+    setFormError('');
+    const validationError = validateExpenseForm(editForm);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    setSavingEditId(id);
+    try {
+      await updateExpense(id, toPayload(editForm));
+      setEditingId(null);
+      setEditForm(null);
+    } catch (error) {
+      setFormError(error.message || 'Failed to update expense.');
+    } finally {
+      setSavingEditId(null);
+    }
+  };
+
+  const removeExpense = async (id) => {
+    setDeletingId(id);
+    setFormError('');
+    try {
+      await deleteExpense(id);
+    } catch (error) {
+      setFormError(error.message || 'Failed to delete expense.');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
-    <div className="grid grid-cols-12 gap-3">
+    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel className="col-span-12">
         <div className="grid gap-3 p-3 xl:grid-cols-[1fr_520px]">
-          <div>
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Current Bank Balance</p>
-            <p className="data-text text-7xl font-black leading-none text-emerald-300">
-              EUR {finance.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className="min-w-0">
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Current Month Spend</p>
+            <p className="data-text text-4xl font-black leading-none text-emerald-300 sm:text-6xl">
+              EUR {formatMoney(monthlySpend)}
+            </p>
+            <p className="data-text mt-2 text-[11px] text-zinc-500">
+              {currentMonthExpenses.length} persisted expenses / {currentMonthLabel()}
             </p>
           </div>
-          <form onSubmit={submit} className="grid grid-cols-[1fr_170px_48px] gap-2 self-end">
-            <input
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              inputMode="decimal"
-              placeholder="Amount"
-              className="data-text rounded-md border border-white/10 bg-black px-3 py-3 text-lg text-zinc-100 outline-none focus:border-cyan-400/40"
-            />
-            <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              className="rounded-md border border-white/10 bg-black px-3 py-3 text-sm text-zinc-100 outline-none focus:border-cyan-400/40"
-            >
-              {finance.categories.map((item) => (
-                <option key={item}>{item}</option>
+
+          <form onSubmit={submit} className="grid gap-2 self-end">
+            <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+              <LedgerField label="Vendor" value={form.vendor} placeholder="Vendor" onChange={(value) => updateForm('vendor', value)} />
+              <LedgerField label="Amount" inputMode="decimal" value={form.amount} placeholder="0.00" onChange={(value) => updateForm('amount', value)} />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_150px_48px]">
+              <LedgerField label="Category" value={form.category} list="expense-categories" onChange={(value) => updateForm('category', value)} />
+              <LedgerField label="Date" type="date" value={form.spent_on} onChange={(value) => updateForm('spent_on', value)} />
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex h-12 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                title="Save expense"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={17} />}
+                <span className="sm:hidden">Save</span>
+              </button>
+            </div>
+            <LedgerField label="Notes" value={form.notes} placeholder="Optional notes" onChange={(value) => updateForm('notes', value)} />
+            <datalist id="expense-categories">
+              {categories.map((category) => (
+                <option key={category} value={category} />
               ))}
-            </select>
-            <button type="submit" className="grid place-items-center rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-300">
-              <Send size={18} />
-            </button>
+            </datalist>
+            {formError || expensesError ? <p className="data-text text-[11px] text-red-300">{formError || expensesError}</p> : null}
           </form>
         </div>
       </Panel>
 
-      <Panel className="col-span-12 xl:col-span-8">
-        <PanelHeader eyebrow="Budget Burn" title="Monthly Spend Against Limit" right={<span className="data-text text-sm text-amber-300">{spendPct}%</span>} />
-        <div className="p-3">
-          <div className="mb-3 h-10 overflow-hidden rounded-md border border-white/5 bg-black">
-            <div className="flex h-full" style={{ width: `${spendPct}%` }}>
-              {finance.budgetSegments.map((segment) => (
-                <div
-                  key={segment.name}
-                  className="h-full border-r border-black/40"
-                  style={{
-                    width: `${(segment.value / finance.monthlySpend) * 100}%`,
-                    backgroundColor: segment.color,
-                  }}
-                  title={`${segment.name}: ${segment.value}`}
-                />
-              ))}
-            </div>
+      <Panel className="col-span-12 xl:col-span-7">
+        <PanelHeader eyebrow="Current Month" title="Spend By Category" right={<SourceStatus status={expensesStatus} />} />
+        <div className="grid gap-3 p-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MiniMetric label="Total Spend" value={`EUR ${formatMoney(monthlySpend)}`} tone="text-emerald-300" sub="month" />
+            <MiniMetric label="Entries" value={currentMonthExpenses.length} tone="text-cyan-300" sub="persisted" />
+            <MiniMetric label="Avg Ticket" value={`EUR ${formatMoney(currentMonthExpenses.length ? monthlySpend / currentMonthExpenses.length : 0)}`} tone="text-amber-300" sub="expense" />
+            <MiniMetric label="Top Category" value={categorySpend[0]?.category ?? '--'} tone="text-zinc-100" sub={categorySpend[0] ? `EUR ${formatMoney(categorySpend[0].total)}` : 'none'} />
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
-            {finance.budgetSegments.map((segment) => (
-              <div key={segment.name} className="rounded border border-white/5 bg-black/25 p-2">
-                <div className="mb-1 h-1.5 rounded" style={{ backgroundColor: segment.color }} />
-                <p className="text-xs text-zinc-300">{segment.name}</p>
-                <p className="data-text text-[11px] text-zinc-500">EUR {segment.value.toFixed(0)}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 h-52">
+
+          <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <XAxis dataKey="name" tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
+              <BarChart data={categorySpend}>
+                <XAxis dataKey="category" tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                  {categorySpend.map((entry, index) => (
+                    <Cell key={entry.category} fill={entry.color ?? categoryColors[index % categoryColors.length]} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
-      </Panel>
 
-      <Panel className="col-span-12 xl:col-span-4">
-        <PanelHeader eyebrow="Ledger" title="Recent Transactions" right={<Banknote size={16} className="text-emerald-300" />} />
-        <div className="divide-y divide-white/5">
-          {finance.entries.map((entry) => (
-            <div key={entry.id} className="grid grid-cols-[24px_1fr_auto] items-center gap-3 px-3 py-3">
-              <div className={`grid h-6 w-6 place-items-center rounded border ${entry.amount > 0 ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-red-400/20 bg-red-400/10 text-red-300'}`}>
-                {entry.amount > 0 ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-zinc-100">{entry.vendor}</p>
-                <p className="data-text text-[10px] text-zinc-500">{entry.date} / {entry.category}</p>
-              </div>
-              <span className={`data-text text-sm font-bold ${entry.amount > 0 ? 'text-emerald-300' : 'text-zinc-200'}`}>
-                {entry.amount > 0 ? '+' : '-'}EUR {Math.abs(entry.amount).toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12">
-        <PanelHeader eyebrow="Controls" title="Ledger Telemetry" />
-        <div className="grid grid-cols-2 gap-2 p-3 md:grid-cols-4">
-          <MiniMetric label="Budget Limit" value={`EUR ${finance.monthlyBudget}`} tone="text-zinc-100" sub="monthly" />
-          <MiniMetric label="Spend Left" value={`EUR ${(finance.monthlyBudget - finance.monthlySpend).toFixed(0)}`} tone="text-emerald-300" sub="remaining" />
-          <MiniMetric label="Daily Cap" value="EUR 52" tone="text-cyan-300" sub="to month close" />
-          <div className="rounded-md border border-white/5 bg-black/20 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">Signal</p>
-            <div className="mt-2 flex gap-1">
-              <Tag tone="emerald">cashflow ok</Tag>
-              <Tag tone="amber">software high</Tag>
-            </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {categorySpend.length ? (
+              categorySpend.map((item) => (
+                <div key={item.category} className="rounded border border-white/5 bg-black/25 p-2">
+                  <div className="mb-1 h-1.5 rounded" style={{ backgroundColor: item.color }} />
+                  <p className="truncate text-xs text-zinc-300">{item.category}</p>
+                  <p className="data-text text-[11px] text-zinc-500">EUR {formatMoney(item.total)}</p>
+                </div>
+              ))
+            ) : (
+              <p className="col-span-full rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
+                No expenses logged for this month.
+              </p>
+            )}
           </div>
+        </div>
+      </Panel>
+
+      <Panel className="col-span-12 xl:col-span-5">
+        <PanelHeader eyebrow="Ledger" title="Recent Expenses" />
+        <div className="grid gap-2 p-3">
+          {expensesStatus === 'loading' ? (
+            <LoadingRow label="Loading expenses" />
+          ) : sortedExpenses.length ? (
+            sortedExpenses.slice(0, 15).map((expense) =>
+              editingId === expense.id ? (
+                <EditExpenseRow
+                  key={expense.id}
+                  categories={categories}
+                  editForm={editForm}
+                  loading={savingEditId === expense.id}
+                  onCancel={() => {
+                    setEditingId(null);
+                    setEditForm(null);
+                  }}
+                  onSave={() => saveEdit(expense.id)}
+                  setEditForm={setEditForm}
+                />
+              ) : (
+                <ExpenseRow
+                  key={expense.id}
+                  expense={expense}
+                  loadingDelete={deletingId === expense.id}
+                  onDelete={() => removeExpense(expense.id)}
+                  onEdit={() => beginEdit(expense)}
+                />
+              ),
+            )
+          ) : (
+            <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
+              No persisted expenses yet. Add one above to start the ledger.
+            </p>
+          )}
         </div>
       </Panel>
     </div>
   );
+}
+
+function LedgerField({ inputMode, label, list, onChange, placeholder = '', type = 'text', value }) {
+  return (
+    <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+      <input
+        type={type}
+        inputMode={inputMode}
+        list={list}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="data-text mt-1 w-full min-w-0 bg-transparent text-base font-semibold text-zinc-100 outline-none placeholder:text-zinc-700"
+      />
+    </label>
+  );
+}
+
+function ExpenseRow({ expense, loadingDelete, onDelete, onEdit }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-white/5 bg-black/25 p-2">
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-sm font-medium text-zinc-100">{expense.vendor}</p>
+          <Tag tone="cyan">{expense.category}</Tag>
+        </div>
+        <p className="data-text mt-1 text-[10px] text-zinc-500">
+          {expense.spent_on} / {expense.notes || 'no notes'}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="data-text text-sm font-bold text-zinc-100">EUR {formatMoney(expense.amount)}</span>
+        <IconButton icon={Pencil} onClick={onEdit} title="Edit expense" />
+        <IconButton icon={Trash2} loading={loadingDelete} onClick={onDelete} title="Delete expense" tone="red" />
+      </div>
+    </div>
+  );
+}
+
+function EditExpenseRow({ categories, editForm, loading, onCancel, onSave, setEditForm }) {
+  const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }));
+  return (
+    <div className="grid gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/[0.04] p-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <LedgerField label="Vendor" value={editForm.vendor} onChange={(value) => update('vendor', value)} />
+        <LedgerField label="Amount" inputMode="decimal" value={editForm.amount} onChange={(value) => update('amount', value)} />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <LedgerField label="Category" list="expense-categories-edit" value={editForm.category} onChange={(value) => update('category', value)} />
+        <LedgerField label="Date" type="date" value={editForm.spent_on} onChange={(value) => update('spent_on', value)} />
+      </div>
+      <LedgerField label="Notes" value={editForm.notes} onChange={(value) => update('notes', value)} />
+      <datalist id="expense-categories-edit">
+        {categories.map((category) => (
+          <option key={category} value={category} />
+        ))}
+      </datalist>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={loading}
+          className="flex h-10 items-center justify-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 text-sm text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+        >
+          {loading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-10 items-center justify-center gap-2 rounded border border-white/10 bg-white/[0.03] text-sm text-zinc-300"
+        >
+          <X size={15} />
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function IconButton({ icon: Icon, loading = false, onClick, title, tone = 'zinc' }) {
+  const DisplayIcon = loading ? Loader2 : Icon;
+  const toneClass = tone === 'red'
+    ? 'border-red-400/20 bg-red-400/10 text-red-300'
+    : 'border-white/10 bg-white/[0.03] text-zinc-300';
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={loading}
+      className={`grid h-8 w-8 place-items-center rounded border ${toneClass} disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600`}
+    >
+      <DisplayIcon size={14} className={loading ? 'animate-spin' : ''} />
+    </button>
+  );
+}
+
+function LoadingRow({ label }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-white/5 bg-black/25 p-3 data-text text-[11px] text-zinc-500">
+      <Loader2 size={15} className="animate-spin text-cyan-300" />
+      {label}
+    </div>
+  );
+}
+
+function SourceStatus({ status }) {
+  const label = status === 'loading' ? 'SYNCING' : status === 'error' ? 'ERROR' : 'LIVE';
+  const tone = status === 'error'
+    ? 'border-red-400/20 bg-red-400/10 text-red-300'
+    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
+  return <span className={`data-text rounded border px-2 py-1 text-[10px] ${tone}`}>{label}</span>;
+}
+
+function formFromExpense(expense) {
+  return {
+    vendor: expense.vendor ?? '',
+    category: expense.category ?? 'Other',
+    amount: stringValue(expense.amount),
+    spent_on: expense.spent_on ?? today,
+    notes: expense.notes ?? '',
+  };
+}
+
+function toPayload(form) {
+  return {
+    vendor: form.vendor.trim(),
+    category: form.category.trim(),
+    amount: parseDecimal(form.amount),
+    spent_on: form.spent_on,
+    notes: form.notes.trim() || null,
+  };
+}
+
+function validateExpenseForm(form) {
+  if (!form.vendor.trim()) return 'Vendor is required.';
+  if (!form.category.trim()) return 'Category is required.';
+  if (!isValidDate(form.spent_on)) return 'Expense date is invalid.';
+  const amount = parseDecimal(form.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Amount must be greater than zero.';
+  return '';
+}
+
+function buildCategorySpend(expenses) {
+  const map = new Map();
+  expenses.forEach((expense) => {
+    const category = expense.category || 'Other';
+    map.set(category, (map.get(category) ?? 0) + Math.abs(Number(expense.amount) || 0));
+  });
+  return Array.from(map.entries())
+    .map(([category, total], index) => ({ category, total, color: categoryColors[index % categoryColors.length] }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function mergeCategories(expenses) {
+  return Array.from(new Set([...defaultCategories, ...expenses.map((expense) => expense.category).filter(Boolean)])).sort();
+}
+
+function sumExpenses(expenses) {
+  return expenses.reduce((total, expense) => total + Math.abs(Number(expense.amount) || 0), 0);
+}
+
+function sortExpenses(expenses) {
+  return expenses.slice().sort((a, b) => {
+    if (a.spent_on !== b.spent_on) return new Date(b.spent_on) - new Date(a.spent_on);
+    return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
+  });
+}
+
+function isCurrentMonth(expense) {
+  const date = new Date(`${expense.spent_on}T00:00:00`);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function parseDecimal(value) {
+  return Number(String(value ?? '').replace(',', '.'));
+}
+
+function isValidDate(value) {
+  if (!value) return false;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isFinite(date.getTime());
+}
+
+function stringValue(value) {
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function formatMoney(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0.00';
+  return Math.abs(numeric).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function currentMonthLabel() {
+  return new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }

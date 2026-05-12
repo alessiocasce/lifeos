@@ -102,19 +102,43 @@ Real/persisted today:
 - Workout analytics are computed frontend-only from persisted workout/session data.
 - Health daily logs persisted in `health_logs`.
 - Health tab creates or updates one log per `user_id + logged_on` and shows persisted 7-day history/summaries.
+- Expenses persisted in `expenses`.
+- Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
 
 Partially wired but not fully used in UI:
 
-- `lifeosApi.js` has basic list/create/update/delete wrappers for `expenses`, `daily_reviews`, and `chat_messages`.
+- `lifeosApi.js` has basic list/create/update/delete wrappers for `daily_reviews` and `chat_messages`.
 - The database schema and RLS support these tables.
 
 Still mostly mock/local:
 
 - Home tab agenda, health snapshot, finance summary, and daily pulse data.
 - Calendar tab events and AI triage behavior.
-- Finances tab balance, ledger entries, rapid-entry form, and budget chart.
 - AI Assistant tab messages, markdown-like presentation, and accept/reject widgets.
 - Workout sample archive uses mock examples from `src/data/lifeosData.js`, visually separated from persisted data.
+
+## Finances Module Current Status
+
+`src/tabs/FinancesTab.jsx` is Supabase-backed and mobile-first.
+
+Current `expenses` fields:
+
+- `vendor`
+- `category`
+- `amount`
+- `spent_on`
+- `notes`
+
+Current behavior:
+
+- Loads the current authenticated user's expenses through RLS.
+- Creates, edits, and deletes expenses.
+- Amount input accepts comma decimals such as `12,50`.
+- Shows current month expenses and total monthly spend from persisted rows only.
+- Shows spend by category for current month persisted rows.
+- Shows recent persisted expense history.
+- Does not use mock finance ledger data inside the Finances tab.
+- No bank balance is persisted yet; the current finance slice is an expense tracker only.
 
 ## Health Module Current Status
 
@@ -253,6 +277,10 @@ Workout mobile direction:
   - Confirm 7-day summaries use persisted rows only.
   - Confirm numeric fields reject out-of-range values.
   - Run `docs/QA_HEALTH.md`.
+- Test Finances tab with `docs/QA_FINANCES.md`:
+  - Create, edit, and delete persisted expenses.
+  - Confirm comma decimal amounts save correctly.
+  - Confirm current-month totals exclude expenses outside the current month.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
@@ -276,7 +304,7 @@ Workout mobile direction:
 1. Harden the workout vertical slice before expanding other tabs.
 2. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
 3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
-4. Convert the Finances tab to Supabase `expenses`.
+4. QA the Finances tab against a real Supabase project.
 5. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
 6. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 

@@ -12,7 +12,7 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { authApi, healthLogApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
+import { authApi, expenseApi, healthLogApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -40,6 +40,9 @@ export function LifeOSProvider({ children }) {
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthLogsStatus, setHealthLogsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [healthLogsError, setHealthLogsError] = useState('');
+  const [expenses, setExpenses] = useState([]);
+  const [expensesStatus, setExpensesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [expensesError, setExpensesError] = useState('');
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -139,6 +142,34 @@ export function LifeOSProvider({ children }) {
     loadHealthLogs();
   }, [loadHealthLogs]);
 
+  const loadExpenses = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setExpensesStatus('not-configured');
+      return;
+    }
+
+    if (!authUser) {
+      setExpenses([]);
+      setExpensesStatus('no-session');
+      return;
+    }
+
+    setExpensesStatus('loading');
+    setExpensesError('');
+    try {
+      const rows = await expenseApi.list();
+      setExpenses(sortExpenses(rows ?? []));
+      setExpensesStatus('ready');
+    } catch (error) {
+      setExpensesError(error.message || 'Failed to load expenses.');
+      setExpensesStatus('error');
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
+
   const activeWorkoutSession = useMemo(
     () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
     [activeWorkoutId, workoutSessions],
@@ -219,6 +250,7 @@ export function LifeOSProvider({ children }) {
         setActiveWorkoutId(null);
         setHealthLogs([]);
         setHealth(initialHealth);
+        setExpenses([]);
       },
       reloadWorkoutSessions: loadWorkoutSessions,
       createWorkoutSession: async (payload) => {
@@ -324,6 +356,30 @@ export function LifeOSProvider({ children }) {
         setHealthLogsStatus('ready');
         return saved;
       },
+      reloadExpenses: loadExpenses,
+      createExpense: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before creating an expense.');
+        }
+        setExpensesError('');
+        const created = await expenseApi.create(normalizeExpensePayload(payload));
+        setExpenses((prev) => sortExpenses([created, ...prev]));
+        setExpensesStatus('ready');
+        return created;
+      },
+      updateExpense: async (id, patch) => {
+        setExpensesError('');
+        const updated = await expenseApi.update(id, normalizeExpensePayload(patch));
+        setExpenses((prev) => sortExpenses(prev.map((expense) => (expense.id === id ? updated : expense))));
+        setExpensesStatus('ready');
+        return updated;
+      },
+      deleteExpense: async (id) => {
+        setExpensesError('');
+        await expenseApi.delete(id);
+        setExpenses((prev) => prev.filter((expense) => expense.id !== id));
+        setExpensesStatus('ready');
+      },
       addTransaction: ({ amount, category }) =>
         setFinance((prev) => {
           const numericAmount = Number(amount);
@@ -370,7 +426,7 @@ export function LifeOSProvider({ children }) {
           ),
         ),
     }),
-    [activeWorkoutId, authUser, healthLogs, loadHealthLogs, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, healthLogs, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {
@@ -382,6 +438,9 @@ export function LifeOSProvider({ children }) {
     healthLogsError,
     healthLogsStatus,
     finance,
+    expenses,
+    expensesError,
+    expensesStatus,
     expandedWorkout,
     chatMessages,
     authError,
@@ -418,6 +477,13 @@ function sortHealthLogs(rows = []) {
   });
 }
 
+function sortExpenses(rows = []) {
+  return rows.slice().sort((a, b) => {
+    if (a.spent_on !== b.spent_on) return new Date(b.spent_on) - new Date(a.spent_on);
+    return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
+  });
+}
+
 function normalizeHealthLogPayload(payload) {
   return {
     logged_on: payload.logged_on,
@@ -433,6 +499,16 @@ function normalizeHealthLogPayload(payload) {
     main_time_waster: payload.main_time_waster?.trim() || null,
     notes: payload.notes?.trim() || null,
     hygiene: Array.isArray(payload.hygiene) ? payload.hygiene : initialHealth.hygiene,
+  };
+}
+
+function normalizeExpensePayload(payload) {
+  return {
+    vendor: payload.vendor?.trim(),
+    category: payload.category?.trim(),
+    amount: numberOrNull(payload.amount),
+    spent_on: payload.spent_on,
+    notes: payload.notes?.trim() || null,
   };
 }
 

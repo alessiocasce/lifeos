@@ -58,6 +58,18 @@ const healthLogSelect = `
   updated_at
 `;
 
+const expenseSelect = `
+  id,
+  user_id,
+  vendor,
+  category,
+  amount,
+  spent_on,
+  notes,
+  created_at,
+  updated_at
+`;
+
 export const authApi = {
   async getSession() {
     return throwIfError(await requireSupabase().auth.getSession());
@@ -209,16 +221,49 @@ export const healthLogApi = {
   },
 };
 
+export const expenseApi = {
+  async list(limit = 100) {
+    return throwIfError(
+      await requireSupabase()
+        .from('expenses')
+        .select(expenseSelect)
+        .order('spent_on', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(limit),
+    );
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('expenses')
+        .insert(prepareExpensePayload(payload))
+        .select(expenseSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('expenses')
+        .update(prepareExpensePayload(patch))
+        .eq('id', id)
+        .select(expenseSelect)
+        .single(),
+    );
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('expenses').delete().eq('id', id));
+  },
+};
+
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
   healthLogs: healthLogApi,
-  expenses: {
-    list: async () => throwIfError(await requireSupabase().from('expenses').select('*').order('spent_on', { ascending: false })),
-    create: async (payload) => throwIfError(await requireSupabase().from('expenses').insert(payload).select('*').single()),
-    update: async (id, patch) => throwIfError(await requireSupabase().from('expenses').update(patch).eq('id', id).select('*').single()),
-    delete: async (id) => throwIfError(await requireSupabase().from('expenses').delete().eq('id', id)),
-  },
+  expenses: expenseApi,
   dailyReviews: {
     list: async () => throwIfError(await requireSupabase().from('daily_reviews').select('*').order('review_on', { ascending: false })),
     create: async (payload) => throwIfError(await requireSupabase().from('daily_reviews').insert(payload).select('*').single()),
@@ -234,6 +279,12 @@ export const lifeosApi = {
 };
 
 function prepareHealthLogPayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareExpensePayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   );
