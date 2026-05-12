@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   agendaBlocks,
   calendarWeeks,
@@ -47,6 +47,27 @@ export function LifeOSProvider({ children }) {
   const [dailyReviews, setDailyReviews] = useState([]);
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
+  const lastAuthUserId = useRef(null);
+
+  const clearUserScopedState = useCallback((status = 'idle') => {
+    setWorkoutSessions([]);
+    setActiveWorkoutId(null);
+    setWorkoutSessionsError('');
+    setWorkoutSessionsStatus(status);
+    setHealthLogs([]);
+    setHealth(initialHealth);
+    setHealthLogsError('');
+    setHealthLogsStatus(status);
+    setExpenses([]);
+    setExpensesError('');
+    setExpensesStatus(status);
+    setMonthlyExpenses([]);
+    setMonthlyExpensesError('');
+    setMonthlyExpensesStatus(status);
+    setDailyReviews([]);
+    setDailyReviewsError('');
+    setDailyReviewsStatus(status);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -60,7 +81,12 @@ export function LifeOSProvider({ children }) {
       .getSession()
       .then(({ session }) => {
         if (!active) return;
-        setAuthUser(session?.user ?? null);
+        const nextUser = session?.user ?? null;
+        if (lastAuthUserId.current !== (nextUser?.id ?? null)) {
+          clearUserScopedState(nextUser ? 'idle' : 'no-session');
+          lastAuthUserId.current = nextUser?.id ?? null;
+        }
+        setAuthUser(nextUser);
         setAuthStatus('ready');
       })
       .catch((error) => {
@@ -70,7 +96,12 @@ export function LifeOSProvider({ children }) {
       });
 
     const subscription = authApi.onAuthStateChange((_event, session) => {
-      setAuthUser(session?.user ?? null);
+      const nextUser = session?.user ?? null;
+      if (lastAuthUserId.current !== (nextUser?.id ?? null)) {
+        clearUserScopedState(nextUser ? 'idle' : 'no-session');
+        lastAuthUserId.current = nextUser?.id ?? null;
+      }
+      setAuthUser(nextUser);
       setAuthStatus('ready');
       setAuthError('');
     });
@@ -79,7 +110,7 @@ export function LifeOSProvider({ children }) {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [clearUserScopedState]);
 
   const loadWorkoutSessions = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -98,6 +129,7 @@ export function LifeOSProvider({ children }) {
     setWorkoutSessionsError('');
     try {
       const rows = await workoutApi.list();
+      if (lastAuthUserId.current !== authUser.id) return;
       setWorkoutSessions(rows ?? []);
       setActiveWorkoutId((currentId) => {
         if (currentId && rows.some((session) => session.id === currentId)) return currentId;
@@ -132,6 +164,7 @@ export function LifeOSProvider({ children }) {
     setHealthLogsError('');
     try {
       const rows = await healthLogApi.list();
+      if (lastAuthUserId.current !== authUser.id) return;
       const sortedRows = sortHealthLogs(rows ?? []);
       setHealthLogs(sortedRows);
       setHealth(healthSnapshotFromLog(sortedRows.find((log) => log.logged_on === today()) ?? sortedRows[0]));
@@ -162,6 +195,7 @@ export function LifeOSProvider({ children }) {
     setExpensesError('');
     try {
       const rows = await expenseApi.list();
+      if (lastAuthUserId.current !== authUser.id) return;
       setExpenses(sortExpenses(rows ?? []));
       setExpensesStatus('ready');
     } catch (error) {
@@ -190,6 +224,7 @@ export function LifeOSProvider({ children }) {
     setMonthlyExpensesError('');
     try {
       const rows = await expenseApi.listByDateRange(startDate, endDate);
+      if (lastAuthUserId.current !== authUser.id) return [];
       const sortedRows = sortExpenses(rows ?? []);
       setMonthlyExpenses(sortedRows);
       setMonthlyExpensesStatus('ready');
@@ -222,6 +257,7 @@ export function LifeOSProvider({ children }) {
     setDailyReviewsError('');
     try {
       const rows = await dailyReviewApi.list();
+      if (lastAuthUserId.current !== authUser.id) return;
       setDailyReviews(sortDailyReviews(rows ?? []));
       setDailyReviewsStatus('ready');
     } catch (error) {
@@ -309,14 +345,9 @@ export function LifeOSProvider({ children }) {
       },
       signOut: async () => {
         await authApi.signOut();
+        lastAuthUserId.current = null;
         setAuthUser(null);
-        setWorkoutSessions([]);
-        setActiveWorkoutId(null);
-        setHealthLogs([]);
-        setHealth(initialHealth);
-        setExpenses([]);
-        setMonthlyExpenses([]);
-        setDailyReviews([]);
+        clearUserScopedState('no-session');
       },
       reloadWorkoutSessions: loadWorkoutSessions,
       createWorkoutSession: async (payload) => {
@@ -494,7 +525,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, dailyReviews, healthLogs, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {

@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-12
 Current branch: `main`
-Recent context: Assistant tab is now a Supabase-backed Daily Review surface instead of fake AI chat.
+Recent context: Full-app integration audit added user-switch state guards and persisted shell metrics.
 
 ## Project Goal
 
@@ -41,6 +41,7 @@ npm.cmd run dev -- --host 0.0.0.0
   - Desktop/tablet uses the fixed left sidebar and full top metrics header.
   - Mobile uses a compact sticky top header and fixed bottom tab navigation.
   - Sign out lives in the shell header, not in an individual tab.
+  - Header/sidebar metrics use persisted health, workout, and expense state where available instead of mock finance/training values.
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
@@ -89,6 +90,7 @@ The frontend currently uses Supabase Auth as a global app gate:
 - Session restoration through `getSession`
 - Auth state subscription through `onAuthStateChange`
 - The app shell and tabs render only after `authUser` exists.
+- User-scoped persisted state is cleared immediately when the auth user changes, and late list responses are ignored if they belong to a previous auth user.
 
 ## Real Features Vs Mock Features
 
@@ -333,6 +335,7 @@ Workout mobile direction:
   - Confirm duplicate-date saves update the existing row.
   - Confirm read-only context cards use persisted health, workout, and expense data.
   - Confirm blank wins/risks, empty next actions, fast date switching, and expense context errors behave correctly.
+- Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.

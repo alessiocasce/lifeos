@@ -22,9 +22,30 @@ const icons = {
 };
 
 export function Shell({ children }) {
-  const { activeTab, authUser, currentDate, finance, health, setActiveTab, signOut, tabs, workoutStatus } = useLifeOS();
+  const {
+    activeTab,
+    activeWorkoutSession,
+    authUser,
+    currentDate,
+    expenses,
+    healthLogs,
+    setActiveTab,
+    signOut,
+    tabs,
+    workoutSessions,
+  } = useLifeOS();
   const [signingOut, setSigningOut] = useState(false);
   const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label ?? 'Pulse';
+  const today = new Date().toISOString().slice(0, 10);
+  const todaysHealthLog = healthLogs.find((log) => log.logged_on === today) ?? null;
+  const currentMonthSpend = expenses.filter(isCurrentMonthExpense).reduce((total, expense) => total + Math.abs(Number(expense.amount) || 0), 0);
+  const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
+  const liveWorkout = todaysSessions.find((session) => !session.ended_at) ?? null;
+  const trainingStatus = liveWorkout || (activeWorkoutSession?.performed_on === today && !activeWorkoutSession.ended_at)
+    ? { value: 'LIVE', tone: 'text-red-300' }
+    : todaysSessions.some((session) => session.ended_at)
+      ? { value: 'DONE', tone: 'text-emerald-300' }
+      : { value: 'NONE', tone: 'text-zinc-400' };
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -68,8 +89,8 @@ export function Shell({ children }) {
         </nav>
 
         <div className="space-y-2 border-t border-white/5 px-2 py-3">
-          <StatusPip label="H2O" value={`${health.water}/8`} tone="text-cyan-300" />
-          <StatusPip label="BAL" value={`EUR ${Math.round(finance.balance / 1000)}k`} tone="text-emerald-300" />
+          <StatusPip label="H2O" value={todaysHealthLog ? `${todaysHealthLog.water ?? 0}/8` : '--'} tone="text-cyan-300" />
+          <StatusPip label="EXP" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-emerald-300" />
         </div>
       </aside>
 
@@ -91,10 +112,10 @@ export function Shell({ children }) {
 
           <div className="flex items-center gap-2">
             <div className="hidden grid-cols-4 gap-2 text-right md:grid">
-              <HeaderMetric label="Mood" value={`${health.mood}/10`} tone="text-emerald-300" />
-              <HeaderMetric label="Sleep" value={`${health.sleepQuality}%`} tone="text-cyan-300" />
-              <HeaderMetric label="Spend" value={`EUR ${Math.round(finance.monthlySpend)}`} tone="text-amber-300" />
-              <HeaderMetric label="Training" value={workoutStatus.mode.toUpperCase()} tone={workoutStatus.accent} />
+              <HeaderMetric label="Mood" value={formatMetric(todaysHealthLog?.mood, '/10')} tone="text-emerald-300" />
+              <HeaderMetric label="Sleep" value={formatMetric(todaysHealthLog?.sleep_quality, '%')} tone="text-cyan-300" />
+              <HeaderMetric label="Spend" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-amber-300" />
+              <HeaderMetric label="Training" value={trainingStatus.value} tone={trainingStatus.tone} />
             </div>
             <button
               type="button"
@@ -136,6 +157,17 @@ export function Shell({ children }) {
       </nav>
     </div>
   );
+}
+
+function isCurrentMonthExpense(expense) {
+  const spentOn = new Date(`${expense.spent_on}T00:00:00`);
+  const now = new Date();
+  return spentOn.getFullYear() === now.getFullYear() && spentOn.getMonth() === now.getMonth();
+}
+
+function formatMetric(value, suffix) {
+  if (value === null || value === undefined || value === '') return '--';
+  return `${value}${suffix}`;
 }
 
 function mobileLabel(id, label) {
