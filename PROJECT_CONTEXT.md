@@ -46,6 +46,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `src/data/lifeosData.js` contains realistic mock data still used by unconverted/sample surfaces, including the workout sample archive.
+- Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
   - `CalendarTab.jsx`
@@ -345,6 +346,7 @@ Workout mobile direction:
 
 ## Known Issues / Things To Test
 
+- Before adding AI, chat automation, Google Calendar sync, or other external APIs, deploy against the real Supabase project and run `docs/QA_DEPLOYMENT.md`.
 - Test global Supabase Auth gate with fresh sign up, email-confirmation flow, sign in, sign out, and page reload.
 - Test app behavior when Supabase env vars are missing.
 - Test Health tab after running the latest `health_logs` migration:
@@ -378,6 +380,7 @@ Workout mobile direction:
   - Confirm another user cannot see the first user's events.
   - Confirm iPhone Safari has no horizontal overflow and controls remain thumb-friendly.
 - Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
+- Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
@@ -405,8 +408,9 @@ Workout mobile direction:
 5. QA the Home dashboard against a real Supabase project after creating records in Health, Workout, and Finances.
 6. Harden the Daily Review workflow against a real Supabase project.
 7. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
-8. Convert Chat Messages only after the assistant behavior is clearly defined.
-9. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+8. Deploy the app and complete live iPhone QA against the real Supabase project.
+9. Convert Chat Messages only after the assistant behavior is clearly defined and live QA has passed.
+10. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 
