@@ -1,8 +1,8 @@
 # LifeOS Project Context
 
-Last updated: 2026-05-11
+Last updated: 2026-05-12
 Current branch: `main`
-Recent context: authentication moved to a global app gate; Workout tab no longer owns login/register UI.
+Recent context: Home now summarizes persisted workout, health, and expense data instead of mock dashboard data.
 
 ## Project Goal
 
@@ -104,6 +104,7 @@ Real/persisted today:
 - Health tab creates or updates one log per `user_id + logged_on` and shows persisted 7-day history/summaries.
 - Expenses persisted in `expenses`.
 - Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
+- Home tab summarizes persisted workout sessions/sets, health logs, and expenses.
 
 Partially wired but not fully used in UI:
 
@@ -112,10 +113,23 @@ Partially wired but not fully used in UI:
 
 Still mostly mock/local:
 
-- Home tab agenda, health snapshot, finance summary, and daily pulse data.
 - Calendar tab events and AI triage behavior.
 - AI Assistant tab messages, markdown-like presentation, and accept/reject widgets.
 - Workout sample archive uses mock examples from `src/data/lifeosData.js`, visually separated from persisted data.
+
+## Home Module Current Status
+
+`src/tabs/HomeTab.jsx` is now a persisted-data summary dashboard.
+
+Current behavior:
+
+- Uses persisted `workoutSessions` and nested `workout_sets` from context.
+- Uses persisted `healthLogs` from context.
+- Uses persisted `expenses` for today's spend and latest expenses.
+- Loads the current month through `loadExpenseMonth` and uses persisted `monthlyExpenses` for current-month spend and category summaries.
+- Shows clear empty states instead of mock values when data is missing.
+- Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
+- Remains mobile-first with compact cards and no wide fixed layout.
 
 ## Finances Module Current Status
 
@@ -282,6 +296,10 @@ Workout mobile direction:
   - Confirm comma decimal amounts save correctly.
   - Confirm selected-month totals exclude expenses outside the selected month.
   - Confirm recent history remains separate from selected-month summaries.
+- Test Home tab with `docs/QA_HOME.md`:
+  - Confirm empty states when no persisted module data exists.
+  - Create health, workout, and expense records and confirm Home updates.
+  - Refresh and confirm persisted summaries reload.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
@@ -306,8 +324,9 @@ Workout mobile direction:
 2. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
 3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
 4. QA the Finances tab against a real Supabase project.
-5. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
-6. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+5. QA the Home dashboard against a real Supabase project after creating records in Health, Workout, and Finances.
+6. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
+7. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 
