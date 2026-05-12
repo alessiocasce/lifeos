@@ -134,7 +134,10 @@ Current behavior:
 - Stores `next_actions` as a JSON array of strings.
 - Validates optional `score` as a whole number from 1 to 100.
 - Shows recent persisted reviews.
+- Shows loading states before review archive empty states and warns if selected-date expense context fails.
+- Defensively sorts recent reviews newest-first in the Review surface.
 - Shows read-only context cards for the selected date using persisted health logs, workout sessions/sets, and expenses.
+- Keeps one empty next-action input row in the UI when all actions are removed, while saving an empty `next_actions` array.
 - Does not save context summaries redundantly into the review.
 - Does not implement AI behavior yet.
 
@@ -329,6 +332,7 @@ Workout mobile direction:
   - Create reviews for other dates and switch between them.
   - Confirm duplicate-date saves update the existing row.
   - Confirm read-only context cards use persisted health, workout, and expense data.
+  - Confirm blank wins/risks, empty next actions, fast date switching, and expense context errors behave correctly.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.

@@ -19,9 +19,11 @@ export function AIAssistantTab() {
     dailyReviewsError,
     dailyReviewsStatus,
     healthLogs,
+    healthLogsStatus,
     loadExpenseRange,
     saveDailyReview,
     workoutSessions,
+    workoutSessionsStatus,
   } = useLifeOS();
 
   const [selectedDate, setSelectedDate] = useState(today());
@@ -70,9 +72,15 @@ export function AIAssistantTab() {
   );
   const workoutSummary = useMemo(() => buildWorkoutSummary(selectedWorkouts), [selectedWorkouts]);
   const expenseTotal = useMemo(() => sumExpenses(dateExpenses), [dateExpenses]);
-  const recentReviews = dailyReviews.slice(0, 8);
+  const recentReviews = useMemo(() => sortReviews(dailyReviews).slice(0, 8), [dailyReviews]);
   const isToday = selectedDate === today();
-  const titleMode = selectedReview ? (isToday ? 'Update Today' : 'Update Selected Date') : (isToday ? 'Create Today' : 'Create Selected Date');
+  const reviewsLoading = isLoadingStatus(dailyReviewsStatus);
+  const reviewsResolved = isResolvedStatus(dailyReviewsStatus);
+  const titleMode = reviewsLoading
+    ? 'Loading Review'
+    : selectedReview
+      ? (isToday ? 'Update Today' : 'Update Selected Date')
+      : (isToday ? 'Create Today' : 'Create Selected Date');
 
   const updateForm = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -161,6 +169,10 @@ export function AIAssistantTab() {
             </label>
           </div>
 
+          {reviewsLoading ? (
+            <LoadingCard label="Loading selected review from Supabase" />
+          ) : null}
+
           <label className="rounded-md border border-white/5 bg-black/25 p-2">
             <span className="text-[10px] uppercase tracking-wider text-zinc-500">Wins</span>
             <textarea
@@ -168,7 +180,7 @@ export function AIAssistantTab() {
               value={form.wins}
               onChange={(event) => updateForm('wins', event.target.value)}
               placeholder="What moved today?"
-              className="mt-2 min-h-32 w-full resize-y bg-transparent text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700"
+              className="mt-2 min-h-28 w-full resize-y bg-transparent text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 sm:min-h-32"
             />
           </label>
 
@@ -179,7 +191,7 @@ export function AIAssistantTab() {
               value={form.risks}
               onChange={(event) => updateForm('risks', event.target.value)}
               placeholder="What needs containment tomorrow?"
-              className="mt-2 min-h-28 w-full resize-y bg-transparent text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700"
+              className="mt-2 min-h-24 w-full resize-y bg-transparent text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 sm:min-h-28"
             />
           </label>
 
@@ -234,8 +246,8 @@ export function AIAssistantTab() {
       <Panel className="col-span-12 xl:col-span-4">
         <PanelHeader eyebrow="Persisted Context" title="Selected Date" right={<CalendarDays size={16} className="text-cyan-300" />} />
         <div className="grid gap-2 p-3">
-          <ContextHealth log={selectedHealthLog} />
-          <ContextWorkout summary={workoutSummary} />
+          <ContextHealth log={selectedHealthLog} status={healthLogsStatus} />
+          <ContextWorkout status={workoutSessionsStatus} summary={workoutSummary} />
           <ContextExpenses count={dateExpenses.length} status={dateExpensesStatus} total={expenseTotal} />
         </div>
       </Panel>
@@ -243,7 +255,7 @@ export function AIAssistantTab() {
       <Panel className="col-span-12">
         <PanelHeader eyebrow="Review Archive" title="Recent Persisted Reviews" />
         <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-4">
-          {dailyReviewsStatus === 'loading' ? (
+          {reviewsLoading ? (
             <LoadingCard label="Loading reviews" />
           ) : recentReviews.length ? (
             recentReviews.map((review) => (
@@ -262,16 +274,19 @@ export function AIAssistantTab() {
                   {review.score ? <Tag tone="emerald">{review.score}/100</Tag> : <Tag tone="zinc">NO SCORE</Tag>}
                 </div>
                 <p className="line-clamp-2 text-sm text-zinc-300">{review.wins || 'No wins written.'}</p>
+                {review.risks ? <p className="mt-1 line-clamp-1 text-xs text-zinc-500">{review.risks}</p> : null}
                 <p className="data-text mt-2 text-[10px] text-zinc-500">
                   {normalizeActions(review.next_actions).length} next actions
                 </p>
               </button>
             ))
-          ) : (
+          ) : reviewsResolved ? (
             <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
               <p className="text-sm font-medium text-zinc-100">No daily reviews yet.</p>
               <p className="mt-1 text-xs text-zinc-500">Save the selected date review to start the archive.</p>
             </div>
+          ) : (
+            <LoadingCard label="Review archive pending" />
           )}
         </div>
       </Panel>
@@ -279,14 +294,17 @@ export function AIAssistantTab() {
   );
 }
 
-function ContextHealth({ log }) {
+function ContextHealth({ log, status }) {
+  const loading = isLoadingStatus(status);
   return (
     <div className="rounded-md border border-white/5 bg-black/25 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-wider text-zinc-500">Health Log</p>
         <ClipboardCheck size={15} className={log ? 'text-emerald-300' : 'text-zinc-600'} />
       </div>
-      {log ? (
+      {loading ? (
+        <p className="data-text text-sm text-cyan-300">Loading health context...</p>
+      ) : log ? (
         <div className="grid grid-cols-2 gap-2">
           <MiniMetric label="Sleep" value={formatWithUnit(log.sleep_hours, 'h')} tone="text-cyan-300" />
           <MiniMetric label="Quality" value={formatWithUnit(log.sleep_quality, '%')} tone="text-emerald-300" />
@@ -300,14 +318,17 @@ function ContextHealth({ log }) {
   );
 }
 
-function ContextWorkout({ summary }) {
+function ContextWorkout({ status, summary }) {
+  const loading = isLoadingStatus(status);
   return (
     <div className="rounded-md border border-white/5 bg-black/25 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-[10px] uppercase tracking-wider text-zinc-500">Workout</p>
         <Dumbbell size={15} className={summary.sessionCount ? 'text-red-300' : 'text-zinc-600'} />
       </div>
-      {summary.sessionCount ? (
+      {loading ? (
+        <p className="data-text text-sm text-cyan-300">Loading workout context...</p>
+      ) : summary.sessionCount ? (
         <div className="grid grid-cols-3 gap-2">
           <MiniMetric label="Sessions" value={summary.sessionCount} tone="text-red-300" />
           <MiniMetric label="Sets" value={summary.setCount} tone="text-cyan-300" />
@@ -370,15 +391,22 @@ function reviewToForm(review, selectedDate) {
 
 function validateForm(form) {
   if (!isValidDate(form.review_on)) return 'Choose a valid review date.';
-  if (form.score !== '') {
-    const score = Number(form.score);
-    if (!Number.isInteger(score) || score < 1 || score > 100) return 'Score must be a whole number from 1 to 100.';
+  const score = String(form.score ?? '').trim();
+  if (score !== '') {
+    if (!/^(100|[1-9][0-9]?)$/.test(score)) return 'Score must be a whole number from 1 to 100.';
   }
   return '';
 }
 
 function normalizeActions(actions) {
   return Array.isArray(actions) ? actions.map((action) => String(action ?? '').trim()).filter(Boolean) : [];
+}
+
+function sortReviews(reviews) {
+  return reviews.slice().sort((a, b) => {
+    if (a.review_on !== b.review_on) return new Date(b.review_on) - new Date(a.review_on);
+    return new Date(b.updated_at ?? 0) - new Date(a.updated_at ?? 0);
+  });
 }
 
 function buildWorkoutSummary(sessions) {
@@ -402,6 +430,14 @@ function addDays(dateValue, days) {
 
 function isValidDate(value) {
   return Boolean(value && !Number.isNaN(new Date(`${value}T00:00:00`).getTime()));
+}
+
+function isLoadingStatus(status) {
+  return status === 'idle' || status === 'loading';
+}
+
+function isResolvedStatus(status) {
+  return ['ready', 'error', 'not-configured', 'no-session'].includes(status);
 }
 
 function formatMoney(value) {

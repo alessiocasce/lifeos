@@ -6,10 +6,11 @@ Run this after signing in through the global auth gate. No schema migration shou
 
 1. Open the Assistant tab.
 2. Confirm it shows the Daily Review surface, not AI chat.
-3. Leave the date set to today.
-4. Enter wins, risks, optional score, and at least one next action.
-5. Save the review.
-6. Confirm the review appears in Recent Persisted Reviews.
+3. Confirm a loading state appears while reviews are loading.
+4. Leave the date set to today.
+5. Enter wins, risks, optional score, and at least one next action.
+6. Save the review.
+7. Confirm the review appears in Recent Persisted Reviews.
 
 ## Update Today's Review
 
@@ -25,6 +26,15 @@ Run this after signing in through the global auth gate. No schema migration shou
 3. Save a review for yesterday.
 4. Switch back to today, then back to yesterday.
 5. Confirm each date loads the correct persisted review.
+6. Click a recent review card.
+7. Confirm the Review Date changes and the matching persisted review loads.
+
+## Fast Date Switching
+
+1. Switch between several review dates quickly.
+2. Watch the expense context card while requests are in flight.
+3. Confirm stale expense totals from the prior date are not shown as current data.
+4. Confirm the final selected date shows the correct expense context.
 
 ## Next Actions
 
@@ -33,6 +43,16 @@ Run this after signing in through the global auth gate. No schema migration shou
 3. Remove one action.
 4. Save and refresh.
 5. Confirm the persisted `next_actions` array reloads correctly.
+6. Delete or blank out every next action input.
+7. Save and refresh.
+8. Confirm the UI keeps one empty input row but the saved `next_actions` value is `[]`.
+
+## Blank Review Body
+
+1. Clear wins and risks.
+2. Leave score blank.
+3. Save the review.
+4. Confirm blank wins and risks are allowed for now.
 
 ## Validation
 
@@ -42,6 +62,7 @@ Try each invalid value and confirm save is blocked:
 - Score `0`.
 - Score `101`.
 - Decimal score such as `8.5`.
+- Decimal-looking score such as `8.0`.
 - Non-numeric score.
 
 ## Duplicate Recovery
@@ -59,6 +80,8 @@ Try each invalid value and confirm save is blocked:
 4. Return to Assistant and select that date.
 5. Confirm the context cards show the persisted health, workout, and expense summaries.
 6. Confirm editing the review does not copy or save these summaries into `wins` or `risks` unless typed manually.
+7. If possible, temporarily break the selected-date expense request or test with a user/project state that triggers an expense request error.
+8. Confirm the expense context card shows a clear warning.
 
 ## Persistence
 

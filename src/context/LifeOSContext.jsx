@@ -593,6 +593,7 @@ function normalizeExpensePayload(payload) {
 }
 
 function normalizeDailyReviewPayload(payload) {
+  const score = payload.score === null || payload.score === undefined ? '' : String(payload.score).trim();
   return {
     review_on: payload.review_on,
     wins: payload.wins?.trim() || null,
@@ -600,7 +601,7 @@ function normalizeDailyReviewPayload(payload) {
     next_actions: Array.isArray(payload.next_actions)
       ? payload.next_actions.map((action) => String(action ?? '').trim()).filter(Boolean)
       : [],
-    score: integerOrNull(payload.score),
+    score: integerOrNull(score),
   };
 }
 
