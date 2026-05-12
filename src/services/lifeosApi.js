@@ -70,6 +70,18 @@ const expenseSelect = `
   updated_at
 `;
 
+const dailyReviewSelect = `
+  id,
+  user_id,
+  review_on,
+  wins,
+  risks,
+  next_actions,
+  score,
+  created_at,
+  updated_at
+`;
+
 export const authApi = {
   async getSession() {
     return throwIfError(await requireSupabase().auth.getSession());
@@ -272,17 +284,59 @@ export const expenseApi = {
   },
 };
 
+export const dailyReviewApi = {
+  async list(limit = 30) {
+    return throwIfError(
+      await requireSupabase()
+        .from('daily_reviews')
+        .select(dailyReviewSelect)
+        .order('review_on', { ascending: false })
+        .limit(limit),
+    );
+  },
+
+  async getByDate(reviewOn) {
+    return throwIfError(
+      await requireSupabase()
+        .from('daily_reviews')
+        .select(dailyReviewSelect)
+        .eq('review_on', reviewOn)
+        .maybeSingle(),
+    );
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('daily_reviews')
+        .insert(prepareDailyReviewPayload(payload))
+        .select(dailyReviewSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('daily_reviews')
+        .update(prepareDailyReviewPayload(patch))
+        .eq('id', id)
+        .select(dailyReviewSelect)
+        .single(),
+    );
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('daily_reviews').delete().eq('id', id));
+  },
+};
+
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
   healthLogs: healthLogApi,
   expenses: expenseApi,
-  dailyReviews: {
-    list: async () => throwIfError(await requireSupabase().from('daily_reviews').select('*').order('review_on', { ascending: false })),
-    create: async (payload) => throwIfError(await requireSupabase().from('daily_reviews').insert(payload).select('*').single()),
-    update: async (id, patch) => throwIfError(await requireSupabase().from('daily_reviews').update(patch).eq('id', id).select('*').single()),
-    delete: async (id) => throwIfError(await requireSupabase().from('daily_reviews').delete().eq('id', id)),
-  },
+  dailyReviews: dailyReviewApi,
   chatMessages: {
     list: async () => throwIfError(await requireSupabase().from('chat_messages').select('*').order('created_at', { ascending: true })),
     create: async (payload) => throwIfError(await requireSupabase().from('chat_messages').insert(payload).select('*').single()),
@@ -298,6 +352,12 @@ function prepareHealthLogPayload(payload) {
 }
 
 function prepareExpensePayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareDailyReviewPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   );

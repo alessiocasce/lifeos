@@ -179,28 +179,3 @@ export const financeData = {
     { id: 5, date: 'May 09', vendor: 'Bookshop', category: 'Books', amount: -27.9, signal: 'normal' },
   ],
 };
-
-export const assistantMessages = [
-  {
-    id: 1,
-    role: 'assistant',
-    title: 'Nightly Performance Review',
-    body:
-      'You protected 3h 45m of deep work, hit 4/8 hydration by mid-day, and have Push Day scheduled at 15:00. Sleep quality is strong at 84%, but coffee is already at 2. Keep the next stimulant decision tied to workout readiness, not inbox fatigue.',
-    widgets: [
-      { id: 'triage-1', label: 'Move finance reconciliation to 18:15', impact: '+25m recovery buffer' },
-      { id: 'triage-2', label: 'Add 500ml water before training', impact: 'Raises hydration pace to 6/8' },
-    ],
-  },
-  {
-    id: 2,
-    role: 'user',
-    body: 'Summarize the highest leverage adjustment for tonight.',
-  },
-  {
-    id: 3,
-    role: 'assistant',
-    body:
-      'Shift the ledger task later and keep 17:00-17:25 open for decompression. Your cognitive load is highest after lecture plus training; protecting that buffer reduces the chance of low-quality financial decisions.',
-  },
-];

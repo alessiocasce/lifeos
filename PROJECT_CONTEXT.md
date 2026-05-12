@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-12
 Current branch: `main`
-Recent context: Home now summarizes persisted workout, health, and expense data instead of mock dashboard data.
+Recent context: Assistant tab is now a Supabase-backed Daily Review surface instead of fake AI chat.
 
 ## Project Goal
 
@@ -35,7 +35,7 @@ npm.cmd run dev -- --host 0.0.0.0
 ## Current Architecture
 
 - `src/App.jsx` gates entry into the app. It shows Supabase setup, auth loading, or global auth screens before rendering `Shell`.
-- `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, local mock-backed state, Supabase auth state, workout session state, and workout CRUD actions.
+- `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, remaining local mock-backed state, Supabase auth state, persisted module state, and CRUD actions.
 - `src/components/AuthScreen.jsx` owns global sign in, sign up, loading, and Supabase setup screens.
 - `src/components/Shell.jsx` owns the global app shell:
   - Desktop/tablet uses the fixed left sidebar and full top metrics header.
@@ -105,17 +105,38 @@ Real/persisted today:
 - Expenses persisted in `expenses`.
 - Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
 - Home tab summarizes persisted workout sessions/sets, health logs, and expenses.
+- Daily reviews persisted in `daily_reviews`.
+- Assistant tab is currently a real Daily Review workflow, not AI chat.
 
 Partially wired but not fully used in UI:
 
-- `lifeosApi.js` has basic list/create/update/delete wrappers for `daily_reviews` and `chat_messages`.
+- `lifeosApi.js` has basic list/create/update/delete wrappers for `chat_messages`.
 - The database schema and RLS support these tables.
 
 Still mostly mock/local:
 
 - Calendar tab events and AI triage behavior.
-- AI Assistant tab messages, markdown-like presentation, and accept/reject widgets.
+- Chat messages and AI assistant behavior; no fake AI chat is shown in the Assistant tab.
 - Workout sample archive uses mock examples from `src/data/lifeosData.js`, visually separated from persisted data.
+
+## Daily Review Module Current Status
+
+`src/tabs/AIAssistantTab.jsx` now hosts the Daily Review workflow.
+
+Current behavior:
+
+- Loads the current authenticated user's `daily_reviews` rows through RLS.
+- Defaults to today's review date.
+- Creates a review when none exists for `review_on`.
+- Updates the existing review when one already exists for `review_on`.
+- Uses duplicate-key recovery by fetching the existing date row and updating it.
+- Supports selecting another review date and loading that date's persisted review.
+- Stores `next_actions` as a JSON array of strings.
+- Validates optional `score` as a whole number from 1 to 100.
+- Shows recent persisted reviews.
+- Shows read-only context cards for the selected date using persisted health logs, workout sessions/sets, and expenses.
+- Does not save context summaries redundantly into the review.
+- Does not implement AI behavior yet.
 
 ## Home Module Current Status
 
@@ -303,6 +324,11 @@ Workout mobile direction:
   - Create health, workout, and expense records and confirm Home updates.
   - Refresh and confirm persisted summaries reload.
   - Confirm Home handles zero-set workouts, blank optional health fields, older-only expenses, long labels, and multiple sessions today.
+- Test Daily Review workflow with `docs/QA_DAILY_REVIEW.md`:
+  - Create and update today's review.
+  - Create reviews for other dates and switch between them.
+  - Confirm duplicate-date saves update the existing row.
+  - Confirm read-only context cards use persisted health, workout, and expense data.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
@@ -328,8 +354,9 @@ Workout mobile direction:
 3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
 4. QA the Finances tab against a real Supabase project.
 5. QA the Home dashboard against a real Supabase project after creating records in Health, Workout, and Finances.
-6. Convert Daily Reviews and Chat Messages only after the assistant behavior is clearly defined.
-7. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+6. Harden the Daily Review workflow against a real Supabase project.
+7. Convert Chat Messages only after the assistant behavior is clearly defined.
+8. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 

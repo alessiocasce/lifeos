@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   agendaBlocks,
-  assistantMessages,
   calendarWeeks,
   currentDate,
   financeData,
@@ -12,7 +11,7 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
-import { authApi, expenseApi, healthLogApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
+import { authApi, dailyReviewApi, expenseApi, healthLogApi, workoutApi, workoutSetApi } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -29,7 +28,6 @@ export function LifeOSProvider({ children }) {
   const [health, setHealth] = useState(initialHealth);
   const [finance, setFinance] = useState(financeData);
   const [expandedWorkout, setExpandedWorkout] = useState(workoutData.history[0].date);
-  const [chatMessages, setChatMessages] = useState(assistantMessages);
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState(isSupabaseConfigured ? 'loading' : 'not-configured');
   const [authError, setAuthError] = useState('');
@@ -46,6 +44,9 @@ export function LifeOSProvider({ children }) {
   const [monthlyExpenses, setMonthlyExpenses] = useState([]);
   const [monthlyExpensesStatus, setMonthlyExpensesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [monthlyExpensesError, setMonthlyExpensesError] = useState('');
+  const [dailyReviews, setDailyReviews] = useState([]);
+  const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [dailyReviewsError, setDailyReviewsError] = useState('');
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -200,6 +201,39 @@ export function LifeOSProvider({ children }) {
     }
   }, [authUser]);
 
+  const loadExpenseRange = useCallback(async (startDate, endDate) => {
+    if (!isSupabaseConfigured || !authUser) return [];
+    return sortExpenses(await expenseApi.listByDateRange(startDate, endDate));
+  }, [authUser]);
+
+  const loadDailyReviews = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setDailyReviewsStatus('not-configured');
+      return;
+    }
+
+    if (!authUser) {
+      setDailyReviews([]);
+      setDailyReviewsStatus('no-session');
+      return;
+    }
+
+    setDailyReviewsStatus('loading');
+    setDailyReviewsError('');
+    try {
+      const rows = await dailyReviewApi.list();
+      setDailyReviews(sortDailyReviews(rows ?? []));
+      setDailyReviewsStatus('ready');
+    } catch (error) {
+      setDailyReviewsError(error.message || 'Failed to load daily reviews.');
+      setDailyReviewsStatus('error');
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadDailyReviews();
+  }, [loadDailyReviews]);
+
   const activeWorkoutSession = useMemo(
     () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
     [activeWorkoutId, workoutSessions],
@@ -282,6 +316,7 @@ export function LifeOSProvider({ children }) {
         setHealth(initialHealth);
         setExpenses([]);
         setMonthlyExpenses([]);
+        setDailyReviews([]);
       },
       reloadWorkoutSessions: loadWorkoutSessions,
       createWorkoutSession: async (payload) => {
@@ -389,6 +424,7 @@ export function LifeOSProvider({ children }) {
       },
       reloadExpenses: loadExpenses,
       loadExpenseMonth,
+      loadExpenseRange,
       createExpense: async (payload) => {
         if (!authUser) {
           throw new Error('Sign in before creating an expense.');
@@ -412,6 +448,32 @@ export function LifeOSProvider({ children }) {
         setExpenses((prev) => prev.filter((expense) => expense.id !== id));
         setExpensesStatus('ready');
       },
+      reloadDailyReviews: loadDailyReviews,
+      saveDailyReview: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before saving a daily review.');
+        }
+
+        const normalizedPayload = normalizeDailyReviewPayload(payload);
+        const existing = dailyReviews.find((review) => review.review_on === normalizedPayload.review_on)
+          ?? await dailyReviewApi.getByDate(normalizedPayload.review_on);
+        let saved;
+
+        try {
+          saved = existing
+            ? await dailyReviewApi.update(existing.id, normalizedPayload)
+            : await dailyReviewApi.create(normalizedPayload);
+        } catch (error) {
+          if (!isDuplicateKeyError(error)) throw error;
+          const duplicate = await dailyReviewApi.getByDate(normalizedPayload.review_on);
+          if (!duplicate) throw error;
+          saved = await dailyReviewApi.update(duplicate.id, normalizedPayload);
+        }
+
+        setDailyReviews((prev) => sortDailyReviews([saved, ...prev.filter((review) => review.id !== saved.id)]));
+        setDailyReviewsStatus('ready');
+        return saved;
+      },
       addTransaction: ({ amount, category }) =>
         setFinance((prev) => {
           const numericAmount = Number(amount);
@@ -431,34 +493,8 @@ export function LifeOSProvider({ children }) {
             entries: [entry, ...prev.entries],
           };
         }),
-      acceptWidget: (id) =>
-        setChatMessages((prev) =>
-          prev.map((message) =>
-            message.widgets
-              ? {
-                  ...message,
-                  widgets: message.widgets.map((widget) =>
-                    widget.id === id ? { ...widget, accepted: true } : widget,
-                  ),
-                }
-              : message,
-          ),
-        ),
-      rejectWidget: (id) =>
-        setChatMessages((prev) =>
-          prev.map((message) =>
-            message.widgets
-              ? {
-                  ...message,
-                  widgets: message.widgets.map((widget) =>
-                    widget.id === id ? { ...widget, rejected: true } : widget,
-                  ),
-                }
-              : message,
-          ),
-        ),
     }),
-    [activeWorkoutId, authUser, healthLogs, loadExpenseMonth, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, dailyReviews, healthLogs, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
   );
 
   const value = {
@@ -476,8 +512,10 @@ export function LifeOSProvider({ children }) {
     monthlyExpenses,
     monthlyExpensesError,
     monthlyExpensesStatus,
+    dailyReviews,
+    dailyReviewsError,
+    dailyReviewsStatus,
     expandedWorkout,
-    chatMessages,
     authError,
     authStatus,
     authUser,
@@ -519,6 +557,13 @@ function sortExpenses(rows = []) {
   });
 }
 
+function sortDailyReviews(rows = []) {
+  return rows.slice().sort((a, b) => {
+    if (a.review_on !== b.review_on) return new Date(b.review_on) - new Date(a.review_on);
+    return new Date(b.updated_at ?? 0) - new Date(a.updated_at ?? 0);
+  });
+}
+
 function normalizeHealthLogPayload(payload) {
   return {
     logged_on: payload.logged_on,
@@ -544,6 +589,18 @@ function normalizeExpensePayload(payload) {
     amount: numberOrNull(payload.amount),
     spent_on: payload.spent_on,
     notes: payload.notes?.trim() || null,
+  };
+}
+
+function normalizeDailyReviewPayload(payload) {
+  return {
+    review_on: payload.review_on,
+    wins: payload.wins?.trim() || null,
+    risks: payload.risks?.trim() || null,
+    next_actions: Array.isArray(payload.next_actions)
+      ? payload.next_actions.map((action) => String(action ?? '').trim()).filter(Boolean)
+      : [],
+    score: integerOrNull(payload.score),
   };
 }
 
