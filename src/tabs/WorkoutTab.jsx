@@ -747,12 +747,13 @@ function TodaySetsLog({
   const activeSets = activeSession?.workout_sets ?? [];
   const groupedActiveSets = groupSetsByExercise(activeSets);
   const otherSessions = workoutSessions.filter((session) => session.id !== activeSession?.id);
+  const sessionsInitialLoading = workoutSessionsStatus === 'loading' && workoutSessions.length === 0;
 
   return (
     <Panel>
       <PanelHeader eyebrow="Today" title="Logged Sets" right={<History size={16} className="text-cyan-300" />} />
       <div className="space-y-3 p-3">
-        {workoutSessionsStatus === 'loading' ? (
+        {sessionsInitialLoading ? (
           <LoadingCard label="Loading workout sessions" />
         ) : activeSession ? (
           Object.keys(groupedActiveSets).length ? (

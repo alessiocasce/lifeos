@@ -75,8 +75,9 @@ export function AIAssistantTab() {
   const recentReviews = useMemo(() => sortReviews(dailyReviews).slice(0, 8), [dailyReviews]);
   const isToday = selectedDate === today();
   const reviewsLoading = isLoadingStatus(dailyReviewsStatus);
+  const reviewsInitialLoading = reviewsLoading && dailyReviews.length === 0;
   const reviewsResolved = isResolvedStatus(dailyReviewsStatus);
-  const titleMode = reviewsLoading
+  const titleMode = reviewsInitialLoading
     ? 'Loading Review'
     : selectedReview
       ? (isToday ? 'Update Today' : 'Update Selected Date')
@@ -169,7 +170,7 @@ export function AIAssistantTab() {
             </label>
           </div>
 
-          {reviewsLoading ? (
+          {reviewsInitialLoading ? (
             <LoadingCard label="Loading selected review from Supabase" />
           ) : null}
 
@@ -255,7 +256,7 @@ export function AIAssistantTab() {
       <Panel className="col-span-12">
         <PanelHeader eyebrow="Review Archive" title="Recent Persisted Reviews" />
         <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-4">
-          {reviewsLoading ? (
+          {reviewsInitialLoading ? (
             <LoadingCard label="Loading reviews" />
           ) : recentReviews.length ? (
             recentReviews.map((review) => (
@@ -295,7 +296,7 @@ export function AIAssistantTab() {
 }
 
 function ContextHealth({ log, status }) {
-  const loading = isLoadingStatus(status);
+  const loading = isLoadingStatus(status) && !log;
   return (
     <div className="rounded-md border border-white/5 bg-black/25 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -319,7 +320,7 @@ function ContextHealth({ log, status }) {
 }
 
 function ContextWorkout({ status, summary }) {
-  const loading = isLoadingStatus(status);
+  const loading = isLoadingStatus(status) && !summary.sessionCount;
   return (
     <div className="rounded-md border border-white/5 bg-black/25 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">

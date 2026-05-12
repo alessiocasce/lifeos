@@ -35,6 +35,8 @@ export function HealthTab() {
     return todayFirst.slice(0, 7);
   }, [sortedLogs, todaysLog]);
   const summary = useMemo(() => summarizeLogs(visibleLogs), [visibleLogs]);
+  const historyInitialLoading = healthLogsStatus === 'loading' && visibleLogs.length === 0;
+  const historyResolved = ['ready', 'error', 'not-configured', 'no-session'].includes(healthLogsStatus);
 
   const [form, setForm] = useState(() => formFromLog(todaysLog));
   const [saving, setSaving] = useState(false);
@@ -196,14 +198,16 @@ export function HealthTab() {
       <Panel className="col-span-12">
         <PanelHeader eyebrow="Persisted Logs" title="7-Day History" right={<Users size={16} className="text-cyan-300" />} />
         <div className="grid gap-2 p-3">
-          {healthLogsStatus === 'loading' ? (
+          {historyInitialLoading ? (
             <LoadingRow label="Loading health logs" />
           ) : visibleLogs.length ? (
             visibleLogs.map((log) => <HistoryRow key={log.id} log={log} current={log.logged_on === today} />)
-          ) : (
+          ) : historyResolved ? (
             <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
               No persisted health logs yet. Save today&apos;s check-in to start the history.
             </div>
+          ) : (
+            <LoadingRow label="Health history pending" />
           )}
         </div>
       </Panel>

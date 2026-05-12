@@ -35,6 +35,9 @@ export function HomeTab() {
   const workoutsLoading = isLoadingStatus(workoutSessionsStatus);
   const expensesLoading = isLoadingStatus(expensesStatus);
   const monthlyExpensesLoading = isLoadingStatus(monthlyExpensesStatus);
+  const healthInitialLoading = healthLoading && healthLogs.length === 0;
+  const workoutsInitialLoading = workoutsLoading && workoutSessions.length === 0;
+  const expensesInitialLoading = expensesLoading && expenses.length === 0;
   const healthReady = isResolvedStatus(healthLogsStatus);
   const workoutsReady = isResolvedStatus(workoutSessionsStatus);
   const expensesReady = isResolvedStatus(expensesStatus);
@@ -63,9 +66,14 @@ export function HomeTab() {
     () => expenses.filter((expense) => expense.spent_on === today),
     [expenses, today],
   );
+  const currentMonthExpenses = useMemo(
+    () => monthlyExpenses.filter((expense) => expense.spent_on >= monthRange.start && expense.spent_on < monthRange.end),
+    [monthRange.end, monthRange.start, monthlyExpenses],
+  );
+  const monthlyExpensesInitialLoading = monthlyExpensesLoading && currentMonthExpenses.length === 0;
   const todaySpend = sumExpenses(todaysExpenses);
-  const currentMonthSpend = sumExpenses(monthlyExpenses);
-  const categorySpend = useMemo(() => buildCategorySpend(monthlyExpenses), [monthlyExpenses]);
+  const currentMonthSpend = sumExpenses(currentMonthExpenses);
+  const categorySpend = useMemo(() => buildCategorySpend(currentMonthExpenses), [currentMonthExpenses]);
   const topCategory = categorySpend[0] ?? null;
   const latestExpenses = expenses.slice(0, 5);
   const latestHealthLog = healthLogs[0] ?? null;
@@ -86,8 +94,8 @@ export function HomeTab() {
             label="Health"
             value={todaysHealthLog ? 'Logged' : 'Missing'}
             tone={todaysHealthLog ? 'text-emerald-300' : 'text-amber-300'}
-            detail={getTodayHealthDetail(todaysHealthLog, healthLoading, healthReady)}
-            loading={healthLoading}
+            detail={getTodayHealthDetail(todaysHealthLog, healthInitialLoading, healthReady)}
+            loading={healthInitialLoading}
           />
           <StatusCard
             icon={Dumbbell}
@@ -95,15 +103,15 @@ export function HomeTab() {
             value={workoutStatus.value}
             tone={workoutStatus.tone}
             detail={workoutStatus.detail}
-            loading={workoutsLoading}
+            loading={workoutsInitialLoading}
           />
           <StatusCard
             icon={CircleDollarSign}
             label="Spend"
             value={`EUR ${formatMoney(todaySpend)}`}
             tone={todaysExpenses.length ? 'text-amber-300' : 'text-zinc-100'}
-            detail={getTodaySpendDetail(todaysExpenses, expensesLoading, expensesReady)}
-            loading={expensesLoading}
+            detail={getTodaySpendDetail(todaysExpenses, expensesInitialLoading, expensesReady)}
+            loading={expensesInitialLoading}
           />
         </div>
       </Panel>
@@ -116,7 +124,7 @@ export function HomeTab() {
         />
         <div className="grid gap-3 p-3 md:grid-cols-[1fr_260px]">
           <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
-            {workoutsLoading ? (
+            {workoutsInitialLoading ? (
               <LoadingState title="Loading workouts" body="Syncing persisted workout sessions." />
             ) : workoutForSummary ? (
               <>
@@ -161,7 +169,7 @@ export function HomeTab() {
       <Panel className="col-span-12 xl:col-span-5">
         <PanelHeader eyebrow="Health" title="Latest Check-In" right={<SourceStatus status={healthLogsStatus} />} />
         <div className="grid gap-3 p-3">
-          {healthLoading ? (
+          {healthInitialLoading ? (
             <LoadingState title="Loading health logs" body="Syncing persisted health check-ins." />
           ) : latestHealthLog ? (
             <>
@@ -204,7 +212,7 @@ export function HomeTab() {
               EUR {formatMoney(currentMonthSpend)}
             </p>
             <p className="data-text mt-2 text-[11px] text-zinc-500">
-              {getMonthSpendDetail(monthlyExpenses, monthlyExpensesLoading, monthlyExpensesReady, today)}
+              {getMonthSpendDetail(monthlyExpenses, monthlyExpensesInitialLoading, monthlyExpensesReady, today)}
             </p>
             {monthlyExpensesError ? <p className="data-text mt-2 text-[11px] text-red-300">{monthlyExpensesError}</p> : null}
           </div>
@@ -218,7 +226,7 @@ export function HomeTab() {
             <MiniMetric label="Today" value={`EUR ${formatMoney(todaySpend)}`} tone="text-cyan-300" sub={`${todaysExpenses.length} expenses`} />
           </div>
           <div className="lg:col-span-2">
-            {monthlyExpensesLoading ? (
+            {monthlyExpensesInitialLoading ? (
               <LoadingState title="Loading monthly expenses" body="Syncing current-month ledger rows." />
             ) : categorySpend.length ? (
               <div className="h-40 rounded-md border border-white/5 bg-black/25 p-2">
@@ -251,7 +259,7 @@ export function HomeTab() {
       <Panel className="col-span-12 xl:col-span-5">
         <PanelHeader eyebrow="Ledger" title="Latest Expenses" right={<ReceiptText size={16} className="text-amber-300" />} />
         <div className="space-y-2 p-3">
-          {expensesLoading ? (
+          {expensesInitialLoading ? (
             <LoadingState title="Loading expenses" body="Syncing latest persisted ledger rows." />
           ) : latestExpenses.length ? (
             latestExpenses.map((expense) => (

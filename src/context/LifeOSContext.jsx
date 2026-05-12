@@ -102,7 +102,7 @@ export function LifeOSProvider({ children }) {
           clearUserScopedState(nextUser ? 'idle' : 'no-session');
           lastAuthUserId.current = nextUser?.id ?? null;
         }
-        setAuthUser(nextUser);
+        setAuthUser((current) => (current?.id === nextUser?.id ? current : nextUser));
         setAuthStatus('ready');
       })
       .catch((error) => {
@@ -117,7 +117,7 @@ export function LifeOSProvider({ children }) {
         clearUserScopedState(nextUser ? 'idle' : 'no-session');
         lastAuthUserId.current = nextUser?.id ?? null;
       }
-      setAuthUser(nextUser);
+      setAuthUser((current) => (current?.id === nextUser?.id ? current : nextUser));
       setAuthStatus('ready');
       setAuthError('');
     });

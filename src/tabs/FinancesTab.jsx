@@ -33,10 +33,16 @@ export function FinancesTab() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
   const selectedMonthRange = useMemo(() => getMonthRange(selectedMonth), [selectedMonth]);
   const sortedExpenses = useMemo(() => sortExpenses(expenses), [expenses]);
-  const sortedMonthlyExpenses = useMemo(() => sortExpenses(monthlyExpenses), [monthlyExpenses]);
+  const sortedMonthlyExpenses = useMemo(
+    () => sortExpenses(monthlyExpenses.filter((expense) => expense.spent_on >= selectedMonthRange.start && expense.spent_on < selectedMonthRange.end)),
+    [monthlyExpenses, selectedMonthRange.end, selectedMonthRange.start],
+  );
   const monthlySpend = useMemo(() => sumExpenses(sortedMonthlyExpenses), [sortedMonthlyExpenses]);
   const categorySpend = useMemo(() => buildCategorySpend(sortedMonthlyExpenses), [sortedMonthlyExpenses]);
   const categories = useMemo(() => mergeCategories([...sortedExpenses, ...sortedMonthlyExpenses]), [sortedExpenses, sortedMonthlyExpenses]);
+  const recentInitialLoading = expensesStatus === 'loading' && sortedExpenses.length === 0;
+  const recentResolved = ['ready', 'error', 'not-configured', 'no-session'].includes(expensesStatus);
+  const monthlyInitialLoading = monthlyExpensesStatus === 'loading' && sortedMonthlyExpenses.length === 0;
 
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
@@ -136,7 +142,9 @@ export function FinancesTab() {
               EUR {formatMoney(monthlySpend)}
             </p>
             <p className="data-text mt-2 text-[11px] text-zinc-500">
-              {sortedMonthlyExpenses.length} persisted expenses / {formatMonthLabel(selectedMonth)}
+              {monthlyInitialLoading
+                ? `Syncing ${formatMonthLabel(selectedMonth)} expenses`
+                : `${sortedMonthlyExpenses.length} persisted expenses / ${formatMonthLabel(selectedMonth)}`}
             </p>
           </div>
 
@@ -206,7 +214,9 @@ export function FinancesTab() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {categorySpend.length ? (
+            {monthlyInitialLoading ? (
+              <LoadingRow label="Loading selected month" />
+            ) : categorySpend.length ? (
               categorySpend.map((item) => (
                 <div key={item.category} className="rounded border border-white/5 bg-black/25 p-2">
                   <div className="mb-1 h-1.5 rounded" style={{ backgroundColor: item.color }} />
@@ -227,7 +237,7 @@ export function FinancesTab() {
       <Panel className="col-span-12 xl:col-span-5">
         <PanelHeader eyebrow="Ledger" title="Recent Expenses" right={<SourceStatus status={expensesStatus} />} />
         <div className="grid gap-2 p-3">
-          {expensesStatus === 'loading' ? (
+          {recentInitialLoading ? (
             <LoadingRow label="Loading expenses" />
           ) : sortedExpenses.length ? (
             sortedExpenses.slice(0, 15).map((expense) =>
@@ -254,10 +264,12 @@ export function FinancesTab() {
                 />
               ),
             )
-          ) : (
+          ) : recentResolved ? (
             <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
               No persisted expenses yet. Add one above to start the ledger.
             </p>
+          ) : (
+            <LoadingRow label="Expense history pending" />
           )}
         </div>
       </Panel>

@@ -51,6 +51,8 @@ export function CalendarTab() {
   const eventsByDate = useMemo(() => groupEventsByDate(calendarEvents), [calendarEvents]);
   const selectedEvents = eventsByDate[selectedDate] ?? [];
   const isLoading = calendarEventsStatus === 'loading';
+  const isInitialLoading = isLoading && calendarEvents.length === 0;
+  const isSyncing = isLoading && calendarEvents.length > 0;
   const rangeLabel = `${formatShortDate(weekStart)} - ${formatShortDate(addDays(weekStart, 6))}`;
 
   useEffect(() => {
@@ -185,7 +187,10 @@ export function CalendarTab() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="data-text text-xs uppercase text-zinc-500">Selected week</p>
-                <p className="data-text text-sm font-semibold text-zinc-100">{rangeLabel}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="data-text text-sm font-semibold text-zinc-100">{rangeLabel}</p>
+                  {isSyncing ? <span className="data-text text-[10px] text-cyan-300">SYNCING</span> : null}
+                </div>
               </div>
               <label className="flex min-w-0 items-center gap-2">
                 <span className="data-text shrink-0 text-[10px] uppercase text-zinc-500">Date</span>
@@ -233,7 +238,7 @@ export function CalendarTab() {
             right={<CalendarDays size={16} className="text-cyan-300" />}
           />
           <div className="space-y-2 p-3">
-            {isLoading ? (
+            {isInitialLoading ? (
               <LoadingRow label="Loading selected date" />
             ) : selectedEvents.length ? (
               selectedEvents.map((event) => (
@@ -245,6 +250,8 @@ export function CalendarTab() {
                   deleting={deleteId === event.id}
                 />
               ))
+            ) : isLoading ? (
+              <LoadingRow label="Syncing selected date" />
             ) : (
               <EmptyState title="No events on this date." detail="Create a schedule item to make it part of LifeOS." />
             )}
@@ -338,12 +345,12 @@ function DayColumn({ day, deletingId, events, loading, onEdit, onRemove, onSelec
       </button>
 
       <div className="space-y-1.5">
-        {loading ? (
-          <div className="h-12 animate-pulse rounded border border-white/5 bg-white/[0.03]" />
-        ) : events.length ? (
+        {events.length ? (
           events.map((event) => (
             <CompactEvent key={event.id} event={event} onEdit={() => onEdit(event)} onRemove={() => onRemove(event.id)} deleting={deletingId === event.id} />
           ))
+        ) : loading ? (
+          <div className="h-12 animate-pulse rounded border border-white/5 bg-white/[0.03]" />
         ) : (
           <p className="rounded border border-white/5 bg-[#121212]/60 px-2 py-2 text-xs text-zinc-600">Open</p>
         )}

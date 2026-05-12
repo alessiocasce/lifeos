@@ -40,6 +40,15 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 3. Confirm Health, Workout, Finances, Calendar, Home, and Daily Review reload persisted records from Supabase.
 4. Confirm loading states appear before empty states.
 
+## Background Sync Flicker
+
+1. Load the app with existing Health, Workout, Finances, Calendar, and Daily Review records.
+2. Switch between tabs several times.
+3. Leave the browser tab and return after Supabase/auth has had time to refresh.
+4. Confirm existing persisted data stays visible while modules show `SYNCING` or status badges.
+5. Confirm large loading rows/cards only appear when a module has no data yet.
+6. Sign out and sign in as another user, then confirm previous-user data still clears immediately.
+
 ## User Scope
 
 1. Sign out.
