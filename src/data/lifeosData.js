@@ -84,15 +84,17 @@ export const selectedDayAgenda = [
 export const initialHealth = {
   sleepHours: 7.25,
   sleepQuality: 84,
+  energy: 7,
   coffee: 2,
   water: 4,
+  adc: 0,
   mood: 8,
   hygiene: [
-    { id: 'brush', label: 'Brush', done: true },
-    { id: 'floss', label: 'Floss', done: false },
-    { id: 'skin', label: 'Skin', done: true },
-    { id: 'stretch', label: 'Stretch', done: true },
-    { id: 'journal', label: 'Journal', done: false },
+    { id: 'brush', label: 'Brush', count: 2 },
+    { id: 'floss', label: 'Floss', count: 0 },
+    { id: 'skin', label: 'Skin', count: 1 },
+    { id: 'stretch', label: 'Stretch', count: 1 },
+    { id: 'journal', label: 'Journal', count: 0 },
   ],
   consistency: [
     0.95, 0.76, 0.88, 0.61, 0.91, 0.82, 1, 0.58, 0.72, 0.84,

@@ -1,4 +1,4 @@
-import { Check, Coffee, Droplets, Loader2, Moon, Save, ShieldCheck, Users } from 'lucide-react';
+import { Ban, Coffee, Droplets, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -6,11 +6,11 @@ import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 const today = new Date().toISOString().slice(0, 10);
 
 const defaultHygiene = [
-  { id: 'brush', label: 'Brush', done: false },
-  { id: 'floss', label: 'Floss', done: false },
-  { id: 'skin', label: 'Skin', done: false },
-  { id: 'stretch', label: 'Stretch', done: false },
-  { id: 'journal', label: 'Journal', done: false },
+  { id: 'brush', label: 'Brush', count: 0 },
+  { id: 'floss', label: 'Floss', count: 0 },
+  { id: 'skin', label: 'Skin', count: 0 },
+  { id: 'stretch', label: 'Stretch', count: 0 },
+  { id: 'journal', label: 'Journal', count: 0 },
 ];
 
 const emptyForm = {
@@ -18,13 +18,10 @@ const emptyForm = {
   sleep_hours: '',
   sleep_start: '',
   wake_time: '',
-  sleep_quality: '',
   energy: '',
-  mood: '',
   water: '0',
   coffee: '0',
-  social_time_minutes: '0',
-  main_time_waster: '',
+  adc: '0',
   notes: '',
   hygiene: defaultHygiene,
 };
@@ -74,10 +71,12 @@ export function HealthTab() {
     setSavedMessage('');
   };
 
-  const toggleHygiene = (id) => {
+  const stepHygiene = (id, delta) => {
     setForm((prev) => ({
       ...prev,
-      hygiene: prev.hygiene.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
+      hygiene: normalizeHygiene(prev.hygiene).map((item) =>
+        item.id === id ? { ...item, count: Math.max(0, item.count + delta) } : item,
+      ),
     }));
     setSavedMessage('');
   };
@@ -108,75 +107,68 @@ export function HealthTab() {
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel className="col-span-12 xl:col-span-8">
-        <PanelHeader
-          eyebrow="Daily Check-In"
-          title={panelTitle}
-          right={<SourceStatus status={healthLogsStatus} />}
-        />
+        <PanelHeader eyebrow="Daily Check-In" title={panelTitle} right={<SourceStatus status={healthLogsStatus} />} />
         <form onSubmit={submit} className="grid gap-3 p-3">
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} />
-            <HealthField label="Sleep Hours" inputMode="decimal" value={form.sleep_hours} suffix="h" onChange={(value) => updateField('sleep_hours', value)} />
-            <HealthField label="Sleep Start" type="time" value={form.sleep_start} onChange={(value) => updateField('sleep_start', value)} />
-            <HealthField label="Wake Time" type="time" value={form.wake_time} onChange={(value) => updateField('wake_time', value)} />
+          <section className="rounded-md border border-white/5 bg-black/25 p-2">
+            <div className="mb-2 flex items-center gap-2">
+              <Moon size={15} className="text-cyan-300" />
+              <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Sleep</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} />
+              <HealthField
+                label="Sleep Hours"
+                inputMode="decimal"
+                value={form.sleep_hours}
+                suffix="h"
+                onChange={(value) => updateField('sleep_hours', value)}
+              />
+              <HealthField label="Sleep Start" type="time" value={form.sleep_start} onChange={(value) => updateField('sleep_start', value)} />
+              <HealthField label="Wake Time" type="time" value={form.wake_time} onChange={(value) => updateField('wake_time', value)} />
+            </div>
+          </section>
+
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <section className="rounded-md border border-amber-400/10 bg-amber-400/5 p-2">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-400">
+                  <Zap size={15} className="text-amber-300" />
+                  Energy
+                </div>
+                <span className="data-text text-xl font-black text-amber-300">{form.energy || '--'}</span>
+              </div>
+              <HealthField
+                label="Energy"
+                inputMode="numeric"
+                value={form.energy}
+                suffix="/10"
+                onChange={(value) => updateField('energy', value)}
+              />
+            </section>
+
+            <section className="grid grid-cols-3 gap-2">
+              <Stepper label="Water" value={form.water} icon={Droplets} tone="cyan" onStep={(delta) => stepField('water', delta, 0, 16)} />
+              <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
+              <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
+            </section>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <HealthField label="Sleep Quality" inputMode="numeric" value={form.sleep_quality} suffix="%" onChange={(value) => updateField('sleep_quality', value)} />
-            <HealthField label="Energy" inputMode="numeric" value={form.energy} suffix="/10" onChange={(value) => updateField('energy', value)} />
-            <HealthField label="Mood" inputMode="numeric" value={form.mood} suffix="/10" onChange={(value) => updateField('mood', value)} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <Stepper label="Water" value={form.water} icon={Droplets} tone="cyan" onStep={(delta) => stepField('water', delta, 0, 16)} />
-            <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 10)} />
-            <HealthField
-              label="Social Time"
-              inputMode="numeric"
-              value={form.social_time_minutes}
-              suffix="min"
-              onChange={(value) => updateField('social_time_minutes', value)}
-            />
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <HealthField
-              label="Main Time Waster"
-              value={form.main_time_waster}
-              placeholder="Short label"
-              onChange={(value) => updateField('main_time_waster', value)}
-            />
-            <HealthField label="Notes" value={form.notes} placeholder="Optional context" onChange={(value) => updateField('notes', value)} />
-          </div>
-
-          <div className="rounded-md border border-white/5 bg-black/25 p-2">
+          <section className="rounded-md border border-white/5 bg-black/25 p-2">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck size={15} className="text-emerald-300" />
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Hygiene</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Hygiene Counters</p>
               </div>
-              <span className="data-text text-[10px] text-zinc-500">
-                {form.hygiene.filter((item) => item.done).length}/{form.hygiene.length}
-              </span>
+              <span className="data-text text-[10px] text-zinc-500">{hygieneTotal(form.hygiene)} total</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {form.hygiene.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => toggleHygiene(item.id)}
-                  className={`flex min-h-10 items-center justify-between gap-2 rounded border px-2 py-2 text-left text-xs ${
-                    item.done
-                      ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
-                      : 'border-white/10 bg-[#121212] text-zinc-400'
-                  }`}
-                >
-                  <span className="truncate">{item.label}</span>
-                  {item.done ? <Check size={14} /> : null}
-                </button>
+              {normalizeHygiene(form.hygiene).map((item) => (
+                <HygieneCounter key={item.id} item={item} onStep={(delta) => stepHygiene(item.id, delta)} />
               ))}
             </div>
-          </div>
+          </section>
+
+          <HealthField label="Notes" value={form.notes} placeholder="Optional context" onChange={(value) => updateField('notes', value)} />
 
           <button
             type="submit"
@@ -193,15 +185,14 @@ export function HealthTab() {
       </Panel>
 
       <Panel className="col-span-12 xl:col-span-4">
-        <PanelHeader eyebrow="7-Day Summary" title="Health Signals" />
+        <PanelHeader eyebrow="7-Day Summary" title="Measurable Signals" />
         <div className="grid grid-cols-2 gap-2 p-3">
           <MiniMetric label="Avg Sleep" value={formatSummary(summary.avgSleep, 'h')} tone="text-cyan-300" sub={`${visibleLogs.length} logs`} />
-          <MiniMetric label="Avg Quality" value={formatSummary(summary.avgSleepQuality, '%')} tone="text-emerald-300" sub="sleep" />
-          <MiniMetric label="Avg Mood" value={formatSummary(summary.avgMood, '/10')} tone="text-emerald-300" sub="signal" />
           <MiniMetric label="Avg Energy" value={formatSummary(summary.avgEnergy, '/10')} tone="text-amber-300" sub="readiness" />
-          <div className="col-span-2">
-            <MiniMetric label="Social Time" value={`${summary.totalSocial}m`} tone="text-cyan-300" sub="last 7 logs" />
-          </div>
+          <MiniMetric label="Avg Water" value={formatSummary(summary.avgWater, '')} tone="text-cyan-300" sub="per log" />
+          <MiniMetric label="Coffee" value={`${summary.totalCoffee}`} tone="text-amber-300" sub="total" />
+          <MiniMetric label="ADC" value={`${summary.totalAdc}`} tone="text-red-300" sub="total" />
+          <MiniMetric label="Hygiene" value={`${summary.totalHygiene}`} tone="text-emerald-300" sub="total counts" />
         </div>
       </Panel>
 
@@ -243,22 +234,59 @@ function HealthField({ inputMode, label, onChange, placeholder = '', suffix, typ
 }
 
 function Stepper({ icon: Icon, label, onStep, tone, value }) {
-  const toneClass = tone === 'cyan' ? 'text-cyan-300 border-cyan-400/20 bg-cyan-400/10' : 'text-amber-300 border-amber-400/20 bg-amber-400/10';
+  const tones = {
+    cyan: {
+      icon: 'text-cyan-300',
+      value: 'text-cyan-300',
+      button: 'border-cyan-400/20 bg-cyan-400/10 text-cyan-300',
+    },
+    amber: {
+      icon: 'text-amber-300',
+      value: 'text-amber-300',
+      button: 'border-amber-400/20 bg-amber-400/10 text-amber-300',
+    },
+    red: {
+      icon: 'text-red-300',
+      value: 'text-red-300',
+      button: 'border-red-400/20 bg-red-400/10 text-red-300',
+    },
+  };
+  const currentTone = tones[tone] ?? tones.cyan;
+
   return (
-    <div className="rounded-md border border-white/5 bg-black/25 p-2">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-medium text-zinc-300">
-          <Icon size={15} className={tone === 'cyan' ? 'text-cyan-300' : 'text-amber-300'} />
-          {label}
+    <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-zinc-300">
+          <Icon size={15} className={currentTone.icon} />
+          <span className="truncate">{label}</span>
         </div>
-        <span className={`data-text text-2xl font-black ${tone === 'cyan' ? 'text-cyan-300' : 'text-amber-300'}`}>{value || 0}</span>
+        <span className={`data-text text-2xl font-black ${currentTone.value}`}>{value || 0}</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onStep(-1)} className="h-10 rounded border border-white/10 bg-[#121212] text-zinc-300">
-          -
+        <button type="button" onClick={() => onStep(-1)} className="grid h-10 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
+          <Minus size={15} />
         </button>
-        <button type="button" onClick={() => onStep(1)} className={`h-10 rounded border ${toneClass}`}>
-          +
+        <button type="button" onClick={() => onStep(1)} className={`grid h-10 place-items-center rounded border ${currentTone.button}`}>
+          <Plus size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HygieneCounter({ item, onStep }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-[#121212] p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-zinc-300">{item.label}</span>
+        <span className="data-text text-lg font-black text-emerald-300">{item.count}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => onStep(-1)} className="grid h-9 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
+          <Minus size={14} />
+        </button>
+        <button type="button" onClick={() => onStep(1)} className="grid h-9 place-items-center rounded border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
+          <Plus size={14} />
         </button>
       </div>
     </div>
@@ -266,8 +294,9 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
 }
 
 function HistoryRow({ current, log }) {
+  const hygiene = normalizeHygiene(log.hygiene);
   return (
-    <div className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-3 sm:grid-cols-[120px_1fr_auto] sm:items-center">
+    <div className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-3 sm:grid-cols-[120px_1fr] sm:items-center">
       <div>
         <div className="flex items-center gap-2">
           <p className="data-text text-sm font-bold text-zinc-100">{log.logged_on}</p>
@@ -275,14 +304,14 @@ function HistoryRow({ current, log }) {
         </div>
         <p className="data-text text-[10px] text-zinc-500">updated {formatShortDate(log.updated_at)}</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
         <HistoryMetric icon={Moon} label="Sleep" value={`${formatNumber(log.sleep_hours)}h`} tone="text-cyan-300" />
-        <HistoryMetric label="Quality" value={`${log.sleep_quality ?? '--'}%`} tone="text-emerald-300" />
-        <HistoryMetric label="Energy" value={`${log.energy ?? '--'}/10`} tone="text-amber-300" />
-        <HistoryMetric label="Mood" value={`${log.mood ?? '--'}/10`} tone="text-emerald-300" />
-        <HistoryMetric label="Social" value={`${log.social_time_minutes ?? 0}m`} tone="text-cyan-300" />
+        <HistoryMetric icon={Zap} label="Energy" value={`${log.energy ?? '--'}/10`} tone="text-amber-300" />
+        <HistoryMetric icon={Droplets} label="Water" value={String(log.water ?? 0)} tone="text-cyan-300" />
+        <HistoryMetric icon={Coffee} label="Coffee" value={String(log.coffee ?? 0)} tone="text-amber-300" />
+        <HistoryMetric icon={Ban} label="ADC" value={String(log.adc ?? 0)} tone="text-red-300" />
+        <HistoryMetric icon={ShieldCheck} label="Hygiene" value={String(hygieneTotal(hygiene))} tone="text-emerald-300" />
       </div>
-      <p className="truncate data-text text-[10px] text-zinc-500 sm:max-w-40">{log.main_time_waster || 'no time waster logged'}</p>
     </div>
   );
 }
@@ -323,15 +352,12 @@ function formFromLog(log) {
     sleep_hours: stringValue(log.sleep_hours),
     sleep_start: log.sleep_start ?? '',
     wake_time: log.wake_time ?? '',
-    sleep_quality: stringValue(log.sleep_quality),
     energy: stringValue(log.energy),
-    mood: stringValue(log.mood),
     water: stringValue(log.water ?? 0),
     coffee: stringValue(log.coffee ?? 0),
-    social_time_minutes: stringValue(log.social_time_minutes ?? 0),
-    main_time_waster: log.main_time_waster ?? '',
+    adc: stringValue(log.adc ?? 0),
     notes: log.notes ?? '',
-    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? cloneHygiene(log.hygiene) : cloneHygiene(defaultHygiene),
+    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? normalizeHygiene(log.hygiene) : normalizeHygiene(defaultHygiene),
   };
 }
 
@@ -339,12 +365,8 @@ function emptyFormForDate(loggedOn) {
   return {
     ...emptyForm,
     logged_on: loggedOn || today,
-    hygiene: cloneHygiene(defaultHygiene),
+    hygiene: normalizeHygiene(defaultHygiene),
   };
-}
-
-function cloneHygiene(items) {
-  return items.map((item) => ({ ...item }));
 }
 
 function toPayload(form) {
@@ -353,15 +375,12 @@ function toPayload(form) {
     sleep_hours: parseOptionalDecimal(form.sleep_hours),
     sleep_start: form.sleep_start || null,
     wake_time: form.wake_time || null,
-    sleep_quality: parseOptionalInteger(form.sleep_quality),
     energy: parseOptionalInteger(form.energy),
-    mood: parseOptionalInteger(form.mood),
     water: parseOptionalInteger(form.water) ?? 0,
     coffee: parseOptionalInteger(form.coffee) ?? 0,
-    social_time_minutes: parseOptionalInteger(form.social_time_minutes) ?? 0,
-    main_time_waster: form.main_time_waster.trim(),
+    adc: parseOptionalInteger(form.adc) ?? 0,
     notes: form.notes.trim(),
-    hygiene: form.hygiene,
+    hygiene: normalizeHygiene(form.hygiene),
   };
 }
 
@@ -371,14 +390,8 @@ function validateHealthForm(form) {
   const sleepHours = parseOptionalDecimal(form.sleep_hours);
   if (sleepHours !== null && (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24)) return 'Sleep hours must be between 0 and 24.';
 
-  const sleepQuality = parseOptionalInteger(form.sleep_quality);
-  if (sleepQuality !== null && (!Number.isInteger(sleepQuality) || sleepQuality < 0 || sleepQuality > 100)) return 'Sleep quality must be between 0 and 100.';
-
   const energy = parseOptionalInteger(form.energy);
   if (energy !== null && (!Number.isInteger(energy) || energy < 1 || energy > 10)) return 'Energy must be between 1 and 10.';
-
-  const mood = parseOptionalInteger(form.mood);
-  if (mood !== null && (!Number.isInteger(mood) || mood < 1 || mood > 10)) return 'Mood must be between 1 and 10.';
 
   const water = parseOptionalInteger(form.water);
   if (water === null || !Number.isInteger(water) || water < 0) return 'Water must be zero or higher.';
@@ -386,20 +399,43 @@ function validateHealthForm(form) {
   const coffee = parseOptionalInteger(form.coffee);
   if (coffee === null || !Number.isInteger(coffee) || coffee < 0) return 'Coffee must be zero or higher.';
 
-  const social = parseOptionalInteger(form.social_time_minutes);
-  if (social === null || !Number.isInteger(social) || social < 0) return 'Social time must be zero or higher.';
+  const adc = parseOptionalInteger(form.adc);
+  if (adc === null || !Number.isInteger(adc) || adc < 0) return 'ADC must be zero or higher.';
+
+  if (normalizeHygiene(form.hygiene).some((item) => !Number.isInteger(item.count) || item.count < 0)) {
+    return 'Hygiene counts must be zero or higher.';
+  }
 
   return '';
 }
 
 function summarizeLogs(logs) {
+  const normalized = logs.map((log) => ({ ...log, hygiene: normalizeHygiene(log.hygiene) }));
   return {
-    avgSleep: average(logs.map((log) => optionalLogNumber(log.sleep_hours)).filter(Number.isFinite)),
-    avgMood: average(logs.map((log) => optionalLogNumber(log.mood)).filter(Number.isFinite)),
-    avgEnergy: average(logs.map((log) => optionalLogNumber(log.energy)).filter(Number.isFinite)),
-    avgSleepQuality: average(logs.map((log) => optionalLogNumber(log.sleep_quality)).filter(Number.isFinite)),
-    totalSocial: logs.reduce((total, log) => total + (parseOptionalInteger(log.social_time_minutes) ?? 0), 0),
+    avgSleep: average(normalized.map((log) => optionalLogNumber(log.sleep_hours)).filter(Number.isFinite)),
+    avgEnergy: average(normalized.map((log) => optionalLogNumber(log.energy)).filter(Number.isFinite)),
+    avgWater: average(normalized.map((log) => optionalLogNumber(log.water)).filter(Number.isFinite)),
+    totalCoffee: normalized.reduce((total, log) => total + (parseOptionalInteger(log.coffee) ?? 0), 0),
+    totalAdc: normalized.reduce((total, log) => total + (parseOptionalInteger(log.adc) ?? 0), 0),
+    totalHygiene: normalized.reduce((total, log) => total + hygieneTotal(log.hygiene), 0),
   };
+}
+
+function normalizeHygiene(items = []) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return defaultHygiene.map((base) => {
+    const item = byId.get(base.id) ?? base;
+    const count = item.count ?? (item.done ? 1 : 0);
+    return {
+      id: base.id,
+      label: item.label ?? base.label,
+      count: Math.max(0, parseInteger(count)),
+    };
+  });
+}
+
+function hygieneTotal(items = []) {
+  return normalizeHygiene(items).reduce((total, item) => total + item.count, 0);
 }
 
 function average(values) {
@@ -440,9 +476,14 @@ function optionalLogNumber(value) {
 }
 
 function isValidDate(value) {
-  if (!value) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00`);
-  return Number.isFinite(date.getTime());
+  if (!Number.isFinite(date.getTime())) return false;
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-') === value;
 }
 
 function stringValue(value) {
@@ -457,7 +498,7 @@ function formatNumber(value) {
 
 function formatSummary(value, suffix) {
   if (!Number.isFinite(value)) return '--';
-  return `${value >= 10 ? value.toFixed(1) : value.toFixed(1)}${suffix}`;
+  return `${value.toFixed(1)}${suffix}`;
 }
 
 function formatShortDate(value) {

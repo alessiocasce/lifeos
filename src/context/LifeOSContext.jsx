@@ -709,21 +709,24 @@ function sortDailyReviews(rows = []) {
 }
 
 function normalizeHealthLogPayload(payload) {
-  return {
-    logged_on: payload.logged_on,
-    sleep_hours: numberOrNull(payload.sleep_hours),
-    sleep_start: payload.sleep_start || null,
-    wake_time: payload.wake_time || null,
-    sleep_quality: integerOrNull(payload.sleep_quality),
-    energy: integerOrNull(payload.energy),
-    coffee: Math.max(0, integerOrZero(payload.coffee)),
-    water: Math.max(0, integerOrZero(payload.water)),
-    mood: integerOrNull(payload.mood),
-    social_time_minutes: Math.max(0, integerOrZero(payload.social_time_minutes)),
-    main_time_waster: payload.main_time_waster?.trim() || null,
-    notes: payload.notes?.trim() || null,
-    hygiene: Array.isArray(payload.hygiene) ? payload.hygiene : initialHealth.hygiene,
-  };
+  const normalized = {};
+  if ('logged_on' in payload) normalized.logged_on = payload.logged_on;
+  if ('sleep_hours' in payload) normalized.sleep_hours = numberOrNull(payload.sleep_hours);
+  if ('sleep_start' in payload) normalized.sleep_start = payload.sleep_start || null;
+  if ('wake_time' in payload) normalized.wake_time = payload.wake_time || null;
+  if ('sleep_quality' in payload) normalized.sleep_quality = integerOrNull(payload.sleep_quality);
+  if ('energy' in payload) normalized.energy = integerOrNull(payload.energy);
+  if ('coffee' in payload) normalized.coffee = Math.max(0, integerOrZero(payload.coffee));
+  if ('water' in payload) normalized.water = Math.max(0, integerOrZero(payload.water));
+  if ('adc' in payload) normalized.adc = Math.max(0, integerOrZero(payload.adc));
+  if ('mood' in payload) normalized.mood = integerOrNull(payload.mood);
+  if ('social_time_minutes' in payload) normalized.social_time_minutes = Math.max(0, integerOrZero(payload.social_time_minutes));
+  if ('main_time_waster' in payload) normalized.main_time_waster = payload.main_time_waster?.trim() || null;
+  if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  if ('hygiene' in payload) {
+    normalized.hygiene = Array.isArray(payload.hygiene) ? normalizeHygieneCounts(payload.hygiene) : normalizeHygieneCounts(initialHealth.hygiene);
+  }
+  return normalized;
 }
 
 function normalizeExpensePayload(payload) {
@@ -772,9 +775,19 @@ function healthSnapshotFromLog(log) {
     sleepQuality: Number(log.sleep_quality ?? initialHealth.sleepQuality),
     coffee: Number(log.coffee ?? initialHealth.coffee),
     water: Number(log.water ?? initialHealth.water),
+    adc: Number(log.adc ?? initialHealth.adc ?? 0),
+    energy: Number(log.energy ?? initialHealth.energy ?? 0),
     mood: Number(log.mood ?? initialHealth.mood),
-    hygiene: Array.isArray(log.hygiene) ? log.hygiene : initialHealth.hygiene,
+    hygiene: Array.isArray(log.hygiene) ? normalizeHygieneCounts(log.hygiene) : normalizeHygieneCounts(initialHealth.hygiene),
   };
+}
+
+function normalizeHygieneCounts(items = []) {
+  return items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    count: Math.max(0, integerOrZero(item.count ?? (item.done ? 1 : 0))),
+  }));
 }
 
 function numberOrNull(value) {

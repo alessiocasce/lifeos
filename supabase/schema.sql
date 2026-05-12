@@ -41,6 +41,7 @@ create table if not exists public.health_logs (
   energy integer check (energy between 1 and 10),
   coffee integer not null default 0 check (coffee >= 0),
   water integer not null default 0 check (water >= 0),
+  adc integer not null default 0 check (adc >= 0),
   mood integer check (mood between 1 and 10),
   social_time_minutes integer not null default 0 check (social_time_minutes >= 0),
   main_time_waster text,
@@ -123,6 +124,7 @@ alter table public.health_logs add column if not exists energy integer check (en
 alter table public.health_logs add column if not exists social_time_minutes integer not null default 0 check (social_time_minutes >= 0);
 alter table public.health_logs add column if not exists main_time_waster text;
 alter table public.health_logs add column if not exists notes text;
+alter table public.health_logs add column if not exists adc integer not null default 0 check (adc >= 0);
 
 alter table public.expenses add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.expenses alter column user_id set default auth.uid();

@@ -49,6 +49,7 @@ const healthLogSelect = `
   energy,
   coffee,
   water,
+  adc,
   mood,
   social_time_minutes,
   main_time_waster,

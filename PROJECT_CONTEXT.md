@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-12
 Current branch: `main`
-Recent context: Calendar is now a Supabase-backed schedule module with user-scoped events.
+Recent context: Health tab now focuses on measurable daily tracking with counters and ADC.
 
 ## Project Goal
 
@@ -229,6 +229,7 @@ Current `health_logs` fields:
 - `mood`
 - `water`
 - `coffee`
+- `adc`
 - `social_time_minutes`
 - `main_time_waster`
 - `notes`
@@ -244,9 +245,11 @@ Current behavior:
 - If a duplicate-key insert happens, the app fetches the existing log for that date and updates it.
 - Changing the form date loads the persisted log for that date or clears the form for a new date.
 - Shows compact 7-day history from persisted rows only.
-- Shows simple persisted summaries: average sleep hours, mood, energy, sleep quality, and total social time.
+- Shows measurable summaries: average sleep, average energy, average water, total coffee, total ADC, and hygiene count totals.
 - Does not auto-calculate sleep time; `sleep_hours` is manually entered.
-- `sleep_hours`, `sleep_quality`, `energy`, and `mood` may be left blank; water, coffee, and social time must be non-negative numbers.
+- `sleep_quality`, `mood`, `social_time_minutes`, and `main_time_waster` remain in the database for backward compatibility but are not displayed in the Health check-in, 7-day summary, or 7-day history.
+- `sleep_hours` and `energy` may be left blank; water, coffee, ADC, and hygiene item counts must be non-negative numbers.
+- Hygiene is stored as JSON count values. Older boolean rows are normalized in the frontend: `done: true` counts as 1 and `done: false` counts as 0.
 - Does not use iPhone Screen Time integration yet.
 
 ## Workout Module Current Status
@@ -350,6 +353,7 @@ Workout mobile direction:
   - Create yesterday's log and switch between dates to confirm the form loads the correct persisted row.
   - Confirm 7-day summaries use persisted rows only.
   - Confirm numeric fields reject out-of-range values.
+  - Confirm ADC and hygiene counters persist.
   - Run `docs/QA_HEALTH.md`.
 - Test Finances tab with `docs/QA_FINANCES.md`:
   - Create, edit, and delete persisted expenses.

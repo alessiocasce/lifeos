@@ -112,8 +112,8 @@ export function Shell({ children }) {
 
           <div className="flex items-center gap-2">
             <div className="hidden grid-cols-4 gap-2 text-right md:grid">
-              <HeaderMetric label="Mood" value={formatMetric(todaysHealthLog?.mood, '/10')} tone="text-emerald-300" />
-              <HeaderMetric label="Sleep" value={formatMetric(todaysHealthLog?.sleep_quality, '%')} tone="text-cyan-300" />
+              <HeaderMetric label="Energy" value={formatMetric(todaysHealthLog?.energy, '/10')} tone="text-emerald-300" />
+              <HeaderMetric label="Sleep" value={formatMetric(todaysHealthLog?.sleep_hours, 'h')} tone="text-cyan-300" />
               <HeaderMetric label="Spend" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-amber-300" />
               <HeaderMetric label="Training" value={trainingStatus.value} tone={trainingStatus.tone} />
             </div>
