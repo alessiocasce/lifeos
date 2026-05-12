@@ -1,5 +1,4 @@
 import {
-  Activity,
   BrainCircuit,
   CalendarDays,
   Dumbbell,
@@ -7,10 +6,10 @@ import {
   Home,
   Landmark,
   LogOut,
-  RadioTower,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { LifeOSLogo } from './LifeOSLogo';
 
 const icons = {
   home: Home,
@@ -61,7 +60,7 @@ export function Shell({ children }) {
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-[76px] flex-col border-r border-white/5 bg-black md:flex">
         <div className="grid h-[72px] place-items-center border-b border-white/5">
           <div className="grid h-10 w-10 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
-            <RadioTower size={20} />
+            <LifeOSLogo size={24} />
           </div>
         </div>
 
@@ -98,7 +97,7 @@ export function Shell({ children }) {
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-3 backdrop-blur md:h-[72px] md:px-5">
           <div>
             <div className="flex items-center gap-2">
-              <Activity size={18} className="text-cyan-400" />
+              <LifeOSLogo size={22} />
               <h1 className="text-lg font-semibold tracking-wide">LifeOS</h1>
               <span className="data-text rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-300 md:hidden">
                 {activeTabLabel}

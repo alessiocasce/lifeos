@@ -37,6 +37,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/App.jsx` gates entry into the app. It shows Supabase setup, auth loading, or global auth screens before rendering `Shell`.
 - `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, remaining local mock-backed state, Supabase auth state, persisted module state, and CRUD actions.
 - `src/components/AuthScreen.jsx` owns global sign in, sign up, loading, and Supabase setup screens.
+- `src/components/LifeOSLogo.jsx` contains the custom inline SVG logo used by the shell and favicon artwork.
 - `src/components/Shell.jsx` owns the global app shell:
   - Desktop/tablet uses the fixed left sidebar and full top metrics header.
   - Mobile uses a compact sticky top header and fixed bottom tab navigation.
