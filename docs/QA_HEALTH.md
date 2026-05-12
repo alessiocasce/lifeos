@@ -42,6 +42,7 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 3. Confirm the same counts reload.
 4. Decrease a counter repeatedly and confirm it never goes below 0.
 5. Test an old row whose hygiene JSON uses `done: true/false`; confirm true displays as count 1 and false displays as count 0.
+6. Confirm saving a row converts hygiene to `count` values rather than boolean-only `done` values.
 
 ## ADC Counter
 
@@ -70,6 +71,7 @@ Try each invalid value and confirm save is blocked with a clear message:
 2. Confirm those fields do not appear in the 7-day summary.
 3. Confirm those fields do not appear in the 7-day history.
 4. Confirm updating an old row that already has those database values does not require re-entering them.
+5. Confirm updating an old row does not wipe those hidden database values unless a future migration explicitly removes them.
 
 ## Persistence
 
@@ -84,5 +86,6 @@ Try each invalid value and confirm save is blocked with a clear message:
 2. Confirm no horizontal scrolling.
 3. Confirm inputs do not zoom when focused.
 4. Confirm the bottom nav does not cover `Save Check-In`.
-5. Confirm the Sleep card, counters, and hygiene controls are thumb-friendly.
-6. Confirm date switching and saving works with the mobile keyboard.
+5. Confirm Water, Coffee, and ADC cards wrap instead of feeling cramped on narrow screens.
+6. Confirm the Sleep card, counters, and hygiene controls are thumb-friendly.
+7. Confirm date switching and saving works with the mobile keyboard.

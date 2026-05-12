@@ -146,7 +146,7 @@ export function HealthTab() {
               />
             </section>
 
-            <section className="grid grid-cols-3 gap-2">
+            <section className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(124px,1fr))]">
               <Stepper label="Water" value={form.water} icon={Droplets} tone="cyan" onStep={(delta) => stepField('water', delta, 0, 16)} />
               <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
               <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
@@ -402,7 +402,7 @@ function validateHealthForm(form) {
   const adc = parseOptionalInteger(form.adc);
   if (adc === null || !Number.isInteger(adc) || adc < 0) return 'ADC must be zero or higher.';
 
-  if (normalizeHygiene(form.hygiene).some((item) => !Number.isInteger(item.count) || item.count < 0)) {
+  if (!hasValidHygieneCounts(form.hygiene)) {
     return 'Hygiene counts must be zero or higher.';
   }
 
@@ -431,6 +431,14 @@ function normalizeHygiene(items = []) {
       label: item.label ?? base.label,
       count: Math.max(0, parseInteger(count)),
     };
+  });
+}
+
+function hasValidHygieneCounts(items = []) {
+  return items.every((item) => {
+    const count = item.count ?? (item.done ? 1 : 0);
+    const parsed = parseOptionalInteger(count);
+    return parsed !== null && Number.isInteger(parsed) && parsed >= 0;
   });
 }
 
