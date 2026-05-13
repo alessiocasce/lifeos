@@ -68,6 +68,7 @@ Run the focused checklists after the full flow:
 - `docs/QA_HOME.md`
 - `docs/QA_CALENDAR.md`
 - `docs/QA_DAILY_REVIEW.md`
+- `docs/QA_WORKOUT.md`
 
 ## Workout Warmup Sets
 

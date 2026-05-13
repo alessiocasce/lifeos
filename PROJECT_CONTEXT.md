@@ -48,6 +48,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `src/data/lifeosData.js` contains realistic mock data still used by unconverted/sample surfaces, including the workout sample archive.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
+- Focused Workout QA, including warmup behavior, lives in `docs/QA_WORKOUT.md`.
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
   - `CalendarTab.jsx`
@@ -280,6 +281,7 @@ Current behavior:
 - Sets include exercise, set number, warmup flag, weight, reps, RPE, performed date/time, and notes.
 - Warmup sets are stored in `workout_sets.is_warmup`, display as repeated `W` rows before working sets, and do not increment the next working set number.
 - Next working set number is automatic based on selected session plus exercise and ignores warmups.
+- Editing between warmup and working status resolves to a non-conflicting internal set number.
 - Weight and RPE parsing accepts both comma and dot decimals.
 - Validation runs before insert/update for exercise, weight, reps, RPE, and date.
 - Today's active session sets are shown immediately under the logger, grouped by exercise.
@@ -386,6 +388,7 @@ Workout mobile direction:
 - Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
 - Test workout session creation with RLS enabled in a real Supabase project.
+- Test Workout tab with `docs/QA_WORKOUT.md`, especially warmup display/edit transitions and analytics exclusion.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
 - Test duplicate set number behavior for the same exercise in one session.

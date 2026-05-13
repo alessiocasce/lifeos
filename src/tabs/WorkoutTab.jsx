@@ -230,6 +230,7 @@ export function WorkoutTab() {
 
     setEditingSetId(set.id);
     setEditForm({
+      id: set.id,
       exercise: set.exercise,
       set_number: set.set_number,
       weight: String(set.weight),
@@ -831,24 +832,7 @@ function TodaySetsLog({
                       </div>
                     </div>
                     {!collapsed ? (
-                      <div className="grid gap-1 border-t border-white/5 p-2">
-                        {sortSetsForDisplay(session.workout_sets ?? []).map((set) => (
-                          <div
-                            key={set.id}
-                            className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 sm:grid-cols-[58px_minmax(0,1fr)_auto] ${
-                              isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
-                            }`}
-                          >
-                            <span className={`data-text text-xs font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
-                              {formatSetLabel(set)}
-                            </span>
-                            <span className="truncate text-xs text-zinc-200">{set.exercise}</span>
-                            <span className="data-text text-xs text-zinc-400">
-                              {formatNumber(set.weight)}kg x {set.reps} @ {formatNumber(set.rpe)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                      <SessionSetArchive session={session} />
                     ) : null}
                   </div>
                 );
@@ -902,6 +886,7 @@ function ExerciseSetGroup({
             return (
               <EditSetRow
                 key={set.id}
+                session={session}
                 editForm={editForm}
                 loading={savingEditId === set.id}
                 onCancel={() => {
@@ -945,6 +930,43 @@ function ExerciseSetGroup({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function SessionSetArchive({ session }) {
+  const groupedSets = groupSetsByExercise(session.workout_sets ?? []);
+
+  return (
+    <div className="grid gap-2 border-t border-white/5 p-2">
+      {Object.entries(groupedSets).map(([exercise, sets]) => {
+        const working = sets.filter((set) => !isWarmupSet(set)).length;
+        const warmups = sets.filter(isWarmupSet).length;
+        return (
+          <div key={exercise} className="rounded border border-white/5 bg-black/20 p-2">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="truncate text-xs font-medium text-zinc-200">{exercise}</p>
+              <span className="data-text shrink-0 text-[10px] text-zinc-500">{working} work / {warmups} W</span>
+            </div>
+            <div className="grid gap-1">
+              {sets.map((set) => (
+                <div
+                  key={set.id}
+                  className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 sm:grid-cols-[58px_minmax(0,1fr)_auto] ${
+                    isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
+                  }`}
+                >
+                  <span className={`data-text text-xs font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
+                    {formatSetLabel(set)}
+                  </span>
+                  <span className="truncate text-xs text-zinc-200">{formatNumber(set.weight)}kg x {set.reps}</span>
+                  <span className="data-text text-xs text-zinc-400">RPE {formatNumber(set.rpe)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1125,13 +1147,15 @@ function TrendBars({ color, max, sessions, title, valueKey }) {
   );
 }
 
-function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
+function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm }) {
   const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }));
   const updateWarmup = (value) =>
     setEditForm((prev) => ({
       ...prev,
       is_warmup: value,
-      set_number: value ? prev.set_number : String(getDisplaySetNumber(prev.set_number)),
+      set_number: value
+        ? getNextWarmupSetNumber(session, prev.exercise, prev.id)
+        : getNextSetNumber(session, prev.exercise, prev.id),
     }));
   return (
     <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.6fr_0.4fr_0.55fr_0.45fr_0.45fr_0.7fr_1fr_72px]">
@@ -1285,13 +1309,18 @@ function groupSetsByExercise(sets) {
 function resolveEditSetNumber(form, session, setId) {
   if (Boolean(form.is_warmup)) {
     const parsed = parseInteger(form.set_number);
-    return Number.isFinite(parsed) && parsed > WARMUP_SET_NUMBER_OFFSET
+    return Number.isFinite(parsed)
+      && parsed > WARMUP_SET_NUMBER_OFFSET
+      && !hasSetNumberConflict(session, form.exercise, parsed, true, setId)
       ? parsed
       : getNextWarmupSetNumber(session, form.exercise, setId);
   }
 
   const parsed = parseInteger(form.set_number);
-  return Number.isFinite(parsed) && parsed > 0 && parsed < WARMUP_SET_NUMBER_OFFSET
+  return Number.isFinite(parsed)
+    && parsed > 0
+    && parsed < WARMUP_SET_NUMBER_OFFSET
+    && !hasSetNumberConflict(session, form.exercise, parsed, false, setId)
     ? parsed
     : getNextSetNumber(session, form.exercise, setId);
 }
@@ -1315,6 +1344,17 @@ function getNextWarmupSetNumber(session, exercise, excludeSetId = null) {
     ? Math.max(...warmupSets.map((set) => parseInteger(set.set_number)).filter(Number.isFinite))
     : WARMUP_SET_NUMBER_OFFSET;
   return Math.max(WARMUP_SET_NUMBER_OFFSET, maxWarmupNumber) + 1;
+}
+
+function hasSetNumberConflict(session, exercise, setNumber, isWarmup, excludeSetId = null) {
+  const normalizedExercise = normalizeExercise(exercise);
+  return (session?.workout_sets ?? []).some(
+    (set) =>
+      set.id !== excludeSetId
+      && isWarmupSet(set) === Boolean(isWarmup)
+      && normalizeExercise(set.exercise) === normalizedExercise
+      && parseInteger(set.set_number) === parseInteger(setNumber),
+  );
 }
 
 function getSessionExerciseSummary(session, exercise) {
@@ -1526,11 +1566,6 @@ function isWarmupSet(set) {
 
 function formatSetLabel(set) {
   return isWarmupSet(set) ? 'W' : `Set ${parseInteger(set.set_number)}`;
-}
-
-function getDisplaySetNumber(value) {
-  const parsed = parseInteger(value);
-  return Number.isFinite(parsed) && parsed > 0 && parsed < WARMUP_SET_NUMBER_OFFSET ? parsed : 1;
 }
 
 function formatPrLabel(key) {
