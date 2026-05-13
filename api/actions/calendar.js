@@ -1,13 +1,24 @@
-import { HttpError, handleApiError, readJsonBody, requireActionAuth, requirePost, sendJson } from '../_utils/http.js';
+import {
+  HttpError,
+  createRequestContext,
+  handleApiError,
+  handleOptions,
+  readJsonBody,
+  requireActionAuth,
+  requirePost,
+  sendSuccess,
+} from '../_utils/http.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
-import { compactPayload, optionalText, optionalTime, requiredDate, requiredText } from '../_utils/validation.js';
+import { assertTimeOrder, compactPayload, optionalNullableTime, optionalText, requiredDate, requiredText } from '../_utils/validation.js';
 
 const VALID_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
 
 export default async function handler(req, res) {
+  const context = createRequestContext(req, res);
   try {
-    requireActionAuth(req);
+    if (handleOptions(req, res)) return;
     requirePost(req);
+    requireActionAuth(req);
 
     const body = await readJsonBody(req);
     const status = body.status === undefined || body.status === null || body.status === ''
@@ -18,15 +29,19 @@ export default async function handler(req, res) {
     }
 
     const userId = getActionUserId();
+    const startTime = optionalNullableTime(body, 'start_time');
+    const endTime = optionalNullableTime(body, 'end_time');
+    assertTimeOrder(startTime, endTime);
+
     const payload = compactPayload({
       user_id: userId,
-      title: requiredText(body, 'title'),
+      title: requiredText(body, 'title', { max: 160 }),
       event_date: requiredDate(body, 'event_date'),
-      start_time: optionalTime(body, 'start_time'),
-      end_time: optionalTime(body, 'end_time'),
-      category: optionalText(body.category),
-      location: optionalText(body.location),
-      notes: optionalText(body.notes),
+      start_time: startTime,
+      end_time: endTime,
+      category: optionalText(body.category, 'category', { max: 80 }),
+      location: optionalText(body.location, 'location', { max: 200 }),
+      notes: optionalText(body.notes, 'notes', { max: 2000 }),
       status,
     });
 
@@ -37,8 +52,8 @@ export default async function handler(req, res) {
       .single();
 
     if (error) throw error;
-    sendJson(res, 201, { data });
+    sendSuccess(res, 201, data, context);
   } catch (error) {
-    handleApiError(res, error);
+    handleApiError(res, error, context);
   }
 }

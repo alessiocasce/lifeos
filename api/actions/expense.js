@@ -1,21 +1,31 @@
-import { handleApiError, readJsonBody, requireActionAuth, requirePost, sendJson } from '../_utils/http.js';
+import {
+  createRequestContext,
+  handleApiError,
+  handleOptions,
+  readJsonBody,
+  requireActionAuth,
+  requirePost,
+  sendSuccess,
+} from '../_utils/http.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
-import { compactPayload, optionalDate, optionalText, requiredPositiveNumber, requiredText, today } from '../_utils/validation.js';
+import { compactPayload, optionalDate, optionalText, requiredNumber, requiredText, today } from '../_utils/validation.js';
 
 export default async function handler(req, res) {
+  const context = createRequestContext(req, res);
   try {
-    requireActionAuth(req);
+    if (handleOptions(req, res)) return;
     requirePost(req);
+    requireActionAuth(req);
 
     const body = await readJsonBody(req);
     const userId = getActionUserId();
     const payload = compactPayload({
       user_id: userId,
-      vendor: requiredText(body, 'vendor'),
-      category: requiredText(body, 'category'),
-      amount: requiredPositiveNumber(body, 'amount'),
+      vendor: requiredText(body, 'vendor', { max: 120 }),
+      category: requiredText(body, 'category', { max: 80 }),
+      amount: requiredNumber(body, 'amount', { minExclusive: 0, max: 100000 }),
       spent_on: optionalDate(body, 'spent_on', today()),
-      notes: optionalText(body.notes),
+      notes: optionalText(body.notes, 'notes', { max: 1000 }),
     });
 
     const { data, error } = await getSupabaseAdmin()
@@ -25,8 +35,8 @@ export default async function handler(req, res) {
       .single();
 
     if (error) throw error;
-    sendJson(res, 201, { data });
+    sendSuccess(res, 201, data, context);
   } catch (error) {
-    handleApiError(res, error);
+    handleApiError(res, error, context);
   }
 }

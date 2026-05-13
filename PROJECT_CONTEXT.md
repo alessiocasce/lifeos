@@ -156,9 +156,16 @@ Current behavior:
 
 - Requires `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` on every request.
 - Returns `401` for missing or incorrect tokens.
+- Supports unauthenticated `OPTIONS` preflight with CORS headers for browser-based callers.
+- Rejects non-POST/non-OPTIONS methods with JSON `405` responses.
+- Limits JSON request bodies to 32kb and returns `413` when exceeded.
+- Uses a consistent JSON response shape with `ok`, `requestId`, `data` on success, and `ok`, `requestId`, `error` on failure.
+- Uses constant-time token comparison and never returns configured secret values.
 - Uses `SUPABASE_SERVICE_ROLE_KEY` only inside `/api` serverless functions.
+- Validates server-only config and requires `LIFEOS_ACTION_USER_ID` to be a UUID.
 - Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
 - Supports creating expenses, upserting partial daily health logs, and creating calendar events.
+- Enforces endpoint field limits and numeric caps before writing to Supabase.
 - Does not implement AI, chat behavior, external model calls, or frontend UI changes.
 - Must be live-tested after setting Vercel env vars; local curl tests require the same server-only env vars.
 
@@ -438,6 +445,9 @@ Workout mobile direction:
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
 - Run `docs/ACTION_API.md` manual QA after deploying Action API env vars:
   - Unauthorized requests return `401`.
+  - Preflight requests return `204`.
+  - Wrong methods return `405`.
+  - Oversized JSON payloads return `413`.
   - Invalid payloads return clear `400` errors.
   - Expense, Health, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
 - Test workout session creation with RLS enabled in a real Supabase project.

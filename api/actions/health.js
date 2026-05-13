@@ -1,12 +1,21 @@
-import { handleApiError, readJsonBody, requireActionAuth, requirePost, sendJson } from '../_utils/http.js';
+import {
+  createRequestContext,
+  handleApiError,
+  handleOptions,
+  readJsonBody,
+  requireActionAuth,
+  requirePost,
+  sendSuccess,
+} from '../_utils/http.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
 import {
   compactPayload,
   optionalDate,
   optionalInteger,
-  optionalNumber,
+  optionalNullableInteger,
+  optionalNullableNumber,
+  optionalNullableTime,
   optionalText,
-  optionalTime,
   today,
 } from '../_utils/validation.js';
 
@@ -32,23 +41,25 @@ const healthLogSelect = `
 `;
 
 export default async function handler(req, res) {
+  const context = createRequestContext(req, res);
   try {
-    requireActionAuth(req);
+    if (handleOptions(req, res)) return;
     requirePost(req);
+    requireActionAuth(req);
 
     const body = await readJsonBody(req);
     const userId = getActionUserId();
     const payload = compactPayload({
       user_id: userId,
       logged_on: optionalDate(body, 'logged_on', today()),
-      sleep_hours: optionalNumber(body, 'sleep_hours', { min: 0, max: 24 }),
-      sleep_start: optionalTime(body, 'sleep_start'),
-      wake_time: optionalTime(body, 'wake_time'),
-      energy: optionalInteger(body, 'energy', { min: 1, max: 10 }),
-      water: optionalInteger(body, 'water', { min: 0 }),
-      coffee: optionalInteger(body, 'coffee', { min: 0 }),
-      adc: optionalInteger(body, 'adc', { min: 0 }),
-      notes: optionalText(body.notes),
+      sleep_hours: optionalNullableNumber(body, 'sleep_hours', { min: 0, max: 24 }),
+      sleep_start: optionalNullableTime(body, 'sleep_start'),
+      wake_time: optionalNullableTime(body, 'wake_time'),
+      energy: optionalNullableInteger(body, 'energy', { min: 1, max: 10 }),
+      water: optionalInteger(body, 'water', { min: 0, max: 100 }),
+      coffee: optionalInteger(body, 'coffee', { min: 0, max: 100 }),
+      adc: optionalInteger(body, 'adc', { min: 0, max: 100 }),
+      notes: optionalText(body.notes, 'notes', { max: 2000 }),
     });
 
     const { data, error } = await getSupabaseAdmin()
@@ -58,8 +69,8 @@ export default async function handler(req, res) {
       .single();
 
     if (error) throw error;
-    sendJson(res, 200, { data });
+    sendSuccess(res, 200, data, context);
   } catch (error) {
-    handleApiError(res, error);
+    handleApiError(res, error, context);
   }
 }

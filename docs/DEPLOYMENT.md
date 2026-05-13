@@ -34,6 +34,8 @@ Redeploy after changing any Vercel environment variable.
 
 See `docs/ACTION_API.md` for endpoint examples and iPhone Shortcuts setup.
 
+The Action API returns JSON success/error envelopes with request IDs, limits JSON payloads to 32kb, and supports `OPTIONS` preflight for browser-based callers.
+
 ## Apply Supabase Schema
 
 1. Open the target Supabase project.
@@ -132,4 +134,5 @@ dist
 - Run `npm run build` before every deploy claim.
 - Apply `supabase/schema.sql` before live QA.
 - Run `docs/ACTION_API.md` manual QA before relying on iPhone Shortcuts automation.
+- Confirm Action API `401`, `405`, `413`, validation, and successful-write cases after every environment change.
 - Do not proceed to AI, chat automation, or Google Calendar sync until the deployed Supabase-backed workflows and Action API pass live QA.
