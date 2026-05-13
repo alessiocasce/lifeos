@@ -11,6 +11,21 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 5. Reopen the session and confirm logging/editing works again.
 6. Delete a session and confirm the confirmation step appears before deletion.
 
+## Start From Previous
+
+1. Complete or use an older session with multiple exercises, warmups, weights, reps, RPE, and notes.
+2. In Session Control, use `Start From Previous`.
+3. Confirm `Start From This` creates a new session for today with the previous session name.
+4. If today's sessions already include the same name, confirm the new session gets a suffix such as `Push Day A #2`.
+5. Confirm previous sets appear as draft target rows in `Today Plan`.
+6. Confirm target rows do not create completed `workout_sets` automatically.
+7. Confirm warmup targets display as `W` and working targets display as `Set 1`, `Set 2`, `Set 3`.
+8. Tap a target row and confirm it fills exercise, warmup status, weight, reps, RPE, and notes in the logger.
+9. Change target values before saving and confirm the saved set uses the edited values.
+10. Save the target and confirm it is marked `LOGGED`.
+11. Confirm the next unlogged target preloads when available.
+12. Confirm unsaved targets do not affect volume, PR tags, previous performance, estimated 1RM, or Exercise History.
+
 ## Normal Set CRUD
 
 1. Log a working set with exercise, weight, reps, RPE, date, and notes.

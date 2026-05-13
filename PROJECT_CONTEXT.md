@@ -282,6 +282,9 @@ Current behavior:
 - Warmup sets are stored in `workout_sets.is_warmup`, display as repeated `W` rows before working sets, and do not increment the next working set number.
 - Next working set number is automatic based on selected session plus exercise and ignores warmups.
 - Editing between warmup and working status resolves to a non-conflicting internal set number.
+- Session Control can start today's workout from a previous completed/past session. This creates only a new `workouts` row for today and builds a local `Today Plan` with editable target rows from the previous session.
+- Previous-session target rows include exercise, warmup status, display label, weight, reps, RPE, and notes. Tapping a target fills the logger, and the target is marked logged only after the user saves a real set.
+- Previous-session targets are local draft guidance only; they do not create `workout_sets` and do not affect volume, PRs, previous performance, estimated 1RM, Exercise History, or other analytics until saved.
 - Weight and RPE parsing accepts both comma and dot decimals.
 - Validation runs before insert/update for exercise, weight, reps, RPE, and date.
 - Today's active session sets are shown immediately under the logger, grouped by exercise.

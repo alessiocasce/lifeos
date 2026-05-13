@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  ClipboardList,
   Database,
   Dumbbell,
   History,
@@ -68,6 +69,9 @@ export function WorkoutTab() {
   const [formError, setFormError] = useState('');
   const [restElapsedSeconds, setRestElapsedSeconds] = useState(0);
   const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
+  const [workoutPlan, setWorkoutPlan] = useState(null);
+  const [selectedPlanTargetId, setSelectedPlanTargetId] = useState(null);
+  const [startingFromSessionId, setStartingFromSessionId] = useState(null);
 
   const activeSetCounts = getSessionSetCounts(activeWorkoutSession);
   const activeVolume = getSessionVolume(activeWorkoutSession);
@@ -85,6 +89,7 @@ export function WorkoutTab() {
     () => getNextSetNumber(activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise],
   );
+  const visibleWorkoutPlan = workoutPlan?.sessionId === activeWorkoutSession?.id ? workoutPlan : null;
   const draftPrs = useMemo(() => {
     if (setForm.is_warmup) {
       return { setVolume: false, sessionVolume: false, weight: false, reps: false };
@@ -100,8 +105,11 @@ export function WorkoutTab() {
   }, [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.is_warmup, setForm.reps, setForm.weight]);
 
   useEffect(() => {
-    setSetForm((prev) => ({ ...prev, set_number: nextSetNumber }));
-  }, [nextSetNumber]);
+    setSetForm((prev) => ({
+      ...prev,
+      set_number: prev.is_warmup ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise) : nextSetNumber,
+    }));
+  }, [activeWorkoutSession, nextSetNumber]);
 
   useEffect(() => {
     if (!activeWorkoutSession || activeWorkoutSession.ended_at) {
@@ -111,6 +119,22 @@ export function WorkoutTab() {
       setEditForm(null);
     }
   }, [activeWorkoutSession]);
+
+  useEffect(() => {
+    if (!workoutPlan || workoutPlan.sessionId !== activeWorkoutSession?.id) return;
+    const loggedSetIds = new Set((activeWorkoutSession.workout_sets ?? []).map((set) => set.id));
+    setWorkoutPlan((prev) => {
+      if (!prev || prev.sessionId !== activeWorkoutSession.id) return prev;
+      let changed = false;
+      const targets = prev.targets.map((target) => {
+        const logged = target.loggedSetId ? loggedSetIds.has(target.loggedSetId) : target.logged;
+        if (logged === target.logged) return target;
+        changed = true;
+        return { ...target, logged };
+      });
+      return changed ? { ...prev, targets } : prev;
+    });
+  }, [activeWorkoutSession, workoutPlan?.sessionId]);
 
   useEffect(() => {
     if (!activeWorkoutSession || activeWorkoutSession.ended_at || !isRestTimerRunning) return undefined;
@@ -173,6 +197,59 @@ export function WorkoutTab() {
     }
   };
 
+  const fillLoggerFromTarget = (target, session = activeWorkoutSession) => {
+    if (!target) return;
+    setSelectedPlanTargetId(target.id);
+    setSetForm((prev) => ({
+      ...prev,
+      exercise: target.exercise,
+      set_number: target.is_warmup
+        ? getNextWarmupSetNumber(session, target.exercise)
+        : getNextSetNumber(session, target.exercise),
+      weight: toInputNumber(target.weight),
+      reps: toInputNumber(target.reps),
+      rpe: toInputNumber(target.rpe),
+      is_warmup: Boolean(target.is_warmup),
+      date: today,
+      notes: target.notes ?? '',
+    }));
+  };
+
+  const startFromPreviousSession = async (sourceSessionId) => {
+    const sourceSession = workoutSessions.find((session) => session.id === sourceSessionId);
+    if (!sourceSession) return;
+
+    setFormError('');
+    setStartingFromSessionId(sourceSessionId);
+    try {
+      const created = await createWorkoutSession({
+        name: getUniqueSessionName(sourceSession.name, todaysSessions),
+        performed_on: today,
+        started_at: new Date().toISOString(),
+        notes: '',
+      });
+      const targets = buildPlanTargetsFromSession(sourceSession);
+      setWorkoutPlan({
+        sourceSessionId: sourceSession.id,
+        sourceName: sourceSession.name,
+        sourceDate: sourceSession.performed_on,
+        sessionId: created.id,
+        sessionName: created.name,
+        targets,
+      });
+      const firstTarget = targets.find((target) => !target.logged);
+      if (firstTarget) {
+        fillLoggerFromTarget(firstTarget, created);
+      } else {
+        setSelectedPlanTargetId(null);
+      }
+    } catch (error) {
+      setFormError(error.message || 'Failed to start from previous session.');
+    } finally {
+      setStartingFromSessionId(null);
+    }
+  };
+
   const submitSet = async (event) => {
     event.preventDefault();
     setFormError('');
@@ -191,10 +268,11 @@ export function WorkoutTab() {
     const weight = parseDecimal(setForm.weight);
     const reps = parseInteger(setForm.reps);
     const rpe = parseDecimal(setForm.rpe);
+    const selectedTarget = visibleWorkoutPlan?.targets.find((target) => target.id === selectedPlanTargetId && !target.logged);
 
     setSavingSet(true);
     try {
-      await createWorkoutSet({
+      const createdSet = await createWorkoutSet({
         workout_id: activeWorkoutSession.id,
         exercise: setForm.exercise.trim(),
         set_number: setForm.is_warmup
@@ -207,12 +285,44 @@ export function WorkoutTab() {
         performed_at: dateToPerformedAt(setForm.date),
         notes: setForm.notes.trim(),
       });
-      setSetForm((prev) => ({
-        ...prev,
-        set_number: prev.is_warmup ? getNextSetNumber(activeWorkoutSession, prev.exercise) : getNextSetNumber(activeWorkoutSession, prev.exercise) + 1,
-        reps: '',
-        notes: '',
-      }));
+      const projectedSession = {
+        ...activeWorkoutSession,
+        workout_sets: [...(activeWorkoutSession.workout_sets ?? []), createdSet],
+      };
+      if (selectedTarget) {
+        const nextTarget = getNextUnloggedPlanTarget(visibleWorkoutPlan.targets, selectedTarget.id);
+        setWorkoutPlan((prev) => {
+          if (!prev || prev.sessionId !== activeWorkoutSession.id) return prev;
+          return {
+            ...prev,
+            targets: prev.targets.map((target) =>
+              target.id === selectedTarget.id ? { ...target, logged: true, loggedSetId: createdSet.id } : target,
+            ),
+          };
+        });
+        if (nextTarget) {
+          fillLoggerFromTarget(nextTarget, projectedSession);
+        } else {
+          setSelectedPlanTargetId(null);
+          setSetForm((prev) => ({
+            ...prev,
+            set_number: prev.is_warmup
+              ? getNextWarmupSetNumber(projectedSession, prev.exercise)
+              : getNextSetNumber(projectedSession, prev.exercise),
+            reps: '',
+            notes: '',
+          }));
+        }
+      } else {
+        setSetForm((prev) => ({
+          ...prev,
+          set_number: prev.is_warmup
+            ? getNextWarmupSetNumber(projectedSession, prev.exercise)
+            : getNextSetNumber(projectedSession, prev.exercise),
+          reps: '',
+          notes: '',
+        }));
+      }
       setRestElapsedSeconds(0);
       setIsRestTimerRunning(true);
     } catch (error) {
@@ -352,6 +462,12 @@ export function WorkoutTab() {
 
       <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
         <div className="grid gap-3">
+          <TodayPlanCard
+            onSelectTarget={(target) => fillLoggerFromTarget(target)}
+            plan={visibleWorkoutPlan}
+            selectedTargetId={selectedPlanTargetId}
+          />
+
           <SetLogger
             activeSession={activeWorkoutSession}
             draftPrs={draftPrs}
@@ -392,11 +508,13 @@ export function WorkoutTab() {
           onEndSession={endSession}
           onReopenSession={reopenSession}
           onSelectToday={selectOrStartToday}
+          onStartFromPrevious={startFromPreviousSession}
           onStartWorkout={startWorkout}
           reopeningSessionId={reopeningSessionId}
           savingSession={savingSession}
           selectingToday={selectingToday}
           sessionForm={sessionForm}
+          startingFromSessionId={startingFromSessionId}
           setActiveWorkoutId={setActiveWorkoutId}
           setSessionForm={setSessionForm}
           setShowCustomSession={setShowCustomSession}
@@ -509,11 +627,13 @@ function SessionControlCard({
   onEndSession,
   onReopenSession,
   onSelectToday,
+  onStartFromPrevious,
   onStartWorkout,
   reopeningSessionId,
   savingSession,
   selectingToday,
   sessionForm,
+  startingFromSessionId,
   setActiveWorkoutId,
   setSessionForm,
   setShowCustomSession,
@@ -523,6 +643,11 @@ function SessionControlCard({
   workoutSessionsStatus,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const previousSessions = workoutSessions
+    .filter((session) => session.id !== activeWorkoutId)
+    .filter((session) => session.performed_on < today || session.ended_at)
+    .filter((session) => (session.workout_sets ?? []).length > 0)
+    .slice(0, 5);
 
   return (
     <Panel className="h-fit">
@@ -609,6 +734,46 @@ function SessionControlCard({
           </div>
         ) : null}
 
+        <div className="rounded-md border border-white/5 bg-black/25 p-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Start From Previous</p>
+              <p className="text-[11px] text-zinc-600">Use prior sets as editable targets. Completed sets are not copied.</p>
+            </div>
+            <ClipboardList size={15} className="shrink-0 text-cyan-300" />
+          </div>
+          {previousSessions.length ? (
+            <div className="grid gap-1.5">
+              {previousSessions.map((session) => {
+                const counts = getSessionSetCounts(session);
+                return (
+                  <div key={session.id} className="grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium text-zinc-200">{session.name}</p>
+                      <p className="data-text text-[10px] text-zinc-500">
+                        {session.performed_on} / {counts.working} working / {counts.warmup} warmup
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onStartFromPrevious(session.id)}
+                      disabled={Boolean(startingFromSessionId)}
+                      className="flex min-h-9 items-center justify-center gap-2 rounded border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-xs font-medium text-cyan-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                    >
+                      {startingFromSessionId === session.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      Start From This
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded border border-white/5 bg-[#121212] px-2 py-2 text-xs text-zinc-500">
+              No completed or past sessions with sets yet.
+            </p>
+          )}
+        </div>
+
         <button
           type="button"
           onClick={() => setShowCustomSession((value) => !value)}
@@ -637,6 +802,91 @@ function SessionControlCard({
         ) : null}
 
         {workoutSessionsError ? <p className="data-text text-[11px] text-red-300">{workoutSessionsError}</p> : null}
+      </div>
+    </Panel>
+  );
+}
+
+function TodayPlanCard({ onSelectTarget, plan, selectedTargetId }) {
+  const [mobileOpen, setMobileOpen] = useState(true);
+
+  if (!plan) return null;
+
+  const groupedTargets = groupPlanTargetsByExercise(plan.targets);
+  const loggedCount = plan.targets.filter((target) => target.logged).length;
+
+  return (
+    <Panel>
+      <PanelHeader
+        eyebrow="Draft Targets"
+        title="Today Plan"
+        right={<Tag tone="cyan">{loggedCount}/{plan.targets.length} logged</Tag>}
+      />
+      <button
+        type="button"
+        onClick={() => setMobileOpen((value) => !value)}
+        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
+      >
+        <span>Targets from {plan.sourceName}</span>
+        <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
+        <p className="text-xs text-zinc-500">
+          Based on {plan.sourceName} from {plan.sourceDate}. Tap a target to load it into the logger; nothing is saved until you press Save.
+        </p>
+        {plan.targets.length ? (
+          <div className="grid gap-2">
+            {Object.entries(groupedTargets).map(([exercise, targets]) => (
+              <div key={exercise} className="rounded-md border border-white/5 bg-black/25 p-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="truncate text-xs font-semibold text-zinc-200">{exercise}</p>
+                  <span className="data-text shrink-0 text-[10px] text-zinc-600">
+                    {targets.filter((target) => target.logged).length}/{targets.length}
+                  </span>
+                </div>
+                <div className="grid gap-1">
+                  {targets.map((target) => {
+                    const selected = selectedTargetId === target.id;
+                    return (
+                      <button
+                        key={target.id}
+                        type="button"
+                        onClick={() => !target.logged && onSelectTarget(target)}
+                        disabled={target.logged}
+                        className={`grid min-h-10 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 text-left transition ${
+                          target.logged
+                            ? 'border-emerald-400/10 bg-emerald-400/[0.04] text-zinc-500'
+                            : selected
+                              ? 'border-cyan-400/30 bg-cyan-400/10 text-zinc-100'
+                              : target.is_warmup
+                                ? 'border-amber-400/10 bg-amber-400/[0.04] text-zinc-200'
+                                : 'border-white/5 bg-[#121212] text-zinc-200'
+                        }`}
+                      >
+                        <span className={`data-text text-xs font-bold ${target.is_warmup ? 'text-amber-300' : 'text-cyan-300'}`}>
+                          {target.label}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate data-text text-xs">
+                            {formatNumber(target.weight)}kg x {target.reps} @ {formatNumber(target.rpe)}
+                          </span>
+                          {target.notes ? <span className="block truncate text-[10px] text-zinc-600">{target.notes}</span> : null}
+                        </span>
+                        <span className={`data-text text-[10px] ${target.logged ? 'text-emerald-300' : selected ? 'text-cyan-300' : 'text-zinc-600'}`}>
+                          {target.logged ? 'LOGGED' : selected ? 'READY' : 'LOAD'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
+            This previous session has no target sets.
+          </p>
+        )}
       </div>
     </Panel>
   );
@@ -1306,6 +1556,51 @@ function groupSetsByExercise(sets) {
   }, {});
 }
 
+function buildPlanTargetsFromSession(session) {
+  return Object.entries(groupSetsByExercise(session.workout_sets ?? [])).flatMap(([, sets]) =>
+    sets.map((set, index) => ({
+      id: `${session.id}-${set.id}-${index}`,
+      sourceSetId: set.id,
+      exercise: set.exercise,
+      is_warmup: isWarmupSet(set),
+      set_number: parseInteger(set.set_number),
+      label: formatSetLabel(set),
+      weight: parseDecimal(set.weight),
+      reps: parseInteger(set.reps),
+      rpe: parseDecimal(set.rpe),
+      notes: set.notes ?? '',
+      logged: false,
+      loggedSetId: null,
+    })),
+  );
+}
+
+function groupPlanTargetsByExercise(targets) {
+  return targets.reduce((groups, target) => {
+    const key = target.exercise || 'Unknown Exercise';
+    groups[key] = groups[key] ?? [];
+    groups[key].push(target);
+    return groups;
+  }, {});
+}
+
+function getNextUnloggedPlanTarget(targets, currentTargetId) {
+  const currentIndex = targets.findIndex((target) => target.id === currentTargetId);
+  return targets.find((target, index) => index > currentIndex && !target.logged) ?? null;
+}
+
+function getUniqueSessionName(sourceName, todaysSessions) {
+  const baseName = sourceName?.trim() || 'Today Workout';
+  const existingNames = new Set(todaysSessions.map((session) => session.name));
+  if (!existingNames.has(baseName)) return baseName;
+
+  let suffix = 2;
+  while (existingNames.has(`${baseName} #${suffix}`)) {
+    suffix += 1;
+  }
+  return `${baseName} #${suffix}`;
+}
+
 function resolveEditSetNumber(form, session, setId) {
   if (Boolean(form.is_warmup)) {
     const parsed = parseInteger(form.set_number);
@@ -1583,6 +1878,11 @@ function formatNumber(value) {
     maximumFractionDigits: 1,
     minimumFractionDigits: Number.isInteger(Number(value)) ? 0 : 1,
   });
+}
+
+function toInputNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? String(parsed) : '';
 }
 
 function formatTime(value) {
