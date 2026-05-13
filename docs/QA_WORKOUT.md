@@ -5,13 +5,18 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 ## Session Flow
 
 1. Open Workout.
-2. Confirm the primary prompt asks what you are training today.
-3. Confirm the old `Start From Previous` UI is gone.
-4. Start a template workout or start an empty workout.
-5. End the session and confirm logging/editing is blocked.
-6. Reopen the session and confirm logging/editing works again.
-7. Open `Advanced / Switch Session` and confirm active session switching still works.
-8. Open `Advanced / Danger`, delete a session, and confirm the confirmation step appears before deletion.
+2. With no active session selected, confirm the first visible card is `Start Workout`.
+3. Confirm the primary prompt asks what you are training today.
+4. Confirm no fake exercise name appears at the top.
+5. Confirm no rest timer, `0 / 0` set metrics, Set Logger, or Logged Sets panel appears above Start Workout.
+6. Confirm the old `Start From Previous` UI is gone.
+7. Confirm the mock workout archive is not visible.
+8. Start a template workout or start an empty workout.
+9. Confirm the active session state shows the workout header, optional Exercise Plan, Set Logger, and Logged Sets.
+10. End the session and confirm logging/editing is blocked.
+11. Reopen the session and confirm logging/editing works again.
+12. Open `Advanced / Switch Session` and confirm active session switching still works.
+13. Open `Advanced / Danger`, delete a session, and confirm the confirmation step appears before deletion.
 
 ## Workout Templates
 
@@ -95,12 +100,14 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 ## Mobile / iPhone
 
 1. Open Workout on iPhone Safari.
-2. Confirm choosing a template or starting empty is the first obvious action when no session is active.
-3. Confirm `Manage Templates`, `Advanced / Switch Session`, and `Advanced / Danger` are collapsed by default.
-4. Confirm template start buttons are thumb-friendly.
-5. Confirm tapping an exercise plan row is thumb-friendly.
-6. Confirm the Warmup toggle is thumb-friendly.
-7. Confirm Save Set / Save Warmup remains visible above the bottom nav.
-8. Confirm inputs do not zoom when focused.
-9. Confirm the current session log has no horizontal overflow.
-10. Confirm expanded session history remains readable.
+2. With no active session selected, confirm Start Workout is visible immediately near the top.
+3. Confirm no fake exercise name, rest timer, logger, or logged-set panel appears before Start Workout.
+4. Confirm choosing a template or starting empty is the first obvious action when no session is active.
+5. Confirm `Manage Templates`, `Advanced / Switch Session`, and `Advanced / Danger` are collapsed by default.
+6. Confirm template start buttons are thumb-friendly.
+7. Confirm tapping an exercise plan row is thumb-friendly.
+8. Confirm the Warmup toggle is thumb-friendly.
+9. Confirm Save Set / Save Warmup remains visible above the bottom nav.
+10. Confirm inputs do not zoom when focused.
+11. Confirm the current session log has no horizontal overflow.
+12. Confirm expanded session history remains readable.

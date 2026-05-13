@@ -46,7 +46,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- `src/data/lifeosData.js` contains realistic mock data still used by unconverted/sample surfaces, including the workout sample archive.
+- `src/data/lifeosData.js` contains remaining local mock data for legacy/unconverted surfaces, but the real Workout tab no longer displays a mock workout archive.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Focused Workout QA, including warmup behavior, lives in `docs/QA_WORKOUT.md`.
 - Tab files live in `src/tabs/`:
@@ -129,7 +129,7 @@ Partially wired but not fully used in UI:
 Still mostly mock/local:
 
 - Chat messages and AI assistant behavior; no fake AI chat is shown in the Assistant tab.
-- Workout sample archive uses mock examples from `src/data/lifeosData.js`, visually separated from persisted data.
+- The real Workout tab no longer displays mock workout examples or archives.
 
 ## Calendar Module Current Status
 
@@ -265,19 +265,22 @@ Current behavior:
 `src/tabs/WorkoutTab.jsx` has been refactored into smaller components:
 
 - `ActiveWorkoutHeader`
-- `SessionControlCard`
+- `WorkoutSessionControl`
 - `SetLogger`
 - `TemplatePlanCard`
 - `PreviousPerformanceCard`
 - `TodaySetsLog`
 - `ExerciseHistoryPanel`
-- `SampleDataArchive`
 
 Current behavior:
 
 - Assumes the user is already authenticated by the global app gate.
 - Loads persisted workout sessions with nested sets.
 - Loads persisted workout templates with ordered template exercises.
+- The Workout tab is state-based:
+  - No active session: Start Workout is the first visible card, with template starts first, Start Empty Workout secondary, and advanced controls collapsed.
+  - Active session: the active header, optional Exercise Plan, Set Logger, Logged Sets, compact current-workout controls, and lower-priority Exercise History are shown.
+- No active-session state hides the active workout header, rest timer, zero set/volume metrics, Set Logger, and Logged Sets panels.
 - Uses templates as the primary way to start a workout. The first question in Session Control is what the user is training today.
 - Starting from a template creates a new `workouts` row for today named after the template, with `#2`, `#3`, etc. suffixes when needed to avoid same-day duplicate names.
 - Starting from a template does not create any `workout_sets`.
@@ -301,7 +304,7 @@ Current behavior:
 - Today's active session sets are shown immediately under the logger, grouped by exercise.
 - Active session logs keep exercises ordered by first logged, with sets displayed as warmups first, then Set 1, Set 2, Set 3.
 - Other sessions are kept visually separate/collapsed in history.
-- Persisted workout data is visually separated from mock sample data.
+- Workout displays persisted/template data only; the previous mock workout archive was removed from the tab.
 - Login/register controls are intentionally absent from the Workout tab.
 
 Workout analytics are frontend-only:
@@ -346,7 +349,7 @@ Workout mobile direction:
 - Save Set is full-width and at least 48px tall.
 - Numeric inputs use `inputMode` to prevent poor mobile keyboard behavior.
 - Font sizes in inputs should stay at least 16px to avoid iOS zoom.
-- Session Control, Exercise History, and Sample Data Archive are collapsed by default on mobile.
+- Session Control and Exercise History are collapsed by default on mobile where appropriate, except no-session Start Workout content opens immediately.
 - Avoid fixed desktop widths or wide grids that cause horizontal overflow.
 
 ## Important UX Principles

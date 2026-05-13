@@ -34,15 +34,12 @@ export function WorkoutTab() {
     deleteWorkoutSession,
     deleteWorkoutSet,
     endWorkoutSession,
-    expandedWorkout,
     reorderWorkoutTemplateExercise,
     setActiveWorkoutId,
-    setExpandedWorkout,
     updateWorkoutTemplate,
     updateWorkoutTemplateExercise,
     updateWorkoutSession,
     updateWorkoutSet,
-    workout,
     workoutSessions,
     workoutSessionsError,
     workoutSessionsStatus,
@@ -54,11 +51,11 @@ export function WorkoutTab() {
   const [sessionForm, setSessionForm] = useState({ name: 'Today Workout', performed_on: today, notes: '' });
   const [showCustomSession, setShowCustomSession] = useState(false);
   const [setForm, setSetForm] = useState({
-    exercise: workout.current.name,
+    exercise: '',
     set_number: 1,
-    weight: String(workout.current.inputs.weight),
-    reps: String(workout.current.inputs.reps),
-    rpe: String(workout.current.inputs.rpe),
+    weight: '',
+    reps: '',
+    rpe: '',
     is_warmup: false,
     date: today,
     notes: '',
@@ -74,7 +71,6 @@ export function WorkoutTab() {
   const [reopeningSessionId, setReopeningSessionId] = useState(null);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-  const [showMockArchive, setShowMockArchive] = useState(false);
   const [collapsedSessions, setCollapsedSessions] = useState({});
   const [formError, setFormError] = useState('');
   const [restElapsedSeconds, setRestElapsedSeconds] = useState(0);
@@ -401,105 +397,142 @@ export function WorkoutTab() {
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
-      <ActiveWorkoutHeader
-        activeSession={activeWorkoutSession}
-        activeVolume={activeVolume}
-        fallbackName={workout.current.name}
-        isRestTimerRunning={isRestTimerRunning}
-        onPauseRestTimer={() => setIsRestTimerRunning(false)}
-        onResetRestTimer={() => {
-          setIsRestTimerRunning(false);
-          setRestElapsedSeconds(0);
-        }}
-        onStartRestTimer={() => activeWorkoutSession && !activeWorkoutSession.ended_at && setIsRestTimerRunning(true)}
-        restElapsedSeconds={restElapsedSeconds}
-        setCounts={activeSetCounts}
-      />
-
-      <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
-        <div className="grid gap-3">
-          <TemplatePlanCard
-            activeExercise={setForm.exercise}
-            onSelectExercise={(exercise) => fillLoggerFromTemplateExercise(exercise)}
-            plan={visibleTemplatePlan}
-          />
-
-          <SetLogger
+      {activeWorkoutSession ? (
+        <>
+          <ActiveWorkoutHeader
             activeSession={activeWorkoutSession}
-            draftPrs={draftPrs}
-            formError={formError}
-            onSetSubmit={submitSet}
-            previousPerformance={previousPerformance}
-            savingSet={savingSet}
-            setFormValue={setForm}
-            updateSetForm={(field, value) => setSetForm((prev) => ({ ...prev, [field]: value }))}
+            activeVolume={activeVolume}
+            isRestTimerRunning={isRestTimerRunning}
+            onPauseRestTimer={() => setIsRestTimerRunning(false)}
+            onResetRestTimer={() => {
+              setIsRestTimerRunning(false);
+              setRestElapsedSeconds(0);
+            }}
+            onStartRestTimer={() => activeWorkoutSession && !activeWorkoutSession.ended_at && setIsRestTimerRunning(true)}
+            restElapsedSeconds={restElapsedSeconds}
+            setCounts={activeSetCounts}
           />
 
-          <TodaySetsLog
-            activeSession={activeWorkoutSession}
-            beginEdit={beginEdit}
-            collapsedSessions={collapsedSessions}
-            deletingSetId={deletingSetId}
-            editForm={editForm}
-            editingSetId={editingSetId}
-            onDeleteSet={removeSet}
-            onSaveEdit={saveEdit}
-            savingEditId={savingEditId}
-            setActiveWorkoutId={setActiveWorkoutId}
-            setCollapsedSessions={setCollapsedSessions}
-            setEditForm={setEditForm}
-            setEditingSetId={setEditingSetId}
-            workoutSessions={workoutSessions}
-            workoutSessionsStatus={workoutSessionsStatus}
-          />
-        </div>
+          <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
+            <div className="grid gap-3">
+              <TemplatePlanCard
+                activeExercise={setForm.exercise}
+                onSelectExercise={(exercise) => fillLoggerFromTemplateExercise(exercise)}
+                plan={visibleTemplatePlan}
+              />
 
-        <SessionControlCard
-          activeSession={activeWorkoutSession}
-          activeWorkoutId={activeWorkoutId}
-          deleteConfirmId={deleteConfirmId}
-          deletingSessionId={deletingSessionId}
-          deleteWorkoutTemplate={deleteWorkoutTemplate}
-          deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
-          endingSessionId={endingSessionId}
-          createWorkoutTemplate={createWorkoutTemplate}
-          createWorkoutTemplateExercise={createWorkoutTemplateExercise}
-          onDeleteSession={removeSession}
-          onEndSession={endSession}
-          onReopenSession={reopenSession}
-          onSelectToday={selectOrStartToday}
-          onStartFromTemplate={startFromTemplate}
-          onStartWorkout={startWorkout}
-          reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
-          reopeningSessionId={reopeningSessionId}
-          savingSession={savingSession}
-          selectingToday={selectingToday}
-          sessionForm={sessionForm}
-          startingTemplateId={startingTemplateId}
-          setActiveWorkoutId={setActiveWorkoutId}
-          setSessionForm={setSessionForm}
-          setShowCustomSession={setShowCustomSession}
-          showCustomSession={showCustomSession}
-          updateWorkoutTemplate={updateWorkoutTemplate}
-          updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
-          workoutSessions={workoutSessions}
-          workoutSessionsError={workoutSessionsError}
-          workoutSessionsStatus={workoutSessionsStatus}
-          workoutTemplates={workoutTemplates}
-          workoutTemplatesError={workoutTemplatesError}
-          workoutTemplatesStatus={workoutTemplatesStatus}
-        />
-      </div>
+              <SetLogger
+                activeSession={activeWorkoutSession}
+                draftPrs={draftPrs}
+                formError={formError}
+                onSetSubmit={submitSet}
+                previousPerformance={previousPerformance}
+                savingSet={savingSet}
+                setFormValue={setForm}
+                updateSetForm={(field, value) => setSetForm((prev) => ({ ...prev, [field]: value }))}
+              />
 
-      <ExerciseHistoryPanel exerciseAnalytics={exerciseAnalytics} />
+              <TodaySetsLog
+                activeSession={activeWorkoutSession}
+                beginEdit={beginEdit}
+                collapsedSessions={collapsedSessions}
+                deletingSetId={deletingSetId}
+                editForm={editForm}
+                editingSetId={editingSetId}
+                onDeleteSet={removeSet}
+                onSaveEdit={saveEdit}
+                savingEditId={savingEditId}
+                setActiveWorkoutId={setActiveWorkoutId}
+                setCollapsedSessions={setCollapsedSessions}
+                setEditForm={setEditForm}
+                setEditingSetId={setEditingSetId}
+                workoutSessions={workoutSessions}
+                workoutSessionsStatus={workoutSessionsStatus}
+              />
+            </div>
 
-      <SampleDataArchive
-        expandedWorkout={expandedWorkout}
-        setExpandedWorkout={setExpandedWorkout}
-        setShowMockArchive={setShowMockArchive}
-        showMockArchive={showMockArchive}
-        workout={workout}
-      />
+            <WorkoutSessionControl
+              activeSession={activeWorkoutSession}
+              activeWorkoutId={activeWorkoutId}
+              createWorkoutTemplate={createWorkoutTemplate}
+              createWorkoutTemplateExercise={createWorkoutTemplateExercise}
+              deleteConfirmId={deleteConfirmId}
+              deleteWorkoutTemplate={deleteWorkoutTemplate}
+              deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
+              deletingSessionId={deletingSessionId}
+              endingSessionId={endingSessionId}
+              onDeleteSession={removeSession}
+              onEndSession={endSession}
+              onReopenSession={reopenSession}
+              onSelectToday={selectOrStartToday}
+              onStartFromTemplate={startFromTemplate}
+              onStartWorkout={startWorkout}
+              reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
+              reopeningSessionId={reopeningSessionId}
+              savingSession={savingSession}
+              selectingToday={selectingToday}
+              sessionForm={sessionForm}
+              setActiveWorkoutId={setActiveWorkoutId}
+              setSessionForm={setSessionForm}
+              setShowCustomSession={setShowCustomSession}
+              showCustomSession={showCustomSession}
+              startingTemplateId={startingTemplateId}
+              updateWorkoutTemplate={updateWorkoutTemplate}
+              updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
+              workoutSessions={workoutSessions}
+              workoutSessionsError={workoutSessionsError}
+              workoutSessionsStatus={workoutSessionsStatus}
+              workoutTemplates={workoutTemplates}
+              workoutTemplatesError={workoutTemplatesError}
+              workoutTemplatesStatus={workoutTemplatesStatus}
+            />
+          </div>
+
+          <ExerciseHistoryPanel exerciseAnalytics={exerciseAnalytics} />
+        </>
+      ) : (
+        <>
+          <div className="col-span-12 grid gap-3 xl:grid-cols-[minmax(0,760px)_1fr]">
+            <WorkoutSessionControl
+              activeSession={activeWorkoutSession}
+              activeWorkoutId={activeWorkoutId}
+              createWorkoutTemplate={createWorkoutTemplate}
+              createWorkoutTemplateExercise={createWorkoutTemplateExercise}
+              deleteConfirmId={deleteConfirmId}
+              deleteWorkoutTemplate={deleteWorkoutTemplate}
+              deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
+              deletingSessionId={deletingSessionId}
+              endingSessionId={endingSessionId}
+              onDeleteSession={removeSession}
+              onEndSession={endSession}
+              onReopenSession={reopenSession}
+              onSelectToday={selectOrStartToday}
+              onStartFromTemplate={startFromTemplate}
+              onStartWorkout={startWorkout}
+              reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
+              reopeningSessionId={reopeningSessionId}
+              savingSession={savingSession}
+              selectingToday={selectingToday}
+              sessionForm={sessionForm}
+              setActiveWorkoutId={setActiveWorkoutId}
+              setSessionForm={setSessionForm}
+              setShowCustomSession={setShowCustomSession}
+              showCustomSession={showCustomSession}
+              startingTemplateId={startingTemplateId}
+              updateWorkoutTemplate={updateWorkoutTemplate}
+              updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
+              workoutSessions={workoutSessions}
+              workoutSessionsError={workoutSessionsError}
+              workoutSessionsStatus={workoutSessionsStatus}
+              workoutTemplates={workoutTemplates}
+              workoutTemplatesError={workoutTemplatesError}
+              workoutTemplatesStatus={workoutTemplatesStatus}
+            />
+          </div>
+
+          <ExerciseHistoryPanel exerciseAnalytics={exerciseAnalytics} />
+        </>
+      )}
     </div>
   );
 }
@@ -507,7 +540,6 @@ export function WorkoutTab() {
 function ActiveWorkoutHeader({
   activeSession,
   activeVolume,
-  fallbackName,
   isRestTimerRunning,
   onPauseRestTimer,
   onResetRestTimer,
@@ -515,9 +547,10 @@ function ActiveWorkoutHeader({
   restElapsedSeconds,
   setCounts,
 }) {
-  const status = activeSession?.ended_at ? 'ENDED' : activeSession ? 'LIVE' : 'NO SESSION';
-  const tone = activeSession?.ended_at ? 'zinc' : activeSession ? 'emerald' : 'amber';
-  const timerInactive = !activeSession || Boolean(activeSession.ended_at);
+  const ended = Boolean(activeSession.ended_at);
+  const status = ended ? 'ENDED' : 'LIVE';
+  const tone = ended ? 'zinc' : 'emerald';
+  const timerInactive = ended;
 
   return (
     <Panel className="sticky top-14 z-20 col-span-12 md:static md:z-auto">
@@ -525,7 +558,7 @@ function ActiveWorkoutHeader({
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Dumbbell size={18} className="text-cyan-300" />
-            <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-zinc-100 md:text-lg">{activeSession?.name ?? fallbackName}</h2>
+            <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-zinc-100 md:text-lg">{activeSession.name}</h2>
             <Tag tone={tone}>{status}</Tag>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -583,7 +616,7 @@ function ActiveWorkoutHeader({
   );
 }
 
-function SessionControlCard({
+function WorkoutSessionControl({
   activeSession,
   activeWorkoutId,
   createWorkoutTemplate,
@@ -625,6 +658,7 @@ function SessionControlCard({
   const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
   const activeCounts = getSessionSetCounts(activeSession);
   const activeVolume = getSessionVolume(activeSession);
+  const contentOpen = !activeSession || mobileOpen;
 
   return (
     <Panel className="h-fit">
@@ -639,9 +673,9 @@ function SessionControlCard({
         className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
       >
         <span>{activeSession ? 'Current workout' : 'Start workout'}</span>
-        <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={16} className={`text-zinc-500 transition ${contentOpen ? 'rotate-180' : ''}`} />
       </button>
-      <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
+      <div className={`${contentOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
         {activeSession ? (
           <div className="rounded-md border border-white/5 bg-black/25 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -1506,83 +1540,6 @@ function ExerciseHistoryPanel({ exerciseAnalytics }) {
             Log persisted sets to build exercise progression.
           </div>
         )}
-      </div>
-    </Panel>
-  );
-}
-
-function SampleDataArchive({ expandedWorkout, setExpandedWorkout, setShowMockArchive, showMockArchive, workout }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  return (
-    <Panel className="col-span-12 border-zinc-800/70 bg-[#0d0d0d] opacity-80">
-      <PanelHeader
-        eyebrow="Sample Data"
-        title="Mock Workout Archive"
-        right={
-          <button
-            type="button"
-            onClick={() => setShowMockArchive((value) => !value)}
-            className="rounded border border-white/10 px-2 py-1 data-text text-[10px] text-zinc-400"
-          >
-            {showMockArchive ? 'HIDE' : 'SHOW'}
-          </button>
-        }
-      />
-      <button
-        type="button"
-        onClick={() => setMobileOpen((value) => !value)}
-        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-500 md:hidden"
-      >
-        <span>Sample archive</span>
-        <ChevronDown size={16} className={`text-zinc-600 transition ${mobileOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <div className={`${mobileOpen ? 'block' : 'hidden'} md:block`}>
-      {showMockArchive ? (
-        <div className="space-y-2 p-3">
-          {workout.history.map((session) => {
-            const open = expandedWorkout === session.date;
-            return (
-              <div key={session.date} className="rounded-md border border-white/5 bg-black/25">
-                <button
-                  type="button"
-                  onClick={() => setExpandedWorkout(open ? null : session.date)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-300">{session.title}</p>
-                    <p className="data-text text-[11px] text-zinc-600">
-                      {session.date} / {session.duration} / {session.volume.toLocaleString()}kg mock volume
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Tag tone="zinc">MOCK</Tag>
-                    <ChevronDown size={16} className={`text-zinc-600 transition ${open ? 'rotate-180' : ''}`} />
-                  </div>
-                </button>
-                {open ? (
-                  <div className="grid gap-2 border-t border-white/5 p-3">
-                    {session.exercises.map((exercise) => (
-                      <div key={exercise.name} className="grid grid-cols-[180px_1fr] gap-2 rounded border border-white/5 bg-[#121212] p-2">
-                        <p className="text-xs font-medium text-zinc-400">{exercise.name}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {exercise.sets.map((set) => (
-                            <span key={set} className="data-text rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-zinc-500">
-                              {set}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="p-3 text-sm text-zinc-600">Mock examples are hidden so persisted Supabase data stays visually primary.</div>
-      )}
       </div>
     </Panel>
   );
