@@ -15,20 +15,24 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 9. Confirm the active session state shows the workout header, optional Exercise Plan, Set Logger, and Logged Sets.
 10. End the session and confirm logging/editing is blocked.
 11. Reopen the session and confirm logging/editing works again.
-12. Open `Advanced / Switch Session` and confirm active session switching still works.
-13. Open `Advanced / Danger`, delete a session, and confirm the confirmation step appears before deletion.
+12. Open `Advanced` and confirm active session switching still works.
+13. Open `Danger`, delete a session, and confirm the confirmation step appears before deletion.
 
 ## Workout Templates
 
-1. Open `Manage Templates`.
+1. Open `Manage templates`.
 2. Create a template such as `Chest Day`.
-3. Add ordered exercises such as `Cable Fly`, `Incline Bench Press`, and `Bench Press`.
-4. Reorder exercises with up/down controls and confirm the order persists after refresh.
-5. Edit the template name and confirm the updated name persists.
-6. Edit an exercise name and confirm it persists.
-7. Delete an exercise and confirm it is removed.
-8. Delete a template and confirm its exercises disappear with it.
-9. Confirm another user cannot see the template or exercises.
+3. Try creating a template with a blank name and confirm a clear validation message appears.
+4. Try creating a second template with the same name and confirm the duplicate-name message is clear.
+5. Add ordered exercises such as `Cable Fly`, `Incline Bench Press`, and `Bench Press`.
+6. Try adding a blank exercise and confirm a clear validation message appears.
+7. Reorder exercises with up/down controls and confirm the order persists after refresh.
+8. Edit the template name and confirm the updated name persists after refresh.
+9. Edit an exercise name and confirm it persists after refresh.
+10. Delete the middle exercise and confirm the remaining exercises are renumbered cleanly.
+11. Delete a template and confirm its exercises disappear with it.
+12. Confirm deleting a template does not delete old workout sessions that used the same name.
+13. Confirm another user cannot see the template or exercises.
 
 ## Start From Template
 
@@ -103,7 +107,7 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 2. With no active session selected, confirm Start Workout is visible immediately near the top.
 3. Confirm no fake exercise name, rest timer, logger, or logged-set panel appears before Start Workout.
 4. Confirm choosing a template or starting empty is the first obvious action when no session is active.
-5. Confirm `Manage Templates`, `Advanced / Switch Session`, and `Advanced / Danger` are collapsed by default.
+5. Confirm `Manage templates`, `Advanced`, and `Danger` are collapsed by default.
 6. Confirm template start buttons are thumb-friendly.
 7. Confirm tapping an exercise plan row is thumb-friendly.
 8. Confirm the Warmup toggle is thumb-friendly.

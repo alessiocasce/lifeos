@@ -719,7 +719,7 @@ function WorkoutSessionControl({
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-cyan-200">What are you training today?</p>
-                  <p className="text-[11px] text-zinc-500">Start from a saved template or keep it blank.</p>
+                  <p className="text-[11px] text-zinc-500">Start from template or start empty.</p>
                 </div>
                 <ClipboardList size={15} className="shrink-0 text-cyan-300" />
               </div>
@@ -786,7 +786,7 @@ function WorkoutSessionControl({
         {!activeSession && showCustomSession ? (
           <form onSubmit={onStartWorkout} className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2">
             <p className="text-xs text-zinc-500">
-              Start without a template. You can keep the default name or set a custom one.
+              Start empty. You can keep the default name or set a custom one.
             </p>
             <CompactField label="Name" value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
             <CompactField label="Date" type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
@@ -797,7 +797,7 @@ function WorkoutSessionControl({
               className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
             >
               {savingSession ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {savingSession ? 'Starting' : 'Start Session'}
+              {savingSession ? 'Starting' : 'Start Empty'}
             </button>
           </form>
         ) : null}
@@ -805,7 +805,7 @@ function WorkoutSessionControl({
         <CollapsedSection
           open={manageTemplatesOpen}
           setOpen={setManageTemplatesOpen}
-          title="Manage Templates"
+          title="Manage templates"
         >
           <TemplateManager
             createWorkoutTemplate={createWorkoutTemplate}
@@ -823,10 +823,10 @@ function WorkoutSessionControl({
         <CollapsedSection
           open={advancedOpen}
           setOpen={setAdvancedOpen}
-          title="Advanced / Switch Session"
+          title="Advanced"
         >
           <label className="block rounded-md border border-white/5 bg-black/25 p-2">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Active Session</span>
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Switch session</span>
             <select
               value={activeWorkoutId ?? ''}
               onChange={(event) => setActiveWorkoutId(event.target.value || null)}
@@ -847,7 +847,7 @@ function WorkoutSessionControl({
           <CollapsedSection
             open={dangerOpen}
             setOpen={setDangerOpen}
-            title="Advanced / Danger"
+            title="Danger"
           >
             <button
               type="button"
@@ -887,6 +887,24 @@ function CollapsedSection({ children, open, setOpen, title }) {
   );
 }
 
+function formatTemplateManagerError(error, fallback) {
+  const message = String(error?.message ?? '');
+  const normalized = message.toLowerCase();
+  if (error?.code === '23505' || normalized.includes('duplicate key') || normalized.includes('unique constraint')) {
+    if (message.includes('workout_templates_user_id_name_key')) {
+      return 'A template with this name already exists.';
+    }
+    if (message.includes('workout_template_exercises_template_id_exercise_order_key')) {
+      return 'Exercise order changed. Try moving it again.';
+    }
+    return 'This template item already exists.';
+  }
+  if (normalized.includes('row-level security')) {
+    return 'You can only change your own templates.';
+  }
+  return message || fallback;
+}
+
 function TemplateManager({
   createWorkoutTemplate,
   createWorkoutTemplateExercise,
@@ -919,7 +937,7 @@ function TemplateManager({
       await createWorkoutTemplate(templateForm);
       setTemplateForm({ name: '', notes: '' });
     } catch (error) {
-      setTemplateError(error.message || 'Failed to create template.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to create template.'));
     } finally {
       setTemplateLoading('');
     }
@@ -936,7 +954,7 @@ function TemplateManager({
       await updateWorkoutTemplate(templateId, templateEditForm);
       setEditingTemplateId(null);
     } catch (error) {
-      setTemplateError(error.message || 'Failed to update template.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to update template.'));
     } finally {
       setTemplateLoading('');
     }
@@ -960,7 +978,7 @@ function TemplateManager({
       });
       setExerciseDrafts((prev) => ({ ...prev, [template.id]: { exercise: '', notes: '' } }));
     } catch (error) {
-      setTemplateError(error.message || 'Failed to add exercise.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to add exercise.'));
     } finally {
       setTemplateLoading('');
     }
@@ -977,7 +995,7 @@ function TemplateManager({
       await updateWorkoutTemplateExercise(exerciseId, exerciseEditForm);
       setEditingExerciseId(null);
     } catch (error) {
-      setTemplateError(error.message || 'Failed to update exercise.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to update exercise.'));
     } finally {
       setTemplateLoading('');
     }
@@ -989,7 +1007,7 @@ function TemplateManager({
     try {
       await deleteWorkoutTemplate(templateId);
     } catch (error) {
-      setTemplateError(error.message || 'Failed to delete template.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to delete template.'));
     } finally {
       setTemplateLoading('');
     }
@@ -1001,7 +1019,7 @@ function TemplateManager({
     try {
       await deleteWorkoutTemplateExercise(exerciseId);
     } catch (error) {
-      setTemplateError(error.message || 'Failed to delete exercise.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to delete exercise.'));
     } finally {
       setTemplateLoading('');
     }
@@ -1013,7 +1031,7 @@ function TemplateManager({
     try {
       await reorderWorkoutTemplateExercise(templateId, exerciseId, direction);
     } catch (error) {
-      setTemplateError(error.message || 'Failed to reorder exercise.');
+      setTemplateError(formatTemplateManagerError(error, 'Failed to reorder exercise.'));
     } finally {
       setTemplateLoading('');
     }
@@ -1022,7 +1040,7 @@ function TemplateManager({
   return (
     <div className="space-y-2">
       <form onSubmit={createTemplate} className="grid gap-2 rounded-md border border-white/5 bg-[#121212] p-2">
-        <CompactField label="Template Name" value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
+        <CompactField label="Template name" value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
         <CompactField label="Notes" value={templateForm.notes} onChange={(value) => setTemplateForm((prev) => ({ ...prev, notes: value }))} />
         <button
           type="submit"
@@ -1030,7 +1048,7 @@ function TemplateManager({
           className="flex h-9 items-center justify-center gap-2 rounded border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
         >
           {templateLoading === 'template-create' ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-          Create Template
+          Create template
         </button>
       </form>
 
@@ -1044,7 +1062,7 @@ function TemplateManager({
             <div key={template.id} className="rounded-md border border-white/5 bg-black/25 p-2">
               {editingTemplateId === template.id ? (
                 <div className="grid gap-2">
-                  <CompactField label="Template Name" value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
+                  <CompactField label="Template name" value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
                   <CompactField label="Notes" value={templateEditForm.notes} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, notes: value }))} />
                   <div className="flex gap-1">
                     <IconButton icon={Check} loading={templateLoading === `template-${template.id}`} onClick={() => saveTemplate(template.id)} title="Save template" tone="emerald" size="sm" />
@@ -1111,7 +1129,7 @@ function TemplateManager({
               </div>
 
               <div className="mt-2 grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
-                <CompactField label="Add Exercise" value={draft.exercise} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, exercise: value } }))} />
+                <CompactField label="Add exercise" value={draft.exercise} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, exercise: value } }))} />
                 <CompactField label="Notes" value={draft.notes} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, notes: value } }))} />
                 <button
                   type="button"
@@ -1120,7 +1138,7 @@ function TemplateManager({
                   className="flex h-9 items-center justify-center gap-2 rounded border border-cyan-400/20 bg-cyan-400/10 text-xs font-medium text-cyan-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
                 >
                   {templateLoading === `exercise-create-${template.id}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  Add Exercise
+                  Add exercise
                 </button>
               </div>
             </div>

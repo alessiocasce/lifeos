@@ -572,8 +572,23 @@ export function LifeOSProvider({ children }) {
         setWorkoutTemplatesError('');
         await workoutTemplateExerciseApi.delete(id);
         if (template) {
+          const remainingExercises = sortWorkoutTemplateExercises(
+            (template.workout_template_exercises ?? []).filter((exercise) => exercise.id !== id),
+          );
+          const compactedRows = remainingExercises.length
+            ? await workoutTemplateExerciseApi.reorder(
+                remainingExercises.map((exercise, index) => ({ id: exercise.id, exercise_order: index + 1 })),
+              )
+            : [];
+          const compactedById = new Map(compactedRows.map((exercise) => [exercise.id, exercise]));
           setWorkoutTemplates((prev) =>
-            updateTemplateExercises(prev, template.id, (exercises) => exercises.filter((exercise) => exercise.id !== id)),
+            updateTemplateExercises(prev, template.id, (exercises) =>
+              sortWorkoutTemplateExercises(
+                exercises
+                  .filter((exercise) => exercise.id !== id)
+                  .map((exercise) => compactedById.get(exercise.id) ?? exercise),
+              ),
+            ),
           );
         }
         setWorkoutTemplatesStatus('ready');

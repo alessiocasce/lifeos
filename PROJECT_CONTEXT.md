@@ -288,8 +288,9 @@ Current behavior:
 - Template exercises are local planning guidance inside the active workout; they do not affect volume, PRs, previous performance, estimated 1RM, Exercise History, or other analytics until sets are saved.
 - Starting empty remains available as a secondary action and creates a blank session named `Today Workout` or a user-provided name.
 - Template management is collapsed inside Workout and supports create/edit/delete templates plus add/edit/delete/reorder template exercises.
+- Template management shows clear validation/duplicate-name messages and compacts exercise order after deleting an exercise.
 - Advanced session switching and delete session controls are collapsed away from the primary logging flow.
-- On load, Workout auto-selects today's session when one exists; older sessions remain available from Advanced / Switch Session instead of hiding the template start prompt.
+- On load, Workout auto-selects today's session when one exists; older sessions remain available from Advanced instead of hiding the template start prompt.
 - Ended sessions cannot use the local rest timer.
 - Ended sessions cannot add or edit sets. The logger shows: "This workout is ended. Reopen it to add more sets."
 - Ended sessions can be reopened from Session Control, which sets `ended_at` back to `null`.
