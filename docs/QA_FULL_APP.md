@@ -69,6 +69,18 @@ Run the focused checklists after the full flow:
 - `docs/QA_CALENDAR.md`
 - `docs/QA_DAILY_REVIEW.md`
 
+## Workout Warmup Sets
+
+1. Apply the latest schema migration and confirm existing old workout sets still appear as working sets.
+2. Start or select today's workout session.
+3. Log two warmup sets for one exercise with the Warmup toggle enabled.
+4. Log two working sets for the same exercise with Warmup disabled.
+5. Confirm the current session log displays `W`, `W`, `Set 1`, `Set 2`.
+6. Confirm warmups appear before working sets and do not increment the next working set number.
+7. Confirm active volume, PR tags, previous performance, and exercise history ignore warmup sets.
+8. Log a second exercise and confirm exercise groups stay ordered first-to-last by first logged exercise.
+9. Edit a set and confirm warmup/working status, edit, and delete behavior still work.
+
 ## Mock Areas
 
 1. Open Calendar.

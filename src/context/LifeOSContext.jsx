@@ -437,9 +437,7 @@ export function LifeOSProvider({ children }) {
             session.id === created.workout_id
               ? {
                   ...session,
-                  workout_sets: [created, ...(session.workout_sets ?? [])].sort(
-                    (a, b) => Number(a.set_number) - Number(b.set_number),
-                  ),
+                  workout_sets: sortWorkoutSets([created, ...(session.workout_sets ?? [])]),
                 }
               : session,
           ),
@@ -456,7 +454,7 @@ export function LifeOSProvider({ children }) {
                   ...session,
                   workout_sets: (session.workout_sets ?? [])
                     .map((set) => (set.id === id ? updated : set))
-                    .sort((a, b) => Number(a.set_number) - Number(b.set_number)),
+                    .sort(compareWorkoutSets),
                 }
               : session,
           ),
@@ -706,6 +704,19 @@ function sortDailyReviews(rows = []) {
     if (a.review_on !== b.review_on) return new Date(b.review_on) - new Date(a.review_on);
     return new Date(b.updated_at ?? 0) - new Date(a.updated_at ?? 0);
   });
+}
+
+function sortWorkoutSets(rows = []) {
+  return rows.slice().sort(compareWorkoutSets);
+}
+
+function compareWorkoutSets(a, b) {
+  const aTime = new Date(a.performed_at ?? a.created_at ?? 0).getTime();
+  const bTime = new Date(b.performed_at ?? b.created_at ?? 0).getTime();
+  if (aTime !== bTime) return aTime - bTime;
+  if (Boolean(a.is_warmup) !== Boolean(b.is_warmup)) return Boolean(a.is_warmup) ? -1 : 1;
+  if (Number(a.set_number) !== Number(b.set_number)) return Number(a.set_number) - Number(b.set_number);
+  return String(a.id).localeCompare(String(b.id));
 }
 
 function normalizeHealthLogPayload(payload) {

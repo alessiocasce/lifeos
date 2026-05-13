@@ -18,6 +18,7 @@ import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
 const today = new Date().toISOString().slice(0, 10);
+const WARMUP_SET_NUMBER_OFFSET = 1000;
 
 export function WorkoutTab() {
   const {
@@ -37,10 +38,9 @@ export function WorkoutTab() {
     workoutSessions,
     workoutSessionsError,
     workoutSessionsStatus,
-    workoutSets,
   } = useLifeOS();
 
-  const [sessionForm, setSessionForm] = useState({ name: 'Push Day A', performed_on: today, notes: '' });
+  const [sessionForm, setSessionForm] = useState({ name: 'Today Workout', performed_on: today, notes: '' });
   const [showCustomSession, setShowCustomSession] = useState(false);
   const [setForm, setSetForm] = useState({
     exercise: workout.current.name,
@@ -48,6 +48,7 @@ export function WorkoutTab() {
     weight: String(workout.current.inputs.weight),
     reps: String(workout.current.inputs.reps),
     rpe: String(workout.current.inputs.rpe),
+    is_warmup: false,
     date: today,
     notes: '',
   });
@@ -68,8 +69,8 @@ export function WorkoutTab() {
   const [restElapsedSeconds, setRestElapsedSeconds] = useState(0);
   const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
 
-  const activeSets = activeWorkoutSession?.workout_sets ?? [];
-  const activeVolume = activeSets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+  const activeSetCounts = getSessionSetCounts(activeWorkoutSession);
+  const activeVolume = getSessionVolume(activeWorkoutSession);
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions]);
   const exerciseAnalytics = useMemo(() => buildExerciseAnalytics(workoutSessions), [workoutSessions]);
   const selectedExerciseAnalytics = useMemo(
@@ -85,15 +86,18 @@ export function WorkoutTab() {
     [activeWorkoutSession, setForm.exercise],
   );
   const draftPrs = useMemo(() => {
+    if (setForm.is_warmup) {
+      return { setVolume: false, sessionVolume: false, weight: false, reps: false };
+    }
     const weight = parseDecimal(setForm.weight);
     const reps = parseInteger(setForm.reps);
     return detectPrs(
-      { exercise: setForm.exercise, weight, reps },
+      { exercise: setForm.exercise, weight, reps, is_warmup: false },
       selectedExerciseAnalytics,
       activeWorkoutSession ? getSessionExerciseVolume(activeWorkoutSession, setForm.exercise) + weight * reps : 0,
       true,
     );
-  }, [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.reps, setForm.weight]);
+  }, [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.is_warmup, setForm.reps, setForm.weight]);
 
   useEffect(() => {
     setSetForm((prev) => ({ ...prev, set_number: nextSetNumber }));
@@ -193,7 +197,10 @@ export function WorkoutTab() {
       await createWorkoutSet({
         workout_id: activeWorkoutSession.id,
         exercise: setForm.exercise.trim(),
-        set_number: nextSetNumber,
+        set_number: setForm.is_warmup
+          ? getNextWarmupSetNumber(activeWorkoutSession, setForm.exercise)
+          : nextSetNumber,
+        is_warmup: Boolean(setForm.is_warmup),
         weight,
         reps,
         rpe,
@@ -202,7 +209,7 @@ export function WorkoutTab() {
       });
       setSetForm((prev) => ({
         ...prev,
-        set_number: getNextSetNumber(activeWorkoutSession, prev.exercise) + 1,
+        set_number: prev.is_warmup ? getNextSetNumber(activeWorkoutSession, prev.exercise) : getNextSetNumber(activeWorkoutSession, prev.exercise) + 1,
         reps: '',
         notes: '',
       }));
@@ -228,6 +235,7 @@ export function WorkoutTab() {
       weight: String(set.weight),
       reps: String(set.reps),
       rpe: String(set.rpe),
+      is_warmup: Boolean(set.is_warmup),
       date: new Date(set.performed_at).toISOString().slice(0, 10),
       notes: set.notes ?? '',
     });
@@ -251,7 +259,8 @@ export function WorkoutTab() {
     try {
       await updateWorkoutSet(setId, {
         exercise: editForm.exercise.trim(),
-        set_number: parseInteger(editForm.set_number),
+        set_number: resolveEditSetNumber(editForm, activeWorkoutSession, setId),
+        is_warmup: Boolean(editForm.is_warmup),
         weight: parseDecimal(editForm.weight),
         reps: parseInteger(editForm.reps),
         rpe: parseDecimal(editForm.rpe),
@@ -337,7 +346,7 @@ export function WorkoutTab() {
         }}
         onStartRestTimer={() => activeWorkoutSession && !activeWorkoutSession.ended_at && setIsRestTimerRunning(true)}
         restElapsedSeconds={restElapsedSeconds}
-        setCount={activeSets.length}
+        setCounts={activeSetCounts}
       />
 
       <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
@@ -419,7 +428,7 @@ function ActiveWorkoutHeader({
   onResetRestTimer,
   onStartRestTimer,
   restElapsedSeconds,
-  setCount,
+  setCounts,
 }) {
   const status = activeSession?.ended_at ? 'ENDED' : activeSession ? 'LIVE' : 'NO SESSION';
   const tone = activeSession?.ended_at ? 'zinc' : activeSession ? 'emerald' : 'amber';
@@ -438,7 +447,7 @@ function ActiveWorkoutHeader({
             <div className="hidden md:block">
               <MiniMetric label="Date" value={activeSession?.performed_on ?? today} tone="text-zinc-100" sub="active day" />
             </div>
-            <MiniMetric label="Sets" value={setCount} tone="text-cyan-300" sub="active session" />
+            <MiniMetric label="Sets" value={`${setCounts.working} / ${setCounts.warmup}`} tone="text-cyan-300" sub="working / warmup" />
             <MiniMetric label="Volume" value={Math.round(activeVolume).toLocaleString()} tone="text-emerald-300" sub="kg x reps" />
             <div className="hidden md:block">
               <MiniMetric label="Started" value={formatTime(activeSession?.started_at)} tone="text-amber-300" sub="local" />
@@ -604,11 +613,14 @@ function SessionControlCard({
           onClick={() => setShowCustomSession((value) => !value)}
           className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-zinc-300"
         >
-          Create Custom Session
+          Start Named Session
         </button>
 
         {showCustomSession ? (
           <form onSubmit={onStartWorkout} className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2">
+            <p className="text-xs text-zinc-500">
+              Session names help group workouts like Push Day A, Pull Day, Legs. Templates will come later.
+            </p>
             <CompactField label="Name" value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
             <CompactField label="Date" type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
             <CompactField label="Notes" value={sessionForm.notes} onChange={(value) => setSessionForm((prev) => ({ ...prev, notes: value }))} />
@@ -653,11 +665,12 @@ function SetLogger({
           <div className="grid gap-3">
             <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
             <form onSubmit={onSetSubmit} className="grid gap-2">
-              <div className="grid grid-cols-[1fr_72px] gap-2 md:grid-cols-[1fr_92px]">
+              <div className="grid gap-2 md:grid-cols-[1fr_132px]">
                 <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
-                <CompactField label="Set" type="number" inputMode="numeric" value={setFormValue.set_number} onChange={(value) => updateSetForm('set_number', value)} readOnly />
+                <WarmupToggle checked={Boolean(setFormValue.is_warmup)} onChange={(value) => updateSetForm('is_warmup', value)} />
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-[72px_repeat(3,minmax(0,1fr))] gap-2">
+                <CompactField label="Set" value={setFormValue.is_warmup ? 'W' : setFormValue.set_number} onChange={() => {}} readOnly />
                 <CompactField label="Weight" inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
                 <CompactField label="Reps" inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
                 <CompactField label="RPE" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
@@ -672,7 +685,7 @@ function SetLogger({
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
               >
                 {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                {savingSet ? 'Saving Set' : 'Save Set'}
+                {savingSet ? 'Saving Set' : setFormValue.is_warmup ? 'Save Warmup' : 'Save Set'}
               </button>
               {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
             </form>
@@ -789,13 +802,14 @@ function TodaySetsLog({
               {otherSessions.map((session) => {
                 const collapsed = collapsedSessions[session.id] ?? true;
                 const volume = getSessionVolume(session);
+                const counts = getSessionSetCounts(session);
                 return (
                   <div key={session.id} className="rounded-md border border-white/5 bg-black/25">
                     <div className="flex items-center justify-between gap-3 px-3 py-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-zinc-200">{session.name}</p>
                         <p className="data-text text-[10px] text-zinc-500">
-                          {session.performed_on} / {(session.workout_sets ?? []).length} sets / {Math.round(volume).toLocaleString()} volume
+                          {session.performed_on} / {counts.working} working / {counts.warmup} warmup / {Math.round(volume).toLocaleString()} volume
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -818,9 +832,16 @@ function TodaySetsLog({
                     </div>
                     {!collapsed ? (
                       <div className="grid gap-1 border-t border-white/5 p-2">
-                        {(session.workout_sets ?? []).map((set) => (
-                            <div key={set.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-1.5 sm:grid-cols-[40px_minmax(0,1fr)_auto]">
-                            <span className="data-text text-xs text-cyan-300">#{set.set_number}</span>
+                        {sortSetsForDisplay(session.workout_sets ?? []).map((set) => (
+                          <div
+                            key={set.id}
+                            className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 sm:grid-cols-[58px_minmax(0,1fr)_auto] ${
+                              isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
+                            }`}
+                          >
+                            <span className={`data-text text-xs font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
+                              {formatSetLabel(set)}
+                            </span>
                             <span className="truncate text-xs text-zinc-200">{set.exercise}</span>
                             <span className="data-text text-xs text-zinc-400">
                               {formatNumber(set.weight)}kg x {set.reps} @ {formatNumber(set.rpe)}
@@ -855,7 +876,9 @@ function ExerciseSetGroup({
   sets,
   workoutSessions,
 }) {
-  const volume = sets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+  const workingSets = sets.filter((set) => !isWarmupSet(set));
+  const warmupSets = sets.filter(isWarmupSet);
+  const volume = workingSets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
   const isEnded = Boolean(session?.ended_at);
 
   return (
@@ -864,7 +887,7 @@ function ExerciseSetGroup({
         <div>
           <p className="text-sm font-semibold text-zinc-100">{exercise}</p>
           <p className="data-text text-[10px] text-zinc-500">
-            {sets.length} sets / {Math.round(volume).toLocaleString()} volume
+            {workingSets.length} working / {warmupSets.length} warmup / {Math.round(volume).toLocaleString()} volume
           </p>
         </div>
       </div>
@@ -892,18 +915,28 @@ function ExerciseSetGroup({
           }
 
           return (
-            <div key={set.id} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2 sm:grid-cols-[40px_minmax(0,1fr)_auto_72px]">
-              <span className="data-text text-sm font-bold text-cyan-300">#{set.set_number}</span>
+            <div
+              key={set.id}
+              className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-2 sm:grid-cols-[58px_minmax(0,1fr)_auto_72px] ${
+                isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
+              }`}
+            >
+              <span className={`data-text text-sm font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
+                {formatSetLabel(set)}
+              </span>
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
                   <p className="truncate text-xs font-medium text-zinc-100">{formatNumber(set.weight)}kg x {set.reps}</p>
+                  {isWarmupSet(set) ? <Tag tone="amber">WARMUP</Tag> : null}
                   <PrTags prs={prs} />
                 </div>
                 <p className="data-text text-[10px] text-zinc-500">
                   RPE {formatNumber(set.rpe)} / {formatDate(set.performed_at)}
                 </p>
               </div>
-              <span className="hidden data-text text-xs text-zinc-400 sm:block">{Math.round(parseDecimal(set.weight) * parseInteger(set.reps))} vol</span>
+              <span className="hidden data-text text-xs text-zinc-400 sm:block">
+                {isWarmupSet(set) ? 'warmup' : `${Math.round(parseDecimal(set.weight) * parseInteger(set.reps))} vol`}
+              </span>
               <div className="flex gap-1">
                 <IconButton disabled={isEnded} icon={Pencil} onClick={() => beginEdit(set)} title={isEnded ? 'Reopen workout to edit' : 'Edit set'} tone="zinc" size="sm" />
                 <IconButton icon={Trash2} loading={deletingSetId === set.id} onClick={() => onDeleteSet(set.id)} title="Delete set" tone="red" size="sm" />
@@ -1094,10 +1127,24 @@ function TrendBars({ color, max, sessions, title, valueKey }) {
 
 function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
   const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }));
+  const updateWarmup = (value) =>
+    setEditForm((prev) => ({
+      ...prev,
+      is_warmup: value,
+      set_number: value ? prev.set_number : String(getDisplaySetNumber(prev.set_number)),
+    }));
   return (
-    <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.4fr_0.55fr_0.45fr_0.45fr_0.7fr_1fr_72px]">
+    <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.6fr_0.4fr_0.55fr_0.45fr_0.45fr_0.7fr_1fr_72px]">
       <CompactField label="Exercise" value={editForm.exercise} onChange={(value) => update('exercise', value)} />
-      <CompactField label="Set" type="number" inputMode="numeric" value={editForm.set_number} onChange={(value) => update('set_number', value)} />
+      <WarmupToggle checked={Boolean(editForm.is_warmup)} onChange={updateWarmup} compact />
+      <CompactField
+        label="Set"
+        type={editForm.is_warmup ? 'text' : 'number'}
+        inputMode={editForm.is_warmup ? undefined : 'numeric'}
+        value={editForm.is_warmup ? 'W' : editForm.set_number}
+        onChange={(value) => update('set_number', value)}
+        readOnly={Boolean(editForm.is_warmup)}
+      />
       <CompactField label="Weight" inputMode="decimal" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
       <CompactField label="Reps" inputMode="numeric" value={editForm.reps} onChange={(value) => update('reps', value)} />
       <CompactField label="RPE" inputMode="decimal" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
@@ -1108,6 +1155,32 @@ function EditSetRow({ editForm, loading, onCancel, onSave, setEditForm }) {
         <IconButton icon={X} onClick={onCancel} title="Cancel edit" tone="zinc" size="sm" />
       </div>
     </div>
+  );
+}
+
+function WarmupToggle({ checked, compact = false, onChange }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`flex min-h-11 items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition ${
+        checked
+          ? 'border-amber-400/30 bg-amber-400/10 text-amber-200'
+          : 'border-white/5 bg-[#121212] text-zinc-400'
+      }`}
+    >
+      <span>
+        <span className="block text-[10px] uppercase tracking-wider text-zinc-500">Warmup</span>
+        <span className={`data-text text-sm font-bold ${checked ? 'text-amber-300' : 'text-zinc-500'}`}>
+          {checked ? 'WARMUP' : compact ? 'WORK' : 'WORKING'}
+        </span>
+      </span>
+      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded border data-text text-xs ${
+        checked ? 'border-amber-400/30 bg-amber-400/20 text-amber-200' : 'border-white/10 bg-black/30 text-zinc-600'
+      }`}>
+        W
+      </span>
+    </button>
   );
 }
 
@@ -1175,27 +1248,79 @@ function SourceStatus({ status }) {
   );
 }
 
+function sortSetsForExerciseOrder(sets = []) {
+  return sets.slice().sort((a, b) => {
+    const aTime = new Date(a.performed_at ?? a.created_at ?? 0).getTime();
+    const bTime = new Date(b.performed_at ?? b.created_at ?? 0).getTime();
+    if (aTime !== bTime) return aTime - bTime;
+    return compareSetsForDisplay(a, b);
+  });
+}
+
+function sortSetsForDisplay(sets = []) {
+  return sets.slice().sort(compareSetsForDisplay);
+}
+
+function compareSetsForDisplay(a, b) {
+  if (isWarmupSet(a) !== isWarmupSet(b)) return isWarmupSet(a) ? -1 : 1;
+  const aNumber = parseInteger(a.set_number);
+  const bNumber = parseInteger(b.set_number);
+  if (aNumber !== bNumber) return aNumber - bNumber;
+  const aTime = new Date(a.performed_at ?? a.created_at ?? 0).getTime();
+  const bTime = new Date(b.performed_at ?? b.created_at ?? 0).getTime();
+  if (aTime !== bTime) return aTime - bTime;
+  return String(a.id).localeCompare(String(b.id));
+}
+
 function groupSetsByExercise(sets) {
-  return sets.reduce((groups, set) => {
+  return sortSetsForExerciseOrder(sets).reduce((groups, set) => {
     const key = set.exercise || 'Unknown Exercise';
     groups[key] = groups[key] ?? [];
     groups[key].push(set);
-    groups[key].sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
+    groups[key].sort(compareSetsForDisplay);
     return groups;
   }, {});
 }
 
-function getNextSetNumber(session, exercise) {
+function resolveEditSetNumber(form, session, setId) {
+  if (Boolean(form.is_warmup)) {
+    const parsed = parseInteger(form.set_number);
+    return Number.isFinite(parsed) && parsed > WARMUP_SET_NUMBER_OFFSET
+      ? parsed
+      : getNextWarmupSetNumber(session, form.exercise, setId);
+  }
+
+  const parsed = parseInteger(form.set_number);
+  return Number.isFinite(parsed) && parsed > 0 && parsed < WARMUP_SET_NUMBER_OFFSET
+    ? parsed
+    : getNextSetNumber(session, form.exercise, setId);
+}
+
+function getNextSetNumber(session, exercise, excludeSetId = null) {
   if (!session || !exercise.trim()) return 1;
   const normalizedExercise = normalizeExercise(exercise);
-  const matchingSets = (session.workout_sets ?? []).filter((set) => normalizeExercise(set.exercise) === normalizedExercise);
+  const matchingSets = (session.workout_sets ?? []).filter(
+    (set) => set.id !== excludeSetId && !isWarmupSet(set) && normalizeExercise(set.exercise) === normalizedExercise,
+  );
   return matchingSets.length ? Math.max(...matchingSets.map((set) => parseInteger(set.set_number))) + 1 : 1;
+}
+
+function getNextWarmupSetNumber(session, exercise, excludeSetId = null) {
+  if (!session || !exercise.trim()) return WARMUP_SET_NUMBER_OFFSET + 1;
+  const normalizedExercise = normalizeExercise(exercise);
+  const warmupSets = (session.workout_sets ?? []).filter(
+    (set) => set.id !== excludeSetId && isWarmupSet(set) && normalizeExercise(set.exercise) === normalizedExercise,
+  );
+  const maxWarmupNumber = warmupSets.length
+    ? Math.max(...warmupSets.map((set) => parseInteger(set.set_number)).filter(Number.isFinite))
+    : WARMUP_SET_NUMBER_OFFSET;
+  return Math.max(WARMUP_SET_NUMBER_OFFSET, maxWarmupNumber) + 1;
 }
 
 function getSessionExerciseSummary(session, exercise) {
   const key = normalizeExercise(exercise);
   const sets = (session?.workout_sets ?? [])
-    .filter((set) => normalizeExercise(set.exercise) === key)
+    .filter((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key)
     .map(normalizeSet)
     .sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
   return {
@@ -1210,7 +1335,17 @@ function getSessionExerciseVolume(session, exercise) {
 }
 
 function getSessionVolume(session) {
-  return (session?.workout_sets ?? []).reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+  return (session?.workout_sets ?? [])
+    .filter((set) => !isWarmupSet(set))
+    .reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
+}
+
+function getSessionSetCounts(session) {
+  const sets = session?.workout_sets ?? [];
+  return {
+    working: sets.filter((set) => !isWarmupSet(set)).length,
+    warmup: sets.filter(isWarmupSet).length,
+  };
 }
 
 function buildExerciseAnalytics(sessions) {
@@ -1221,7 +1356,7 @@ function buildExerciseAnalytics(sessions) {
     .sort(compareSessionsAscending)
     .forEach((session) => {
       const groupedSets = {};
-      (session.workout_sets ?? []).forEach((set) => {
+      (session.workout_sets ?? []).filter((set) => !isWarmupSet(set)).forEach((set) => {
         const key = normalizeExercise(set.exercise);
         if (!key) return;
         groupedSets[key] = groupedSets[key] ?? [];
@@ -1301,12 +1436,12 @@ function getPreviousPerformance(sessions, activeSession, exercise) {
     .filter((session) => session.id !== activeSession.id)
     .filter((session) => compareSessionPosition(session, activeSession) < 0)
     .sort(compareSessionsDescending)
-    .find((session) => (session.workout_sets ?? []).some((set) => normalizeExercise(set.exercise) === key));
+    .find((session) => (session.workout_sets ?? []).some((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key));
 
   if (!previousSession) return null;
 
   const sets = previousSession.workout_sets
-    .filter((set) => normalizeExercise(set.exercise) === key)
+    .filter((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key)
     .map(normalizeSet)
     .sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
   const totalVolume = sets.reduce((total, set) => total + set.volume, 0);
@@ -1336,7 +1471,7 @@ function getExerciseAnalyticsBeforeSession(sessions, activeSession, exercise) {
     .filter((session) => compareSessionPosition(session, activeSession) < 0)
     .map((session) => ({
       ...session,
-      workout_sets: (session.workout_sets ?? []).filter((set) => normalizeExercise(set.exercise) === key),
+      workout_sets: (session.workout_sets ?? []).filter((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key),
     }));
   return buildExerciseAnalytics(priorSessions).byExercise[key] ?? null;
 }
@@ -1344,7 +1479,7 @@ function getExerciseAnalyticsBeforeSession(sessions, activeSession, exercise) {
 function detectPrs(set, analytics, sessionExerciseVolume = 0, includeSessionVolume = false) {
   const weight = parseDecimal(set.weight);
   const reps = parseInteger(set.reps);
-  if (!analytics || !set.exercise || !Number.isFinite(weight) || !Number.isFinite(reps)) {
+  if (isWarmupSet(set) || !analytics || !set.exercise || !Number.isFinite(weight) || !Number.isFinite(reps)) {
     return { setVolume: false, sessionVolume: false, weight: false, reps: false };
   }
 
@@ -1363,6 +1498,7 @@ function normalizeSet(set) {
   const estimated1Rm = weight * (1 + reps / 30);
   return {
     ...set,
+    is_warmup: isWarmupSet(set),
     weight,
     reps,
     rpe: parseDecimal(set.rpe),
@@ -1382,6 +1518,19 @@ function parseDecimal(value) {
 
 function parseInteger(value) {
   return Number(String(value ?? '').trim());
+}
+
+function isWarmupSet(set) {
+  return Boolean(set?.is_warmup);
+}
+
+function formatSetLabel(set) {
+  return isWarmupSet(set) ? 'W' : `Set ${parseInteger(set.set_number)}`;
+}
+
+function getDisplaySetNumber(value) {
+  const parsed = parseInteger(value);
+  return Number.isFinite(parsed) && parsed > 0 && parsed < WARMUP_SET_NUMBER_OFFSET ? parsed : 1;
 }
 
 function formatPrLabel(key) {
@@ -1435,7 +1584,9 @@ function validateSetForm(form, activeWorkoutSession) {
 
   if (!activeWorkoutSession) return 'Select or start a workout session first.';
   if (!form.exercise.trim()) return 'Exercise is required.';
+  if (typeof form.is_warmup !== 'boolean') return 'Warmup must be true or false.';
   if (!Number.isFinite(setNumber) || setNumber <= 0) return 'Set number must be greater than 0.';
+  if (!form.is_warmup && setNumber >= WARMUP_SET_NUMBER_OFFSET) return 'Working set number is invalid.';
   if (!Number.isFinite(weight) || weight < 0) return 'Weight must be 0 or greater.';
   if (!Number.isInteger(reps) || reps <= 0) return 'Reps must be a positive whole number.';
   if (!Number.isFinite(rpe) || rpe < 0 || rpe > 10) return 'RPE must be between 0 and 10.';

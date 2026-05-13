@@ -19,6 +19,7 @@ create table if not exists public.workout_sets (
   workout_id uuid not null,
   exercise text not null,
   set_number integer not null check (set_number > 0),
+  is_warmup boolean not null default false,
   weight numeric(7,2) not null check (weight >= 0),
   reps integer not null check (reps > 0),
   rpe numeric(3,1) not null check (rpe >= 0 and rpe <= 10),
@@ -115,6 +116,7 @@ alter table public.workout_sets add column if not exists set_number integer;
 alter table public.workout_sets alter column set_number set default 1;
 update public.workout_sets set set_number = 1 where set_number is null;
 alter table public.workout_sets alter column set_number set not null;
+alter table public.workout_sets add column if not exists is_warmup boolean not null default false;
 
 alter table public.health_logs add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.health_logs alter column user_id set default auth.uid();

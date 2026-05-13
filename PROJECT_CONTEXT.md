@@ -1,8 +1,8 @@
 # LifeOS Project Context
 
-Last updated: 2026-05-12
+Last updated: 2026-05-13
 Current branch: `main`
-Recent context: Health tab now focuses on measurable daily tracking with counters and ADC.
+Recent context: Workout sets now support warmup rows that display as `W` and are excluded from working analytics.
 
 ## Project Goal
 
@@ -277,11 +277,13 @@ Current behavior:
 - Ended sessions can be reopened from Session Control, which sets `ended_at` back to `null`.
 - Deleting a session requires confirmation and cascades sets through the database relationship.
 - Sets belong to workout sessions.
-- Sets include exercise, set number, weight, reps, RPE, performed date/time, and notes.
-- Next set number is automatic based on selected session plus exercise.
+- Sets include exercise, set number, warmup flag, weight, reps, RPE, performed date/time, and notes.
+- Warmup sets are stored in `workout_sets.is_warmup`, display as repeated `W` rows before working sets, and do not increment the next working set number.
+- Next working set number is automatic based on selected session plus exercise and ignores warmups.
 - Weight and RPE parsing accepts both comma and dot decimals.
 - Validation runs before insert/update for exercise, weight, reps, RPE, and date.
 - Today's active session sets are shown immediately under the logger, grouped by exercise.
+- Active session logs keep exercises ordered by first logged, with sets displayed as warmups first, then Set 1, Set 2, Set 3.
 - Other sessions are kept visually separate/collapsed in history.
 - Persisted workout data is visually separated from mock sample data.
 - Login/register controls are intentionally absent from the Workout tab.
@@ -293,6 +295,7 @@ Workout analytics are frontend-only:
 - PR detection for weight PR, reps PR, set volume PR, and session-volume PR.
 - Estimated 1RM uses the Epley formula: `weight * (1 + reps / 30)`.
 - Exercise History groups persisted sets by exercise and shows progression over time, including total session volume and best estimated 1RM trend.
+- Warmup sets are excluded from PR detection, previous performance, estimated 1RM trends, exercise volume, and active working volume.
 
 Rest timer status:
 

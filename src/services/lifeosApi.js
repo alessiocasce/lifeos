@@ -28,6 +28,7 @@ const workoutSelect = `
     workout_id,
     exercise,
     set_number,
+    is_warmup,
     weight,
     reps,
     rpe,
@@ -175,6 +176,7 @@ export const workoutSetApi = {
           workout_id: payload.workout_id,
           exercise: payload.exercise,
           set_number: Number(payload.set_number),
+          is_warmup: Boolean(payload.is_warmup),
           weight: Number(payload.weight),
           reps: Number(payload.reps),
           rpe: Number(payload.rpe),
@@ -182,7 +184,7 @@ export const workoutSetApi = {
           notes: payload.notes || null,
         })
         .select(
-          'id, user_id, workout_id, exercise, set_number, weight, reps, rpe, performed_at, notes, created_at, updated_at',
+          'id, user_id, workout_id, exercise, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
         )
         .single(),
     );
@@ -192,10 +194,10 @@ export const workoutSetApi = {
     return throwIfError(
       await requireSupabase()
         .from('workout_sets')
-        .update(patch)
+        .update(prepareWorkoutSetPayload(patch))
         .eq('id', id)
         .select(
-          'id, user_id, workout_id, exercise, set_number, weight, reps, rpe, performed_at, notes, created_at, updated_at',
+          'id, user_id, workout_id, exercise, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
         )
         .single(),
     );
@@ -415,6 +417,15 @@ function prepareExpensePayload(payload) {
   );
 }
 
+function prepareWorkoutSetPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      is_warmup: payload.is_warmup === undefined ? undefined : Boolean(payload.is_warmup),
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
 function prepareCalendarEventPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
@@ -434,9 +445,17 @@ function normalizeWorkouts(rows = []) {
 function normalizeWorkout(row) {
   return {
     ...row,
-    workout_sets: [...(row.workout_sets ?? [])].sort((a, b) => {
-      if (a.performed_at !== b.performed_at) return new Date(b.performed_at) - new Date(a.performed_at);
-      return Number(a.set_number) - Number(b.set_number);
-    }),
+    workout_sets: [...(row.workout_sets ?? [])]
+      .map((set) => ({ ...set, is_warmup: Boolean(set.is_warmup) }))
+      .sort(compareWorkoutSetOrder),
   };
+}
+
+function compareWorkoutSetOrder(a, b) {
+  const aTime = new Date(a.performed_at ?? a.created_at ?? 0).getTime();
+  const bTime = new Date(b.performed_at ?? b.created_at ?? 0).getTime();
+  if (aTime !== bTime) return aTime - bTime;
+  if (Boolean(a.is_warmup) !== Boolean(b.is_warmup)) return Boolean(a.is_warmup) ? -1 : 1;
+  if (Number(a.set_number) !== Number(b.set_number)) return Number(a.set_number) - Number(b.set_number);
+  return String(a.id).localeCompare(String(b.id));
 }
