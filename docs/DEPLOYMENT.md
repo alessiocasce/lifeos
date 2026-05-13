@@ -1,6 +1,6 @@
 # LifeOS Deployment Guide
 
-Use this guide to deploy LifeOS against a real Supabase project before adding AI or external API automation.
+Use this guide to deploy LifeOS against a real Supabase project before adding AI automation.
 
 ## Required Environment Variables
 
@@ -14,6 +14,25 @@ VITE_SUPABASE_ANON_KEY=your-anon-public-key
 Only use the Supabase anon public key in the frontend. Do not add Supabase service-role keys or other private API keys to this repo or to Vite client variables.
 
 If these variables are missing, the app should show the existing Supabase setup/config screen instead of rendering the LifeOS shell.
+
+## Server-Only Action API Variables
+
+The Vercel Action API uses server-only environment variables:
+
+```env
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+LIFEOS_ACTION_TOKEN=your-long-random-token
+LIFEOS_ACTION_USER_ID=target-auth-user-uuid
+```
+
+Do not add `SUPABASE_SERVICE_ROLE_KEY` to frontend code or any `VITE_` variable. The service-role key is only for files under `/api`.
+
+`LIFEOS_ACTION_TOKEN` should be long, random, and stored only in Vercel and trusted clients such as iPhone Shortcuts. `LIFEOS_ACTION_USER_ID` is the Supabase Auth user UUID that action calls write records for.
+
+Redeploy after changing any Vercel environment variable.
+
+See `docs/ACTION_API.md` for endpoint examples and iPhone Shortcuts setup.
 
 ## Apply Supabase Schema
 
@@ -66,6 +85,7 @@ dist
 4. Add environment variables:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - Action API server variables are Vercel-only for now; Netlify functions are not configured in this repo.
 5. Deploy.
 
 ## Deploy On Vercel
@@ -87,6 +107,10 @@ dist
 5. Add environment variables:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `LIFEOS_ACTION_TOKEN`
+   - `LIFEOS_ACTION_USER_ID`
 6. Deploy.
 
 ## iPhone Live QA
@@ -107,4 +131,5 @@ dist
 
 - Run `npm run build` before every deploy claim.
 - Apply `supabase/schema.sql` before live QA.
-- Do not proceed to AI, chat automation, Google Calendar sync, or other external APIs until the deployed Supabase-backed workflows pass live QA.
+- Run `docs/ACTION_API.md` manual QA before relying on iPhone Shortcuts automation.
+- Do not proceed to AI, chat automation, or Google Calendar sync until the deployed Supabase-backed workflows and Action API pass live QA.

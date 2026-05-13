@@ -46,8 +46,10 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+- `api/actions/` contains token-protected Vercel Serverless Functions for external automation. These are server-only and use `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
 - `src/data/lifeosData.js` contains remaining local mock data for legacy/unconverted surfaces, but the real Workout tab no longer displays a mock workout archive.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
+- Action API docs live in `docs/ACTION_API.md`.
 - Focused Workout QA, including warmup behavior, lives in `docs/QA_WORKOUT.md`.
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
@@ -65,6 +67,17 @@ Supabase is configured through `.env.local`:
 VITE_SUPABASE_URL=...
 VITE_SUPABASE_ANON_KEY=...
 ```
+
+Vercel Action API server functions use server-only env vars:
+
+```env
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+LIFEOS_ACTION_TOKEN=...
+LIFEOS_ACTION_USER_ID=...
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
 
 The schema is in `supabase/schema.sql`.
 
@@ -120,6 +133,10 @@ Real/persisted today:
 - Calendar tab creates, edits, deletes, and groups persisted user-scoped events by date/week.
 - Daily reviews persisted in `daily_reviews`.
 - Assistant tab is currently a real Daily Review workflow, not AI chat.
+- Token-protected Action API endpoints for external automation:
+  - `POST /api/actions/expense`
+  - `POST /api/actions/health`
+  - `POST /api/actions/calendar`
 
 Partially wired but not fully used in UI:
 
@@ -130,6 +147,20 @@ Still mostly mock/local:
 
 - Chat messages and AI assistant behavior; no fake AI chat is shown in the Assistant tab.
 - The real Workout tab no longer displays mock workout examples or archives.
+
+## Action API Current Status
+
+The Action API is a minimal Vercel Serverless API for iPhone Shortcuts or other trusted external tools.
+
+Current behavior:
+
+- Requires `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` on every request.
+- Returns `401` for missing or incorrect tokens.
+- Uses `SUPABASE_SERVICE_ROLE_KEY` only inside `/api` serverless functions.
+- Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
+- Supports creating expenses, upserting partial daily health logs, and creating calendar events.
+- Does not implement AI, chat behavior, external model calls, or frontend UI changes.
+- Must be live-tested after setting Vercel env vars; local curl tests require the same server-only env vars.
 
 ## Calendar Module Current Status
 
@@ -405,6 +436,10 @@ Workout mobile direction:
   - Confirm iPhone Safari has no horizontal overflow and controls remain thumb-friendly.
 - Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
+- Run `docs/ACTION_API.md` manual QA after deploying Action API env vars:
+  - Unauthorized requests return `401`.
+  - Invalid payloads return clear `400` errors.
+  - Expense, Health, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template CRUD/start flow, warmup display/edit transitions, and analytics exclusion.
 - Test Workout templates after applying the latest `workout_templates` and `workout_template_exercises` schema migration.
@@ -435,8 +470,9 @@ Workout mobile direction:
 6. Harden the Daily Review workflow against a real Supabase project.
 7. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
 8. Deploy the app and complete live iPhone QA against the real Supabase project.
-9. Convert Chat Messages only after the assistant behavior is clearly defined and live QA has passed.
-10. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+9. Live-test Action API calls from iPhone Shortcuts before relying on external automation.
+10. Convert Chat Messages only after the assistant behavior is clearly defined and live QA has passed.
+11. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 
