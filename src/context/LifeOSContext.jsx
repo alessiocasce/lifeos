@@ -19,6 +19,8 @@ import {
   healthLogApi,
   workoutApi,
   workoutSetApi,
+  workoutTemplateApi,
+  workoutTemplateExerciseApi,
 } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
@@ -43,6 +45,9 @@ export function LifeOSProvider({ children }) {
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [workoutSessionsStatus, setWorkoutSessionsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [workoutSessionsError, setWorkoutSessionsError] = useState('');
+  const [workoutTemplates, setWorkoutTemplates] = useState([]);
+  const [workoutTemplatesStatus, setWorkoutTemplatesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [workoutTemplatesError, setWorkoutTemplatesError] = useState('');
   const [healthLogs, setHealthLogs] = useState([]);
   const [healthLogsStatus, setHealthLogsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [healthLogsError, setHealthLogsError] = useState('');
@@ -66,6 +71,9 @@ export function LifeOSProvider({ children }) {
     setActiveWorkoutId(null);
     setWorkoutSessionsError('');
     setWorkoutSessionsStatus(status);
+    setWorkoutTemplates([]);
+    setWorkoutTemplatesError('');
+    setWorkoutTemplatesStatus(status);
     setHealthLogs([]);
     setHealth(initialHealth);
     setHealthLogsError('');
@@ -150,7 +158,7 @@ export function LifeOSProvider({ children }) {
       setActiveWorkoutId((currentId) => {
         if (currentId && rows.some((session) => session.id === currentId)) return currentId;
         const todaysSession = rows.find((session) => session.performed_on === new Date().toISOString().slice(0, 10));
-        return todaysSession?.id ?? rows[0]?.id ?? null;
+        return todaysSession?.id ?? null;
       });
       setWorkoutSessionsStatus('ready');
     } catch (error) {
@@ -162,6 +170,35 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadWorkoutSessions();
   }, [loadWorkoutSessions]);
+
+  const loadWorkoutTemplates = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setWorkoutTemplatesStatus('not-configured');
+      return;
+    }
+
+    if (!authUser) {
+      setWorkoutTemplates([]);
+      setWorkoutTemplatesStatus('no-session');
+      return;
+    }
+
+    setWorkoutTemplatesStatus('loading');
+    setWorkoutTemplatesError('');
+    try {
+      const rows = await workoutTemplateApi.list();
+      if (lastAuthUserId.current !== authUser.id) return;
+      setWorkoutTemplates(sortWorkoutTemplates(rows ?? []));
+      setWorkoutTemplatesStatus('ready');
+    } catch (error) {
+      setWorkoutTemplatesError(error.message || 'Failed to load workout templates.');
+      setWorkoutTemplatesStatus('error');
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadWorkoutTemplates();
+  }, [loadWorkoutTemplates]);
 
   const loadHealthLogs = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -423,7 +460,7 @@ export function LifeOSProvider({ children }) {
         const remaining = workoutSessions.filter((session) => session.id !== id);
         setWorkoutSessions(remaining);
         if (activeWorkoutId === id) {
-          setActiveWorkoutId(remaining[0]?.id ?? null);
+          setActiveWorkoutId(remaining.find((session) => session.performed_on === today())?.id ?? null);
         }
       },
       createWorkoutSet: async (payload) => {
@@ -469,6 +506,103 @@ export function LifeOSProvider({ children }) {
             workout_sets: (session.workout_sets ?? []).filter((set) => set.id !== id),
           })),
         );
+      },
+      reloadWorkoutTemplates: loadWorkoutTemplates,
+      createWorkoutTemplate: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before creating a workout template.');
+        }
+        setWorkoutTemplatesError('');
+        const created = await workoutTemplateApi.create(normalizeWorkoutTemplatePayload(payload));
+        setWorkoutTemplates((prev) => sortWorkoutTemplates([created, ...prev]));
+        setWorkoutTemplatesStatus('ready');
+        return created;
+      },
+      updateWorkoutTemplate: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating a workout template.');
+        }
+        setWorkoutTemplatesError('');
+        const updated = await workoutTemplateApi.update(id, normalizeWorkoutTemplatePayload(patch));
+        setWorkoutTemplates((prev) => sortWorkoutTemplates(prev.map((template) => (template.id === id ? updated : template))));
+        setWorkoutTemplatesStatus('ready');
+        return updated;
+      },
+      deleteWorkoutTemplate: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting a workout template.');
+        }
+        setWorkoutTemplatesError('');
+        await workoutTemplateApi.delete(id);
+        setWorkoutTemplates((prev) => prev.filter((template) => template.id !== id));
+        setWorkoutTemplatesStatus('ready');
+      },
+      createWorkoutTemplateExercise: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before adding a template exercise.');
+        }
+        setWorkoutTemplatesError('');
+        const created = await workoutTemplateExerciseApi.create({
+          ...normalizeWorkoutTemplateExercisePayload(payload),
+          template_id: payload.template_id,
+        });
+        setWorkoutTemplates((prev) => updateTemplateExercises(prev, created.template_id, (exercises) => sortWorkoutTemplateExercises([...exercises, created])));
+        setWorkoutTemplatesStatus('ready');
+        return created;
+      },
+      updateWorkoutTemplateExercise: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating a template exercise.');
+        }
+        setWorkoutTemplatesError('');
+        const updated = await workoutTemplateExerciseApi.update(id, normalizeWorkoutTemplateExercisePayload(patch));
+        setWorkoutTemplates((prev) =>
+          updateTemplateExercises(prev, updated.template_id, (exercises) =>
+            sortWorkoutTemplateExercises(exercises.map((exercise) => (exercise.id === id ? updated : exercise))),
+          ),
+        );
+        setWorkoutTemplatesStatus('ready');
+        return updated;
+      },
+      deleteWorkoutTemplateExercise: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting a template exercise.');
+        }
+        const template = workoutTemplates.find((item) => (item.workout_template_exercises ?? []).some((exercise) => exercise.id === id));
+        setWorkoutTemplatesError('');
+        await workoutTemplateExerciseApi.delete(id);
+        if (template) {
+          setWorkoutTemplates((prev) =>
+            updateTemplateExercises(prev, template.id, (exercises) => exercises.filter((exercise) => exercise.id !== id)),
+          );
+        }
+        setWorkoutTemplatesStatus('ready');
+      },
+      reorderWorkoutTemplateExercise: async (templateId, exerciseId, direction) => {
+        if (!authUser) {
+          throw new Error('Sign in before reordering template exercises.');
+        }
+        const template = workoutTemplates.find((item) => item.id === templateId);
+        const exercises = sortWorkoutTemplateExercises(template?.workout_template_exercises ?? []);
+        const index = exercises.findIndex((exercise) => exercise.id === exerciseId);
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (!template || index < 0 || targetIndex < 0 || targetIndex >= exercises.length) return exercises[index] ?? null;
+
+        const reordered = exercises.map((exercise) => ({ ...exercise }));
+        const [moved] = reordered.splice(index, 1);
+        reordered.splice(targetIndex, 0, moved);
+        const updates = reordered.map((exercise, orderIndex) => ({ id: exercise.id, exercise_order: orderIndex + 1 }));
+
+        setWorkoutTemplatesError('');
+        const updatedRows = await workoutTemplateExerciseApi.reorder(updates);
+        const updatedById = new Map(updatedRows.map((exercise) => [exercise.id, exercise]));
+        setWorkoutTemplates((prev) =>
+          updateTemplateExercises(prev, templateId, (current) =>
+            sortWorkoutTemplateExercises(current.map((exercise) => updatedById.get(exercise.id) ?? exercise)),
+          ),
+        );
+        setWorkoutTemplatesStatus('ready');
+        return updatedRows;
       },
       reloadHealthLogs: loadHealthLogs,
       saveHealthLog: async (payload) => {
@@ -625,7 +759,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, workoutSessions],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, loadWorkoutTemplates, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -668,6 +802,9 @@ export function LifeOSProvider({ children }) {
     workoutSessions,
     workoutSessionsError,
     workoutSessionsStatus,
+    workoutTemplates,
+    workoutTemplatesError,
+    workoutTemplatesStatus,
     workoutSetsError: workoutSessionsError,
     workoutSetsStatus: workoutSessionsStatus,
     workoutStatus,
@@ -710,6 +847,35 @@ function sortWorkoutSets(rows = []) {
   return rows.slice().sort(compareWorkoutSets);
 }
 
+function sortWorkoutTemplates(rows = []) {
+  return rows
+    .map((template) => ({
+      ...template,
+      workout_template_exercises: sortWorkoutTemplateExercises(template.workout_template_exercises ?? []),
+    }))
+    .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
+}
+
+function sortWorkoutTemplateExercises(rows = []) {
+  return rows.slice().sort((a, b) => {
+    if (Number(a.exercise_order) !== Number(b.exercise_order)) return Number(a.exercise_order) - Number(b.exercise_order);
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function updateTemplateExercises(templates, templateId, updater) {
+  return sortWorkoutTemplates(
+    templates.map((template) =>
+      template.id === templateId
+        ? {
+            ...template,
+            workout_template_exercises: updater(template.workout_template_exercises ?? []),
+          }
+        : template,
+    ),
+  );
+}
+
 function compareWorkoutSets(a, b) {
   const aTime = new Date(a.performed_at ?? a.created_at ?? 0).getTime();
   const bTime = new Date(b.performed_at ?? b.created_at ?? 0).getTime();
@@ -748,6 +914,21 @@ function normalizeExpensePayload(payload) {
     spent_on: payload.spent_on,
     notes: payload.notes?.trim() || null,
   };
+}
+
+function normalizeWorkoutTemplatePayload(payload) {
+  const normalized = {};
+  if ('name' in payload) normalized.name = payload.name?.trim();
+  if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  return normalized;
+}
+
+function normalizeWorkoutTemplateExercisePayload(payload) {
+  const normalized = {};
+  if ('exercise' in payload) normalized.exercise = payload.exercise?.trim();
+  if ('exercise_order' in payload) normalized.exercise_order = Math.max(1, integerOrZero(payload.exercise_order));
+  if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  return normalized;
 }
 
 function normalizeCalendarEventPayload(payload) {

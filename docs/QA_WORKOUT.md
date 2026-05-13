@@ -5,26 +5,44 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 ## Session Flow
 
 1. Open Workout.
-2. Select/start today's session.
-3. Use `Start Named Session` and confirm the helper text explains that templates will come later.
-4. End the session and confirm logging/editing is blocked.
-5. Reopen the session and confirm logging/editing works again.
-6. Delete a session and confirm the confirmation step appears before deletion.
+2. Confirm the primary prompt asks what you are training today.
+3. Confirm the old `Start From Previous` UI is gone.
+4. Start a template workout or start an empty workout.
+5. End the session and confirm logging/editing is blocked.
+6. Reopen the session and confirm logging/editing works again.
+7. Open `Advanced / Switch Session` and confirm active session switching still works.
+8. Open `Advanced / Danger`, delete a session, and confirm the confirmation step appears before deletion.
 
-## Start From Previous
+## Workout Templates
 
-1. Complete or use an older session with multiple exercises, warmups, weights, reps, RPE, and notes.
-2. In Session Control, use `Start From Previous`.
-3. Confirm `Start From This` creates a new session for today with the previous session name.
-4. If today's sessions already include the same name, confirm the new session gets a suffix such as `Push Day A #2`.
-5. Confirm previous sets appear as draft target rows in `Today Plan`.
-6. Confirm target rows do not create completed `workout_sets` automatically.
-7. Confirm warmup targets display as `W` and working targets display as `Set 1`, `Set 2`, `Set 3`.
-8. Tap a target row and confirm it fills exercise, warmup status, weight, reps, RPE, and notes in the logger.
-9. Change target values before saving and confirm the saved set uses the edited values.
-10. Save the target and confirm it is marked `LOGGED`.
-11. Confirm the next unlogged target preloads when available.
-12. Confirm unsaved targets do not affect volume, PR tags, previous performance, estimated 1RM, or Exercise History.
+1. Open `Manage Templates`.
+2. Create a template such as `Chest Day`.
+3. Add ordered exercises such as `Cable Fly`, `Incline Bench Press`, and `Bench Press`.
+4. Reorder exercises with up/down controls and confirm the order persists after refresh.
+5. Edit the template name and confirm the updated name persists.
+6. Edit an exercise name and confirm it persists.
+7. Delete an exercise and confirm it is removed.
+8. Delete a template and confirm its exercises disappear with it.
+9. Confirm another user cannot see the template or exercises.
+
+## Start From Template
+
+1. With no active session selected, start a workout from a saved template.
+2. Confirm the new session is named after the template.
+3. If today's sessions already include the same name, confirm the new session gets a suffix such as `Chest Day #2`.
+4. Confirm no `workout_sets` are created automatically.
+5. Confirm `Exercise Plan` shows only ordered exercise names, not weights/reps/RPE targets.
+6. Tap an exercise in `Exercise Plan` and confirm it fills the logger Exercise input.
+7. Log warmups and working sets normally.
+8. Confirm Previous Performance still uses persisted historical sets for the selected exercise.
+9. Confirm unsaved template exercises do not affect volume, PR tags, previous performance, estimated 1RM, or Exercise History.
+
+## Start Empty Workout
+
+1. With no active session selected, open `Start Empty Workout`.
+2. Keep `Today Workout` or enter a custom name.
+3. Start the session and confirm no `Exercise Plan` appears.
+4. Type exercises manually and log sets normally.
 
 ## Normal Set CRUD
 
@@ -77,8 +95,12 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 ## Mobile / iPhone
 
 1. Open Workout on iPhone Safari.
-2. Confirm the Warmup toggle is thumb-friendly.
-3. Confirm Save Set / Save Warmup remains visible above the bottom nav.
-4. Confirm inputs do not zoom when focused.
-5. Confirm the current session log has no horizontal overflow.
-6. Confirm expanded session history remains readable.
+2. Confirm choosing a template or starting empty is the first obvious action when no session is active.
+3. Confirm `Manage Templates`, `Advanced / Switch Session`, and `Advanced / Danger` are collapsed by default.
+4. Confirm template start buttons are thumb-friendly.
+5. Confirm tapping an exercise plan row is thumb-friendly.
+6. Confirm the Warmup toggle is thumb-friendly.
+7. Confirm Save Set / Save Warmup remains visible above the bottom nav.
+8. Confirm inputs do not zoom when focused.
+9. Confirm the current session log has no horizontal overflow.
+10. Confirm expanded session history remains readable.

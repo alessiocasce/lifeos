@@ -25,20 +25,30 @@ export function WorkoutTab() {
   const {
     activeWorkoutId,
     activeWorkoutSession,
+    createWorkoutTemplate,
+    createWorkoutTemplateExercise,
     createWorkoutSession,
     createWorkoutSet,
+    deleteWorkoutTemplate,
+    deleteWorkoutTemplateExercise,
     deleteWorkoutSession,
     deleteWorkoutSet,
     endWorkoutSession,
     expandedWorkout,
+    reorderWorkoutTemplateExercise,
     setActiveWorkoutId,
     setExpandedWorkout,
+    updateWorkoutTemplate,
+    updateWorkoutTemplateExercise,
     updateWorkoutSession,
     updateWorkoutSet,
     workout,
     workoutSessions,
     workoutSessionsError,
     workoutSessionsStatus,
+    workoutTemplates,
+    workoutTemplatesError,
+    workoutTemplatesStatus,
   } = useLifeOS();
 
   const [sessionForm, setSessionForm] = useState({ name: 'Today Workout', performed_on: today, notes: '' });
@@ -69,9 +79,8 @@ export function WorkoutTab() {
   const [formError, setFormError] = useState('');
   const [restElapsedSeconds, setRestElapsedSeconds] = useState(0);
   const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
-  const [workoutPlan, setWorkoutPlan] = useState(null);
-  const [selectedPlanTargetId, setSelectedPlanTargetId] = useState(null);
-  const [startingFromSessionId, setStartingFromSessionId] = useState(null);
+  const [templatePlan, setTemplatePlan] = useState(null);
+  const [startingTemplateId, setStartingTemplateId] = useState(null);
 
   const activeSetCounts = getSessionSetCounts(activeWorkoutSession);
   const activeVolume = getSessionVolume(activeWorkoutSession);
@@ -89,7 +98,7 @@ export function WorkoutTab() {
     () => getNextSetNumber(activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise],
   );
-  const visibleWorkoutPlan = workoutPlan?.sessionId === activeWorkoutSession?.id ? workoutPlan : null;
+  const visibleTemplatePlan = templatePlan?.sessionId === activeWorkoutSession?.id ? templatePlan : null;
   const draftPrs = useMemo(() => {
     if (setForm.is_warmup) {
       return { setVolume: false, sessionVolume: false, weight: false, reps: false };
@@ -121,22 +130,6 @@ export function WorkoutTab() {
   }, [activeWorkoutSession]);
 
   useEffect(() => {
-    if (!workoutPlan || workoutPlan.sessionId !== activeWorkoutSession?.id) return;
-    const loggedSetIds = new Set((activeWorkoutSession.workout_sets ?? []).map((set) => set.id));
-    setWorkoutPlan((prev) => {
-      if (!prev || prev.sessionId !== activeWorkoutSession.id) return prev;
-      let changed = false;
-      const targets = prev.targets.map((target) => {
-        const logged = target.loggedSetId ? loggedSetIds.has(target.loggedSetId) : target.logged;
-        if (logged === target.logged) return target;
-        changed = true;
-        return { ...target, logged };
-      });
-      return changed ? { ...prev, targets } : prev;
-    });
-  }, [activeWorkoutSession, workoutPlan?.sessionId]);
-
-  useEffect(() => {
     if (!activeWorkoutSession || activeWorkoutSession.ended_at || !isRestTimerRunning) return undefined;
     const interval = window.setInterval(() => {
       setRestElapsedSeconds((seconds) => seconds + 1);
@@ -166,6 +159,7 @@ export function WorkoutTab() {
         started_at: new Date().toISOString(),
         notes: sessionForm.notes.trim(),
       });
+      setTemplatePlan(null);
       setShowCustomSession(false);
     } catch (error) {
       setFormError(error.message || 'Failed to start workout session.');
@@ -190,6 +184,7 @@ export function WorkoutTab() {
         started_at: new Date().toISOString(),
         notes: sessionForm.notes.trim(),
       });
+      setTemplatePlan(null);
     } catch (error) {
       setFormError(error.message || 'Failed to start today workout.');
     } finally {
@@ -197,56 +192,44 @@ export function WorkoutTab() {
     }
   };
 
-  const fillLoggerFromTarget = (target, session = activeWorkoutSession) => {
-    if (!target) return;
-    setSelectedPlanTargetId(target.id);
+  const fillLoggerFromTemplateExercise = (exercise, session = activeWorkoutSession) => {
+    if (!exercise) return;
     setSetForm((prev) => ({
       ...prev,
-      exercise: target.exercise,
-      set_number: target.is_warmup
-        ? getNextWarmupSetNumber(session, target.exercise)
-        : getNextSetNumber(session, target.exercise),
-      weight: toInputNumber(target.weight),
-      reps: toInputNumber(target.reps),
-      rpe: toInputNumber(target.rpe),
-      is_warmup: Boolean(target.is_warmup),
+      exercise: exercise.exercise,
+      set_number: prev.is_warmup
+        ? getNextWarmupSetNumber(session, exercise.exercise)
+        : getNextSetNumber(session, exercise.exercise),
       date: today,
-      notes: target.notes ?? '',
     }));
   };
 
-  const startFromPreviousSession = async (sourceSessionId) => {
-    const sourceSession = workoutSessions.find((session) => session.id === sourceSessionId);
-    if (!sourceSession) return;
+  const startFromTemplate = async (templateId) => {
+    const template = workoutTemplates.find((item) => item.id === templateId);
+    if (!template) return;
 
     setFormError('');
-    setStartingFromSessionId(sourceSessionId);
+    setStartingTemplateId(templateId);
     try {
       const created = await createWorkoutSession({
-        name: getUniqueSessionName(sourceSession.name, todaysSessions),
+        name: getUniqueSessionName(template.name, todaysSessions),
         performed_on: today,
         started_at: new Date().toISOString(),
         notes: '',
       });
-      const targets = buildPlanTargetsFromSession(sourceSession);
-      setWorkoutPlan({
-        sourceSessionId: sourceSession.id,
-        sourceName: sourceSession.name,
-        sourceDate: sourceSession.performed_on,
+      const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
+      setTemplatePlan({
+        templateId: template.id,
+        templateName: template.name,
         sessionId: created.id,
         sessionName: created.name,
-        targets,
+        exercises,
       });
-      const firstTarget = targets.find((target) => !target.logged);
-      if (firstTarget) {
-        fillLoggerFromTarget(firstTarget, created);
-      } else {
-        setSelectedPlanTargetId(null);
-      }
+      if (exercises[0]) fillLoggerFromTemplateExercise(exercises[0], created);
     } catch (error) {
-      setFormError(error.message || 'Failed to start from previous session.');
+      setFormError(error.message || 'Failed to start from template.');
     } finally {
-      setStartingFromSessionId(null);
+      setStartingTemplateId(null);
     }
   };
 
@@ -268,7 +251,6 @@ export function WorkoutTab() {
     const weight = parseDecimal(setForm.weight);
     const reps = parseInteger(setForm.reps);
     const rpe = parseDecimal(setForm.rpe);
-    const selectedTarget = visibleWorkoutPlan?.targets.find((target) => target.id === selectedPlanTargetId && !target.logged);
 
     setSavingSet(true);
     try {
@@ -289,40 +271,14 @@ export function WorkoutTab() {
         ...activeWorkoutSession,
         workout_sets: [...(activeWorkoutSession.workout_sets ?? []), createdSet],
       };
-      if (selectedTarget) {
-        const nextTarget = getNextUnloggedPlanTarget(visibleWorkoutPlan.targets, selectedTarget.id);
-        setWorkoutPlan((prev) => {
-          if (!prev || prev.sessionId !== activeWorkoutSession.id) return prev;
-          return {
-            ...prev,
-            targets: prev.targets.map((target) =>
-              target.id === selectedTarget.id ? { ...target, logged: true, loggedSetId: createdSet.id } : target,
-            ),
-          };
-        });
-        if (nextTarget) {
-          fillLoggerFromTarget(nextTarget, projectedSession);
-        } else {
-          setSelectedPlanTargetId(null);
-          setSetForm((prev) => ({
-            ...prev,
-            set_number: prev.is_warmup
-              ? getNextWarmupSetNumber(projectedSession, prev.exercise)
-              : getNextSetNumber(projectedSession, prev.exercise),
-            reps: '',
-            notes: '',
-          }));
-        }
-      } else {
-        setSetForm((prev) => ({
-          ...prev,
-          set_number: prev.is_warmup
-            ? getNextWarmupSetNumber(projectedSession, prev.exercise)
-            : getNextSetNumber(projectedSession, prev.exercise),
-          reps: '',
-          notes: '',
-        }));
-      }
+      setSetForm((prev) => ({
+        ...prev,
+        set_number: prev.is_warmup
+          ? getNextWarmupSetNumber(projectedSession, prev.exercise)
+          : getNextSetNumber(projectedSession, prev.exercise),
+        reps: '',
+        notes: '',
+      }));
       setRestElapsedSeconds(0);
       setIsRestTimerRunning(true);
     } catch (error) {
@@ -462,10 +418,10 @@ export function WorkoutTab() {
 
       <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
         <div className="grid gap-3">
-          <TodayPlanCard
-            onSelectTarget={(target) => fillLoggerFromTarget(target)}
-            plan={visibleWorkoutPlan}
-            selectedTargetId={selectedPlanTargetId}
+          <TemplatePlanCard
+            activeExercise={setForm.exercise}
+            onSelectExercise={(exercise) => fillLoggerFromTemplateExercise(exercise)}
+            plan={visibleTemplatePlan}
           />
 
           <SetLogger
@@ -503,25 +459,35 @@ export function WorkoutTab() {
           activeWorkoutId={activeWorkoutId}
           deleteConfirmId={deleteConfirmId}
           deletingSessionId={deletingSessionId}
+          deleteWorkoutTemplate={deleteWorkoutTemplate}
+          deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
           endingSessionId={endingSessionId}
+          createWorkoutTemplate={createWorkoutTemplate}
+          createWorkoutTemplateExercise={createWorkoutTemplateExercise}
           onDeleteSession={removeSession}
           onEndSession={endSession}
           onReopenSession={reopenSession}
           onSelectToday={selectOrStartToday}
-          onStartFromPrevious={startFromPreviousSession}
+          onStartFromTemplate={startFromTemplate}
           onStartWorkout={startWorkout}
+          reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
           reopeningSessionId={reopeningSessionId}
           savingSession={savingSession}
           selectingToday={selectingToday}
           sessionForm={sessionForm}
-          startingFromSessionId={startingFromSessionId}
+          startingTemplateId={startingTemplateId}
           setActiveWorkoutId={setActiveWorkoutId}
           setSessionForm={setSessionForm}
           setShowCustomSession={setShowCustomSession}
           showCustomSession={showCustomSession}
+          updateWorkoutTemplate={updateWorkoutTemplate}
+          updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
           workoutSessions={workoutSessions}
           workoutSessionsError={workoutSessionsError}
           workoutSessionsStatus={workoutSessionsStatus}
+          workoutTemplates={workoutTemplates}
+          workoutTemplatesError={workoutTemplatesError}
+          workoutTemplatesStatus={workoutTemplatesStatus}
         />
       </div>
 
@@ -620,40 +586,51 @@ function ActiveWorkoutHeader({
 function SessionControlCard({
   activeSession,
   activeWorkoutId,
+  createWorkoutTemplate,
+  createWorkoutTemplateExercise,
   deleteConfirmId,
+  deleteWorkoutTemplate,
+  deleteWorkoutTemplateExercise,
   deletingSessionId,
   endingSessionId,
   onDeleteSession,
   onEndSession,
   onReopenSession,
   onSelectToday,
-  onStartFromPrevious,
+  onStartFromTemplate,
   onStartWorkout,
+  reorderWorkoutTemplateExercise,
   reopeningSessionId,
   savingSession,
   selectingToday,
   sessionForm,
-  startingFromSessionId,
+  startingTemplateId,
   setActiveWorkoutId,
   setSessionForm,
   setShowCustomSession,
   showCustomSession,
+  updateWorkoutTemplate,
+  updateWorkoutTemplateExercise,
   workoutSessions,
   workoutSessionsError,
   workoutSessionsStatus,
+  workoutTemplates,
+  workoutTemplatesError,
+  workoutTemplatesStatus,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const previousSessions = workoutSessions
-    .filter((session) => session.id !== activeWorkoutId)
-    .filter((session) => session.performed_on < today || session.ended_at)
-    .filter((session) => (session.workout_sets ?? []).length > 0)
-    .slice(0, 5);
+  const [manageTemplatesOpen, setManageTemplatesOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [dangerOpen, setDangerOpen] = useState(false);
+  const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
+  const activeCounts = getSessionSetCounts(activeSession);
+  const activeVolume = getSessionVolume(activeSession);
 
   return (
     <Panel className="h-fit">
       <PanelHeader
-        eyebrow="Session"
-        title="Control"
+        eyebrow="Workout"
+        title={activeSession ? 'Current Workout' : 'Start Workout'}
         right={<SourceStatus status={workoutSessionsStatus} />}
       />
       <button
@@ -661,131 +638,121 @@ function SessionControlCard({
         onClick={() => setMobileOpen((value) => !value)}
         className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
       >
-        <span>Session controls</span>
+        <span>{activeSession ? 'Current workout' : 'Start workout'}</span>
         <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
-        <button
-          type="button"
-          onClick={onSelectToday}
-          disabled={selectingToday}
-          className="flex w-full items-center justify-between rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-left text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-        >
-          <span>
-            <span className="block text-sm font-semibold">{selectingToday ? 'Syncing' : 'Select/start today'}</span>
-            <span className="data-text text-[10px] text-cyan-300/70">{today}</span>
-          </span>
-          {selectingToday ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-        </button>
-
-        <label className="block rounded-md border border-white/5 bg-black/25 p-2">
-          <span className="text-[10px] uppercase tracking-wider text-zinc-500">Active Session</span>
-          <select
-            value={activeWorkoutId ?? ''}
-            onChange={(event) => setActiveWorkoutId(event.target.value || null)}
-            disabled={!workoutSessions.length}
-            className="mt-1 w-full rounded border border-white/10 bg-black px-2 py-2 text-xs text-zinc-100 outline-none focus:border-cyan-400/40 disabled:text-zinc-600"
-          >
-            <option value="">No session selected</option>
-            {workoutSessions.map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.performed_on} / {session.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
         {activeSession ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-md border border-white/5 bg-black/25 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-zinc-100">{activeSession.name}</p>
+                <p className="data-text text-[10px] text-zinc-500">
+                  {activeSession.performed_on} / {activeCounts.working} working / {activeCounts.warmup} warmup
+                </p>
+              </div>
+              <Tag tone={activeSession.ended_at ? 'zinc' : 'emerald'}>{activeSession.ended_at ? 'ENDED' : 'LIVE'}</Tag>
+            </div>
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <MiniMetric label="Volume" value={Math.round(activeVolume).toLocaleString()} tone="text-emerald-300" sub="kg x reps" />
+              <MiniMetric label="Sets" value={`${activeCounts.working}/${activeCounts.warmup}`} tone="text-cyan-300" sub="work / warmup" />
+            </div>
             {activeSession.ended_at ? (
               <button
                 type="button"
                 onClick={() => onReopenSession(activeSession.id)}
                 disabled={reopeningSessionId === activeSession.id}
-                className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
               >
                 {reopeningSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                 Reopen Workout
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => onEndSession(activeSession.id)}
-                disabled={endingSessionId === activeSession.id}
-                className="flex h-9 items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-              >
-                {endingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-                End
-              </button>
-            )}
             <button
               type="button"
-              onClick={() => onDeleteSession(activeSession.id)}
-              disabled={deletingSessionId === activeSession.id}
-              className={`flex h-9 items-center justify-center gap-2 rounded-md border text-xs font-medium disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
-                deleteConfirmId === activeSession.id
-                  ? 'border-red-400/40 bg-red-400/20 text-red-200'
-                  : 'border-red-400/20 bg-red-400/10 text-red-300'
-              }`}
+              onClick={() => onEndSession(activeSession.id)}
+              disabled={endingSessionId === activeSession.id}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
             >
-              {deletingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              {deleteConfirmId === activeSession.id ? 'Confirm' : 'Delete'}
+              {endingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+              End Workout
             </button>
+            )}
           </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="rounded-md border border-cyan-400/10 bg-cyan-400/[0.04] p-2">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-cyan-200">What are you training today?</p>
+                  <p className="text-[11px] text-zinc-500">Start from a saved template or keep it blank.</p>
+                </div>
+                <ClipboardList size={15} className="shrink-0 text-cyan-300" />
+              </div>
+              {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? (
+                <LoadingCard label="Loading workout templates" />
+              ) : workoutTemplates.length ? (
+                <div className="grid gap-1.5">
+                  {workoutTemplates.map((template) => {
+                    const count = template.workout_template_exercises?.length ?? 0;
+                    return (
+                      <div key={template.id} className="grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-zinc-100">{template.name}</p>
+                          <p className="data-text text-[10px] text-zinc-500">{count} exercises</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onStartFromTemplate(template.id)}
+                          disabled={Boolean(startingTemplateId)}
+                          className="flex min-h-10 items-center justify-center gap-2 rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                        >
+                          {startingTemplateId === template.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                          Start
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="rounded border border-white/5 bg-[#121212] px-2 py-2 text-xs text-zinc-500">
+                  No templates yet. Create your first template or start empty.
+                </p>
+              )}
+              {workoutTemplatesError ? <p className="mt-2 data-text text-[11px] text-red-300">{workoutTemplatesError}</p> : null}
+            </div>
+
+            {todaysSessions.length ? (
+              <button
+                type="button"
+                onClick={onSelectToday}
+                disabled={selectingToday}
+                className="flex w-full items-center justify-between rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-left text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              >
+                <span>
+                  <span className="block text-sm font-semibold">{selectingToday ? 'Syncing' : "Continue Today's Workout"}</span>
+                  <span className="data-text text-[10px] text-cyan-300/70">{todaysSessions.length} today</span>
+                </span>
+                {selectingToday ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {!activeSession ? (
+          <button
+            type="button"
+            onClick={() => setShowCustomSession((value) => !value)}
+            className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-zinc-300"
+          >
+            Start Empty Workout
+          </button>
         ) : null}
 
-        <div className="rounded-md border border-white/5 bg-black/25 p-2">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Start From Previous</p>
-              <p className="text-[11px] text-zinc-600">Use prior sets as editable targets. Completed sets are not copied.</p>
-            </div>
-            <ClipboardList size={15} className="shrink-0 text-cyan-300" />
-          </div>
-          {previousSessions.length ? (
-            <div className="grid gap-1.5">
-              {previousSessions.map((session) => {
-                const counts = getSessionSetCounts(session);
-                return (
-                  <div key={session.id} className="grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-zinc-200">{session.name}</p>
-                      <p className="data-text text-[10px] text-zinc-500">
-                        {session.performed_on} / {counts.working} working / {counts.warmup} warmup
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onStartFromPrevious(session.id)}
-                      disabled={Boolean(startingFromSessionId)}
-                      className="flex min-h-9 items-center justify-center gap-2 rounded border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-xs font-medium text-cyan-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-                    >
-                      {startingFromSessionId === session.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                      Start From This
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="rounded border border-white/5 bg-[#121212] px-2 py-2 text-xs text-zinc-500">
-              No completed or past sessions with sets yet.
-            </p>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowCustomSession((value) => !value)}
-          className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-zinc-300"
-        >
-          Start Named Session
-        </button>
-
-        {showCustomSession ? (
+        {!activeSession && showCustomSession ? (
           <form onSubmit={onStartWorkout} className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2">
             <p className="text-xs text-zinc-500">
-              Session names help group workouts like Push Day A, Pull Day, Legs. Templates will come later.
+              Start without a template. You can keep the default name or set a custom one.
             </p>
             <CompactField label="Name" value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
             <CompactField label="Date" type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
@@ -801,90 +768,386 @@ function SessionControlCard({
           </form>
         ) : null}
 
+        <CollapsedSection
+          open={manageTemplatesOpen}
+          setOpen={setManageTemplatesOpen}
+          title="Manage Templates"
+        >
+          <TemplateManager
+            createWorkoutTemplate={createWorkoutTemplate}
+            createWorkoutTemplateExercise={createWorkoutTemplateExercise}
+            deleteWorkoutTemplate={deleteWorkoutTemplate}
+            deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
+            reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
+            updateWorkoutTemplate={updateWorkoutTemplate}
+            updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
+            workoutTemplates={workoutTemplates}
+            workoutTemplatesStatus={workoutTemplatesStatus}
+          />
+        </CollapsedSection>
+
+        <CollapsedSection
+          open={advancedOpen}
+          setOpen={setAdvancedOpen}
+          title="Advanced / Switch Session"
+        >
+          <label className="block rounded-md border border-white/5 bg-black/25 p-2">
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Active Session</span>
+            <select
+              value={activeWorkoutId ?? ''}
+              onChange={(event) => setActiveWorkoutId(event.target.value || null)}
+              disabled={!workoutSessions.length}
+              className="mt-1 w-full rounded border border-white/10 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-cyan-400/40 disabled:text-zinc-600 md:text-xs"
+            >
+              <option value="">No session selected</option>
+              {workoutSessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.performed_on} / {session.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </CollapsedSection>
+
+        {activeSession ? (
+          <CollapsedSection
+            open={dangerOpen}
+            setOpen={setDangerOpen}
+            title="Advanced / Danger"
+          >
+            <button
+              type="button"
+              onClick={() => onDeleteSession(activeSession.id)}
+              disabled={deletingSessionId === activeSession.id}
+              className={`flex h-10 w-full items-center justify-center gap-2 rounded-md border text-xs font-medium disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
+                deleteConfirmId === activeSession.id
+                  ? 'border-red-400/40 bg-red-400/20 text-red-200'
+                  : 'border-red-400/20 bg-red-400/10 text-red-300'
+              }`}
+            >
+              {deletingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              {deleteConfirmId === activeSession.id ? 'Confirm Delete Session' : 'Delete Session'}
+            </button>
+          </CollapsedSection>
+        ) : null}
+
         {workoutSessionsError ? <p className="data-text text-[11px] text-red-300">{workoutSessionsError}</p> : null}
       </div>
     </Panel>
   );
 }
 
-function TodayPlanCard({ onSelectTarget, plan, selectedTargetId }) {
+function CollapsedSection({ children, open, setOpen, title }) {
+  return (
+    <div className="rounded-md border border-white/5 bg-black/20">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-zinc-300"
+      >
+        <span>{title}</span>
+        <ChevronDown size={15} className={`text-zinc-500 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open ? <div className="space-y-2 border-t border-white/5 p-2">{children}</div> : null}
+    </div>
+  );
+}
+
+function TemplateManager({
+  createWorkoutTemplate,
+  createWorkoutTemplateExercise,
+  deleteWorkoutTemplate,
+  deleteWorkoutTemplateExercise,
+  reorderWorkoutTemplateExercise,
+  updateWorkoutTemplate,
+  updateWorkoutTemplateExercise,
+  workoutTemplates,
+  workoutTemplatesStatus,
+}) {
+  const [templateForm, setTemplateForm] = useState({ name: '', notes: '' });
+  const [templateLoading, setTemplateLoading] = useState('');
+  const [templateError, setTemplateError] = useState('');
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
+  const [templateEditForm, setTemplateEditForm] = useState({ name: '', notes: '' });
+  const [exerciseDrafts, setExerciseDrafts] = useState({});
+  const [editingExerciseId, setEditingExerciseId] = useState(null);
+  const [exerciseEditForm, setExerciseEditForm] = useState({ exercise: '', notes: '' });
+
+  const createTemplate = async (event) => {
+    event.preventDefault();
+    setTemplateError('');
+    if (!templateForm.name.trim()) {
+      setTemplateError('Template name is required.');
+      return;
+    }
+    setTemplateLoading('template-create');
+    try {
+      await createWorkoutTemplate(templateForm);
+      setTemplateForm({ name: '', notes: '' });
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to create template.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  const saveTemplate = async (templateId) => {
+    setTemplateError('');
+    if (!templateEditForm.name.trim()) {
+      setTemplateError('Template name is required.');
+      return;
+    }
+    setTemplateLoading(`template-${templateId}`);
+    try {
+      await updateWorkoutTemplate(templateId, templateEditForm);
+      setEditingTemplateId(null);
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to update template.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  const addExercise = async (template) => {
+    const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
+    setTemplateError('');
+    if (!draft.exercise.trim()) {
+      setTemplateError('Exercise name is required.');
+      return;
+    }
+    const nextOrder = Math.max(0, ...(template.workout_template_exercises ?? []).map((exercise) => Number(exercise.exercise_order) || 0)) + 1;
+    setTemplateLoading(`exercise-create-${template.id}`);
+    try {
+      await createWorkoutTemplateExercise({
+        template_id: template.id,
+        exercise: draft.exercise,
+        exercise_order: nextOrder,
+        notes: draft.notes,
+      });
+      setExerciseDrafts((prev) => ({ ...prev, [template.id]: { exercise: '', notes: '' } }));
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to add exercise.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  const saveExercise = async (exerciseId) => {
+    setTemplateError('');
+    if (!exerciseEditForm.exercise.trim()) {
+      setTemplateError('Exercise name is required.');
+      return;
+    }
+    setTemplateLoading(`exercise-${exerciseId}`);
+    try {
+      await updateWorkoutTemplateExercise(exerciseId, exerciseEditForm);
+      setEditingExerciseId(null);
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to update exercise.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  const removeTemplate = async (templateId) => {
+    setTemplateError('');
+    setTemplateLoading(`template-delete-${templateId}`);
+    try {
+      await deleteWorkoutTemplate(templateId);
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to delete template.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  const removeExercise = async (exerciseId) => {
+    setTemplateError('');
+    setTemplateLoading(`exercise-delete-${exerciseId}`);
+    try {
+      await deleteWorkoutTemplateExercise(exerciseId);
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to delete exercise.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  const moveExercise = async (templateId, exerciseId, direction) => {
+    setTemplateError('');
+    setTemplateLoading(`exercise-move-${exerciseId}`);
+    try {
+      await reorderWorkoutTemplateExercise(templateId, exerciseId, direction);
+    } catch (error) {
+      setTemplateError(error.message || 'Failed to reorder exercise.');
+    } finally {
+      setTemplateLoading('');
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <form onSubmit={createTemplate} className="grid gap-2 rounded-md border border-white/5 bg-[#121212] p-2">
+        <CompactField label="Template Name" value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
+        <CompactField label="Notes" value={templateForm.notes} onChange={(value) => setTemplateForm((prev) => ({ ...prev, notes: value }))} />
+        <button
+          type="submit"
+          disabled={templateLoading === 'template-create'}
+          className="flex h-9 items-center justify-center gap-2 rounded border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+        >
+          {templateLoading === 'template-create' ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          Create Template
+        </button>
+      </form>
+
+      {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? <LoadingCard label="Loading templates" /> : null}
+
+      <div className="grid gap-2">
+        {workoutTemplates.map((template) => {
+          const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
+          const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
+          return (
+            <div key={template.id} className="rounded-md border border-white/5 bg-black/25 p-2">
+              {editingTemplateId === template.id ? (
+                <div className="grid gap-2">
+                  <CompactField label="Template Name" value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
+                  <CompactField label="Notes" value={templateEditForm.notes} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, notes: value }))} />
+                  <div className="flex gap-1">
+                    <IconButton icon={Check} loading={templateLoading === `template-${template.id}`} onClick={() => saveTemplate(template.id)} title="Save template" tone="emerald" size="sm" />
+                    <IconButton icon={X} onClick={() => setEditingTemplateId(null)} title="Cancel" tone="zinc" size="sm" />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-zinc-100">{template.name}</p>
+                    <p className="data-text text-[10px] text-zinc-500">{exercises.length} exercises</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <IconButton
+                      icon={Pencil}
+                      onClick={() => {
+                        setEditingTemplateId(template.id);
+                        setTemplateEditForm({ name: template.name, notes: template.notes ?? '' });
+                      }}
+                      title="Edit template"
+                      tone="zinc"
+                      size="sm"
+                    />
+                    <IconButton icon={Trash2} loading={templateLoading === `template-delete-${template.id}`} onClick={() => removeTemplate(template.id)} title="Delete template" tone="red" size="sm" />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-2 grid gap-1">
+                {exercises.map((exercise, index) => (
+                  <div key={exercise.id} className="rounded border border-white/5 bg-[#121212] p-2">
+                    {editingExerciseId === exercise.id ? (
+                      <div className="grid gap-2">
+                        <CompactField label="Exercise" value={exerciseEditForm.exercise} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, exercise: value }))} />
+                        <CompactField label="Notes" value={exerciseEditForm.notes} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, notes: value }))} />
+                        <div className="flex gap-1">
+                          <IconButton icon={Check} loading={templateLoading === `exercise-${exercise.id}`} onClick={() => saveExercise(exercise.id)} title="Save exercise" tone="emerald" size="sm" />
+                          <IconButton icon={X} onClick={() => setEditingExerciseId(null)} title="Cancel" tone="zinc" size="sm" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2">
+                        <span className="data-text text-xs text-zinc-500">{index + 1}</span>
+                        <span className="truncate text-xs text-zinc-200">{exercise.exercise}</span>
+                        <div className="flex gap-1">
+                          <IconButton disabled={index === 0} icon={ChevronDown} className={index === 0 ? '' : 'rotate-180'} loading={templateLoading === `exercise-move-${exercise.id}`} onClick={() => moveExercise(template.id, exercise.id, 'up')} title="Move up" tone="zinc" size="sm" />
+                          <IconButton disabled={index === exercises.length - 1} icon={ChevronDown} loading={templateLoading === `exercise-move-${exercise.id}`} onClick={() => moveExercise(template.id, exercise.id, 'down')} title="Move down" tone="zinc" size="sm" />
+                          <IconButton
+                            icon={Pencil}
+                            onClick={() => {
+                              setEditingExerciseId(exercise.id);
+                              setExerciseEditForm({ exercise: exercise.exercise, notes: exercise.notes ?? '' });
+                            }}
+                            title="Edit exercise"
+                            tone="zinc"
+                            size="sm"
+                          />
+                          <IconButton icon={Trash2} loading={templateLoading === `exercise-delete-${exercise.id}`} onClick={() => removeExercise(exercise.id)} title="Delete exercise" tone="red" size="sm" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-2 grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
+                <CompactField label="Add Exercise" value={draft.exercise} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, exercise: value } }))} />
+                <CompactField label="Notes" value={draft.notes} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, notes: value } }))} />
+                <button
+                  type="button"
+                  onClick={() => addExercise(template)}
+                  disabled={templateLoading === `exercise-create-${template.id}`}
+                  className="flex h-9 items-center justify-center gap-2 rounded border border-cyan-400/20 bg-cyan-400/10 text-xs font-medium text-cyan-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                >
+                  {templateLoading === `exercise-create-${template.id}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  Add Exercise
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {templateError ? <p className="data-text text-[11px] text-red-300">{templateError}</p> : null}
+    </div>
+  );
+}
+
+function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
   const [mobileOpen, setMobileOpen] = useState(true);
 
   if (!plan) return null;
 
-  const groupedTargets = groupPlanTargetsByExercise(plan.targets);
-  const loggedCount = plan.targets.filter((target) => target.logged).length;
-
   return (
     <Panel>
       <PanelHeader
-        eyebrow="Draft Targets"
-        title="Today Plan"
-        right={<Tag tone="cyan">{loggedCount}/{plan.targets.length} logged</Tag>}
+        eyebrow="Template"
+        title="Exercise Plan"
+        right={<Tag tone="cyan">{plan.exercises.length} exercises</Tag>}
       />
       <button
         type="button"
         onClick={() => setMobileOpen((value) => !value)}
         className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
       >
-        <span>Targets from {plan.sourceName}</span>
+        <span>{plan.templateName}</span>
         <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
         <p className="text-xs text-zinc-500">
-          Based on {plan.sourceName} from {plan.sourceDate}. Tap a target to load it into the logger; nothing is saved until you press Save.
+          Tap an exercise to load it into the logger. The plan does not affect analytics until sets are saved.
         </p>
-        {plan.targets.length ? (
-          <div className="grid gap-2">
-            {Object.entries(groupedTargets).map(([exercise, targets]) => (
-              <div key={exercise} className="rounded-md border border-white/5 bg-black/25 p-2">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <p className="truncate text-xs font-semibold text-zinc-200">{exercise}</p>
-                  <span className="data-text shrink-0 text-[10px] text-zinc-600">
-                    {targets.filter((target) => target.logged).length}/{targets.length}
+        {plan.exercises.length ? (
+          <div className="grid gap-1">
+            {plan.exercises.map((exercise, index) => {
+              const selected = normalizeExercise(activeExercise) === normalizeExercise(exercise.exercise);
+              return (
+                <button
+                  key={exercise.id}
+                  type="button"
+                  onClick={() => onSelectExercise(exercise)}
+                  className={`grid min-h-10 grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 text-left transition ${
+                    selected ? 'border-cyan-400/30 bg-cyan-400/10 text-zinc-100' : 'border-white/5 bg-[#121212] text-zinc-300'
+                  }`}
+                >
+                  <span className="data-text text-xs text-zinc-500">{index + 1}</span>
+                  <span className="truncate text-sm font-medium">{exercise.exercise}</span>
+                  <span className={`data-text text-[10px] ${selected ? 'text-cyan-300' : 'text-zinc-600'}`}>
+                    {selected ? 'ACTIVE' : 'LOAD'}
                   </span>
-                </div>
-                <div className="grid gap-1">
-                  {targets.map((target) => {
-                    const selected = selectedTargetId === target.id;
-                    return (
-                      <button
-                        key={target.id}
-                        type="button"
-                        onClick={() => !target.logged && onSelectTarget(target)}
-                        disabled={target.logged}
-                        className={`grid min-h-10 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 text-left transition ${
-                          target.logged
-                            ? 'border-emerald-400/10 bg-emerald-400/[0.04] text-zinc-500'
-                            : selected
-                              ? 'border-cyan-400/30 bg-cyan-400/10 text-zinc-100'
-                              : target.is_warmup
-                                ? 'border-amber-400/10 bg-amber-400/[0.04] text-zinc-200'
-                                : 'border-white/5 bg-[#121212] text-zinc-200'
-                        }`}
-                      >
-                        <span className={`data-text text-xs font-bold ${target.is_warmup ? 'text-amber-300' : 'text-cyan-300'}`}>
-                          {target.label}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate data-text text-xs">
-                            {formatNumber(target.weight)}kg x {target.reps} @ {formatNumber(target.rpe)}
-                          </span>
-                          {target.notes ? <span className="block truncate text-[10px] text-zinc-600">{target.notes}</span> : null}
-                        </span>
-                        <span className={`data-text text-[10px] ${target.logged ? 'text-emerald-300' : selected ? 'text-cyan-300' : 'text-zinc-600'}`}>
-                          {target.logged ? 'LOGGED' : selected ? 'READY' : 'LOAD'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-            This previous session has no target sets.
+            This template has no exercises yet.
           </p>
         )}
       </div>
@@ -1556,37 +1819,11 @@ function groupSetsByExercise(sets) {
   }, {});
 }
 
-function buildPlanTargetsFromSession(session) {
-  return Object.entries(groupSetsByExercise(session.workout_sets ?? [])).flatMap(([, sets]) =>
-    sets.map((set, index) => ({
-      id: `${session.id}-${set.id}-${index}`,
-      sourceSetId: set.id,
-      exercise: set.exercise,
-      is_warmup: isWarmupSet(set),
-      set_number: parseInteger(set.set_number),
-      label: formatSetLabel(set),
-      weight: parseDecimal(set.weight),
-      reps: parseInteger(set.reps),
-      rpe: parseDecimal(set.rpe),
-      notes: set.notes ?? '',
-      logged: false,
-      loggedSetId: null,
-    })),
-  );
-}
-
-function groupPlanTargetsByExercise(targets) {
-  return targets.reduce((groups, target) => {
-    const key = target.exercise || 'Unknown Exercise';
-    groups[key] = groups[key] ?? [];
-    groups[key].push(target);
-    return groups;
-  }, {});
-}
-
-function getNextUnloggedPlanTarget(targets, currentTargetId) {
-  const currentIndex = targets.findIndex((target) => target.id === currentTargetId);
-  return targets.find((target, index) => index > currentIndex && !target.logged) ?? null;
+function sortTemplateExercises(exercises = []) {
+  return exercises.slice().sort((a, b) => {
+    if (Number(a.exercise_order) !== Number(b.exercise_order)) return Number(a.exercise_order) - Number(b.exercise_order);
+    return String(a.id).localeCompare(String(b.id));
+  });
 }
 
 function getUniqueSessionName(sourceName, todaysSessions) {
@@ -1878,11 +2115,6 @@ function formatNumber(value) {
     maximumFractionDigits: 1,
     minimumFractionDigits: Number.isInteger(Number(value)) ? 0 : 1,
   });
-}
-
-function toInputNumber(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? String(parsed) : '';
 }
 
 function formatTime(value) {

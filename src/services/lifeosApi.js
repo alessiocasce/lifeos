@@ -39,6 +39,36 @@ const workoutSelect = `
   )
 `;
 
+const workoutTemplateSelect = `
+  id,
+  user_id,
+  name,
+  notes,
+  created_at,
+  updated_at,
+  workout_template_exercises (
+    id,
+    user_id,
+    template_id,
+    exercise,
+    exercise_order,
+    notes,
+    created_at,
+    updated_at
+  )
+`;
+
+const workoutTemplateExerciseSelect = `
+  id,
+  user_id,
+  template_id,
+  exercise,
+  exercise_order,
+  notes,
+  created_at,
+  updated_at
+`;
+
 const healthLogSelect = `
   id,
   user_id,
@@ -205,6 +235,112 @@ export const workoutSetApi = {
 
   async delete(id) {
     return throwIfError(await requireSupabase().from('workout_sets').delete().eq('id', id));
+  },
+};
+
+export const workoutTemplateApi = {
+  async list(limit = 50) {
+    const rows = throwIfError(
+      await requireSupabase()
+        .from('workout_templates')
+        .select(workoutTemplateSelect)
+        .order('name', { ascending: true })
+        .limit(limit),
+    );
+
+    return normalizeWorkoutTemplates(rows);
+  },
+
+  async create(payload) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('workout_templates')
+        .insert({
+          name: payload.name,
+          notes: payload.notes || null,
+        })
+        .select(workoutTemplateSelect)
+        .single(),
+    );
+
+    return normalizeWorkoutTemplate(row);
+  },
+
+  async update(id, patch) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('workout_templates')
+        .update(prepareWorkoutTemplatePayload(patch))
+        .eq('id', id)
+        .select(workoutTemplateSelect)
+        .single(),
+    );
+    return normalizeWorkoutTemplate(row);
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('workout_templates').delete().eq('id', id));
+  },
+};
+
+export const workoutTemplateExerciseApi = {
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('workout_template_exercises')
+        .insert({
+          template_id: payload.template_id,
+          exercise: payload.exercise,
+          exercise_order: Number(payload.exercise_order),
+          notes: payload.notes || null,
+        })
+        .select(workoutTemplateExerciseSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('workout_template_exercises')
+        .update(prepareWorkoutTemplateExercisePayload(patch))
+        .eq('id', id)
+        .select(workoutTemplateExerciseSelect)
+        .single(),
+    );
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('workout_template_exercises').delete().eq('id', id));
+  },
+
+  async reorder(updates) {
+    const client = requireSupabase();
+    await Promise.all(
+      updates.map(async (update) =>
+        throwIfError(
+          await client
+            .from('workout_template_exercises')
+            .update({ exercise_order: Number(update.exercise_order) + 10000 })
+            .eq('id', update.id)
+            .select(workoutTemplateExerciseSelect)
+            .single(),
+        ),
+      ),
+    );
+    const rows = await Promise.all(
+      updates.map(async (update) =>
+        throwIfError(
+          await client
+            .from('workout_template_exercises')
+            .update({ exercise_order: Number(update.exercise_order) })
+            .eq('id', update.id)
+            .select(workoutTemplateExerciseSelect)
+            .single(),
+        ),
+      ),
+    );
+    return rows;
   },
 };
 
@@ -393,6 +529,8 @@ export const dailyReviewApi = {
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
+  workoutTemplates: workoutTemplateApi,
+  workoutTemplateExercises: workoutTemplateExerciseApi,
   healthLogs: healthLogApi,
   expenses: expenseApi,
   calendarEvents: calendarEventApi,
@@ -422,6 +560,27 @@ function prepareWorkoutSetPayload(payload) {
     Object.entries({
       ...payload,
       is_warmup: payload.is_warmup === undefined ? undefined : Boolean(payload.is_warmup),
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareWorkoutTemplatePayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      name: payload.name === undefined ? undefined : payload.name?.trim(),
+      notes: payload.notes === undefined ? undefined : payload.notes?.trim() || null,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareWorkoutTemplateExercisePayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      exercise: payload.exercise === undefined ? undefined : payload.exercise?.trim(),
+      exercise_order: payload.exercise_order === undefined ? undefined : Number(payload.exercise_order),
+      notes: payload.notes === undefined ? undefined : payload.notes?.trim() || null,
     }).filter(([, value]) => value !== undefined),
   );
 }
@@ -457,5 +616,25 @@ function compareWorkoutSetOrder(a, b) {
   if (aTime !== bTime) return aTime - bTime;
   if (Boolean(a.is_warmup) !== Boolean(b.is_warmup)) return Boolean(a.is_warmup) ? -1 : 1;
   if (Number(a.set_number) !== Number(b.set_number)) return Number(a.set_number) - Number(b.set_number);
+  return String(a.id).localeCompare(String(b.id));
+}
+
+function normalizeWorkoutTemplates(rows = []) {
+  return rows.map(normalizeWorkoutTemplate).sort(compareWorkoutTemplates);
+}
+
+function normalizeWorkoutTemplate(row) {
+  return {
+    ...row,
+    workout_template_exercises: [...(row.workout_template_exercises ?? [])].sort(compareWorkoutTemplateExerciseOrder),
+  };
+}
+
+function compareWorkoutTemplates(a, b) {
+  return String(a.name ?? '').localeCompare(String(b.name ?? ''));
+}
+
+function compareWorkoutTemplateExerciseOrder(a, b) {
+  if (Number(a.exercise_order) !== Number(b.exercise_order)) return Number(a.exercise_order) - Number(b.exercise_order);
   return String(a.id).localeCompare(String(b.id));
 }

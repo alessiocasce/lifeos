@@ -71,6 +71,8 @@ The schema is in `supabase/schema.sql`.
 Current tables:
 
 - `workouts`
+- `workout_templates`
+- `workout_template_exercises`
 - `workout_sets`
 - `health_logs`
 - `expenses`
@@ -84,6 +86,7 @@ RLS is enabled on all user tables. Current policies are user-scoped for authenti
 
 - Users can only read/write rows where `auth.uid() = user_id`.
 - `workout_sets` also checks that the referenced `workouts` row belongs to the same authenticated user.
+- `workout_template_exercises` also checks that the referenced `workout_templates` row belongs to the same authenticated user.
 
 The frontend currently uses Supabase Auth as a global app gate:
 
@@ -102,8 +105,10 @@ Real/persisted today:
 
 - Supabase Auth as a global app gate before the shell/tabs render.
 - Workout sessions persisted in `workouts`.
+- Workout templates persisted in `workout_templates` with ordered exercises persisted in `workout_template_exercises`.
 - Workout sets persisted in `workout_sets`.
 - Workout session create/select/end/delete.
+- Workout template create/edit/delete and template exercise add/edit/delete/reorder.
 - Workout set create/edit/delete.
 - Workout analytics are computed frontend-only from persisted workout/session data.
 - Health daily logs persisted in `health_logs`.
@@ -262,6 +267,7 @@ Current behavior:
 - `ActiveWorkoutHeader`
 - `SessionControlCard`
 - `SetLogger`
+- `TemplatePlanCard`
 - `PreviousPerformanceCard`
 - `TodaySetsLog`
 - `ExerciseHistoryPanel`
@@ -271,8 +277,16 @@ Current behavior:
 
 - Assumes the user is already authenticated by the global app gate.
 - Loads persisted workout sessions with nested sets.
-- Selects an existing session or creates a session for today.
-- Supports custom session creation behind a toggle.
+- Loads persisted workout templates with ordered template exercises.
+- Uses templates as the primary way to start a workout. The first question in Session Control is what the user is training today.
+- Starting from a template creates a new `workouts` row for today named after the template, with `#2`, `#3`, etc. suffixes when needed to avoid same-day duplicate names.
+- Starting from a template does not create any `workout_sets`.
+- A local `Exercise Plan` shows ordered template exercises near the logger. Tapping an exercise fills the Exercise input only.
+- Template exercises are local planning guidance inside the active workout; they do not affect volume, PRs, previous performance, estimated 1RM, Exercise History, or other analytics until sets are saved.
+- Starting empty remains available as a secondary action and creates a blank session named `Today Workout` or a user-provided name.
+- Template management is collapsed inside Workout and supports create/edit/delete templates plus add/edit/delete/reorder template exercises.
+- Advanced session switching and delete session controls are collapsed away from the primary logging flow.
+- On load, Workout auto-selects today's session when one exists; older sessions remain available from Advanced / Switch Session instead of hiding the template start prompt.
 - Ended sessions cannot use the local rest timer.
 - Ended sessions cannot add or edit sets. The logger shows: "This workout is ended. Reopen it to add more sets."
 - Ended sessions can be reopened from Session Control, which sets `ended_at` back to `null`.
@@ -282,9 +296,6 @@ Current behavior:
 - Warmup sets are stored in `workout_sets.is_warmup`, display as repeated `W` rows before working sets, and do not increment the next working set number.
 - Next working set number is automatic based on selected session plus exercise and ignores warmups.
 - Editing between warmup and working status resolves to a non-conflicting internal set number.
-- Session Control can start today's workout from a previous completed/past session. This creates only a new `workouts` row for today and builds a local `Today Plan` with editable target rows from the previous session.
-- Previous-session target rows include exercise, warmup status, display label, weight, reps, RPE, and notes. Tapping a target fills the logger, and the target is marked logged only after the user saves a real set.
-- Previous-session targets are local draft guidance only; they do not create `workout_sets` and do not affect volume, PRs, previous performance, estimated 1RM, Exercise History, or other analytics until saved.
 - Weight and RPE parsing accepts both comma and dot decimals.
 - Validation runs before insert/update for exercise, weight, reps, RPE, and date.
 - Today's active session sets are shown immediately under the logger, grouped by exercise.
@@ -391,7 +402,8 @@ Workout mobile direction:
 - Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
 - Test workout session creation with RLS enabled in a real Supabase project.
-- Test Workout tab with `docs/QA_WORKOUT.md`, especially warmup display/edit transitions and analytics exclusion.
+- Test Workout tab with `docs/QA_WORKOUT.md`, especially template CRUD/start flow, warmup display/edit transitions, and analytics exclusion.
+- Test Workout templates after applying the latest `workout_templates` and `workout_template_exercises` schema migration.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
 - Test duplicate set number behavior for the same exercise in one session.

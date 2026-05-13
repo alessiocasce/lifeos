@@ -13,6 +13,30 @@ create table if not exists public.workouts (
   unique (id, user_id)
 );
 
+create table if not exists public.workout_templates (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, name),
+  unique (id, user_id)
+);
+
+create table if not exists public.workout_template_exercises (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  template_id uuid not null,
+  exercise text not null,
+  exercise_order integer not null check (exercise_order > 0),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (template_id, exercise_order),
+  foreign key (template_id, user_id) references public.workout_templates(id, user_id) on delete cascade
+);
+
 create table if not exists public.workout_sets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -110,6 +134,25 @@ alter table public.workouts add column if not exists performed_on date not null 
 alter table public.workouts add column if not exists started_at timestamptz;
 alter table public.workouts add column if not exists ended_at timestamptz;
 
+alter table public.workout_templates add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.workout_templates alter column user_id set default auth.uid();
+alter table public.workout_templates add column if not exists name text;
+alter table public.workout_templates add column if not exists notes text;
+alter table public.workout_templates add column if not exists created_at timestamptz not null default now();
+alter table public.workout_templates add column if not exists updated_at timestamptz not null default now();
+
+alter table public.workout_template_exercises add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.workout_template_exercises alter column user_id set default auth.uid();
+alter table public.workout_template_exercises add column if not exists template_id uuid;
+alter table public.workout_template_exercises add column if not exists exercise text;
+alter table public.workout_template_exercises add column if not exists exercise_order integer;
+alter table public.workout_template_exercises alter column exercise_order set default 1;
+update public.workout_template_exercises set exercise_order = 1 where exercise_order is null;
+alter table public.workout_template_exercises alter column exercise_order set not null;
+alter table public.workout_template_exercises add column if not exists notes text;
+alter table public.workout_template_exercises add column if not exists created_at timestamptz not null default now();
+alter table public.workout_template_exercises add column if not exists updated_at timestamptz not null default now();
+
 alter table public.workout_sets add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.workout_sets alter column user_id set default auth.uid();
 alter table public.workout_sets add column if not exists set_number integer;
@@ -174,6 +217,61 @@ do $$
 begin
   if not exists (
     select 1 from pg_constraint
+    where conname = 'workout_templates_user_id_name_key'
+  ) then
+    alter table public.workout_templates add constraint workout_templates_user_id_name_key unique (user_id, name);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workout_templates_id_user_id_key'
+  ) then
+    alter table public.workout_templates add constraint workout_templates_id_user_id_key unique (id, user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workout_template_exercises_template_id_exercise_order_key'
+  ) then
+    alter table public.workout_template_exercises
+    add constraint workout_template_exercises_template_id_exercise_order_key unique (template_id, exercise_order);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workout_template_exercises_exercise_order_check'
+  ) then
+    alter table public.workout_template_exercises
+    add constraint workout_template_exercises_exercise_order_check
+    check (exercise_order > 0);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workout_template_exercises_template_id_user_id_fkey'
+  ) then
+    alter table public.workout_template_exercises
+    add constraint workout_template_exercises_template_id_user_id_fkey
+    foreign key (template_id, user_id) references public.workout_templates(id, user_id) on delete cascade;
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
     where conname = 'workout_sets_workout_id_user_id_fkey'
   ) then
     alter table public.workout_sets
@@ -193,6 +291,16 @@ $$ language plpgsql;
 drop trigger if exists set_workouts_updated_at on public.workouts;
 create trigger set_workouts_updated_at
 before update on public.workouts
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_workout_templates_updated_at on public.workout_templates;
+create trigger set_workout_templates_updated_at
+before update on public.workout_templates
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_workout_template_exercises_updated_at on public.workout_template_exercises;
+create trigger set_workout_template_exercises_updated_at
+before update on public.workout_template_exercises
 for each row execute function public.set_updated_at();
 
 drop trigger if exists set_workout_sets_updated_at on public.workout_sets;
@@ -226,6 +334,8 @@ before update on public.chat_messages
 for each row execute function public.set_updated_at();
 
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
+create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
+create index if not exists workout_template_exercises_template_order_idx on public.workout_template_exercises (template_id, exercise_order);
 create index if not exists workout_sets_user_performed_at_idx on public.workout_sets (user_id, performed_at desc);
 create index if not exists workout_sets_workout_id_idx on public.workout_sets (workout_id);
 create index if not exists workout_sets_exercise_idx on public.workout_sets (user_id, exercise);
@@ -236,6 +346,8 @@ create index if not exists daily_reviews_user_review_on_idx on public.daily_revi
 create index if not exists chat_messages_user_created_at_idx on public.chat_messages (user_id, created_at asc);
 
 alter table public.workouts enable row level security;
+alter table public.workout_templates enable row level security;
+alter table public.workout_template_exercises enable row level security;
 alter table public.workout_sets enable row level security;
 alter table public.health_logs enable row level security;
 alter table public.expenses enable row level security;
@@ -250,6 +362,36 @@ create policy "workouts are user scoped" on public.workouts
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+drop policy if exists "lifeos local read workout_templates" on public.workout_templates;
+drop policy if exists "lifeos local write workout_templates" on public.workout_templates;
+drop policy if exists "workout_templates are user scoped" on public.workout_templates;
+create policy "workout_templates are user scoped" on public.workout_templates
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "lifeos local read workout_template_exercises" on public.workout_template_exercises;
+drop policy if exists "lifeos local write workout_template_exercises" on public.workout_template_exercises;
+drop policy if exists "workout_template_exercises are user scoped" on public.workout_template_exercises;
+create policy "workout_template_exercises are user scoped" on public.workout_template_exercises
+for all to authenticated
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.workout_templates
+    where workout_templates.id = workout_template_exercises.template_id
+      and workout_templates.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.workout_templates
+    where workout_templates.id = workout_template_exercises.template_id
+      and workout_templates.user_id = auth.uid()
+  )
+);
 
 drop policy if exists "lifeos local read workout_sets" on public.workout_sets;
 drop policy if exists "lifeos local write workout_sets" on public.workout_sets;
