@@ -134,7 +134,7 @@ Real/persisted today:
 - Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
 - Home tab summarizes persisted workout sessions/sets, health logs, and expenses.
 - Calendar events persisted in `calendar_events`.
-- Calendar tab creates, edits, deletes, and groups persisted user-scoped events by date/week.
+- Calendar tab creates, edits, deletes, and displays persisted user-scoped events in a day-first agenda.
 - Daily reviews persisted in `daily_reviews`.
 - Assistant tab is currently a real Daily Review workflow, not AI chat.
 - Token-protected Action API endpoints for external automation:
@@ -237,10 +237,15 @@ Current `calendar_events` fields:
 Current behavior:
 
 - Loads the current authenticated user's calendar events through RLS.
-- Queries events by selected week range.
-- Supports selected date and selected week navigation.
+- Defaults the selected date to today and visually prioritizes the selected-day agenda.
+- Uses a compact selected-day control card with date picker, Today shortcut, event count, and Plus button.
+- Uses weekly range loading internally around the selected date, but the week board is not the primary UI.
+- Creates and edits events through a modal instead of an always-visible side form.
 - Creates, edits, and deletes events.
-- Shows events grouped by date in the week view and selected-date detail.
+- Shows all events for the selected date as readable agenda cards.
+- Sorts timed events by start time, with untimed events after timed events.
+- UI-created event categories are limited to Work, Study, School, Health, Workout, Entertainment, and Sleep.
+- Category badges use consistent subtle color styling. Older unknown category strings remain display-compatible with neutral styling.
 - Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
 - Ignores stale week-range responses during fast week switching and clears calendar state on auth changes.
 - Shows a specific setup error if the `calendar_events` migration has not been applied.
@@ -491,7 +496,8 @@ Workout mobile direction:
   - Confirm blank wins/risks, empty next actions, fast date switching, and expense context errors behave correctly.
 - Test Calendar tab with `docs/QA_CALENDAR.md`:
   - Create, edit, and delete persisted events.
-  - Switch selected dates and weeks.
+  - Confirm the selected-day agenda defaults to today and date picker navigation works.
+  - Confirm create/edit modals work and categories display correctly.
   - Refresh and confirm events persist.
   - Confirm another user cannot see the first user's events.
   - Confirm iPhone Safari has no horizontal overflow and controls remain thumb-friendly.

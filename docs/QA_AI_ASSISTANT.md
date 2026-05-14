@@ -40,9 +40,10 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 7. Ask with `25 euro`, `€25`, `25 dollar`, `$25`, and `12,50` in test expenses and confirm amounts validate correctly.
 8. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
 9. Confirm a calendar event is created with the right date and times.
-10. Ask: `Log 8 energy and 1 coffee today.`
-11. Confirm today's health log updates without overwriting omitted fields.
-12. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+10. Confirm AI-created calendar events use preferred categories where possible: Work, Study, School, Health, Workout, Entertainment, Sleep.
+11. Ask: `Log 8 energy and 1 coffee today.`
+12. Confirm today's health log updates without overwriting omitted fields.
+13. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 

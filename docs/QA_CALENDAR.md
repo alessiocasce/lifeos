@@ -2,48 +2,76 @@
 
 Run this after applying `supabase/schema.sql` and signing in through the global auth gate.
 
-## Create Event
+## Day-First Layout
 
 1. Open Calendar.
-2. Confirm no mock events are shown as real persisted data.
-3. Create an event with title, date, start time, end time, category, location, notes, and status `planned`.
-4. Confirm it appears in the selected week and selected date list.
-5. Refresh the page and confirm the event reloads from Supabase.
+2. Confirm the first visible card is the selected day, not a week board.
+3. Confirm the selected date defaults to today.
+4. Confirm the top card shows the day label, full date, selected-day event count, date picker, and Plus button.
+5. Confirm no duplicate week-grid event display appears above or beside the selected-day agenda.
 
-## Edit Event
+## Date Selection
 
-1. Click edit on the event.
-2. Change title, time, category, notes, and status.
-3. Save the event.
-4. Confirm the week card and selected date detail both update.
+1. Use the date picker in the top card.
+2. Confirm the selected-day agenda updates to the chosen date.
+3. Select a date outside the current week and confirm persisted events for that date load.
+4. Select a non-today date and confirm the Today shortcut appears.
+5. Use the Today shortcut and confirm the selected date returns to today.
+
+## Create Event Modal
+
+1. Click the Plus button.
+2. Confirm the `New Schedule Item` or create modal opens.
+3. Confirm the modal date defaults to the currently selected date.
+4. Create an event with title, date, start time, end time, category, location, notes, and status `planned`.
+5. Confirm the modal closes after save.
+6. Confirm the new event appears in the selected-day agenda.
+7. Refresh the page and confirm the event reloads from Supabase.
+
+## Edit Event Modal
+
+1. Click edit on an event card.
+2. Confirm the same modal opens in edit mode and is prefilled.
+3. Change title, time, category, notes, date, and status.
+4. Save the event.
+5. Confirm the modal closes and the selected date follows the event date.
+6. Confirm the agenda shows the updated event.
+7. Click cancel/close from edit mode and confirm no changes are saved.
 
 ## Delete Event
 
 1. Click delete on an event.
 2. Confirm the browser confirmation appears.
-3. Confirm the event disappears from the week and selected date list.
+3. Confirm the event disappears from the selected-day agenda.
 4. Refresh and confirm it does not return.
 
-## Date And Week Navigation
+## Categories
 
-1. Use previous and next week controls.
-2. Create an event in a future week.
-3. Confirm the UI moves to or remains clearly oriented around the event's week.
-4. Switch away and back to that week.
-5. Confirm only events in the selected week are shown.
-6. Edit an event and change its date to another week.
-7. Confirm the UI loads the new week and the event appears on the new date.
-8. Use the date picker and confirm the selected date panel updates.
-9. Switch weeks rapidly several times and confirm old-week events do not appear after the final week finishes loading.
+1. Confirm the event form uses defined category choices, not a free text hashtag field.
+2. Confirm the visible categories are Work, Study, School, Health, Workout, Entertainment, and Sleep.
+3. Create one event in several categories and confirm each uses a distinct but subtle color treatment.
+4. Confirm event cards show category labels without hashtags.
+5. If an older event has an unknown category string, confirm it displays with neutral styling and does not crash.
+6. Confirm Action API or AI-created category strings outside the list remain display-compatible.
+
+## Agenda Readability
+
+1. Create several events on the same day.
+2. Confirm timed events sort by start time ascending.
+3. Confirm events without a start time appear after timed events.
+4. Confirm titles, notes, and locations remain readable in the main agenda and do not rely on cramped truncation.
+5. Confirm long titles, category strings, locations, and notes stay inside the viewport.
+6. Confirm the empty state says `No events on this day` and includes a create CTA.
 
 ## Validation
 
 1. Try saving without a title and confirm a clear error.
 2. Try an end time earlier than the start time and confirm a clear error.
 3. Confirm status only allows planned, done, skipped, or cancelled.
-4. Confirm invalid dates are rejected.
-5. Confirm invalid manual time values are rejected if the browser allows entry.
-6. Confirm category, location, and notes can be left blank.
+4. Confirm UI category selection only allows the defined categories.
+5. Confirm invalid dates are rejected.
+6. Confirm invalid manual time values are rejected if the browser allows entry.
+7. Confirm location and notes can be left blank.
 
 ## Migration / Error States
 
@@ -58,20 +86,15 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 2. Confirm the first user's events do not appear.
 3. Create an event as the second user.
 4. Sign back in as the first user and confirm only the first user's events appear.
-5. Start a week load, sign out quickly, and confirm previous-user events do not appear on the auth screen or after another user signs in.
-
-## Long Labels
-
-1. Create an event with a very long title.
-2. Add a long category and a long location.
-3. Confirm compact week cards truncate labels cleanly.
-4. Confirm the selected date detail stays inside the viewport.
+5. Start a date load, sign out quickly, and confirm previous-user events do not appear on the auth screen or after another user signs in.
 
 ## iPhone Safari
 
 1. Open Calendar on iPhone Safari.
 2. Confirm no horizontal scrolling.
-3. Confirm inputs do not zoom when focused.
-4. Confirm week cards are readable in a single-column mobile flow.
-5. Confirm create/edit/delete controls are thumb-friendly.
-6. Confirm the bottom nav does not cover the Create/Update Event button.
+3. Confirm the selected-day card is first and the agenda is immediately visible.
+4. Confirm the Plus button is thumb-friendly.
+5. Confirm the create/edit modal fits the screen and can scroll internally.
+6. Confirm inputs do not zoom when focused.
+7. Confirm the bottom nav does not cover modal actions.
+8. Confirm event edit/delete controls are thumb-friendly.

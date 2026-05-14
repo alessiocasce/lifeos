@@ -162,7 +162,7 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/calendar \
     "event_date": "2026-05-13",
     "start_time": "15:30",
     "end_time": "16:30",
-    "category": "personal",
+    "category": "Health",
     "location": "optional",
     "notes": "optional",
     "status": "planned"
@@ -172,6 +172,7 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/calendar \
 Required: `title`, `event_date`.
 
 `status` defaults to `planned` and must be `planned`, `done`, `skipped`, or `cancelled`.
+The Action API keeps accepting compatible category strings, but the app UI prefers: `Work`, `Study`, `School`, `Health`, `Workout`, `Entertainment`, `Sleep`.
 
 Limits:
 

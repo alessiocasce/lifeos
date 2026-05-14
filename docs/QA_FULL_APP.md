@@ -21,8 +21,9 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 7. Create one expense dated today.
 8. Open Calendar.
 9. Create one event dated today.
-10. Open Assistant.
-11. Create today's Daily Review with wins, risks, optional score, and next actions.
+10. Confirm the event is created from the modal and appears in the selected-day agenda.
+11. Open Assistant.
+12. Create today's Daily Review with wins, risks, optional score, and next actions.
 
 ## Home Integration
 
@@ -86,9 +87,10 @@ Run the focused checklists after the full flow:
 
 1. Open Calendar.
 2. Confirm Calendar uses persisted events only and no fake planning data is shown as real.
-3. Open Workout sample archive.
-4. Confirm mock workout examples are visually labeled as mock/archive data.
-5. Confirm Home, Health, Finances, Calendar, and Daily Review do not show fake data as real persisted data.
+3. Confirm Calendar opens to the selected-day agenda, not a week board or always-open side form.
+4. Open Workout sample archive.
+5. Confirm mock workout examples are visually labeled as mock/archive data.
+6. Confirm Home, Health, Finances, Calendar, and Daily Review do not show fake data as real persisted data.
 
 ## iPhone Safari Basics
 
