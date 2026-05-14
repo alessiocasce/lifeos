@@ -21,7 +21,13 @@ export async function sendLifeOSAiMessage(message) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.error || 'LifeOS assistant request failed.');
+    const error = new Error(payload?.error || 'LifeOS assistant request failed.');
+    error.requestId = payload?.requestId;
+    error.status = response.status;
+    error.details = payload?.details;
+    error.providerStatus = payload?.details?.providerStatus;
+    error.providerMessage = payload?.details?.providerMessage;
+    throw error;
   }
   return payload.data;
 }

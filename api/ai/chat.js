@@ -40,9 +40,10 @@ Schema:
 }
 Rules:
 - Extract dates as YYYY-MM-DD when possible. Today is provided in the prompt.
+- If the user gives DD/MM/YY or DD/MM/YYYY, copy that date into args; the backend can normalize it.
 - Natural "tomorrow" may be represented as "tomorrow" or the provided date.
 - Extract times as 24-hour HH:MM.
-- For simple expense creation, extract vendor, amount, category, spent_on/date, notes.
+- For simple expense creation, extract vendor, amount, category, spent_on/date, notes. Amount may include currency words or symbols.
 - For calendar creation, extract title, event_date/date, start_time, end_time, category, location, notes.
 - For health logging, extract logged_on/date and provided fields: energy, water, coffee, adc, sleep_hours, sleep_start, wake_time, notes.
 - For "last week", use range "7d". For "last 30 days" or "last month", use "30d". For "last 3 months", use "3m". For all-time/overall behavior, use "all".
@@ -140,6 +141,7 @@ export default async function handler(req, res) {
       const writeResult = await executeWriteIntent(plan, message, lifeosContext);
       actions.push(...writeResult.actions);
       if (writeResult.context) lifeosContext = writeResult.context;
+      if (writeResult.answer) answer = writeResult.answer;
     }
 
     if (!answer) {
@@ -171,7 +173,13 @@ async function planMessage(message) {
     tomorrow: localDate(1),
     userMessage: message,
   });
-  const rawPlan = await generateGeminiJson({ system: PLANNER_SYSTEM, prompt, temperature: 0 });
+  const rawPlan = await generateGeminiJson({
+    system: PLANNER_SYSTEM,
+    prompt,
+    temperature: 0,
+    invalidMessage: 'Gemini returned an invalid planner response.',
+    repair: true,
+  });
   return normalizePlannerPlan(rawPlan);
 }
 
@@ -182,17 +190,26 @@ async function executeWriteIntent(plan, message, lifeosContext) {
 
   if (plan.intent === 'create_expense') {
     const created = await createExpense(plan.args);
-    return { actions: [{ type: 'create_expense', data: created }] };
+    return {
+      actions: [{ type: 'create_expense', data: created }],
+      answer: formatExpenseSuccess(created),
+    };
   }
 
   if (plan.intent === 'create_calendar_event') {
     const created = await createCalendarEvent({ ...plan.args, range: plan.range });
-    return { actions: [{ type: 'create_calendar_event', data: created }] };
+    return {
+      actions: [{ type: 'create_calendar_event', data: created }],
+      answer: formatCalendarSuccess(created),
+    };
   }
 
   if (plan.intent === 'update_health_log') {
     const updated = await updateHealthLog(plan.args);
-    return { actions: [{ type: 'update_health_log', data: updated }] };
+    return {
+      actions: [{ type: 'update_health_log', data: updated }],
+      answer: `Updated health log for ${updated.logged_on}.`,
+    };
   }
 
   if (plan.intent === 'analyze_and_plan') {
@@ -215,6 +232,30 @@ async function executeWriteIntent(plan, message, lifeosContext) {
   }
 
   return { actions: [] };
+}
+
+function formatExpenseSuccess(expense) {
+  return `Added expense: ${expense.vendor} - EUR ${formatMoney(expense.amount)} - ${expense.category} - ${expense.spent_on}.`;
+}
+
+function formatCalendarSuccess(event) {
+  const timeRange = event.start_time && event.end_time
+    ? ` - ${formatTime(event.start_time)}-${formatTime(event.end_time)}`
+    : event.start_time
+      ? ` - ${formatTime(event.start_time)}`
+      : '';
+  return `Added calendar event: ${event.title} - ${event.event_date}${timeRange}.`;
+}
+
+function formatTime(value) {
+  return String(value ?? '').slice(0, 5);
+}
+
+function formatMoney(value) {
+  return Number(value ?? 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 async function proposeCalendarPlan(message, plan, lifeosContext, targetDate) {

@@ -194,6 +194,12 @@ Architecture:
 - Assistant replies render Markdown in the frontend for bold labels, lists, paragraphs, inline code, and code blocks.
 - Raw HTML is not allowed or executed in assistant responses.
 - The only supported styled response tags are `[good]`, `[warn]`, `[bad]`, `[info]`, and `[action]`; unknown tags render as ordinary text.
+- Gemini provider failures are mapped to clean errors: rate limits, temporary outages, rejected requests, empty responses, and invalid planner JSON.
+- Assistant error cards show safe request/provider details without exposing secrets.
+- Expense, calendar, and health date handling accepts `YYYY-MM-DD`, `DD/MM/YY`, `DD/MM/YYYY`, `today`, and `tomorrow` where relevant.
+- Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
+- Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
+- Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
 
 Supported v1 intents/tools:
 

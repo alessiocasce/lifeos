@@ -61,13 +61,15 @@ export function normalizePlannerPlan(plan) {
   const allowedIntents = new Set(['analyze', 'create_expense', 'create_calendar_event', 'update_health_log', 'analyze_and_plan', 'clarify', 'unsupported', 'blocked_destructive']);
   const allowedRanges = new Set(['today', 'tomorrow', '7d', '30d', '3m', '6m', '12m', 'all']);
   const intent = allowedIntents.has(plan?.intent) ? plan.intent : 'unsupported';
+  const writeIntents = new Set(['create_expense', 'create_calendar_event', 'update_health_log', 'analyze_and_plan']);
+  const readIntents = new Set(['analyze', 'analyze_and_plan', 'blocked_destructive']);
   const tables = Array.isArray(plan?.tables)
     ? plan.tables.filter((table) => VALID_TABLES.has(table))
     : [];
   return {
     intent,
-    needsRead: Boolean(plan?.needsRead),
-    needsWrite: Boolean(plan?.needsWrite),
+    needsRead: Boolean(plan?.needsRead) || readIntents.has(intent),
+    needsWrite: Boolean(plan?.needsWrite) || writeIntents.has(intent),
     range: allowedRanges.has(plan?.range) ? plan.range : null,
     tables,
     args: plan?.args && typeof plan.args === 'object' ? plan.args : {},

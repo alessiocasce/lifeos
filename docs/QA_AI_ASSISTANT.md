@@ -33,11 +33,16 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 
 1. Ask: `Add a 25 dollar expense for ChatGPT Plus.`
 2. Confirm an expense is created and appears in Finances/Home after refresh.
-3. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
-4. Confirm a calendar event is created with the right date and times.
-5. Ask: `Log 8 energy and 3 waters today.`
-6. Confirm today's health log updates without overwriting omitted fields.
-7. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+3. Ask: `add a 25 euro expense for ChatGPT Plus on 13/05/26. The category should be "Subscriptions"`
+4. Confirm it creates `ChatGPT Plus`, amount `25`, category `Subscriptions`, spent on `2026-05-13`.
+5. Confirm the success message is deterministic and does not wait for a second Gemini answer call.
+6. Ask with `13/05/2026` and confirm DD/MM/YYYY dates normalize correctly.
+7. Ask with `25 euro`, `€25`, `25 dollar`, `$25`, and `12,50` in test expenses and confirm amounts validate correctly.
+8. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
+9. Confirm a calendar event is created with the right date and times.
+10. Ask: `Log 8 energy and 3 waters today.`
+11. Confirm today's health log updates without overwriting omitted fields.
+12. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Analyze And Plan
 
@@ -69,6 +74,18 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 9. Confirm raw HTML from a response renders as text or is ignored, and never executes.
 10. Confirm user messages remain plain text and do not render Markdown.
 11. Confirm action result cards still render below assistant content.
+12. Confirm Markdown and callouts still render after provider-error and deterministic-write changes.
+
+## Provider Errors
+
+1. Simulate or observe Gemini `429` and confirm the UI says `Gemini rate limit reached. Try again shortly.`
+2. Simulate or observe Gemini `500` or `503` and confirm the UI says `Gemini is temporarily unavailable. Try again shortly.`
+3. Simulate Gemini `400` and confirm the UI says `Gemini rejected the request.`
+4. Confirm the error card shows `requestId` when returned.
+5. Confirm provider status is shown as `Provider: 503` or the relevant status.
+6. Confirm safe provider messages can appear, but no stack traces, API keys, bearer tokens, or env values appear.
+7. Confirm invalid planner JSON returns `Gemini returned an invalid planner response.` and no write is executed.
+8. Confirm complex analysis can still use multiple Gemini calls, while simple create expense/calendar/health writes avoid the final answer call.
 
 ## Mobile / iPhone
 

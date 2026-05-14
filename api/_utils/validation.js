@@ -23,8 +23,8 @@ export function requiredText(body, field, { max = Infinity } = {}) {
 
 export function optionalDate(body, field, fallback = undefined) {
   if (body[field] === undefined || body[field] === null || body[field] === '') return fallback;
-  const value = String(body[field]).trim();
-  if (!isValidDate(value)) throw new HttpError(400, `${field} must be a valid date in YYYY-MM-DD format.`);
+  const value = normalizeDateValue(body[field]);
+  if (!isValidDate(value)) throw new HttpError(400, `${field} must be a valid date in YYYY-MM-DD, DD/MM/YY, or DD/MM/YYYY format.`);
   return value;
 }
 
@@ -88,7 +88,7 @@ export function optionalInteger(body, field, { min = -Infinity, max = Infinity }
   if (body[field] === null || body[field] === '') {
     throw new HttpError(400, `${field} must be ${formatRange('an integer', min, max)}.`);
   }
-  const value = Number(body[field]);
+  const value = parseDecimal(body[field]);
   if (!Number.isInteger(value) || value < min || value > max) {
     throw new HttpError(400, `${field} must be ${formatRange('an integer', min, max)}.`);
   }
@@ -103,7 +103,14 @@ export function optionalNullableInteger(body, field, { min = -Infinity, max = In
 
 export function parseDecimal(value) {
   if (typeof value === 'number') return value;
-  return Number(String(value ?? '').trim().replace(',', '.'));
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[€$£]/g, '')
+    .replace(/\b(euros?|eur|dollars?|usd)\b/g, '')
+    .replace(',', '.');
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : Number.NaN;
 }
 
 export function assertTimeOrder(startTime, endTime) {
@@ -117,6 +124,20 @@ function isValidDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function normalizeDateValue(value) {
+  const text = String(value ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+
+  const european = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!european) return text;
+
+  const day = Number(european[1]);
+  const month = Number(european[2]);
+  const rawYear = Number(european[3]);
+  const year = european[3].length === 2 ? 2000 + rawYear : rawYear;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 function hasField(body, field) {

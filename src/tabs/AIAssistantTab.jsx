@@ -125,7 +125,7 @@ export function AIAssistantTab() {
   const [aiInput, setAiInput] = useState('');
   const [aiMessages, setAiMessages] = useState([]);
   const [aiStatus, setAiStatus] = useState('idle');
-  const [aiError, setAiError] = useState('');
+  const [aiError, setAiError] = useState(null);
 
   useEffect(() => {
     setForm(reviewToForm(selectedReview, selectedDate));
@@ -238,7 +238,7 @@ export function AIAssistantTab() {
     };
     setAiMessages((prev) => [...prev, userMessage]);
     setAiInput('');
-    setAiError('');
+    setAiError(null);
     setAiStatus('loading');
 
     try {
@@ -256,7 +256,12 @@ export function AIAssistantTab() {
       await refreshAfterAiActions(result.actions ?? []);
       setAiStatus('idle');
     } catch (error) {
-      setAiError(error.message || 'LifeOS assistant failed.');
+      setAiError({
+        message: error.message || 'LifeOS assistant failed.',
+        requestId: error.requestId,
+        providerStatus: error.providerStatus,
+        providerMessage: error.providerMessage,
+      });
       setAiStatus('idle');
     }
   };
@@ -294,7 +299,7 @@ export function AIAssistantTab() {
                 value={aiInput}
                 onChange={(event) => {
                   setAiInput(event.target.value);
-                  setAiError('');
+                  setAiError(null);
                 }}
                 placeholder="Type a LifeOS request..."
                 className="min-h-28 w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/40"
@@ -322,7 +327,7 @@ export function AIAssistantTab() {
             </div>
           </div>
 
-          {aiError ? <p className="data-text text-[11px] text-red-300">{aiError}</p> : null}
+          {aiError ? <AssistantError error={aiError} /> : null}
 
           <div className="grid gap-2">
             {aiMessages.length ? (
@@ -574,6 +579,21 @@ function LoadingCard({ label }) {
 function SourceStatus({ status }) {
   const tone = status === 'ready' ? 'text-emerald-300' : status === 'loading' ? 'text-cyan-300' : 'text-zinc-500';
   return <span className={`data-text text-[10px] uppercase tracking-wider ${tone}`}>{status}</span>;
+}
+
+function AssistantError({ error }) {
+  return (
+    <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3">
+      <p className="text-sm font-medium text-red-200">{error.message}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {error.providerStatus ? <Tag tone="amber">Provider: {error.providerStatus}</Tag> : null}
+        {error.requestId ? <Tag tone="zinc">Request: {error.requestId}</Tag> : null}
+      </div>
+      {error.providerMessage ? (
+        <p className="mt-2 text-xs leading-5 text-zinc-400">{error.providerMessage}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function AssistantMessage({ message }) {
