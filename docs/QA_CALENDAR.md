@@ -28,6 +28,17 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 6. Confirm the new event appears in the selected-day agenda.
 7. Refresh the page and confirm the event reloads from Supabase.
 
+## Modal Scrolling
+
+1. Open the create modal on iPhone Safari.
+2. Confirm the Calendar page behind the modal does not scroll while the modal is open.
+3. Confirm there is no double-scroll trap between the background page and modal.
+4. Confirm only the modal form body scrolls when the form is taller than the viewport.
+5. Confirm the X close button remains visible without scrolling.
+6. Confirm Create/Update and Cancel remain accessible at the bottom of the modal.
+7. Trigger a validation error and confirm the user can still see the X button and close the modal.
+8. Confirm the modal respects the iPhone safe area and is not covered by the bottom nav.
+
 ## Edit Event Modal
 
 1. Click edit on an event card.
@@ -95,6 +106,7 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 3. Confirm the selected-day card is first and the agenda is immediately visible.
 4. Confirm the Plus button is thumb-friendly.
 5. Confirm the create/edit modal fits the screen and can scroll internally.
-6. Confirm inputs do not zoom when focused.
-7. Confirm the bottom nav does not cover modal actions.
-8. Confirm event edit/delete controls are thumb-friendly.
+6. Confirm background page scrolling is locked while the modal is open.
+7. Confirm inputs do not zoom when focused.
+8. Confirm the bottom nav does not cover modal actions.
+9. Confirm event edit/delete controls are thumb-friendly.

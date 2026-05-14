@@ -62,6 +62,42 @@ export function CalendarTab() {
     loadCalendarRange(weekStart, weekEnd);
   }, [loadCalendarRange, weekEnd, weekStart]);
 
+  useEffect(() => {
+    if (!modalOpen) return undefined;
+
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const bodyStyle = document.body.style;
+    const rootStyle = document.documentElement.style;
+    const previousBody = {
+      left: bodyStyle.left,
+      overflow: bodyStyle.overflow,
+      position: bodyStyle.position,
+      right: bodyStyle.right,
+      top: bodyStyle.top,
+      width: bodyStyle.width,
+    };
+    const previousRootOverflow = rootStyle.overflow;
+
+    rootStyle.overflow = 'hidden';
+    bodyStyle.overflow = 'hidden';
+    bodyStyle.position = 'fixed';
+    bodyStyle.top = `-${scrollY}px`;
+    bodyStyle.left = '0';
+    bodyStyle.right = '0';
+    bodyStyle.width = '100%';
+
+    return () => {
+      rootStyle.overflow = previousRootOverflow;
+      bodyStyle.overflow = previousBody.overflow;
+      bodyStyle.position = previousBody.position;
+      bodyStyle.top = previousBody.top;
+      bodyStyle.left = previousBody.left;
+      bodyStyle.right = previousBody.right;
+      bodyStyle.width = previousBody.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [modalOpen]);
+
   const reloadSelectedRange = () => loadCalendarRange(startOfWeek(selectedDate), addDays(startOfWeek(selectedDate), 7));
 
   const openCreateModal = () => {
@@ -94,6 +130,15 @@ export function CalendarTab() {
     setFormError('');
     setActionStatus('idle');
   };
+
+  useEffect(() => {
+    if (!modalOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') closeModal();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modalOpen]);
 
   const updateForm = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -245,9 +290,12 @@ export function CalendarTab() {
 
 function EventModal({ actionStatus, editing, error, form, onChange, onClose, onSubmit }) {
   return (
-    <div className="fixed inset-0 z-50 grid min-w-0 place-items-end bg-black/70 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur sm:place-items-center sm:p-4">
-      <div className="max-h-[calc(100vh-24px)] w-full max-w-2xl overflow-y-auto rounded-md border border-white/10 bg-[#0f0f0f] shadow-2xl sm:max-h-[calc(100vh-32px)]">
-        <div className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-3">
+    <div className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-hidden bg-black/70 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur sm:items-center sm:p-4">
+      <div
+        className="flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-md border border-white/10 bg-[#0f0f0f] shadow-2xl"
+        style={{ maxHeight: 'min(85dvh, 640px)' }}
+      >
+        <div className="shrink-0 flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5">
           <div className="min-w-0">
             <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Event' : 'Create Event'}</p>
             <h3 className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Update Schedule Item' : 'New Schedule Item'}</h3>
@@ -255,49 +303,51 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
           <button
             type="button"
             onClick={onClose}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
             aria-label="Close event modal"
           >
-            <X size={17} />
+            <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3 p-3">
-          <CalendarField label="Title" value={form.title} placeholder="Deep work, lecture, lift..." onChange={(value) => onChange('title', value)} />
+        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <CalendarField label="Title" value={form.title} placeholder="Deep work, lecture, lift..." onChange={(value) => onChange('title', value)} />
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <CalendarField label="Date" type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
-            <SelectField label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <CalendarField label="Start" type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
-            <CalendarField label="End" type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <SelectField label="Category" value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
-            <CalendarField label="Location" value={form.location} placeholder="Library, gym, office" onChange={(value) => onChange('location', value)} />
-          </div>
-
-          <label className="space-y-1">
-            <span className="data-text text-[10px] uppercase text-zinc-500">Notes</span>
-            <textarea
-              value={form.notes}
-              onChange={(event) => onChange('notes', event.target.value)}
-              rows={4}
-              className="min-h-24 w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50"
-              placeholder="Prep, constraints, or agenda notes"
-            />
-          </label>
-
-          {error ? (
-            <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-              {error}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <CalendarField label="Date" type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
+              <SelectField label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
             </div>
-          ) : null}
 
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="grid grid-cols-2 gap-2">
+              <CalendarField label="Start" type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
+              <CalendarField label="End" type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <SelectField label="Category" value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
+              <CalendarField label="Location" value={form.location} placeholder="Library, gym, office" onChange={(value) => onChange('location', value)} />
+            </div>
+
+            <label className="space-y-1">
+              <span className="data-text text-[10px] uppercase text-zinc-500">Notes</span>
+              <textarea
+                value={form.notes}
+                onChange={(event) => onChange('notes', event.target.value)}
+                rows={3}
+                className="min-h-20 w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50 sm:min-h-24"
+                placeholder="Prep, constraints, or agenda notes"
+              />
+            </label>
+
+            {error ? (
+              <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
+                {error}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="shrink-0 grid gap-2 border-t border-white/5 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:grid-cols-[1fr_auto] sm:items-center sm:pb-3">
             <button
               type="submit"
               disabled={actionStatus === 'saving'}

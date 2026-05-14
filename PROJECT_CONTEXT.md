@@ -241,6 +241,7 @@ Current behavior:
 - Uses a compact selected-day control card with date picker, Today shortcut, event count, and Plus button.
 - Uses weekly range loading internally around the selected date, but the week board is not the primary UI.
 - Creates and edits events through a modal instead of an always-visible side form.
+- The create/edit modal is mobile-safe: it locks background page scroll while open, keeps the X close button visible, and confines overflow to the form body.
 - Creates, edits, and deletes events.
 - Shows all events for the selected date as readable agenda cards.
 - Sorts timed events by start time, with untimed events after timed events.
