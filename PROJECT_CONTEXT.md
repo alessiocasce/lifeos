@@ -174,6 +174,7 @@ Current behavior:
 - Validates server-only config and requires `LIFEOS_ACTION_USER_ID` to be a UUID.
 - Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
 - Supports creating expenses, upserting partial daily health logs, and creating calendar events.
+- Expense categories created through the Action API normalize to canonical display casing when possible.
 - Enforces endpoint field limits and numeric caps before writing to Supabase.
 - Does not implement AI, chat behavior, external model calls, or frontend UI changes.
 - Must be live-tested after setting Vercel env vars; local curl tests require the same server-only env vars.
@@ -197,6 +198,7 @@ Architecture:
 - Gemini provider failures are mapped to clean errors: rate limits, temporary outages, rejected requests, empty responses, and invalid planner JSON.
 - Assistant error cards show safe request/provider details without exposing secrets.
 - Expense, calendar, and health date handling accepts `YYYY-MM-DD`, `DD/MM/YY`, `DD/MM/YYYY`, `today`, and `tomorrow` where relevant.
+- AI-created expense categories normalize to canonical display casing when possible, such as `subscriptions` to `Subscriptions`.
 - AI-created calendar events normalize case-insensitive preferred categories such as `work` or `study` to the UI category names when possible.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
@@ -314,6 +316,7 @@ Current behavior:
 
 - Loads the current authenticated user's expenses through RLS.
 - Creates, edits, and deletes expenses.
+- Server-created expense categories from AI and the Action API use canonical display casing when possible.
 - Amount input accepts comma decimals such as `12,50`.
 - Has a month selector that defaults to the current month.
 - Queries Supabase for the selected month range for monthly spend and category summaries.

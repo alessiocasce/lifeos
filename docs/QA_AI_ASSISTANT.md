@@ -36,17 +36,19 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 2. Confirm an expense is created and appears in Finances/Home after refresh.
 3. Ask: `add a 25 euro expense for ChatGPT Plus on 13/05/26. The category should be "Subscriptions"`
 4. Confirm it creates `ChatGPT Plus`, amount `25`, category `Subscriptions`, spent on `2026-05-13`.
-5. Confirm the success message is deterministic and does not wait for a second Gemini answer call.
-6. Ask with `13/05/2026` and confirm DD/MM/YYYY dates normalize correctly.
-7. Ask with `25 euro`, `€25`, `25 dollar`, `$25`, and `12,50` in test expenses and confirm amounts validate correctly.
-8. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
-9. Confirm a calendar event is created with the right date and times.
-10. Confirm AI-created calendar events use preferred categories where possible: Work, Study, School, Health, Workout, Entertainment, Sleep.
-11. Ask for an event with a lowercase preferred category such as `work` or `study`.
-12. Confirm the created event stores/displays the preferred category casing, such as `Work` or `Study`.
-13. Ask: `Log 8 energy and 1 coffee today.`
-14. Confirm today's health log updates without overwriting omitted fields.
-15. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+5. Ask: `25 euro expense for chatgpt plus`.
+6. Confirm the saved expense category is `Subscriptions`, not `subscriptions`.
+7. Confirm the success message is deterministic and uses the saved normalized category.
+8. Ask with `13/05/2026` and confirm DD/MM/YYYY dates normalize correctly.
+9. Ask with `25 euro`, `€25`, `25 dollar`, `$25`, and `12,50` in test expenses and confirm amounts validate correctly.
+10. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
+11. Confirm a calendar event is created with the right date and times.
+12. Confirm AI-created calendar events use preferred categories where possible: Work, Study, School, Health, Workout, Entertainment, Sleep.
+13. Ask for an event with a lowercase preferred category such as `work` or `study`.
+14. Confirm the created event stores/displays the preferred category casing, such as `Work` or `Study`.
+15. Ask: `Log 8 energy and 1 coffee today.`
+16. Confirm today's health log updates without overwriting omitted fields.
+17. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 

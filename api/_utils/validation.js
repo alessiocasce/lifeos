@@ -2,6 +2,32 @@ import { HttpError } from './http.js';
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
+const CANONICAL_EXPENSE_CATEGORIES = [
+  'Food',
+  'Groceries',
+  'Transport',
+  'Car',
+  'Shopping',
+  'Health',
+  'Entertainment',
+  'Bills',
+  'Subscriptions',
+  'Education',
+  'Travel',
+  'Personal Care',
+  'Other',
+];
+
+const EXPENSE_CATEGORY_ALIASES = new Map([
+  ['subscription', 'Subscriptions'],
+  ['subscriptions', 'Subscriptions'],
+  ['bill', 'Bills'],
+  ['bills', 'Bills'],
+  ['grocery', 'Groceries'],
+  ['groceries', 'Groceries'],
+  ['personal care', 'Personal Care'],
+]);
+
 export function compactPayload(payload) {
   return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
 }
@@ -113,6 +139,17 @@ export function parseDecimal(value) {
   return match ? Number(match[0]) : Number.NaN;
 }
 
+export function normalizeExpenseCategory(category) {
+  if (category === undefined || category === null) return category;
+  const text = String(category).trim();
+  if (!text) return text;
+
+  const key = normalizeCategoryKey(text);
+  const canonical = CANONICAL_EXPENSE_CATEGORIES.find((item) => normalizeCategoryKey(item) === key)
+    ?? EXPENSE_CATEGORY_ALIASES.get(key);
+  return canonical ?? titleCaseCategory(text);
+}
+
 export function assertTimeOrder(startTime, endTime) {
   if (!startTime || !endTime) return;
   if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
@@ -142,6 +179,22 @@ function normalizeDateValue(value) {
 
 function hasField(body, field) {
   return Object.prototype.hasOwnProperty.call(body, field);
+}
+
+function normalizeCategoryKey(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function titleCaseCategory(value) {
+  return normalizeCategoryKey(value)
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 function formatRange(label, min, max, exclusiveMin = false) {

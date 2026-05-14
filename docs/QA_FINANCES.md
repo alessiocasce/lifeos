@@ -30,6 +30,13 @@ Run this after signing in through the global auth gate. No extra schema migratio
 3. Confirm only this month's expense contributes to `Current Month Spend`.
 4. Confirm both expenses can still appear in recent history.
 
+## Category Casing
+
+1. Create an expense through the AI assistant or Action API with category `subscriptions`.
+2. Confirm Finances displays the saved category as `Subscriptions`.
+3. Repeat with `grocery`, `bill`, and `personal-care` if possible and confirm they display as `Groceries`, `Bills`, and `Personal Care`.
+4. Create an expense with an unknown category such as `random thing` and confirm it saves as `Random Thing` instead of being rejected.
+
 ## Month Selector
 
 1. Create an expense dated this month.

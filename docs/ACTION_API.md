@@ -112,6 +112,7 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/expense \
 Required: `vendor`, `category`, `amount > 0`.
 
 `spent_on` defaults to today when omitted.
+Expense categories are normalized to canonical display casing when possible. For example, `subscription` or `subscriptions` becomes `Subscriptions`, `grocery` becomes `Groceries`, and `personal-care` becomes `Personal Care`. Unknown categories are title-cased instead of rejected.
 
 Limits:
 

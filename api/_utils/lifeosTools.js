@@ -9,6 +9,7 @@ import {
   optionalNullableNumber,
   optionalNullableTime,
   optionalText,
+  normalizeExpenseCategory,
   requiredDate,
   requiredNumber,
   requiredText,
@@ -182,7 +183,7 @@ export async function createExpense(args) {
   const userId = getActionUserId();
   const body = {
     vendor: args.vendor ?? args.merchant ?? args.name,
-    category: args.category,
+    category: normalizeExpenseCategory(args.category),
     amount: args.amount,
     spent_on: resolveDate(args.spent_on ?? args.date, localDate()),
     notes: args.notes,

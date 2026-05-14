@@ -8,7 +8,7 @@ import {
   sendSuccess,
 } from '../_utils/http.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
-import { compactPayload, optionalDate, optionalText, requiredNumber, requiredText, today } from '../_utils/validation.js';
+import { compactPayload, normalizeExpenseCategory, optionalDate, optionalText, requiredNumber, requiredText, today } from '../_utils/validation.js';
 
 export default async function handler(req, res) {
   const context = createRequestContext(req, res);
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const payload = compactPayload({
       user_id: userId,
       vendor: requiredText(body, 'vendor', { max: 120 }),
-      category: requiredText(body, 'category', { max: 80 }),
+      category: requiredText({ category: normalizeExpenseCategory(body.category) }, 'category', { max: 80 }),
       amount: requiredNumber(body, 'amount', { minExclusive: 0, max: 100000 }),
       spent_on: optionalDate(body, 'spent_on', today()),
       notes: optionalText(body.notes, 'notes', { max: 1000 }),
