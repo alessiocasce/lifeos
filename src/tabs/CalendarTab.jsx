@@ -310,20 +310,21 @@ export function CalendarTab() {
 }
 
 function EventModal({ actionStatus, editing, error, form, onChange, onClose, onSubmit, viewportHeight }) {
-  const modalMaxHeight = viewportHeight
+  const mobileEditorHeight = viewportHeight ? `${viewportHeight}px` : '100dvh';
+  const desktopModalMaxHeight = viewportHeight
     ? `${Math.min(Math.max(Math.floor(viewportHeight * 0.82), 360), 620)}px`
     : 'min(82dvh, 620px)';
 
   return (
-    <div className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-hidden bg-black/70 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex min-w-0 items-stretch justify-stretch overflow-hidden bg-black/70 backdrop-blur sm:items-center sm:justify-center sm:p-4">
       <div
-        className="flex min-h-0 w-full max-w-[calc(100vw-16px)] flex-col overflow-hidden overflow-x-hidden rounded-t-2xl border border-white/10 bg-[#0f0f0f] shadow-2xl sm:max-w-2xl sm:rounded-xl"
-        style={{ maxHeight: modalMaxHeight }}
+        className="flex h-[var(--calendar-editor-height)] max-h-[var(--calendar-editor-height)] min-h-0 w-full max-w-full flex-col overflow-hidden overflow-x-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[var(--calendar-editor-max-height)] sm:max-w-2xl sm:rounded-xl sm:border"
+        style={{
+          '--calendar-editor-height': mobileEditorHeight,
+          '--calendar-editor-max-height': desktopModalMaxHeight,
+        }}
       >
-        <div className="flex shrink-0 justify-center pt-2 sm:hidden">
-          <div className="h-1 w-10 rounded-full bg-white/20" />
-        </div>
-        <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5">
+        <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
             <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Event' : 'Create Event'}</p>
             <h3 className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Update Schedule Item' : 'New Schedule Item'}</h3>
@@ -338,63 +339,80 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
-          <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden overscroll-contain p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <CalendarField label="Title" value={form.title} placeholder="Deep work, lecture, lift..." onChange={(value) => onChange('title', value)} />
+        <form
+          onSubmit={onSubmit}
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain sm:overflow-hidden"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="min-w-0 space-y-3 p-4 sm:min-h-0 sm:flex-1 sm:space-y-2 sm:overflow-y-auto sm:overflow-x-hidden sm:p-3">
+            <CalendarField id="calendar-title" label="Title" value={form.title} placeholder="Deep work, lecture, lift..." onChange={(value) => onChange('title', value)} />
 
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-              <CalendarField label="Date" type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
-              <SelectField label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
+              <CalendarField id="calendar-date" label="Date" type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
+              <SelectField id="calendar-status" label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
             </div>
 
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-              <CalendarField label="Start" type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
-              <CalendarField label="End" type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
+              <CalendarField id="calendar-start" label="Start" type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
+              <CalendarField id="calendar-end" label="End" type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
             </div>
 
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-              <SelectField label="Category" value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
-              <CalendarField label="Location" value={form.location} placeholder="Library, gym, office" onChange={(value) => onChange('location', value)} />
+              <SelectField id="calendar-category" label="Category" value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
+              <CalendarField id="calendar-location" label="Location" value={form.location} placeholder="Library, gym, office" onChange={(value) => onChange('location', value)} />
             </div>
 
-            <label className="block min-w-0 space-y-1 overflow-hidden">
-              <span className="data-text text-[10px] uppercase text-zinc-500">Notes</span>
+            <div className="block min-w-0 space-y-1 overflow-hidden">
+              <label htmlFor="calendar-notes" className="data-text block text-[10px] uppercase text-zinc-500">Notes</label>
               <textarea
+                id="calendar-notes"
                 value={form.notes}
                 onChange={(event) => onChange('notes', event.target.value)}
                 rows={3}
                 className="min-h-20 w-full min-w-0 max-w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50 sm:min-h-24"
                 placeholder="Prep, constraints, or agenda notes"
               />
-            </label>
+            </div>
 
             {error ? (
               <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
                 {error}
               </div>
             ) : null}
+
+            <div className="grid min-w-0 grid-cols-1 gap-2 overflow-hidden overflow-x-hidden pt-2 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:hidden">
+              <EventFormActions actionStatus={actionStatus} editing={editing} onClose={onClose} />
+            </div>
           </div>
 
-          <div className="grid min-w-0 shrink-0 grid-cols-1 gap-2 overflow-hidden overflow-x-hidden border-t border-white/5 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:pb-3">
-            <button
-              type="submit"
-              disabled={actionStatus === 'saving'}
-              className="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {actionStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {actionStatus === 'saving' ? 'Saving Event' : editing ? 'Update Event' : 'Create Event'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
-            >
-              Cancel
-            </button>
+          <div className="hidden min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden overflow-x-hidden border-t border-white/5 p-3 sm:grid">
+            <EventFormActions actionStatus={actionStatus} editing={editing} onClose={onClose} />
           </div>
         </form>
       </div>
     </div>
+  );
+}
+
+function EventFormActions({ actionStatus, editing, onClose }) {
+  return (
+    <>
+      <button
+        type="submit"
+        disabled={actionStatus === 'saving'}
+        className="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {actionStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+        {actionStatus === 'saving' ? 'Saving Event' : editing ? 'Update Event' : 'Create Event'}
+      </button>
+      <button
+        type="button"
+        onClick={onClose}
+        className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
+      >
+        Cancel
+      </button>
+    </>
   );
 }
 
@@ -433,26 +451,28 @@ function EventCard({ deleting, event, onEdit, onRemove }) {
   );
 }
 
-function CalendarField({ label, onChange, placeholder = '', type = 'text', value }) {
+function CalendarField({ id, label, onChange, placeholder = '', type = 'text', value }) {
   return (
-    <label className="block min-w-0 space-y-1 overflow-hidden">
-      <span className="data-text text-[10px] uppercase text-zinc-500">{label}</span>
+    <div className="block min-w-0 space-y-1 overflow-hidden">
+      <label htmlFor={id} className="data-text block text-[10px] uppercase text-zinc-500">{label}</label>
       <input
+        id={id}
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full min-w-0 max-w-full rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/50"
       />
-    </label>
+    </div>
   );
 }
 
-function SelectField({ label, onChange, options, value }) {
+function SelectField({ id, label, onChange, options, value }) {
   return (
-    <label className="block min-w-0 space-y-1 overflow-hidden">
-      <span className="data-text text-[10px] uppercase text-zinc-500">{label}</span>
+    <div className="block min-w-0 space-y-1 overflow-hidden">
+      <label htmlFor={id} className="data-text block text-[10px] uppercase text-zinc-500">{label}</label>
       <select
+        id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="h-10 w-full min-w-0 max-w-full appearance-none rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50"
@@ -461,7 +481,7 @@ function SelectField({ label, onChange, options, value }) {
           <option key={option} value={option}>{option}</option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 

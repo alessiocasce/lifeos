@@ -241,7 +241,8 @@ Current behavior:
 - Uses a compact selected-day control card with date picker, Today shortcut, event count, and Plus button.
 - Uses weekly range loading internally around the selected date, but the week board is not the primary UI.
 - Creates and edits events through a modal instead of an always-visible side form.
-- The create/edit modal is mobile-safe: it uses an iOS-safe scroll lock without body fixed-position offsets, responds to visual viewport changes, keeps the X close button visible, confines overflow to the form body, prevents horizontal modal overflow, and stacks paired fields on narrow screens.
+- Calendar create/edit uses a full-screen editor on mobile to avoid iPhone Safari bottom-sheet input hitbox issues, while desktop/tablet keeps a centered dialog.
+- The create/edit surface uses an iOS-safe scroll lock without body fixed-position offsets, responds to visual viewport changes, keeps the X close button visible, prevents horizontal overflow, and stacks paired fields on narrow screens.
 - Creates, edits, and deletes events.
 - Shows all events for the selected date as readable agenda cards.
 - Sorts timed events by start time, with untimed events after timed events.

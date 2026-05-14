@@ -21,25 +21,28 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 ## Create Event Modal
 
 1. Click the Plus button.
-2. Confirm the `New Schedule Item` or create modal opens.
-3. Confirm the modal date defaults to the currently selected date.
-4. Create an event with title, date, start time, end time, category, location, notes, and status `planned`.
-5. Confirm the modal closes after save.
-6. Confirm the new event appears in the selected-day agenda.
-7. Refresh the page and confirm the event reloads from Supabase.
+2. Confirm the `New Schedule Item` create editor opens.
+3. On mobile, confirm it opens as a full-screen editor instead of a bottom sheet.
+4. On desktop/tablet, confirm it still opens as a centered dialog.
+5. Confirm the editor date defaults to the currently selected date.
+6. Create an event with title, date, start time, end time, category, location, notes, and status `planned`.
+7. Confirm the editor closes after save.
+8. Confirm the new event appears in the selected-day agenda.
+9. Refresh the page and confirm the event reloads from Supabase.
 
 ## Modal Scrolling
 
 1. Open the create modal on iPhone Safari.
-2. Confirm the Calendar page behind the modal does not scroll while the modal is open.
-3. Confirm there is no double-scroll trap between the background page and modal.
-4. Confirm there is no horizontal scrollbar inside the modal, form body, or footer.
-5. Confirm only the modal form body scrolls vertically when the form is taller than the viewport.
-6. Confirm the X close button remains visible without scrolling.
-7. Confirm Create/Update and Cancel remain accessible at the bottom of the modal.
-8. Trigger a validation error and confirm the user can still see the X button and close the modal.
-9. Confirm the modal respects the iPhone safe area and is not covered by the bottom nav.
-10. Confirm the modal still feels like a clean bottom sheet/dialog, not a squeezed desktop form.
+2. Confirm mobile uses a full-screen editor, not a bottom-sheet popup.
+3. Confirm the Calendar page behind the editor does not create a bad scroll trap.
+4. Confirm there is no nested modal/body double-scroll trap.
+5. Confirm there is no horizontal scrollbar inside the editor, form body, or footer.
+6. Confirm the editor content has a single reliable vertical scroll path when the form is taller than the viewport.
+7. Confirm the X close button remains visible without scrolling.
+8. Confirm Create/Update and Cancel remain accessible.
+9. Trigger a validation error and confirm the user can still see the X button and close the editor.
+10. Confirm the editor respects the iPhone safe area and is not covered by the bottom nav.
+11. Confirm the mobile editor feels like a native full-screen create/edit screen, not a squeezed desktop form.
 
 ## Modal Field Layout
 
@@ -47,14 +50,14 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 2. Confirm Start and End are not forced into two columns on the narrowest screens.
 3. Confirm native date, time, and select controls stay inside the modal width.
 4. Confirm footer buttons are full width on mobile and do not overflow.
-5. Confirm the modal top handle, rounded top corners, title, and X remain visually clean.
+5. Confirm the mobile editor header title and X remain visually clean.
 
 ## iPhone Input Targeting
 
 1. Open the create modal on iPhone Safari.
 2. Tap Title, type `Study session`, dismiss the keyboard, and tap Title again. Confirm Title focuses, not Date.
 3. Repeat the focus, dismiss, and refocus flow for Date, Status, Start, End, Category, Location, and Notes.
-4. Scroll the modal form body, tap a visible field, and confirm the tapped field receives focus.
+4. Scroll the full-screen editor, tap a visible field, and confirm the tapped field receives focus.
 5. Confirm keyboard open/close does not shift tap hitboxes to the field below the visible target.
 6. Confirm there is still no horizontal scrollbar inside the modal.
 7. Confirm the X button still closes the modal and the background page does not create a bad scroll trap.
@@ -62,12 +65,13 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 ## Edit Event Modal
 
 1. Click edit on an event card.
-2. Confirm the same modal opens in edit mode and is prefilled.
-3. Change title, time, category, notes, date, and status.
-4. Save the event.
-5. Confirm the modal closes and the selected date follows the event date.
-6. Confirm the agenda shows the updated event.
-7. Click cancel/close from edit mode and confirm no changes are saved.
+2. Confirm the same editor opens in edit mode and is prefilled.
+3. On mobile, confirm edit also uses the full-screen editor.
+4. Change title, time, category, notes, date, and status.
+5. Save the event.
+6. Confirm the editor closes and the selected date follows the event date.
+7. Confirm the agenda shows the updated event.
+8. Click cancel/close from edit mode and confirm no changes are saved.
 
 ## Delete Event
 
@@ -125,8 +129,8 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 2. Confirm no horizontal scrolling.
 3. Confirm the selected-day card is first and the agenda is immediately visible.
 4. Confirm the Plus button is thumb-friendly.
-5. Confirm the create/edit modal fits the screen and can scroll internally.
-6. Confirm background page scrolling is locked while the modal is open.
+5. Confirm the create/edit flow uses a full-screen editor that fits the screen.
+6. Confirm background page scrolling does not interfere while the editor is open.
 7. Confirm there is no horizontal scrollbar inside the modal.
 8. Confirm inputs do not zoom when focused.
 9. Confirm tapping a field after keyboard open/close focuses the visible field, not the field below it.
