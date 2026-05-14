@@ -25,7 +25,6 @@ export function Shell({ children }) {
     activeTab,
     activeWorkoutSession,
     authUser,
-    currentDate,
     expenses,
     healthLogs,
     setActiveTab,
@@ -106,7 +105,6 @@ export function Shell({ children }) {
                 MIDNIGHT OPS
               </span>
             </div>
-            <p className="data-text mt-1 hidden text-[11px] text-zinc-500 md:block">{currentDate} / 13:42 LOCAL / LATENCY 18ms</p>
           </div>
 
           <div className="flex items-center gap-2">
