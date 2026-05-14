@@ -11,6 +11,7 @@ Run this against the deployed HTTPS URL after a production build has been deploy
 5. Confirm the Home Screen icon uses the LifeOS icon, not a page screenshot.
 6. Open LifeOS from the Home Screen and confirm it launches in standalone mode where iOS supports it.
 7. Confirm the status bar blends with the dark LifeOS background.
+8. Confirm the LifeOS logo, title, and sign-out button sit below the iPhone time/Wi-Fi/battery area.
 
 ## App Shell Cache
 
@@ -36,11 +37,13 @@ Run this against the deployed HTTPS URL after a production build has been deploy
 1. Open LifeOS from the Home Screen.
 2. Confirm Home, Calendar, Health, Workout, Finances, and Assistant have no horizontal page scroll.
 3. Confirm bottom navigation safe-area padding works in standalone mode.
-4. Confirm text inputs do not zoom on focus.
-5. Open Calendar and create or edit an event.
-6. Confirm the mobile full-screen Calendar editor still targets the correct input after keyboard open/close.
-7. Confirm Calendar save/cancel controls are not covered by the iPhone bottom area.
-8. Confirm the Gemini assistant and Action API features still require their server env vars and do not work from cached API responses.
+4. Confirm the top shell header does not overlap iPhone status icons.
+5. Confirm text inputs do not zoom on focus.
+6. Open Calendar and create or edit an event.
+7. Confirm the mobile full-screen Calendar editor still targets the correct input after keyboard open/close.
+8. Confirm the Calendar editor close button respects the top safe area.
+9. Confirm Calendar save/cancel controls are not covered by the iPhone bottom area.
+10. Confirm the Gemini assistant and Action API features still require their server env vars and do not work from cached API responses.
 
 ## Deployment Notes
 

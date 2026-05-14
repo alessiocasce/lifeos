@@ -41,7 +41,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/components/LifeOSLogo.jsx` contains the custom inline SVG logo used by the shell and favicon artwork.
 - `src/components/Shell.jsx` owns the global app shell:
   - Desktop/tablet uses the fixed left sidebar and full top metrics header.
-  - Mobile uses a compact sticky top header and fixed bottom tab navigation.
+  - Mobile uses a compact sticky top header that respects `env(safe-area-inset-top)` in iPhone PWA standalone mode, plus fixed bottom tab navigation.
   - Sign out lives in the shell header, not in an individual tab.
   - Header/sidebar metrics use persisted health, workout, and expense state where available instead of mock finance/training values.
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
@@ -170,6 +170,7 @@ Current behavior:
 - Provides manifest metadata for `LifeOS`, standalone display, portrait orientation, dark theme/background colors, and productivity/health/finance categories.
 - Provides generated PNG icons for 192px, 512px, maskable 192px, maskable 512px, and Apple touch icon usage.
 - Adds iOS Home Screen metadata and `viewport-fit=cover` in `index.html`.
+- Uses a safe-area-aware mobile shell header so the installed iPhone PWA does not overlap the status bar.
 - Caches the built app shell and static assets only.
 - Does not add runtime caching for `/api`, Supabase, Gemini, auth/session, or user-specific database responses.
 - Does not store Supabase tokens or server-only secrets in service worker code.
@@ -468,7 +469,7 @@ The app shell is now mobile-first while preserving desktop:
 Workout mobile direction:
 
 - Prioritize fast set logging at the gym.
-- Active workout header is compact and sticky on mobile with `top-14`, matching the shell's mobile `h-14` header.
+- Active workout header is compact and sticky on mobile with `top-[calc(env(safe-area-inset-top)+56px)]`, matching the safe-area-aware shell header.
 - Desktop keeps the workout header non-sticky with `md:static`.
 - Rest timer is compact and visible near the top.
 - Exercise input is full-width.
@@ -534,6 +535,7 @@ Workout mobile direction:
 - Run `docs/QA_PWA.md` after deploying PWA changes:
   - Confirm the manifest and service worker load over HTTPS.
   - Confirm iPhone Safari can add LifeOS to the Home Screen.
+  - Confirm the installed app header sits below the iPhone time/Wi-Fi/battery area.
   - Confirm the installed app opens standalone and keeps the Calendar mobile editor stable.
   - Confirm Supabase, `/api`, Gemini, and auth responses are not cached by the service worker.
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.

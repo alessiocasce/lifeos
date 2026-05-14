@@ -553,7 +553,7 @@ function ActiveWorkoutHeader({
   const timerInactive = ended;
 
   return (
-    <Panel className="sticky top-14 z-20 col-span-12 md:static md:z-auto">
+    <Panel className="sticky top-[calc(env(safe-area-inset-top)+56px)] z-20 col-span-12 md:static md:z-auto">
       <div className="grid items-center gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[1fr_190px]">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">

@@ -115,6 +115,7 @@ Run the focused checklists after the full flow:
 5. Confirm bottom navigation does not cover primary save buttons.
 6. Confirm Calendar status buttons wrap without horizontal overflow.
 7. Confirm long labels truncate cleanly in ledger, review archive, and workout history rows.
+8. If installed as a PWA, confirm the shell header sits below the iPhone status bar and does not overlap time, Wi-Fi, or battery.
 
 ## Desktop / Laptop Layout
 

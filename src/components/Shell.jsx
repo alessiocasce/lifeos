@@ -93,7 +93,7 @@ export function Shell({ children }) {
       </aside>
 
       <main className="min-h-screen min-w-0 w-full md:ml-[76px] md:w-[calc(100%-76px)]">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-3 backdrop-blur md:h-[72px] md:px-5">
+        <header className="sticky top-0 z-10 flex h-[calc(env(safe-area-inset-top)+56px)] items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:h-[72px] md:px-5 md:pt-0">
           <div>
             <div className="flex items-center gap-2">
               <LifeOSLogo size={22} />
