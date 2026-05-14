@@ -38,12 +38,21 @@ export function requireActionAuth(req) {
     throw new HttpError(500, 'Action API token is not configured.');
   }
 
-  const header = String(req.headers.authorization || req.headers.Authorization || '').trim();
-  const match = header.match(/^Bearer ([^\s]+)$/);
-  const token = match?.[1] ?? '';
+  const token = getBearerToken(req);
   if (!token || !constantTimeEqual(token, expectedToken)) {
     throw new HttpError(401, 'Unauthorized.');
   }
+}
+
+export function getBearerToken(req) {
+  const header = String(req.headers.authorization || req.headers.Authorization || '').trim();
+  const match = header.match(/^Bearer ([^\s]+)$/);
+  return match?.[1] ?? '';
+}
+
+export function matchesSecret(value, secret) {
+  const expected = String(secret ?? '').trim();
+  return Boolean(value && expected && constantTimeEqual(String(value), expected));
 }
 
 export async function readJsonBody(req) {

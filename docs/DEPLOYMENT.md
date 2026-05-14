@@ -15,20 +15,24 @@ Only use the Supabase anon public key in the frontend. Do not add Supabase servi
 
 If these variables are missing, the app should show the existing Supabase setup/config screen instead of rendering the LifeOS shell.
 
-## Server-Only Action API Variables
+## Server-Only API Variables
 
-The Vercel Action API uses server-only environment variables:
+The Vercel Action API and in-app AI assistant use server-only environment variables:
 
 ```env
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 LIFEOS_ACTION_TOKEN=your-long-random-token
 LIFEOS_ACTION_USER_ID=target-auth-user-uuid
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 Do not add `SUPABASE_SERVICE_ROLE_KEY` to frontend code or any `VITE_` variable. The service-role key is only for files under `/api`.
 
 `LIFEOS_ACTION_TOKEN` should be long, random, and stored only in Vercel and trusted clients such as iPhone Shortcuts. `LIFEOS_ACTION_USER_ID` is the Supabase Auth user UUID that action calls write records for.
+
+`GEMINI_API_KEY` is required for the in-app LifeOS AI assistant. `GEMINI_MODEL` is optional and defaults to `gemini-2.5-flash`.
 
 Redeploy after changing any Vercel environment variable.
 
@@ -113,6 +117,8 @@ dist
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `LIFEOS_ACTION_TOKEN`
    - `LIFEOS_ACTION_USER_ID`
+   - `GEMINI_API_KEY`
+   - optional `GEMINI_MODEL`
 6. Deploy.
 
 ## iPhone Live QA
@@ -134,5 +140,6 @@ dist
 - Run `npm run build` before every deploy claim.
 - Apply `supabase/schema.sql` before live QA.
 - Run `docs/ACTION_API.md` manual QA before relying on iPhone Shortcuts automation.
+- Run `docs/QA_AI_ASSISTANT.md` before relying on the in-app Gemini assistant.
 - Confirm Action API `401`, `405`, `413`, validation, and successful-write cases after every environment change.
 - Do not proceed to AI, chat automation, or Google Calendar sync until the deployed Supabase-backed workflows and Action API pass live QA.

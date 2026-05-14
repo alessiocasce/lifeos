@@ -40,6 +40,22 @@ export function getSupabaseAdmin() {
   return adminClient;
 }
 
+export async function requireConfiguredUserAccess(accessToken) {
+  if (!accessToken) {
+    throw new HttpError(401, 'Unauthorized.');
+  }
+
+  const actionUserId = getActionUserId();
+  const { data, error } = await getSupabaseAdmin().auth.getUser(accessToken);
+  if (error || !data?.user) {
+    throw new HttpError(401, 'Unauthorized.');
+  }
+  if (data.user.id !== actionUserId) {
+    throw new HttpError(403, 'This assistant is not configured for the signed-in user.');
+  }
+  return data.user;
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

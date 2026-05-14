@@ -1,8 +1,8 @@
 # LifeOS Project Context
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 Current branch: `main`
-Recent context: Workout sets now support warmup rows that display as `W` and are excluded from working analytics.
+Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
 
 ## Project Goal
 
@@ -47,9 +47,11 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `api/actions/` contains token-protected Vercel Serverless Functions for external automation. These are server-only and use `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
+- `api/ai/chat.js` contains the in-app Gemini-powered LifeOS assistant endpoint. Gemini plans intent, while backend-controlled tools read/write Supabase.
 - `src/data/lifeosData.js` contains remaining local mock data for legacy/unconverted surfaces, but the real Workout tab no longer displays a mock workout archive.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Action API docs live in `docs/ACTION_API.md`.
+- AI Assistant QA lives in `docs/QA_AI_ASSISTANT.md`.
 - Focused Workout QA, including warmup behavior, lives in `docs/QA_WORKOUT.md`.
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
@@ -75,9 +77,11 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 LIFEOS_ACTION_TOKEN=...
 LIFEOS_ACTION_USER_ID=...
+GEMINI_API_KEY=...
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
+`GEMINI_API_KEY` is also server-only and must never be exposed through frontend code.
 
 The schema is in `supabase/schema.sql`.
 
@@ -137,6 +141,10 @@ Real/persisted today:
   - `POST /api/actions/expense`
   - `POST /api/actions/health`
   - `POST /api/actions/calendar`
+- In-app Gemini LifeOS assistant:
+  - `POST /api/ai/chat`
+  - Assistant tab "Ask LifeOS" chat surface.
+  - Daily Review workflow remains available below the AI chat surface.
 
 Partially wired but not fully used in UI:
 
@@ -168,6 +176,38 @@ Current behavior:
 - Enforces endpoint field limits and numeric caps before writing to Supabase.
 - Does not implement AI, chat behavior, external model calls, or frontend UI changes.
 - Must be live-tested after setting Vercel env vars; local curl tests require the same server-only env vars.
+
+## AI Assistant Current Status
+
+`src/tabs/AIAssistantTab.jsx` now includes an in-app "Ask LifeOS" chat area above the persisted Daily Review workflow.
+
+Architecture:
+
+- Frontend sends only the raw message to `POST /api/ai/chat`.
+- The frontend sends the current Supabase access token; the backend verifies it and ensures it matches `LIFEOS_ACTION_USER_ID`.
+- The endpoint can also accept `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` for trusted server/tool callers.
+- Gemini receives no database credentials and cannot run SQL.
+- Gemini first returns a strict JSON planner object.
+- Backend tools perform controlled reads/writes through Supabase service-role access and always filter/write `user_id = LIFEOS_ACTION_USER_ID`.
+- Gemini is called again to produce the final practical answer from the original message, plan, controlled context summary, and action results.
+
+Supported v1 intents/tools:
+
+- Analyze persisted LifeOS context across expenses, health logs, workouts/sets, calendar events, and daily reviews.
+- Create expenses.
+- Create calendar events.
+- Update provided daily health log fields.
+- Analyze recent context and create a small non-overlapping calendar plan when the user explicitly asks to plan/schedule.
+- Block destructive requests such as deleting records or mass updates.
+
+Current limitations:
+
+- No arbitrary SQL.
+- No destructive writes.
+- No multi-turn pending confirmation system yet.
+- No external API integrations beyond Gemini.
+- No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
+- `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
 
 ## Calendar Module Current Status
 
@@ -450,6 +490,11 @@ Workout mobile direction:
   - Oversized JSON payloads return `413`.
   - Invalid payloads return clear `400` errors.
   - Expense, Health, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
+- Run `docs/QA_AI_ASSISTANT.md` after deploying `GEMINI_API_KEY`:
+  - Natural-language analysis uses persisted context only.
+  - Low-risk additive actions execute directly.
+  - Destructive requests are blocked.
+  - Daily Review remains usable.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template CRUD/start flow, warmup display/edit transitions, and analytics exclusion.
 - Test Workout templates after applying the latest `workout_templates` and `workout_template_exercises` schema migration.
@@ -481,8 +526,9 @@ Workout mobile direction:
 7. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
 8. Deploy the app and complete live iPhone QA against the real Supabase project.
 9. Live-test Action API calls from iPhone Shortcuts before relying on external automation.
-10. Convert Chat Messages only after the assistant behavior is clearly defined and live QA has passed.
-11. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+10. Live-test the Gemini in-app assistant with `docs/QA_AI_ASSISTANT.md`.
+11. Convert Chat Messages only after assistant transcript persistence is clearly defined and live QA has passed.
+12. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
 
 ## Rules For Future Work
 
