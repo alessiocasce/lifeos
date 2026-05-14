@@ -245,6 +245,7 @@ Current behavior:
 - The create/edit surface uses an iOS-safe scroll lock without body fixed-position offsets, keeps mobile sizing CSS-driven with `100dvh` to reduce keyboard close gaps, keeps the X close button visible, prevents horizontal overflow, and stacks paired fields on narrow screens.
 - Creates, edits, and deletes events.
 - Shows all events for the selected date as readable agenda cards.
+- Agenda event cards support quick status changes for planned, done, skipped, and cancelled without opening the editor.
 - Sorts timed events by start time, with untimed events after timed events.
 - UI-created event categories are limited to Work, Study, School, Health, Workout, Entertainment, and Sleep.
 - Category badges use consistent subtle color styling. Older unknown category strings remain display-compatible with neutral styling.

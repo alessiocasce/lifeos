@@ -90,6 +90,19 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 3. Confirm the event disappears from the selected-day agenda.
 4. Refresh and confirm it does not return.
 
+## Quick Status Actions
+
+1. Create or open an event in the selected-day agenda.
+2. Click the green check button and confirm the event status changes to `done`.
+3. Click the amber skip button and confirm the event status changes to `skipped`.
+4. Click the red X status button and confirm the event status changes to `cancelled`.
+5. Click the planned clock button and confirm the event status changes back to `planned`.
+6. Confirm the current status button is highlighted and disabled.
+7. Confirm the red cancelled status button does not delete the event.
+8. Confirm permanent delete still uses the Trash icon and confirmation prompt.
+9. Confirm failed status updates show a clear agenda error.
+10. On mobile, confirm the status buttons wrap cleanly with Edit/Delete and do not create horizontal overflow.
+
 ## Categories
 
 1. Confirm the event form uses defined category choices, not a free text hashtag field.
@@ -146,4 +159,4 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 9. Confirm tapping a field after keyboard open/close focuses the visible field, not the field below it.
 10. Confirm tapping Done/End on the keyboard does not leave a lingering black box under the editor.
 11. Confirm the bottom nav does not cover modal actions.
-12. Confirm event edit/delete controls are thumb-friendly.
+12. Confirm event status, edit, and delete controls are thumb-friendly and wrap without horizontal overflow.

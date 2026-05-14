@@ -1,11 +1,13 @@
 import {
   CalendarDays,
+  Check,
   Clock,
   Loader2,
   MapPin,
   Pencil,
   Plus,
   Save,
+  SkipForward,
   Trash2,
   X,
 } from 'lucide-react';
@@ -44,8 +46,10 @@ export function CalendarTab() {
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [formError, setFormError] = useState('');
+  const [eventActionError, setEventActionError] = useState('');
   const [actionStatus, setActionStatus] = useState('idle');
   const [deleteId, setDeleteId] = useState(null);
+  const [statusActionId, setStatusActionId] = useState('');
 
   const weekStart = useMemo(() => startOfWeek(selectedDate), [selectedDate]);
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
@@ -95,6 +99,7 @@ export function CalendarTab() {
     setEditingId(null);
     setForm(emptyForm(selectedDate));
     setFormError('');
+    setEventActionError('');
     setModalOpen(true);
   };
 
@@ -111,6 +116,7 @@ export function CalendarTab() {
       status: event.status ?? 'planned',
     });
     setFormError('');
+    setEventActionError('');
     setModalOpen(true);
   };
 
@@ -164,14 +170,30 @@ export function CalendarTab() {
     if (!window.confirm('Delete this calendar event?')) return;
     setDeleteId(id);
     setFormError('');
+    setEventActionError('');
     try {
       await deleteCalendarEvent(id);
       await reloadSelectedRange();
       if (editingId === id) closeModal();
     } catch (error) {
-      setFormError(error.message || 'Failed to delete calendar event.');
+      setEventActionError(error.message || 'Failed to delete calendar event.');
     } finally {
       setDeleteId(null);
+    }
+  };
+
+  const updateEventStatus = async (event, nextStatus) => {
+    if (!statuses.includes(nextStatus) || event.status === nextStatus) return;
+    const actionKey = `${event.id}:${nextStatus}`;
+    setStatusActionId(actionKey);
+    setEventActionError('');
+    try {
+      await updateCalendarEvent(event.id, { status: nextStatus });
+      await reloadSelectedRange();
+    } catch (error) {
+      setEventActionError(error.message || 'Failed to update event status.');
+    } finally {
+      setStatusActionId('');
     }
   };
 
@@ -243,6 +265,11 @@ export function CalendarTab() {
               {calendarEventsError}
             </div>
           ) : null}
+          {eventActionError ? (
+            <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
+              {eventActionError}
+            </div>
+          ) : null}
 
           {isInitialLoading ? (
             <LoadingRow label="Loading selected day" />
@@ -253,7 +280,9 @@ export function CalendarTab() {
                 event={event}
                 onEdit={() => openEditModal(event)}
                 onRemove={() => removeEvent(event.id)}
+                onStatusChange={(nextStatus) => updateEventStatus(event, nextStatus)}
                 deleting={deleteId === event.id}
+                statusActionId={statusActionId}
               />
             ))
           ) : isLoading ? (
@@ -381,7 +410,10 @@ function EventFormActions({ actionStatus, editing, onClose }) {
   );
 }
 
-function EventCard({ deleting, event, onEdit, onRemove }) {
+function EventCard({ deleting, event, onEdit, onRemove, onStatusChange, statusActionId }) {
+  const normalizedStatus = statuses.includes(event.status) ? event.status : 'planned';
+  const statusBusy = statusActionId.startsWith(`${event.id}:`);
+
   return (
     <article className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
       <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -405,14 +437,53 @@ function EventCard({ deleting, event, onEdit, onRemove }) {
             {event.notes ? <p className="break-words leading-6 text-zinc-400">{event.notes}</p> : null}
           </div>
         </div>
-        <div className="flex items-center gap-2 md:justify-end">
-          <IconButton label="Edit event" onClick={onEdit}><Pencil size={15} /></IconButton>
-          <IconButton label="Delete event" onClick={onRemove} disabled={deleting}>
-            {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-          </IconButton>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
+          <div className="flex flex-wrap items-center gap-2">
+            {statusActions.map((action) => (
+              <StatusActionButton
+                key={action.status}
+                action={action}
+                active={normalizedStatus === action.status}
+                loading={statusActionId === `${event.id}:${action.status}`}
+                disabled={statusBusy}
+                onClick={() => onStatusChange(action.status)}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-2 border-l border-white/5 pl-2">
+            <IconButton label="Edit event" onClick={onEdit}><Pencil size={15} /></IconButton>
+            <IconButton label="Delete event" onClick={onRemove} disabled={deleting}>
+              {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+            </IconButton>
+          </div>
         </div>
       </div>
     </article>
+  );
+}
+
+const statusActions = [
+  { status: 'planned', label: 'Mark planned', icon: Clock, tone: 'planned' },
+  { status: 'done', label: 'Mark done', icon: Check, tone: 'done' },
+  { status: 'skipped', label: 'Mark skipped', icon: SkipForward, tone: 'skipped' },
+  { status: 'cancelled', label: 'Mark cancelled', icon: X, tone: 'cancelled' },
+];
+
+function StatusActionButton({ action, active, disabled, loading, onClick }) {
+  const Icon = action.icon;
+  const disabledState = active || disabled || loading;
+  return (
+    <button
+      type="button"
+      aria-label={action.label}
+      title={action.label}
+      aria-pressed={active}
+      disabled={disabledState}
+      onClick={onClick}
+      className={`grid h-10 w-10 place-items-center rounded-md border transition disabled:cursor-not-allowed ${statusActionTone(action.tone, active)}`}
+    >
+      {loading ? <Loader2 size={15} className="animate-spin" /> : <Icon size={15} />}
+    </button>
   );
 }
 
@@ -499,6 +570,27 @@ function IconButton({ children, disabled = false, label, onClick }) {
       {children}
     </button>
   );
+}
+
+function statusActionTone(tone, active) {
+  if (tone === 'done') {
+    return active
+      ? 'border-emerald-400/50 bg-emerald-400/20 text-emerald-100 opacity-100'
+      : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200 hover:border-emerald-300/50';
+  }
+  if (tone === 'skipped') {
+    return active
+      ? 'border-amber-400/50 bg-amber-400/20 text-amber-100 opacity-100'
+      : 'border-amber-400/25 bg-amber-400/10 text-amber-200 hover:border-amber-300/50';
+  }
+  if (tone === 'cancelled') {
+    return active
+      ? 'border-red-400/50 bg-red-400/20 text-red-100 opacity-100'
+      : 'border-red-400/25 bg-red-400/10 text-red-200 hover:border-red-300/50';
+  }
+  return active
+    ? 'border-cyan-400/40 bg-cyan-400/15 text-cyan-100 opacity-100'
+    : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200 hover:border-cyan-300/40';
 }
 
 function validateEventForm(form) {
