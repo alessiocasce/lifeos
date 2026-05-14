@@ -197,6 +197,7 @@ Architecture:
 - Gemini provider failures are mapped to clean errors: rate limits, temporary outages, rejected requests, empty responses, and invalid planner JSON.
 - Assistant error cards show safe request/provider details without exposing secrets.
 - Expense, calendar, and health date handling accepts `YYYY-MM-DD`, `DD/MM/YY`, `DD/MM/YYYY`, `today`, and `tomorrow` where relevant.
+- AI-created calendar events normalize case-insensitive preferred categories such as `work` or `study` to the UI category names when possible.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
@@ -275,6 +276,7 @@ Current behavior:
 - Shows loading states before review archive empty states and warns if selected-date expense context fails.
 - Defensively sorts recent reviews newest-first in the Review surface.
 - Shows read-only context cards for the selected date using persisted health logs, workout sessions/sets, and expenses.
+- Selected-date workout context counts working sets and working volume, excluding warmups.
 - Keeps one empty next-action input row in the UI when all actions are removed, while saving an empty `next_actions` array.
 - Does not save context summaries redundantly into the review.
 - Does not implement AI behavior yet.
@@ -286,6 +288,7 @@ Current behavior:
 Current behavior:
 
 - Uses persisted `workoutSessions` and nested `workout_sets` from context.
+- Workout set and volume summaries exclude warmup sets.
 - Uses persisted `healthLogs` from context.
 - Uses persisted `expenses` for today's spend and latest expenses.
 - Loads the current month through `loadExpenseMonth` and uses persisted `monthlyExpenses` for current-month spend and category summaries.
@@ -348,6 +351,7 @@ Current behavior:
 - Uses the `user_id + logged_on` unique constraint to avoid duplicate daily logs.
 - If a duplicate-key insert happens, the app fetches the existing log for that date and updates it.
 - Changing the form date loads the persisted log for that date or clears the form for a new date.
+- A selected non-today Health date remains stable during background health-log refreshes.
 - Shows compact 7-day history from persisted rows only.
 - Shows measurable summaries: average sleep, average energy, total coffee, total ADC, and standalone daily habit stats.
 - Does not auto-calculate sleep time; `sleep_hours` is manually entered.

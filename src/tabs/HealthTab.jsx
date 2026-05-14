@@ -49,7 +49,7 @@ export function HealthTab() {
   const panelTitle = `${selectedLog ? 'Update' : 'Create'} ${selectedIsToday ? 'Today' : 'Selected Date'}`;
 
   useEffect(() => {
-    setForm(formFromLog(todaysLog));
+    setForm((prev) => (prev.logged_on === today ? formFromLog(todaysLog) : prev));
   }, [todaysLog?.id, todaysLog?.updated_at]);
 
   const updateField = (field, value) => {

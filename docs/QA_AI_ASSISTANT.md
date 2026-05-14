@@ -27,7 +27,8 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 4. Confirm it uses expenses and the 3-month range.
 5. Ask: `Am I progressing in workouts?`
 6. Confirm warmups are not treated as working volume or PR evidence.
-7. Ask a broad question with no data and confirm it does not invent records.
+7. Confirm the selected-date workout context card also excludes warmups from set count and volume.
+8. Ask a broad question with no data and confirm it does not invent records.
 
 ## Low-Risk Writes
 
@@ -41,9 +42,11 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 8. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
 9. Confirm a calendar event is created with the right date and times.
 10. Confirm AI-created calendar events use preferred categories where possible: Work, Study, School, Health, Workout, Entertainment, Sleep.
-11. Ask: `Log 8 energy and 1 coffee today.`
-12. Confirm today's health log updates without overwriting omitted fields.
-13. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+11. Ask for an event with a lowercase preferred category such as `work` or `study`.
+12. Confirm the created event stores/displays the preferred category casing, such as `Work` or `Study`.
+13. Ask: `Log 8 energy and 1 coffee today.`
+14. Confirm today's health log updates without overwriting omitted fields.
+15. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 

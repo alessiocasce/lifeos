@@ -35,6 +35,7 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 3. Switch the date to yesterday.
 4. Confirm yesterday's persisted values load into the form.
 5. Switch to a date with no log and confirm the form is empty for that date.
+6. While a non-today date is selected, refresh/sync health logs and confirm the form does not jump back to today.
 
 ## Daily Habits
 

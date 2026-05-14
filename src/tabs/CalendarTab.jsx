@@ -199,10 +199,12 @@ export function CalendarTab() {
 
   const selectDate = (value) => {
     if (!value) return;
+    setEventActionError('');
     setSelectedDate(value);
   };
 
   const selectToday = () => {
+    setEventActionError('');
     setSelectedDate(todayString());
   };
 
@@ -424,7 +426,7 @@ function EventCard({ deleting, event, onEdit, onRemove, onStatusChange, statusAc
               {formatTimeRange(event)}
             </span>
             <CategoryBadge category={event.category} />
-            <Tag tone={statusTone(event.status)}>{event.status}</Tag>
+            <Tag tone={statusTone(normalizedStatus)}>{normalizedStatus}</Tag>
           </div>
           <h3 className="break-words text-base font-semibold leading-6 text-zinc-100">{event.title}</h3>
           <div className="mt-2 grid gap-1 text-sm text-zinc-400">
@@ -437,24 +439,30 @@ function EventCard({ deleting, event, onEdit, onRemove, onStatusChange, statusAc
             {event.notes ? <p className="break-words leading-6 text-zinc-400">{event.notes}</p> : null}
           </div>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
-          <div className="flex flex-wrap items-center gap-2">
-            {statusActions.map((action) => (
-              <StatusActionButton
-                key={action.status}
-                action={action}
-                active={normalizedStatus === action.status}
-                loading={statusActionId === `${event.id}:${action.status}`}
-                disabled={statusBusy}
-                onClick={() => onStatusChange(action.status)}
-              />
-            ))}
+        <div className="flex min-w-0 flex-wrap items-end gap-3 md:justify-end">
+          <div className="grid min-w-0 gap-1">
+            <p className="data-text text-[9px] uppercase tracking-wider text-zinc-600">Status</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {statusActions.map((action) => (
+                <StatusActionButton
+                  key={action.status}
+                  action={action}
+                  active={normalizedStatus === action.status}
+                  loading={statusActionId === `${event.id}:${action.status}`}
+                  disabled={statusBusy}
+                  onClick={() => onStatusChange(action.status)}
+                />
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-2 border-l border-white/5 pl-2">
-            <IconButton label="Edit event" onClick={onEdit}><Pencil size={15} /></IconButton>
-            <IconButton label="Delete event" onClick={onRemove} disabled={deleting}>
-              {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-            </IconButton>
+          <div className="grid min-w-0 gap-1 border-l border-white/5 pl-3">
+            <p className="data-text text-[9px] uppercase tracking-wider text-zinc-600">Manage</p>
+            <div className="flex items-center gap-2">
+              <IconButton label="Edit event" onClick={onEdit}><Pencil size={15} /></IconButton>
+              <IconButton label="Delete event permanently" onClick={onRemove} disabled={deleting}>
+                {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+              </IconButton>
+            </div>
           </div>
         </div>
       </div>
@@ -525,7 +533,7 @@ function CategoryBadge({ category }) {
   const label = normalizeCategoryLabel(category);
   const tone = categoryTone(label);
   return (
-    <span className={`data-text inline-flex max-w-full rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${tone}`}>
+    <span className={`data-text inline-flex max-w-full break-all rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${tone}`}>
       {label || 'Uncategorized'}
     </span>
   );

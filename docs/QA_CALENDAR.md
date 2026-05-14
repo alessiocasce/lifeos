@@ -93,15 +93,16 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 ## Quick Status Actions
 
 1. Create or open an event in the selected-day agenda.
-2. Click the green check button and confirm the event status changes to `done`.
-3. Click the amber skip button and confirm the event status changes to `skipped`.
-4. Click the red X status button and confirm the event status changes to `cancelled`.
-5. Click the planned clock button and confirm the event status changes back to `planned`.
-6. Confirm the current status button is highlighted and disabled.
-7. Confirm the red cancelled status button does not delete the event.
-8. Confirm permanent delete still uses the Trash icon and confirmation prompt.
-9. Confirm failed status updates show a clear agenda error.
-10. On mobile, confirm the status buttons wrap cleanly with Edit/Delete and do not create horizontal overflow.
+2. Confirm the quick controls are visually grouped as status actions and separate manage actions.
+3. Click the green check button and confirm the event status changes to `done`.
+4. Click the amber skip button and confirm the event status changes to `skipped`.
+5. Click the red X status button and confirm the event status changes to `cancelled`.
+6. Click the planned clock button and confirm the event status changes back to `planned`.
+7. Confirm the current status button is highlighted and disabled.
+8. Confirm the red cancelled status button does not delete the event.
+9. Confirm permanent delete still uses the Trash icon and confirmation prompt.
+10. Confirm failed status updates show a clear agenda error and that the error clears after changing selected dates.
+11. On mobile, confirm the status buttons wrap cleanly with Edit/Delete and do not create horizontal overflow.
 
 ## Categories
 
@@ -118,7 +119,7 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 2. Confirm timed events sort by start time ascending.
 3. Confirm events without a start time appear after timed events.
 4. Confirm titles, notes, and locations remain readable in the main agenda and do not rely on cramped truncation.
-5. Confirm long titles, category strings, locations, and notes stay inside the viewport.
+5. Confirm long titles, unknown category strings, locations, and notes stay inside the viewport.
 6. Confirm the empty state says `No events on this day` and includes a create CTA.
 
 ## Validation

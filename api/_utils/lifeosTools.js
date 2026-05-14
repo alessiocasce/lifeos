@@ -17,6 +17,7 @@ import {
 const TIME_ZONE = 'Europe/Rome';
 const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews']);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
+const PREFERRED_CALENDAR_CATEGORIES = ['Work', 'Study', 'School', 'Health', 'Workout', 'Entertainment', 'Sleep'];
 const HEALTH_HABITS = [
   { id: 'brush', type: 'count' },
   { id: 'shower', type: 'count' },
@@ -250,7 +251,7 @@ export async function createCalendarEvent(args) {
     event_date: resolveDate(args.event_date ?? args.date, args.range === 'tomorrow' ? localDate(1) : localDate()),
     start_time: args.start_time,
     end_time: args.end_time,
-    category: args.category,
+    category: normalizeCalendarCategory(args.category),
     location: args.location,
     notes: args.notes,
   };
@@ -301,6 +302,12 @@ export async function createCalendarPlanEvents(events, targetDate) {
     created.push(await createCalendarEvent(event));
   }
   return { created, skipped };
+}
+
+function normalizeCalendarCategory(value) {
+  if (value === undefined || value === null || value === '') return value;
+  const text = String(value).trim();
+  return PREFERRED_CALENDAR_CATEGORIES.find((category) => category.toLowerCase() === text.toLowerCase()) ?? text;
 }
 
 function queryDateRange(query, column, window) {

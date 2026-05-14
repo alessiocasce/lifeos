@@ -88,9 +88,22 @@ Run the focused checklists after the full flow:
 1. Open Calendar.
 2. Confirm Calendar uses persisted events only and no fake planning data is shown as real.
 3. Confirm Calendar opens to the selected-day agenda, not a week board or always-open side form.
-4. Open Workout sample archive.
-5. Confirm mock workout examples are visually labeled as mock/archive data.
-6. Confirm Home, Health, Finances, Calendar, and Daily Review do not show fake data as real persisted data.
+4. Open Workout.
+5. Confirm the real Workout tab does not show the old mock workout archive.
+6. Confirm Home, Health, Finances, Calendar, Workout, and Daily Review do not show fake data as real persisted data.
+
+## Calendar Polish
+
+1. Create a Calendar event from the selected-day agenda.
+2. Mark it done, skipped, cancelled, and planned from the event card quick actions.
+3. Confirm the cancelled status button does not delete the event.
+4. Confirm permanent delete still uses the Trash icon and confirmation prompt.
+5. Confirm long event titles, notes, locations, and unknown categories stay inside the viewport.
+
+## Summary Consistency
+
+1. Log a workout with warmups and working sets.
+2. Confirm Home and Assistant selected-date workout summaries count working sets and working volume, not warmups.
 
 ## iPhone Safari Basics
 
@@ -99,7 +112,8 @@ Run the focused checklists after the full flow:
 3. Confirm no horizontal scrolling on Home, Health, Workout, Finances, Calendar, or Assistant.
 4. Confirm inputs do not zoom when focused.
 5. Confirm bottom navigation does not cover primary save buttons.
-6. Confirm long labels truncate cleanly in ledger, review archive, and workout history rows.
+6. Confirm Calendar status buttons wrap without horizontal overflow.
+7. Confirm long labels truncate cleanly in ledger, review archive, and workout history rows.
 
 ## Desktop / Laptop Layout
 

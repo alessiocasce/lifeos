@@ -781,10 +781,11 @@ function sortReviews(reviews) {
 
 function buildWorkoutSummary(sessions) {
   const sets = sessions.flatMap((session) => session.workout_sets ?? []);
+  const workingSets = sets.filter((set) => !set.is_warmup);
   return {
     sessionCount: sessions.length,
-    setCount: sets.length,
-    volume: sets.reduce((sum, set) => sum + Number(set.weight ?? 0) * Number(set.reps ?? 0), 0),
+    setCount: workingSets.length,
+    volume: workingSets.reduce((sum, set) => sum + Number(set.weight ?? 0) * Number(set.reps ?? 0), 0),
   };
 }
 

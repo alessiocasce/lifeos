@@ -358,7 +358,7 @@ function getMonthSpendDetail(expenses, loading, ready, today) {
 }
 
 function getWorkoutMetrics(session) {
-  const sets = session?.workout_sets ?? [];
+  const sets = (session?.workout_sets ?? []).filter((set) => !set.is_warmup);
   const volume = sets.reduce((sum, set) => sum + Number(set.weight ?? 0) * Number(set.reps ?? 0), 0);
   const exerciseCount = new Set(sets.map((set) => set.exercise).filter(Boolean)).size;
   return { exerciseCount, setCount: sets.length, volume };
