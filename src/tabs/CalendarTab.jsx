@@ -292,10 +292,13 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
   return (
     <div className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-hidden bg-black/70 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur sm:items-center sm:p-4">
       <div
-        className="flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-md border border-white/10 bg-[#0f0f0f] shadow-2xl"
-        style={{ maxHeight: 'min(85dvh, 640px)' }}
+        className="flex min-h-0 w-full max-w-[calc(100vw-16px)] flex-col overflow-hidden overflow-x-hidden rounded-t-2xl border border-white/10 bg-[#0f0f0f] shadow-2xl sm:max-w-2xl sm:rounded-xl"
+        style={{ maxHeight: 'min(82dvh, 620px)' }}
       >
-        <div className="shrink-0 flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5">
+        <div className="flex shrink-0 justify-center pt-2 sm:hidden">
+          <div className="h-1 w-10 rounded-full bg-white/20" />
+        </div>
+        <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5">
           <div className="min-w-0">
             <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Event' : 'Create Event'}</p>
             <h3 className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Update Schedule Item' : 'New Schedule Item'}</h3>
@@ -310,32 +313,32 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <form onSubmit={onSubmit} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
+          <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden overscroll-contain p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
             <CalendarField label="Title" value={form.title} placeholder="Deep work, lecture, lift..." onChange={(value) => onChange('title', value)} />
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               <CalendarField label="Date" type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
               <SelectField label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               <CalendarField label="Start" type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
               <CalendarField label="End" type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
               <SelectField label="Category" value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
               <CalendarField label="Location" value={form.location} placeholder="Library, gym, office" onChange={(value) => onChange('location', value)} />
             </div>
 
-            <label className="space-y-1">
+            <label className="block min-w-0 space-y-1 overflow-hidden">
               <span className="data-text text-[10px] uppercase text-zinc-500">Notes</span>
               <textarea
                 value={form.notes}
                 onChange={(event) => onChange('notes', event.target.value)}
                 rows={3}
-                className="min-h-20 w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50 sm:min-h-24"
+                className="min-h-20 w-full min-w-0 max-w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50 sm:min-h-24"
                 placeholder="Prep, constraints, or agenda notes"
               />
             </label>
@@ -347,11 +350,11 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
             ) : null}
           </div>
 
-          <div className="shrink-0 grid gap-2 border-t border-white/5 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:grid-cols-[1fr_auto] sm:items-center sm:pb-3">
+          <div className="grid min-w-0 shrink-0 grid-cols-1 gap-2 overflow-hidden overflow-x-hidden border-t border-white/5 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:pb-3">
             <button
               type="submit"
               disabled={actionStatus === 'saving'}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {actionStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               {actionStatus === 'saving' ? 'Saving Event' : editing ? 'Update Event' : 'Create Event'}
@@ -359,7 +362,7 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
             <button
               type="button"
               onClick={onClose}
-              className="min-h-12 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300"
+              className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
             >
               Cancel
             </button>
@@ -407,14 +410,14 @@ function EventCard({ deleting, event, onEdit, onRemove }) {
 
 function CalendarField({ label, onChange, placeholder = '', type = 'text', value }) {
   return (
-    <label className="space-y-1">
+    <label className="block min-w-0 space-y-1 overflow-hidden">
       <span className="data-text text-[10px] uppercase text-zinc-500">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/50"
+        className="h-10 w-full min-w-0 max-w-full rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/50"
       />
     </label>
   );
@@ -422,12 +425,12 @@ function CalendarField({ label, onChange, placeholder = '', type = 'text', value
 
 function SelectField({ label, onChange, options, value }) {
   return (
-    <label className="space-y-1">
+    <label className="block min-w-0 space-y-1 overflow-hidden">
       <span className="data-text text-[10px] uppercase text-zinc-500">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50"
+        className="h-10 w-full min-w-0 max-w-full appearance-none rounded-md border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50"
       >
         {options.map((option) => (
           <option key={option} value={option}>{option}</option>

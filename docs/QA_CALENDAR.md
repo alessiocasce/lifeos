@@ -33,11 +33,21 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 1. Open the create modal on iPhone Safari.
 2. Confirm the Calendar page behind the modal does not scroll while the modal is open.
 3. Confirm there is no double-scroll trap between the background page and modal.
-4. Confirm only the modal form body scrolls when the form is taller than the viewport.
-5. Confirm the X close button remains visible without scrolling.
-6. Confirm Create/Update and Cancel remain accessible at the bottom of the modal.
-7. Trigger a validation error and confirm the user can still see the X button and close the modal.
-8. Confirm the modal respects the iPhone safe area and is not covered by the bottom nav.
+4. Confirm there is no horizontal scrollbar inside the modal, form body, or footer.
+5. Confirm only the modal form body scrolls vertically when the form is taller than the viewport.
+6. Confirm the X close button remains visible without scrolling.
+7. Confirm Create/Update and Cancel remain accessible at the bottom of the modal.
+8. Trigger a validation error and confirm the user can still see the X button and close the modal.
+9. Confirm the modal respects the iPhone safe area and is not covered by the bottom nav.
+10. Confirm the modal still feels like a clean bottom sheet/dialog, not a squeezed desktop form.
+
+## Modal Field Layout
+
+1. On a narrow iPhone viewport, confirm Date, Status, Start, End, Category, and Location stack vertically.
+2. Confirm Start and End are not forced into two columns on the narrowest screens.
+3. Confirm native date, time, and select controls stay inside the modal width.
+4. Confirm footer buttons are full width on mobile and do not overflow.
+5. Confirm the modal top handle, rounded top corners, title, and X remain visually clean.
 
 ## Edit Event Modal
 
@@ -107,6 +117,7 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 4. Confirm the Plus button is thumb-friendly.
 5. Confirm the create/edit modal fits the screen and can scroll internally.
 6. Confirm background page scrolling is locked while the modal is open.
-7. Confirm inputs do not zoom when focused.
-8. Confirm the bottom nav does not cover modal actions.
-9. Confirm event edit/delete controls are thumb-friendly.
+7. Confirm there is no horizontal scrollbar inside the modal.
+8. Confirm inputs do not zoom when focused.
+9. Confirm the bottom nav does not cover modal actions.
+10. Confirm event edit/delete controls are thumb-friendly.
