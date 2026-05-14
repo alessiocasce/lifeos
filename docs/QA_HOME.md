@@ -19,7 +19,7 @@ Run this after signing in through the global auth gate. No schema migration is n
 2. Create or update today's health log.
 3. Return to Home.
 4. Confirm Today's Health status changes to `Logged`.
-5. Confirm Latest Check-In shows persisted sleep hours, sleep quality, mood, energy, water, and social time.
+5. Confirm Latest Check-In shows persisted sleep hours, energy, coffee, and ADC, with no visible Water metric.
 
 ## Workout Summary
 
@@ -43,7 +43,7 @@ Run this after signing in through the global auth gate. No schema migration is n
 
 ## Health Edge Cases
 
-1. Create a health log with optional fields left blank, such as sleep hours, mood, or energy.
+1. Create a health log with optional fields left blank, such as sleep hours or energy.
 2. Return to Home.
 3. Confirm blank optional fields render as `--`, not fake values.
 

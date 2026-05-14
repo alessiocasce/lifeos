@@ -17,6 +17,13 @@ import {
 const TIME_ZONE = 'Europe/Rome';
 const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews']);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
+const HEALTH_HABITS = [
+  { id: 'brush', type: 'count' },
+  { id: 'shower', type: 'count' },
+  { id: 'creatine', type: 'count' },
+  { id: 'skin', type: 'count' },
+  { id: 'journal', type: 'boolean' },
+];
 
 export function localDate(offsetDays = 0) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -103,14 +110,14 @@ export async function readLifeOSContext(plan) {
   }
 
   if (tables.includes('health_logs')) {
-    const rows = await queryDateRange(client.from('health_logs').select('logged_on, sleep_hours, sleep_start, wake_time, energy, water, coffee, adc, notes, hygiene').eq('user_id', userId), 'logged_on', window)
+    const rows = await queryDateRange(client.from('health_logs').select('logged_on, sleep_hours, sleep_start, wake_time, energy, coffee, adc, notes, hygiene').eq('user_id', userId), 'logged_on', window)
       .order('logged_on', { ascending: false })
       .limit(limitForRange(plan.range, 365));
     if (rows.error) throw rows.error;
     const logs = rows.data ?? [];
     context.coverage.health_logs = logs.length;
     context.summaries.health_logs = summarizeHealth(logs);
-    context.examples.health_logs = logs.slice(0, exampleLimit(plan.range));
+    context.examples.health_logs = logs.slice(0, exampleLimit(plan.range)).map(formatHealthExample);
   }
 
   if (tables.includes('workouts') || tables.includes('workout_sets')) {
@@ -316,15 +323,61 @@ function summarizeExpenses(expenses) {
 }
 
 function summarizeHealth(logs) {
+  const habitStats = summarizeHealthHabits(logs);
   return {
     count: logs.length,
     averageSleep: average(logs, 'sleep_hours'),
     averageEnergy: average(logs, 'energy'),
-    averageWater: average(logs, 'water'),
     totalCoffee: sum(logs, 'coffee'),
     totalAdc: sum(logs, 'adc'),
+    habits: habitStats,
     notesExamples: logs.map((log) => log.notes).filter(Boolean).slice(0, 6),
   };
+}
+
+function formatHealthExample(log) {
+  return {
+    logged_on: log.logged_on,
+    sleep_hours: log.sleep_hours,
+    sleep_start: log.sleep_start,
+    wake_time: log.wake_time,
+    energy: log.energy,
+    coffee: log.coffee,
+    adc: log.adc,
+    habits: normalizeHealthHabits(log.hygiene),
+    notes: log.notes,
+  };
+}
+
+function summarizeHealthHabits(logs) {
+  const normalizedLogs = logs.map((log) => normalizeHealthHabits(log.hygiene));
+  return {
+    brushTotal: sumHabit(normalizedLogs, 'brush'),
+    showerTotal: sumHabit(normalizedLogs, 'shower'),
+    creatineTotal: sumHabit(normalizedLogs, 'creatine'),
+    skinTotal: sumHabit(normalizedLogs, 'skin'),
+    journalDays: normalizedLogs.filter((habits) => habits.journal).length,
+    journalCoverage: `${normalizedLogs.filter((habits) => habits.journal).length}/${logs.length}`,
+    recent: normalizedLogs.slice(0, 10),
+  };
+}
+
+function normalizeHealthHabits(items = []) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const byId = new Map(safeItems.map((item) => [item.id, item]));
+  return HEALTH_HABITS.reduce((acc, habit) => {
+    const item = byId.get(habit.id) ?? {};
+    if (habit.type === 'boolean') {
+      acc[habit.id] = Boolean(item.done) || Number(item.count ?? 0) > 0;
+    } else {
+      acc[habit.id] = Math.max(0, Math.trunc(Number(item.count ?? (item.done ? 1 : 0)) || 0));
+    }
+    return acc;
+  }, {});
+}
+
+function sumHabit(logs, id) {
+  return logs.reduce((total, habits) => total + Number(habits[id] ?? 0), 0);
 }
 
 function summarizeWorkouts(workouts) {

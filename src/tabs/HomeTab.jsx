@@ -1,13 +1,12 @@
 import {
   Activity,
-  BatteryCharging,
+  Ban,
   CheckCircle2,
   CircleDollarSign,
-  Droplets,
   Dumbbell,
+  Coffee,
   Moon,
   ReceiptText,
-  Users,
 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Bar, BarChart, Cell, ResponsiveContainer, XAxis } from 'recharts';
@@ -182,13 +181,11 @@ export function HomeTab() {
                   {latestHealthLog.logged_on === today ? 'TODAY' : 'LATEST'}
                 </Tag>
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <IconMetric icon={Moon} label="Sleep" value={formatWithUnit(latestHealthLog.sleep_hours, 'h')} tone="text-cyan-300" />
-                <IconMetric icon={BatteryCharging} label="Quality" value={formatWithUnit(latestHealthLog.sleep_quality, '%')} tone="text-emerald-300" />
-                <IconMetric icon={Activity} label="Mood" value={formatNumber(latestHealthLog.mood)} tone="text-amber-300" />
-                <IconMetric icon={Activity} label="Energy" value={formatNumber(latestHealthLog.energy)} tone="text-red-300" />
-                <IconMetric icon={Droplets} label="Water" value={formatNumber(latestHealthLog.water)} tone="text-cyan-300" />
-                <IconMetric icon={Users} label="Social" value={formatWithUnit(latestHealthLog.social_time_minutes, 'm')} tone="text-violet-300" />
+                <IconMetric icon={Activity} label="Energy" value={formatNumber(latestHealthLog.energy)} tone="text-amber-300" />
+                <IconMetric icon={Coffee} label="Coffee" value={formatNumber(latestHealthLog.coffee)} tone="text-amber-300" />
+                <IconMetric icon={Ban} label="ADC" value={formatNumber(latestHealthLog.adc)} tone="text-red-300" />
               </div>
             </>
           ) : healthReady ? (
@@ -344,7 +341,7 @@ function getWorkoutStatus(liveWorkout, endedWorkout, todayCount) {
 
 function getTodayHealthDetail(log, loading, ready) {
   if (loading) return 'Syncing persisted health logs.';
-  if (log) return `${formatWithUnit(log.sleep_hours, 'h')} sleep / mood ${formatNumber(log.mood)}`;
+  if (log) return `${formatWithUnit(log.sleep_hours, 'h')} sleep / energy ${formatNumber(log.energy)}`;
   return ready ? 'No health log yet today.' : 'Waiting for persisted health data.';
 }
 

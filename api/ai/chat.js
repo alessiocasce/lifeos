@@ -45,7 +45,7 @@ Rules:
 - Extract times as 24-hour HH:MM.
 - For simple expense creation, extract vendor, amount, category, spent_on/date, notes. Amount may include currency words or symbols.
 - For calendar creation, extract title, event_date/date, start_time, end_time, category, location, notes.
-- For health logging, extract logged_on/date and provided fields: energy, water, coffee, adc, sleep_hours, sleep_start, wake_time, notes.
+- For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes. Only extract water when the user explicitly asks to log water because it is kept for backward compatibility.
 - For "last week", use range "7d". For "last 30 days" or "last month", use "30d". For "last 3 months", use "3m". For all-time/overall behavior, use "all".
 - For vague "how am I doing?", use intent "analyze", needsRead true, range "30d", and broad LifeOS tables.
 - For analyze plus explicit plan/schedule requests, use "analyze_and_plan" with needsRead true and needsWrite true.

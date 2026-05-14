@@ -341,11 +341,15 @@ Current behavior:
 - If a duplicate-key insert happens, the app fetches the existing log for that date and updates it.
 - Changing the form date loads the persisted log for that date or clears the form for a new date.
 - Shows compact 7-day history from persisted rows only.
-- Shows measurable summaries: average sleep, average energy, average water, total coffee, total ADC, and hygiene count totals.
+- Shows measurable summaries: average sleep, average energy, total coffee, total ADC, and standalone daily habit stats.
 - Does not auto-calculate sleep time; `sleep_hours` is manually entered.
 - `sleep_quality`, `mood`, `social_time_minutes`, and `main_time_waster` remain in the database for backward compatibility but are not displayed in the Health check-in, 7-day summary, or 7-day history.
-- `sleep_hours` and `energy` may be left blank; water, coffee, ADC, and hygiene item counts must be non-negative numbers.
-- Hygiene is stored as JSON count values. Older boolean rows are normalized in the frontend: `done: true` counts as 1 and `done: false` counts as 0.
+- `sleep_hours` and `energy` may be left blank; coffee, ADC, and numeric habit counts must be non-negative numbers.
+- Visible Health no longer includes a Water counter. The `water` column remains in the schema and Action API for backward compatibility, but visible UI and AI summaries do not emphasize it.
+- Daily habit trackers are Brush, Shower, Creatine, Skin, and Journal.
+- Brush, Shower, Creatine, and Skin are numeric counts. Journal is boolean: journaled or not journaled.
+- Habits are stored in the existing `hygiene` JSON field. Older boolean rows and older numeric Journal rows are normalized safely; old Floss/Stretch rows are ignored by the new visible UI.
+- Health and AI summaries treat habits as standalone stats instead of one generic hygiene total.
 - Does not use iPhone Screen Time integration yet.
 
 ## Workout Module Current Status
@@ -467,7 +471,7 @@ Workout mobile direction:
   - Create yesterday's log and switch between dates to confirm the form loads the correct persisted row.
   - Confirm 7-day summaries use persisted rows only.
   - Confirm numeric fields reject out-of-range values.
-  - Confirm ADC and hygiene counters persist.
+  - Confirm ADC and Daily Habits persist.
   - Run `docs/QA_HEALTH.md`.
 - Test Finances tab with `docs/QA_FINANCES.md`:
   - Create, edit, and delete persisted expenses.

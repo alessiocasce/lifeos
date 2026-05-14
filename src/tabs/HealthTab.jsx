@@ -1,16 +1,16 @@
-import { Ban, Coffee, Droplets, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users, Zap } from 'lucide-react';
+import { Ban, Coffee, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
 const today = new Date().toISOString().slice(0, 10);
 
-const defaultHygiene = [
-  { id: 'brush', label: 'Brush', count: 0 },
-  { id: 'floss', label: 'Floss', count: 0 },
-  { id: 'skin', label: 'Skin', count: 0 },
-  { id: 'stretch', label: 'Stretch', count: 0 },
-  { id: 'journal', label: 'Journal', count: 0 },
+const defaultHabits = [
+  { id: 'brush', label: 'Brush', type: 'count', count: 0 },
+  { id: 'shower', label: 'Shower', type: 'count', count: 0 },
+  { id: 'creatine', label: 'Creatine', type: 'count', count: 0 },
+  { id: 'skin', label: 'Skin', type: 'count', count: 0 },
+  { id: 'journal', label: 'Journal', type: 'boolean', done: false },
 ];
 
 const emptyForm = {
@@ -19,11 +19,10 @@ const emptyForm = {
   sleep_start: '',
   wake_time: '',
   energy: '',
-  water: '0',
   coffee: '0',
   adc: '0',
   notes: '',
-  hygiene: defaultHygiene,
+  hygiene: defaultHabits,
 };
 
 export function HealthTab() {
@@ -85,11 +84,21 @@ export function HealthTab() {
     setSavedMessage('');
   };
 
-  const stepHygiene = (id, delta) => {
+  const stepHabit = (id, delta) => {
     setForm((prev) => ({
       ...prev,
       hygiene: normalizeHygiene(prev.hygiene).map((item) =>
-        item.id === id ? { ...item, count: Math.max(0, item.count + delta) } : item,
+        item.id === id && item.type === 'count' ? { ...item, count: Math.max(0, item.count + delta) } : item,
+      ),
+    }));
+    setSavedMessage('');
+  };
+
+  const toggleHabit = (id) => {
+    setForm((prev) => ({
+      ...prev,
+      hygiene: normalizeHygiene(prev.hygiene).map((item) =>
+        item.id === id && item.type === 'boolean' ? { ...item, done: !item.done } : item,
       ),
     }));
     setSavedMessage('');
@@ -146,7 +155,6 @@ export function HealthTab() {
             <EnergyControl value={form.energy} onStep={stepEnergy} />
 
             <section className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(124px,1fr))]">
-              <Stepper label="Water" value={form.water} icon={Droplets} tone="cyan" onStep={(delta) => stepField('water', delta, 0, 16)} />
               <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
               <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
             </section>
@@ -156,13 +164,13 @@ export function HealthTab() {
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck size={15} className="text-emerald-300" />
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Hygiene Counters</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Daily Habits</p>
               </div>
-              <span className="data-text text-[10px] text-zinc-500">{hygieneTotal(form.hygiene)} total</span>
+              <span className="data-text text-[10px] text-zinc-500">tracked separately</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {normalizeHygiene(form.hygiene).map((item) => (
-                <HygieneCounter key={item.id} item={item} onStep={(delta) => stepHygiene(item.id, delta)} />
+                <HabitTracker key={item.id} item={item} onStep={(delta) => stepHabit(item.id, delta)} onToggle={() => toggleHabit(item.id)} />
               ))}
             </div>
           </section>
@@ -188,10 +196,23 @@ export function HealthTab() {
         <div className="grid grid-cols-2 gap-2 p-3">
           <MiniMetric label="Avg Sleep" value={formatSummary(summary.avgSleep, 'h')} tone="text-cyan-300" sub={`${visibleLogs.length} logs`} />
           <MiniMetric label="Avg Energy" value={formatSummary(summary.avgEnergy, '/10')} tone="text-amber-300" sub="readiness" />
-          <MiniMetric label="Avg Water" value={formatSummary(summary.avgWater, '')} tone="text-cyan-300" sub="per log" />
           <MiniMetric label="Coffee" value={`${summary.totalCoffee}`} tone="text-amber-300" sub="total" />
           <MiniMetric label="ADC" value={`${summary.totalAdc}`} tone="text-red-300" sub="total" />
-          <MiniMetric label="Hygiene" value={`${summary.totalHygiene}`} tone="text-emerald-300" sub="total counts" />
+          <div className="col-span-2 rounded-md border border-white/5 bg-black/25 p-3">
+            <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">Habits</p>
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5 xl:grid-cols-2 2xl:grid-cols-5">
+              {summary.habits.counts.map((habit) => (
+                <div key={habit.id} className="min-w-0">
+                  <p className="truncate text-zinc-500">{habit.label}</p>
+                  <p className="data-text font-semibold text-emerald-300">{habit.total}</p>
+                </div>
+              ))}
+              <div className="min-w-0">
+                <p className="truncate text-zinc-500">Journal</p>
+                <p className="data-text font-semibold text-emerald-300">{summary.habits.journalDays}/{visibleLogs.length || 0} days</p>
+              </div>
+            </div>
+          </div>
         </div>
       </Panel>
 
@@ -300,7 +321,31 @@ function EnergyControl({ onStep, value }) {
   );
 }
 
-function HygieneCounter({ item, onStep }) {
+function HabitTracker({ item, onStep, onToggle }) {
+  if (item.type === 'boolean') {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`min-h-[86px] rounded-md border p-2 text-left transition ${
+          item.done
+            ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+            : 'border-white/10 bg-[#121212] text-zinc-300'
+        }`}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="truncate text-xs">{item.label}</span>
+          <span className={`data-text rounded border px-2 py-0.5 text-[10px] ${item.done ? 'border-emerald-400/30 text-emerald-300' : 'border-white/10 text-zinc-500'}`}>
+            {item.done ? 'YES' : 'NO'}
+          </span>
+        </div>
+        <p className={`data-text text-sm font-semibold ${item.done ? 'text-emerald-300' : 'text-zinc-500'}`}>
+          {item.done ? 'Journaled' : 'Not journaled'}
+        </p>
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-md border border-white/10 bg-[#121212] p-2">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -330,13 +375,18 @@ function HistoryRow({ current, log }) {
         </div>
         <p className="data-text text-[10px] text-zinc-500">updated {formatShortDate(log.updated_at)}</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <HistoryMetric icon={Moon} label="Sleep" value={`${formatNumber(log.sleep_hours)}h`} tone="text-cyan-300" />
         <HistoryMetric icon={Zap} label="Energy" value={`${log.energy ?? '--'}/10`} tone="text-amber-300" />
-        <HistoryMetric icon={Droplets} label="Water" value={String(log.water ?? 0)} tone="text-cyan-300" />
         <HistoryMetric icon={Coffee} label="Coffee" value={String(log.coffee ?? 0)} tone="text-amber-300" />
         <HistoryMetric icon={Ban} label="ADC" value={String(log.adc ?? 0)} tone="text-red-300" />
-        <HistoryMetric icon={ShieldCheck} label="Hygiene" value={String(hygieneTotal(hygiene))} tone="text-emerald-300" />
+        <div className="col-span-2 min-w-0 rounded border border-white/5 bg-[#121212] px-2 py-1 sm:col-span-4">
+          <p className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-500">
+            <ShieldCheck size={11} />
+            Habits
+          </p>
+          <p className="data-text mt-0.5 text-xs font-semibold leading-5 text-emerald-300">{formatHabitBreakdown(hygiene)}</p>
+        </div>
       </div>
     </div>
   );
@@ -379,11 +429,10 @@ function formFromLog(log) {
     sleep_start: log.sleep_start ?? '',
     wake_time: log.wake_time ?? '',
     energy: stringValue(log.energy),
-    water: stringValue(log.water ?? 0),
     coffee: stringValue(log.coffee ?? 0),
     adc: stringValue(log.adc ?? 0),
     notes: log.notes ?? '',
-    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? normalizeHygiene(log.hygiene) : normalizeHygiene(defaultHygiene),
+    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? normalizeHygiene(log.hygiene) : normalizeHygiene(defaultHabits),
   };
 }
 
@@ -391,7 +440,7 @@ function emptyFormForDate(loggedOn) {
   return {
     ...emptyForm,
     logged_on: loggedOn || today,
-    hygiene: normalizeHygiene(defaultHygiene),
+    hygiene: normalizeHygiene(defaultHabits),
   };
 }
 
@@ -402,7 +451,6 @@ function toPayload(form) {
     sleep_start: form.sleep_start || null,
     wake_time: form.wake_time || null,
     energy: parseOptionalInteger(form.energy),
-    water: parseOptionalInteger(form.water) ?? 0,
     coffee: parseOptionalInteger(form.coffee) ?? 0,
     adc: parseOptionalInteger(form.adc) ?? 0,
     notes: form.notes.trim(),
@@ -419,17 +467,14 @@ function validateHealthForm(form) {
   const energy = parseOptionalInteger(form.energy);
   if (energy !== null && (!Number.isInteger(energy) || energy < 1 || energy > 10)) return 'Energy must be between 1 and 10.';
 
-  const water = parseOptionalInteger(form.water);
-  if (water === null || !Number.isInteger(water) || water < 0) return 'Water must be zero or higher.';
-
   const coffee = parseOptionalInteger(form.coffee);
   if (coffee === null || !Number.isInteger(coffee) || coffee < 0) return 'Coffee must be zero or higher.';
 
   const adc = parseOptionalInteger(form.adc);
   if (adc === null || !Number.isInteger(adc) || adc < 0) return 'ADC must be zero or higher.';
 
-  if (!hasValidHygieneCounts(form.hygiene)) {
-    return 'Hygiene counts must be zero or higher.';
+  if (!hasValidHabitValues(form.hygiene)) {
+    return 'Habit counts must be zero or higher.';
   }
 
   return '';
@@ -440,36 +485,65 @@ function summarizeLogs(logs) {
   return {
     avgSleep: average(normalized.map((log) => optionalLogNumber(log.sleep_hours)).filter(Number.isFinite)),
     avgEnergy: average(normalized.map((log) => optionalLogNumber(log.energy)).filter(Number.isFinite)),
-    avgWater: average(normalized.map((log) => optionalLogNumber(log.water)).filter(Number.isFinite)),
     totalCoffee: normalized.reduce((total, log) => total + (parseOptionalInteger(log.coffee) ?? 0), 0),
     totalAdc: normalized.reduce((total, log) => total + (parseOptionalInteger(log.adc) ?? 0), 0),
-    totalHygiene: normalized.reduce((total, log) => total + hygieneTotal(log.hygiene), 0),
+    habits: summarizeHabits(normalized),
   };
 }
 
 function normalizeHygiene(items = []) {
-  const byId = new Map(items.map((item) => [item.id, item]));
-  return defaultHygiene.map((base) => {
+  const safeItems = Array.isArray(items) ? items : [];
+  const byId = new Map(safeItems.map((item) => [item.id, item]));
+  return defaultHabits.map((base) => {
     const item = byId.get(base.id) ?? base;
+    if (base.type === 'boolean') {
+      const count = item.count ?? 0;
+      return {
+        id: base.id,
+        label: base.label,
+        type: base.type,
+        done: Boolean(item.done) || parseInteger(count) > 0,
+      };
+    }
     const count = item.count ?? (item.done ? 1 : 0);
     return {
       id: base.id,
-      label: item.label ?? base.label,
+      label: base.label,
+      type: base.type,
       count: Math.max(0, parseInteger(count)),
     };
   });
 }
 
-function hasValidHygieneCounts(items = []) {
-  return items.every((item) => {
+function hasValidHabitValues(items = []) {
+  return normalizeHygiene(items).every((item) => {
+    if (item.type === 'boolean') return typeof item.done === 'boolean';
     const count = item.count ?? (item.done ? 1 : 0);
     const parsed = parseOptionalInteger(count);
     return parsed !== null && Number.isInteger(parsed) && parsed >= 0;
   });
 }
 
-function hygieneTotal(items = []) {
-  return normalizeHygiene(items).reduce((total, item) => total + item.count, 0);
+function summarizeHabits(logs) {
+  const countHabits = defaultHabits.filter((habit) => habit.type === 'count');
+  return {
+    counts: countHabits.map((habit) => ({
+      id: habit.id,
+      label: habit.label,
+      total: logs.reduce((sum, log) => sum + (normalizeHygiene(log.hygiene).find((item) => item.id === habit.id)?.count ?? 0), 0),
+    })),
+    journalDays: logs.reduce((sum, log) => sum + (normalizeHygiene(log.hygiene).find((item) => item.id === 'journal')?.done ? 1 : 0), 0),
+  };
+}
+
+function formatHabitBreakdown(items = []) {
+  const habits = normalizeHygiene(items);
+  return habits
+    .map((item) => {
+      if (item.type === 'boolean') return `${item.label} ${item.done ? 'Yes' : 'No'}`;
+      return `${item.label} ${item.count}`;
+    })
+    .join(' / ');
 }
 
 function average(values) {

@@ -91,10 +91,10 @@ export const initialHealth = {
   mood: 8,
   hygiene: [
     { id: 'brush', label: 'Brush', count: 2 },
-    { id: 'floss', label: 'Floss', count: 0 },
+    { id: 'shower', label: 'Shower', count: 1 },
+    { id: 'creatine', label: 'Creatine', count: 1 },
     { id: 'skin', label: 'Skin', count: 1 },
-    { id: 'stretch', label: 'Stretch', count: 1 },
-    { id: 'journal', label: 'Journal', count: 0 },
+    { id: 'journal', label: 'Journal', type: 'boolean', done: false },
   ],
   consistency: [
     0.95, 0.76, 0.88, 0.61, 0.91, 0.82, 1, 0.58, 0.72, 0.84,

@@ -412,7 +412,11 @@ export function LifeOSProvider({ children }) {
       toggleHygiene: (id) =>
         setHealth((prev) => ({
           ...prev,
-          hygiene: prev.hygiene.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
+          hygiene: normalizeHygieneCounts(prev.hygiene).map((item) => (
+            item.id === id && item.type === 'boolean'
+              ? { ...item, done: !item.done }
+              : item
+          )),
         })),
       setExpandedWorkout,
       setActiveWorkoutId,
@@ -990,12 +994,34 @@ function healthSnapshotFromLog(log) {
 }
 
 function normalizeHygieneCounts(items = []) {
-  return items.map((item) => ({
-    id: item.id,
-    label: item.label,
-    count: Math.max(0, integerOrZero(item.count ?? (item.done ? 1 : 0))),
-  }));
+  const safeItems = Array.isArray(items) ? items : [];
+  const byId = new Map(safeItems.map((item) => [item.id, item]));
+  return HEALTH_HABITS.map((base) => {
+    const item = byId.get(base.id) ?? base;
+    if (base.type === 'boolean') {
+      return {
+        id: base.id,
+        label: base.label,
+        type: base.type,
+        done: Boolean(item.done) || integerOrZero(item.count) > 0,
+      };
+    }
+    return {
+      id: base.id,
+      label: base.label,
+      type: base.type,
+      count: Math.max(0, integerOrZero(item.count ?? (item.done ? 1 : 0))),
+    };
+  });
 }
+
+const HEALTH_HABITS = [
+  { id: 'brush', label: 'Brush', type: 'count', count: 0 },
+  { id: 'shower', label: 'Shower', type: 'count', count: 0 },
+  { id: 'creatine', label: 'Creatine', type: 'count', count: 0 },
+  { id: 'skin', label: 'Skin', type: 'count', count: 0 },
+  { id: 'journal', label: 'Journal', type: 'boolean', done: false },
+];
 
 function numberOrNull(value) {
   if (value === '' || value === null || value === undefined) return null;

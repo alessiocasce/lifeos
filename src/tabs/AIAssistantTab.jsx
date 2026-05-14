@@ -511,9 +511,13 @@ function ContextHealth({ log, status }) {
       ) : log ? (
         <div className="grid grid-cols-2 gap-2">
           <MiniMetric label="Sleep" value={formatWithUnit(log.sleep_hours, 'h')} tone="text-cyan-300" />
-          <MiniMetric label="Quality" value={formatWithUnit(log.sleep_quality, '%')} tone="text-emerald-300" />
-          <MiniMetric label="Mood" value={formatValue(log.mood)} tone="text-amber-300" />
-          <MiniMetric label="Energy" value={formatValue(log.energy)} tone="text-red-300" />
+          <MiniMetric label="Energy" value={formatValue(log.energy)} tone="text-amber-300" />
+          <MiniMetric label="Coffee" value={formatValue(log.coffee)} tone="text-amber-300" />
+          <MiniMetric label="ADC" value={formatValue(log.adc)} tone="text-red-300" />
+          <div className="col-span-2 rounded border border-white/5 bg-[#121212] px-2 py-1">
+            <p className="text-[9px] uppercase tracking-wider text-zinc-500">Habits</p>
+            <p className="data-text mt-0.5 text-xs font-semibold leading-5 text-emerald-300">{formatHealthHabits(log.hygiene)}</p>
+          </div>
         </div>
       ) : (
         <p className="text-sm text-zinc-500">No health log for this date.</p>
@@ -827,3 +831,30 @@ function formatWithUnit(value, unit) {
   const formatted = formatValue(value);
   return formatted === '--' ? formatted : `${formatted}${unit}`;
 }
+
+function formatHealthHabits(items = []) {
+  const habits = normalizeHealthHabits(items);
+  return `Brush ${habits.brush} / Shower ${habits.shower} / Creatine ${habits.creatine} / Skin ${habits.skin} / Journal ${habits.journal ? 'Yes' : 'No'}`;
+}
+
+function normalizeHealthHabits(items = []) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const byId = new Map(safeItems.map((item) => [item.id, item]));
+  return HEALTH_HABITS.reduce((acc, habit) => {
+    const item = byId.get(habit.id) ?? {};
+    if (habit.type === 'boolean') {
+      acc[habit.id] = Boolean(item.done) || Number(item.count ?? 0) > 0;
+    } else {
+      acc[habit.id] = Math.max(0, Math.trunc(Number(item.count ?? (item.done ? 1 : 0)) || 0));
+    }
+    return acc;
+  }, {});
+}
+
+const HEALTH_HABITS = [
+  { id: 'brush', type: 'count' },
+  { id: 'shower', type: 'count' },
+  { id: 'creatine', type: 'count' },
+  { id: 'skin', type: 'count' },
+  { id: 'journal', type: 'boolean' },
+];

@@ -7,7 +7,7 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 1. Open the Health tab.
 2. Confirm the main form does not show sleep quality, mood, social time, or main time waster.
 3. Confirm the Sleep card is compact and includes date, sleep hours, sleep start, and wake time.
-4. Enter sleep hours, optional sleep times, energy, water, coffee, ADC, notes, and hygiene counts.
+4. Enter sleep hours, optional sleep times, energy, coffee, ADC, notes, and Daily Habit values.
 5. Confirm Energy uses compact `-` and `+` controls, not a nested input card.
 6. Click `Save Check-In`.
 7. Confirm today's row appears in `7-Day History` with the `TODAY` tag.
@@ -15,7 +15,7 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 ## Update Today's Log
 
 1. Change at least one measurable value on today's form.
-2. Increment and decrement Energy, Water, Coffee, ADC, and at least one Hygiene counter.
+2. Increment and decrement Energy, Coffee, ADC, and at least one numeric Daily Habit.
 3. Click `Update Check-In`.
 4. Confirm only one row exists for today.
 5. Refresh the page and confirm the updated values persist.
@@ -36,14 +36,34 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 4. Confirm yesterday's persisted values load into the form.
 5. Switch to a date with no log and confirm the form is empty for that date.
 
-## Hygiene Counters
+## Daily Habits
 
-1. Increase Brush to 2, Skin to 3, and Journal to 1.
-2. Save and refresh.
-3. Confirm the same counts reload.
-4. Decrease a counter repeatedly and confirm it never goes below 0.
-5. Test an old row whose hygiene JSON uses `done: true/false`; confirm true displays as count 1 and false displays as count 0.
-6. Confirm saving a row converts hygiene to `count` values rather than boolean-only `done` values.
+1. Confirm the visible habit list is Brush, Shower, Creatine, Skin, and Journal.
+2. Increase Brush to 2, Shower to 1, Creatine to 1, and Skin to 3.
+3. Toggle Journal on and confirm it displays as journaled/yes rather than a numeric counter.
+4. Toggle Journal off and confirm it displays as not journaled/no.
+5. Save and refresh.
+6. Confirm the same values reload.
+7. Decrease a numeric counter repeatedly and confirm it never goes below 0.
+8. Test an old row whose `hygiene` JSON contains Floss or Stretch; confirm the new UI ignores those old items without crashing.
+9. Test an old row whose Journal uses `count: 1` or `done: true`; confirm it displays as journaled.
+10. Confirm forced Journal counts above 1 normalize to journaled rather than displaying as a count.
+
+## Standalone Habit Stats
+
+1. Save at least two logs with different Brush, Shower, Creatine, Skin, and Journal values.
+2. Confirm the 7-day summary shows standalone habit stats, not one generic hygiene total.
+3. Confirm the 7-day history shows a compact habit breakdown per row.
+4. Confirm Brush/Skin values from old compatible rows carry forward when present.
+5. Confirm Shower and Creatine default to 0 for older rows.
+
+## Hidden Water Compatibility
+
+1. Confirm the Health form has no visible Water counter.
+2. Confirm the 7-day summary has no Avg Water metric.
+3. Confirm the 7-day history has no Water metric.
+4. Confirm saving a newly created Health log still works with the database `water` column left at its default.
+5. If testing an old row with a non-zero water value, update another visible field and confirm the save does not require editing Water.
 
 ## ADC Counter
 
@@ -67,10 +87,10 @@ Try each invalid value and confirm save is blocked with a clear message:
 - Invalid `logged_on` date.
 - `sleep_hours` below 0 or above 24.
 - `energy` below 1 or above 10 through any forced/manual test path.
-- Negative water.
 - Negative coffee.
 - Negative ADC.
-- Negative hygiene count through any forced/manual test path.
+- Negative numeric habit count through any forced/manual test path.
+- Forced Journal counts above 1 normalize safely.
 - Non-numeric values in numeric fields.
 - Comma decimal sleep value such as `7,5` should save as valid.
 
@@ -95,6 +115,6 @@ Try each invalid value and confirm save is blocked with a clear message:
 2. Confirm no horizontal scrolling.
 3. Confirm inputs do not zoom when focused.
 4. Confirm the bottom nav does not cover `Save Check-In`.
-5. Confirm Energy, Water, Coffee, and ADC cards wrap instead of feeling cramped on narrow screens.
-6. Confirm the Sleep card, counters, and hygiene controls are thumb-friendly.
+5. Confirm Energy, Coffee, ADC, and Daily Habit cards wrap instead of feeling cramped on narrow screens.
+6. Confirm the Sleep card, counters, and Journal toggle are thumb-friendly.
 7. Confirm date switching and saving works with the mobile keyboard.

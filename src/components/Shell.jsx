@@ -87,7 +87,7 @@ export function Shell({ children }) {
         </nav>
 
         <div className="space-y-2 border-t border-white/5 px-2 py-3">
-          <StatusPip label="H2O" value={todaysHealthLog ? `${todaysHealthLog.water ?? 0}/8` : '--'} tone="text-cyan-300" />
+          <StatusPip label="ENG" value={formatMetric(todaysHealthLog?.energy, '/10')} tone="text-emerald-300" />
           <StatusPip label="EXP" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-emerald-300" />
         </div>
       </aside>

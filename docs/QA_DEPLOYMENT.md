@@ -13,9 +13,9 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 ## Health
 
 1. Open Health.
-2. Create today's health log with sleep hours, optional sleep times, Energy, Water, Coffee, ADC, notes, and hygiene counters.
+2. Create today's health log with sleep hours, optional sleep times, Energy, Coffee, ADC, notes, and Daily Habits.
 3. Save, refresh, and confirm the values reload.
-4. Update ADC and at least one hygiene counter.
+4. Update ADC and at least one Daily Habit.
 5. Save again and confirm today's row updates instead of duplicating.
 
 ## Calendar
@@ -73,7 +73,7 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 2. Confirm no horizontal scrolling on Home, Health, Workout, Finances, Calendar, or Assistant.
 3. Confirm inputs do not zoom on focus.
 4. Confirm the bottom navigation does not cover Save Check-In, Save Set, Create Event, Save Expense, or Save Review.
-5. Confirm Health Energy/Water/Coffee/ADC counters are thumb-friendly.
+5. Confirm Health Energy/Coffee/ADC counters and Daily Habits are thumb-friendly.
 6. Confirm Workout set logging is usable one-handed.
 
 ## Known Non-Failing Build Warning

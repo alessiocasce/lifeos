@@ -13,7 +13,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 ## Create Persisted Records
 
 1. Open Health.
-2. Create today's health log with sleep, Energy, Water, Coffee, ADC, hygiene counters, and optional notes.
+2. Create today's health log with sleep, Energy, Coffee, ADC, Daily Habits, and optional notes.
 3. Open Workout.
 4. Start today's workout session.
 5. Add one set with exercise, weight, reps, RPE, and date.

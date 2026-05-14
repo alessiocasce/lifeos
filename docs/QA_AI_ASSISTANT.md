@@ -40,9 +40,17 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 7. Ask with `25 euro`, `€25`, `25 dollar`, `$25`, and `12,50` in test expenses and confirm amounts validate correctly.
 8. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
 9. Confirm a calendar event is created with the right date and times.
-10. Ask: `Log 8 energy and 3 waters today.`
+10. Ask: `Log 8 energy and 1 coffee today.`
 11. Confirm today's health log updates without overwriting omitted fields.
 12. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+
+## Health Habit Context
+
+1. Create several Health logs with different Brush, Shower, Creatine, Skin, and Journal values.
+2. Ask: `Analyze my sleeping behaviour and daily habits in the last 7 days.`
+3. Confirm the assistant sees standalone habit stats rather than one generic hygiene total.
+4. Confirm Journal is treated as a yes/no daily stat.
+5. Confirm Water is not emphasized in the assistant health analysis, while old Action API compatibility remains available if explicitly used.
 
 ## Analyze And Plan
 
