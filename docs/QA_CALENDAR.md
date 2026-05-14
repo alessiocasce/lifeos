@@ -49,6 +49,16 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 4. Confirm footer buttons are full width on mobile and do not overflow.
 5. Confirm the modal top handle, rounded top corners, title, and X remain visually clean.
 
+## iPhone Input Targeting
+
+1. Open the create modal on iPhone Safari.
+2. Tap Title, type `Study session`, dismiss the keyboard, and tap Title again. Confirm Title focuses, not Date.
+3. Repeat the focus, dismiss, and refocus flow for Date, Status, Start, End, Category, Location, and Notes.
+4. Scroll the modal form body, tap a visible field, and confirm the tapped field receives focus.
+5. Confirm keyboard open/close does not shift tap hitboxes to the field below the visible target.
+6. Confirm there is still no horizontal scrollbar inside the modal.
+7. Confirm the X button still closes the modal and the background page does not create a bad scroll trap.
+
 ## Edit Event Modal
 
 1. Click edit on an event card.
@@ -119,5 +129,6 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 6. Confirm background page scrolling is locked while the modal is open.
 7. Confirm there is no horizontal scrollbar inside the modal.
 8. Confirm inputs do not zoom when focused.
-9. Confirm the bottom nav does not cover modal actions.
-10. Confirm event edit/delete controls are thumb-friendly.
+9. Confirm tapping a field after keyboard open/close focuses the visible field, not the field below it.
+10. Confirm the bottom nav does not cover modal actions.
+11. Confirm event edit/delete controls are thumb-friendly.

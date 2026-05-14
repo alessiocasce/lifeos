@@ -43,6 +43,7 @@ export function CalendarTab() {
   const [form, setForm] = useState(emptyForm(todayString()));
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalViewportHeight, setModalViewportHeight] = useState(null);
   const [formError, setFormError] = useState('');
   const [actionStatus, setActionStatus] = useState('idle');
   const [deleteId, setDeleteId] = useState(null);
@@ -65,36 +66,55 @@ export function CalendarTab() {
   useEffect(() => {
     if (!modalOpen) return undefined;
 
-    const scrollY = window.scrollY || window.pageYOffset || 0;
     const bodyStyle = document.body.style;
     const rootStyle = document.documentElement.style;
     const previousBody = {
-      left: bodyStyle.left,
       overflow: bodyStyle.overflow,
-      position: bodyStyle.position,
-      right: bodyStyle.right,
-      top: bodyStyle.top,
-      width: bodyStyle.width,
+      overscrollBehavior: bodyStyle.overscrollBehavior,
     };
-    const previousRootOverflow = rootStyle.overflow;
+    const previousRoot = {
+      overflow: rootStyle.overflow,
+      overscrollBehavior: rootStyle.overscrollBehavior,
+    };
 
     rootStyle.overflow = 'hidden';
+    rootStyle.overscrollBehavior = 'none';
     bodyStyle.overflow = 'hidden';
-    bodyStyle.position = 'fixed';
-    bodyStyle.top = `-${scrollY}px`;
-    bodyStyle.left = '0';
-    bodyStyle.right = '0';
-    bodyStyle.width = '100%';
+    bodyStyle.overscrollBehavior = 'none';
 
     return () => {
-      rootStyle.overflow = previousRootOverflow;
+      rootStyle.overflow = previousRoot.overflow;
+      rootStyle.overscrollBehavior = previousRoot.overscrollBehavior;
       bodyStyle.overflow = previousBody.overflow;
-      bodyStyle.position = previousBody.position;
-      bodyStyle.top = previousBody.top;
-      bodyStyle.left = previousBody.left;
-      bodyStyle.right = previousBody.right;
-      bodyStyle.width = previousBody.width;
-      window.scrollTo(0, scrollY);
+      bodyStyle.overscrollBehavior = previousBody.overscrollBehavior;
+    };
+  }, [modalOpen]);
+
+  useEffect(() => {
+    if (!modalOpen) {
+      setModalViewportHeight(null);
+      return undefined;
+    }
+
+    const viewport = window.visualViewport;
+    let frameId = 0;
+    const updateViewportHeight = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        setModalViewportHeight(Math.round(viewport?.height || window.innerHeight || 620));
+      });
+    };
+
+    updateViewportHeight();
+    viewport?.addEventListener('resize', updateViewportHeight);
+    viewport?.addEventListener('scroll', updateViewportHeight);
+    window.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      viewport?.removeEventListener('resize', updateViewportHeight);
+      viewport?.removeEventListener('scroll', updateViewportHeight);
+      window.removeEventListener('resize', updateViewportHeight);
     };
   }, [modalOpen]);
 
@@ -279,6 +299,7 @@ export function CalendarTab() {
           editing={Boolean(editingId)}
           error={formError}
           form={form}
+          viewportHeight={modalViewportHeight}
           onChange={updateForm}
           onClose={closeModal}
           onSubmit={submitEvent}
@@ -288,12 +309,16 @@ export function CalendarTab() {
   );
 }
 
-function EventModal({ actionStatus, editing, error, form, onChange, onClose, onSubmit }) {
+function EventModal({ actionStatus, editing, error, form, onChange, onClose, onSubmit, viewportHeight }) {
+  const modalMaxHeight = viewportHeight
+    ? `${Math.min(Math.max(Math.floor(viewportHeight * 0.82), 360), 620)}px`
+    : 'min(82dvh, 620px)';
+
   return (
     <div className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-hidden bg-black/70 p-2 pb-[calc(env(safe-area-inset-bottom)+8px)] backdrop-blur sm:items-center sm:p-4">
       <div
         className="flex min-h-0 w-full max-w-[calc(100vw-16px)] flex-col overflow-hidden overflow-x-hidden rounded-t-2xl border border-white/10 bg-[#0f0f0f] shadow-2xl sm:max-w-2xl sm:rounded-xl"
-        style={{ maxHeight: 'min(82dvh, 620px)' }}
+        style={{ maxHeight: modalMaxHeight }}
       >
         <div className="flex shrink-0 justify-center pt-2 sm:hidden">
           <div className="h-1 w-10 rounded-full bg-white/20" />
