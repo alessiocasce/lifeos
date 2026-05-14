@@ -76,6 +76,12 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 5. Confirm Health Energy/Coffee/ADC counters and Daily Habits are thumb-friendly.
 6. Confirm Workout set logging is usable one-handed.
 
+## PWA / Home Screen
+
+1. Run `docs/QA_PWA.md` against the deployed HTTPS URL.
+2. Confirm LifeOS can be added to the iPhone Home Screen.
+3. Confirm the installed app opens standalone and keeps API/Supabase/Gemini responses uncached.
+
 ## Known Non-Failing Build Warning
 
 The production build may warn that a JavaScript chunk is larger than 500 kB. This is expected for now and does not block deployment.

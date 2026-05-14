@@ -70,6 +70,7 @@ Run the focused checklists after the full flow:
 - `docs/QA_CALENDAR.md`
 - `docs/QA_DAILY_REVIEW.md`
 - `docs/QA_WORKOUT.md`
+- `docs/QA_PWA.md` after deployment over HTTPS
 
 ## Workout Warmup Sets
 

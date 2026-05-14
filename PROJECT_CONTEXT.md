@@ -14,6 +14,7 @@ The app should feel like a practical daily-use tool, not a marketing page. The c
 
 - React 18 functional components
 - Vite 6
+- Vite PWA support for installable app-shell caching
 - Tailwind CSS
 - Lucide React icons
 - Recharts for compact charts and sparklines
@@ -52,6 +53,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Action API docs live in `docs/ACTION_API.md`.
 - AI Assistant QA lives in `docs/QA_AI_ASSISTANT.md`.
+- PWA/iPhone Home Screen QA lives in `docs/QA_PWA.md`.
 - Focused Workout QA, including warmup behavior, lives in `docs/QA_WORKOUT.md`.
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
@@ -156,6 +158,23 @@ Still mostly mock/local:
 
 - Chat messages and AI assistant behavior; no fake AI chat is shown in the Assistant tab.
 - The real Workout tab no longer displays mock workout examples or archives.
+
+## PWA Current Status
+
+LifeOS supports installation as a Progressive Web App for iPhone Home Screen and modern desktop/mobile browsers.
+
+Current behavior:
+
+- Uses `vite-plugin-pwa` with generated Workbox service worker support.
+- Registers the service worker with auto-update behavior in production builds.
+- Provides manifest metadata for `LifeOS`, standalone display, portrait orientation, dark theme/background colors, and productivity/health/finance categories.
+- Provides generated PNG icons for 192px, 512px, maskable 192px, maskable 512px, and Apple touch icon usage.
+- Adds iOS Home Screen metadata and `viewport-fit=cover` in `index.html`.
+- Caches the built app shell and static assets only.
+- Does not add runtime caching for `/api`, Supabase, Gemini, auth/session, or user-specific database responses.
+- Does not store Supabase tokens or server-only secrets in service worker code.
+- Supports opening the already-loaded app shell offline where the browser allows it.
+- Does not implement full offline data sync, offline write queues, or cached personal data.
 
 ## Action API Current Status
 
@@ -512,6 +531,11 @@ Workout mobile direction:
   - Confirm another user cannot see the first user's events.
   - Confirm iPhone Safari has no horizontal overflow and controls remain thumb-friendly.
 - Run the full-app checklist in `docs/QA_FULL_APP.md` after major integration changes.
+- Run `docs/QA_PWA.md` after deploying PWA changes:
+  - Confirm the manifest and service worker load over HTTPS.
+  - Confirm iPhone Safari can add LifeOS to the Home Screen.
+  - Confirm the installed app opens standalone and keeps the Calendar mobile editor stable.
+  - Confirm Supabase, `/api`, Gemini, and auth responses are not cached by the service worker.
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
 - Run `docs/ACTION_API.md` manual QA after deploying Action API env vars:
   - Unauthorized requests return `401`.
