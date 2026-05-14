@@ -144,6 +144,7 @@ Real/persisted today:
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
   - Assistant tab "Ask LifeOS" chat surface.
+  - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Daily Review workflow remains available below the AI chat surface.
 
 Partially wired but not fully used in UI:
@@ -190,6 +191,9 @@ Architecture:
 - Gemini first returns a strict JSON planner object.
 - Backend tools perform controlled reads/writes through Supabase service-role access and always filter/write `user_id = LIFEOS_ACTION_USER_ID`.
 - Gemini is called again to produce the final practical answer from the original message, plan, controlled context summary, and action results.
+- Assistant replies render Markdown in the frontend for bold labels, lists, paragraphs, inline code, and code blocks.
+- Raw HTML is not allowed or executed in assistant responses.
+- The only supported styled response tags are `[good]`, `[warn]`, `[bad]`, `[info]`, and `[action]`; unknown tags render as ordinary text.
 
 Supported v1 intents/tools:
 

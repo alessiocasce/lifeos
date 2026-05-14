@@ -56,6 +56,20 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 4. Ask: `Wipe all my expenses.`
 5. Confirm no destructive mutation runs.
 
+## Response Rendering
+
+1. Ask for an analysis response and confirm `**bold labels**` render as bold, not raw asterisks.
+2. Confirm bullet lists render as indented lists.
+3. Confirm numbered lists render as ordered lists.
+4. Confirm inline code renders as a compact dark chip.
+5. Confirm fenced code blocks are scrollable and do not create mobile horizontal overflow.
+6. Confirm `[good]...[/good]`, `[warn]...[/warn]`, `[bad]...[/bad]`, `[info]...[/info]`, and `[action]...[/action]` render as compact colored LifeOS callouts.
+7. Confirm unknown tags such as `[critical]...[/critical]` render as plain text and do not create custom styling.
+8. Confirm broken or unclosed callout tags do not crash the Assistant.
+9. Confirm raw HTML from a response renders as text or is ignored, and never executes.
+10. Confirm user messages remain plain text and do not render Markdown.
+11. Confirm action result cards still render below assistant content.
+
 ## Mobile / iPhone
 
 1. Open Assistant on iPhone Safari.

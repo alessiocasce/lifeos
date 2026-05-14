@@ -1,5 +1,6 @@
 import { Bot, CalendarDays, ClipboardCheck, Dumbbell, Loader2, Plus, Save, Send, Sparkles, Trash2, WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import { sendLifeOSAiMessage } from '../services/aiApi';
@@ -21,6 +22,78 @@ const assistantPrompts = [
   'Plan a more productive day for tomorrow.',
   'Add a 25 dollar expense for ChatGPT Plus.',
 ];
+
+const calloutStyles = {
+  good: {
+    label: 'Signal',
+    shell: 'border-emerald-400/25 bg-emerald-400/[0.08]',
+    labelClass: 'text-emerald-300',
+  },
+  warn: {
+    label: 'Caution',
+    shell: 'border-amber-400/25 bg-amber-400/[0.08]',
+    labelClass: 'text-amber-300',
+  },
+  bad: {
+    label: 'Risk',
+    shell: 'border-red-400/25 bg-red-400/[0.08]',
+    labelClass: 'text-red-300',
+  },
+  info: {
+    label: 'Info',
+    shell: 'border-cyan-400/20 bg-cyan-400/[0.07]',
+    labelClass: 'text-cyan-300',
+  },
+  action: {
+    label: 'Action',
+    shell: 'border-violet-400/25 bg-violet-400/[0.08]',
+    labelClass: 'text-violet-300',
+  },
+};
+
+const markdownComponents = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-zinc-50">{children}</strong>,
+  em: ({ children }) => <em className="italic text-zinc-200">{children}</em>,
+  ul: ({ children }) => <ul className="my-2 ml-4 list-disc space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="my-2 ml-4 list-decimal space-y-1">{children}</ol>,
+  li: ({ children }) => <li className="pl-1">{children}</li>,
+  pre: ({ children }) => (
+    <pre className="my-2 max-w-full overflow-x-auto rounded-md border border-white/10 bg-black/50 p-3 text-xs leading-5 text-zinc-200">
+      {children}
+    </pre>
+  ),
+  code: ({ inline, children, node, ...props }) => {
+    if (inline) {
+      return (
+        <code className="rounded border border-white/10 bg-white/[0.06] px-1 py-0.5 text-[0.9em] text-cyan-100" {...props}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className="block min-w-0 whitespace-pre text-xs text-zinc-200" {...props}>
+        {children}
+      </code>
+    );
+  },
+  a: ({ href, children }) => {
+    const safeHref = getSafeHref(href);
+    if (!safeHref) return <span>{children}</span>;
+    return (
+      <a
+        href={safeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-cyan-300 underline decoration-cyan-400/30 underline-offset-2 hover:text-cyan-200"
+      >
+        {children}
+      </a>
+    );
+  },
+};
+
+const markdownElements = ['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'a', 'br'];
 
 export function AIAssistantTab() {
   const {
@@ -511,7 +584,11 @@ function AssistantMessage({ message }) {
         {isUser ? <Sparkles size={15} className="text-cyan-300" /> : <Bot size={15} className="text-emerald-300" />}
         <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{isUser ? 'You' : 'LifeOS'}</span>
       </div>
-      <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-100">{message.content}</p>
+      {isUser ? (
+        <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-100">{message.content}</p>
+      ) : (
+        <AssistantMarkdown content={message.content} />
+      )}
       {message.actions?.length ? <ActionResults actions={message.actions} /> : null}
       {import.meta.env.DEV && message.plan ? (
         <details className="mt-2 rounded border border-white/5 bg-black/30 p-2">
@@ -523,6 +600,83 @@ function AssistantMessage({ message }) {
       ) : null}
     </div>
   );
+}
+
+function AssistantMarkdown({ content }) {
+  const parts = parseAssistantContent(content);
+  return (
+    <div className="grid min-w-0 gap-2 text-sm leading-6 text-zinc-100">
+      {parts.map((part, index) => (
+        part.type === 'callout' ? (
+          <LifeOSCallout key={`${part.type}-${part.tone}-${index}`} tone={part.tone}>
+            <MarkdownBlock content={part.content} />
+          </LifeOSCallout>
+        ) : (
+          <MarkdownBlock key={`${part.type}-${index}`} content={part.content} />
+        )
+      ))}
+    </div>
+  );
+}
+
+function LifeOSCallout({ tone, children }) {
+  const style = calloutStyles[tone] ?? calloutStyles.info;
+  return (
+    <div className={`min-w-0 rounded-md border px-3 py-2 ${style.shell}`}>
+      <p className={`data-text mb-1 text-[10px] uppercase tracking-wider ${style.labelClass}`}>{style.label}</p>
+      <div className="min-w-0 text-zinc-100">{children}</div>
+    </div>
+  );
+}
+
+function MarkdownBlock({ content }) {
+  const markdown = String(content ?? '').trim();
+  if (!markdown) return null;
+  return (
+    <div className="min-w-0">
+      <ReactMarkdown
+        allowedElements={markdownElements}
+        components={markdownComponents}
+        unwrapDisallowed
+      >
+        {markdown}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function parseAssistantContent(content) {
+  const value = String(content ?? '');
+  const parts = [];
+  const calloutPattern = /\[(good|warn|bad|info|action)\]([\s\S]*?)\[\/\1\]/gi;
+  let cursor = 0;
+  let match = calloutPattern.exec(value);
+
+  while (match) {
+    if (match.index > cursor) {
+      parts.push({ type: 'markdown', content: value.slice(cursor, match.index) });
+    }
+    parts.push({ type: 'callout', tone: match[1].toLowerCase(), content: match[2] });
+    cursor = match.index + match[0].length;
+    match = calloutPattern.exec(value);
+  }
+
+  if (cursor < value.length) {
+    parts.push({ type: 'markdown', content: value.slice(cursor) });
+  }
+
+  return parts.length ? parts : [{ type: 'markdown', content: value }];
+}
+
+function getSafeHref(href) {
+  const value = String(href ?? '').trim();
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? value : '';
+  } catch {
+    return '';
+  }
 }
 
 function ActionResults({ actions }) {
