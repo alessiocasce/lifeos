@@ -43,7 +43,6 @@ export function CalendarTab() {
   const [form, setForm] = useState(emptyForm(todayString()));
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalViewportHeight, setModalViewportHeight] = useState(null);
   const [formError, setFormError] = useState('');
   const [actionStatus, setActionStatus] = useState('idle');
   const [deleteId, setDeleteId] = useState(null);
@@ -87,34 +86,6 @@ export function CalendarTab() {
       rootStyle.overscrollBehavior = previousRoot.overscrollBehavior;
       bodyStyle.overflow = previousBody.overflow;
       bodyStyle.overscrollBehavior = previousBody.overscrollBehavior;
-    };
-  }, [modalOpen]);
-
-  useEffect(() => {
-    if (!modalOpen) {
-      setModalViewportHeight(null);
-      return undefined;
-    }
-
-    const viewport = window.visualViewport;
-    let frameId = 0;
-    const updateViewportHeight = () => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(() => {
-        setModalViewportHeight(Math.round(viewport?.height || window.innerHeight || 620));
-      });
-    };
-
-    updateViewportHeight();
-    viewport?.addEventListener('resize', updateViewportHeight);
-    viewport?.addEventListener('scroll', updateViewportHeight);
-    window.addEventListener('resize', updateViewportHeight);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      viewport?.removeEventListener('resize', updateViewportHeight);
-      viewport?.removeEventListener('scroll', updateViewportHeight);
-      window.removeEventListener('resize', updateViewportHeight);
     };
   }, [modalOpen]);
 
@@ -299,7 +270,6 @@ export function CalendarTab() {
           editing={Boolean(editingId)}
           error={formError}
           form={form}
-          viewportHeight={modalViewportHeight}
           onChange={updateForm}
           onClose={closeModal}
           onSubmit={submitEvent}
@@ -309,19 +279,14 @@ export function CalendarTab() {
   );
 }
 
-function EventModal({ actionStatus, editing, error, form, onChange, onClose, onSubmit, viewportHeight }) {
-  const mobileEditorHeight = viewportHeight ? `${viewportHeight}px` : '100dvh';
-  const desktopModalMaxHeight = viewportHeight
-    ? `${Math.min(Math.max(Math.floor(viewportHeight * 0.82), 360), 620)}px`
-    : 'min(82dvh, 620px)';
-
+function EventModal({ actionStatus, editing, error, form, onChange, onClose, onSubmit }) {
   return (
-    <div className="fixed inset-0 z-50 flex min-w-0 items-stretch justify-stretch overflow-hidden bg-black/70 backdrop-blur sm:items-center sm:justify-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex min-w-0 items-stretch justify-stretch overflow-hidden bg-[#0f0f0f] backdrop-blur sm:items-center sm:justify-center sm:bg-black/70 sm:p-4">
       <div
         className="flex h-[var(--calendar-editor-height)] max-h-[var(--calendar-editor-height)] min-h-0 w-full max-w-full flex-col overflow-hidden overflow-x-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[var(--calendar-editor-max-height)] sm:max-w-2xl sm:rounded-xl sm:border"
         style={{
-          '--calendar-editor-height': mobileEditorHeight,
-          '--calendar-editor-max-height': desktopModalMaxHeight,
+          '--calendar-editor-height': '100dvh',
+          '--calendar-editor-max-height': 'min(82dvh, 620px)',
         }}
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">

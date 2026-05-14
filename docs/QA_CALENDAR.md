@@ -62,6 +62,16 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 6. Confirm there is still no horizontal scrollbar inside the modal.
 7. Confirm the X button still closes the modal and the background page does not create a bad scroll trap.
 
+## iPhone Keyboard Close
+
+1. Open the mobile full-screen create editor on iPhone Safari.
+2. Focus Title, type text, and tap Done/End on the keyboard.
+3. Confirm the keyboard close animation does not leave a lingering black rectangle where the keyboard was.
+4. Repeat with Location and Notes.
+5. Confirm any brief viewport transition uses the editor background and disappears quickly.
+6. Confirm input targeting still works after keyboard open/close.
+7. Confirm there is no horizontal overflow after the keyboard closes.
+
 ## Edit Event Modal
 
 1. Click edit on an event card.
@@ -134,5 +144,6 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 7. Confirm there is no horizontal scrollbar inside the modal.
 8. Confirm inputs do not zoom when focused.
 9. Confirm tapping a field after keyboard open/close focuses the visible field, not the field below it.
-10. Confirm the bottom nav does not cover modal actions.
-11. Confirm event edit/delete controls are thumb-friendly.
+10. Confirm tapping Done/End on the keyboard does not leave a lingering black box under the editor.
+11. Confirm the bottom nav does not cover modal actions.
+12. Confirm event edit/delete controls are thumb-friendly.
