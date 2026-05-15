@@ -135,7 +135,8 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 7. Confirm location and notes can be left blank.
 8. Confirm API/AI-created events accept AM/PM time strings such as `12:45pm`, `2:15 pm`, `9am`, and `9 am`, then store/display canonical `HH:MM`.
 9. Confirm a range like `3:45 to 5:30 pm` stores as `15:45-17:30` when created through AI/API.
-10. Confirm the UI time inputs still save normal browser time values correctly.
+10. Confirm messy AI/API time fields parse correctly: `from 12:45pm`, `12:45pm to 2:15pm`, and `from 3:45 to 5:30 pm`.
+11. Confirm the UI time inputs still save normal browser time values correctly.
 
 ## Migration / Error States
 

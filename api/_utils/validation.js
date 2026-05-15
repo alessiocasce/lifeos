@@ -61,33 +61,42 @@ export function requiredDate(body, field) {
 }
 
 export function optionalTime(body, field) {
-  if (!hasField(body, field)) return undefined;
-  if (body[field] === null || body[field] === '') {
-    throw new HttpError(400, `${field} must be a valid time such as HH:MM, 2:15pm, or 9am.`);
-  }
-  const value = normalizeTimeValue(body[field]);
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
-    throw new HttpError(400, `${field} must be a valid time such as HH:MM, 2:15pm, or 9am.`);
-  }
-  return value;
+  const parsed = readTimeField(body, field);
+  if (!parsed.present) return undefined;
+  if (parsed.empty || parsed.invalid) throw timeFormatError(field);
+  return parsed.tokens[0].normalized;
 }
 
 export function optionalNullableTime(body, field) {
-  if (!hasField(body, field)) return undefined;
-  if (body[field] === null || body[field] === '') return null;
-  return optionalTime(body, field);
+  const parsed = readTimeField(body, field);
+  if (!parsed.present) return undefined;
+  if (parsed.empty) return null;
+  if (parsed.invalid) throw timeFormatError(field);
+  return parsed.tokens[0].normalized;
 }
 
 export function normalizeTimeRange(body, startField = 'start_time', endField = 'end_time') {
-  const startTime = optionalNullableTime(body, startField);
-  const endTime = optionalNullableTime(body, endField);
-  if (!startTime || !endTime || !shouldPromoteAmbiguousStartToPm(body[startField], body[endField], startTime, endTime)) {
-    return { startTime, endTime };
+  const start = readTimeField(body, startField);
+  const end = readTimeField(body, endField);
+
+  if (start.invalid) throw timeFormatError(startField);
+  if (end.invalid && start.tokens.length < 2) throw timeFormatError(endField);
+
+  let startToken = start.tokens[0] ?? null;
+  let endToken = end.invalid ? null : end.tokens[0] ?? null;
+
+  if (!endToken && start.tokens.length >= 2) {
+    endToken = start.tokens[1];
   }
-  return {
-    startTime: addHours(startTime, 12),
-    endTime,
-  };
+
+  let startTime = start.empty ? null : startToken?.normalized;
+  const endTime = end.empty && !endToken ? null : endToken?.normalized;
+
+  if (startTime && endTime && shouldPromoteAmbiguousStartToPm(startToken, endToken, endTime)) {
+    startTime = addHours(startTime, 12);
+  }
+
+  return { startTime, endTime };
 }
 
 export function optionalNumber(body, field, { min = -Infinity, max = Infinity } = {}) {
@@ -152,30 +161,9 @@ export function parseDecimal(value) {
 }
 
 export function normalizeTimeValue(value) {
-  const text = String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-
-  const meridiemMatch = text.match(/^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)$/);
-  if (meridiemMatch) {
-    let hours = Number(meridiemMatch[1]);
-    const minutes = Number(meridiemMatch[2] ?? '0');
-    const meridiem = meridiemMatch[3];
-    if (!Number.isInteger(hours) || hours < 1 || hours > 12) return text;
-    if (meridiem === 'am') {
-      hours = hours === 12 ? 0 : hours;
-    } else {
-      hours = hours === 12 ? 12 : hours + 12;
-    }
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-  }
-
-  const twentyFourHourMatch = text.match(/^(\d{1,2}):([0-5]\d)$/);
-  if (twentyFourHourMatch) {
-    const hours = Number(twentyFourHourMatch[1]);
-    const minutes = Number(twentyFourHourMatch[2]);
-    if (!Number.isInteger(hours) || hours < 0 || hours > 23) return text;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-  }
-
+  const tokens = extractTimeTokens(value);
+  if (tokens[0]) return tokens[0].normalized;
+  const text = normalizeTimeText(value);
   return text;
 }
 
@@ -257,35 +245,101 @@ function timeToMinutes(value) {
   return hours * 60 + minutes;
 }
 
-function shouldPromoteAmbiguousStartToPm(rawStart, rawEnd, startTime, endTime) {
-  if (!isAmbiguousUnmarkedTime(rawStart)) return false;
-  if (hasMeridiem(rawStart)) return false;
+function readTimeField(body, field) {
+  const present = hasField(body, field);
+  const raw = present ? body[field] : undefined;
+  const empty = present && (raw === null || raw === '');
+  const tokens = present && !empty ? extractTimeTokens(raw) : [];
+  return {
+    present,
+    raw,
+    empty,
+    tokens,
+    invalid: present && !empty && tokens.length === 0,
+  };
+}
 
-  const startHours = Number(startTime.slice(0, 2));
+function extractTimeTokens(value) {
+  const text = normalizeTimeText(value);
+  if (!text) return [];
+
+  const tokens = [];
+  const colonPattern = /(^|[^\d])(\d{1,2}):([0-5]\d)\s*(am|pm)?(?=$|[^a-z0-9])/gi;
+  let colonMatch;
+  while ((colonMatch = colonPattern.exec(text)) !== null) {
+    const hoursText = colonMatch[2];
+    const hours = Number(hoursText);
+    const minutes = Number(colonMatch[3]);
+    const meridiem = colonMatch[4] ?? null;
+    if (isValidTimeParts(hours, minutes, meridiem)) {
+      tokens.push({
+        index: colonMatch.index + colonMatch[1].length,
+        raw: colonMatch[0].slice(colonMatch[1].length),
+        hours,
+        minutes,
+        meridiem,
+        hasColon: true,
+        hasLeadingZero: hoursText.length > 1 && hoursText.startsWith('0'),
+        normalized: formatTimeParts(hours, minutes, meridiem),
+      });
+    }
+  }
+
+  const hourMeridiemPattern = /(^|[^:\d])(\d{1,2})\s*(am|pm)(?=$|[^a-z0-9])/gi;
+  let hourMatch;
+  while ((hourMatch = hourMeridiemPattern.exec(text)) !== null) {
+    const hours = Number(hourMatch[2]);
+    const meridiem = hourMatch[3];
+    const index = hourMatch.index + hourMatch[1].length;
+    if (isTokenOverlapping(tokens, index) || !isValidTimeParts(hours, 0, meridiem)) continue;
+    tokens.push({
+      index,
+      raw: hourMatch[0].slice(hourMatch[1].length),
+      hours,
+      minutes: 0,
+      meridiem,
+      hasColon: false,
+      hasLeadingZero: hourMatch[2].length > 1 && hourMatch[2].startsWith('0'),
+      normalized: formatTimeParts(hours, 0, meridiem),
+    });
+  }
+
+  return tokens.sort((a, b) => a.index - b.index);
+}
+
+function shouldPromoteAmbiguousStartToPm(startToken, endToken, endTime) {
+  if (!startToken || startToken.meridiem || !startToken.hasColon || startToken.hasLeadingZero) return false;
+
+  const startHours = Number(startToken.normalized.slice(0, 2));
   if (startHours < 1 || startHours > 11) return false;
 
-  const shiftedStart = timeToMinutes(startTime) + 12 * 60;
+  const shiftedStart = timeToMinutes(startToken.normalized) + 12 * 60;
   const endMinutes = timeToMinutes(endTime);
-  const endLooksAfternoon = hasPmMeridiem(rawEnd) || Number(endTime.slice(0, 2)) >= 13;
+  const endLooksAfternoon = endToken?.meridiem === 'pm' || Number(endTime.slice(0, 2)) >= 13;
   return endLooksAfternoon && shiftedStart < endMinutes;
 }
 
-function isAmbiguousUnmarkedTime(value) {
-  const text = String(value ?? '').trim().toLowerCase();
-  if (hasMeridiem(text)) return false;
-  const match = text.match(/^(\d{1,2}):[0-5]\d$/);
-  if (!match) return false;
-  if (text.startsWith('0')) return false;
-  const hours = Number(match[1]);
-  return hours >= 1 && hours <= 11;
+function normalizeTimeText(value) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function hasMeridiem(value) {
-  return /\b(?:am|pm)\b/i.test(String(value ?? '').replace(/\s+/g, ' ')) || /(?:am|pm)$/i.test(String(value ?? '').trim());
+function isValidTimeParts(hours, minutes, meridiem) {
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || minutes < 0 || minutes > 59) return false;
+  return meridiem ? hours >= 1 && hours <= 12 : hours >= 0 && hours <= 23;
 }
 
-function hasPmMeridiem(value) {
-  return /\bpm\b/i.test(String(value ?? '').replace(/\s+/g, ' ')) || /pm$/i.test(String(value ?? '').trim());
+function formatTimeParts(hours, minutes, meridiem) {
+  let normalizedHours = hours;
+  if (meridiem === 'am') {
+    normalizedHours = hours === 12 ? 0 : hours;
+  } else if (meridiem === 'pm') {
+    normalizedHours = hours === 12 ? 12 : hours + 12;
+  }
+  return `${String(normalizedHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function isTokenOverlapping(tokens, index) {
+  return tokens.some((token) => index >= token.index && index < token.index + token.raw.length);
 }
 
 function addHours(value, hoursToAdd) {
@@ -293,4 +347,8 @@ function addHours(value, hoursToAdd) {
   const hours = Math.floor(minutes / 60) % 24;
   const minutesRemainder = minutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutesRemainder).padStart(2, '0')}`;
+}
+
+function timeFormatError(field) {
+  return new HttpError(400, `${field} must be a valid time such as HH:MM, 2:15pm, or 9am.`);
 }

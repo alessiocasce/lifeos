@@ -220,7 +220,7 @@ Architecture:
 - Expense, calendar, and health date handling accepts `YYYY-MM-DD`, `DD/MM/YY`, `DD/MM/YYYY`, `today`, and `tomorrow` where relevant.
 - AI-created expense categories normalize to canonical display casing when possible, such as `subscriptions` to `Subscriptions`.
 - AI-created calendar events normalize case-insensitive preferred categories such as `work`, `errands`, `personal`, or `social` to the UI category names when possible.
-- AI and Action API calendar creates normalize common AM/PM time input such as `12:45pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`.
+- AI and Action API calendar creates normalize common AM/PM and messy Gemini time fields such as `from 12:45pm`, `12:45pm to 2:15pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
@@ -274,7 +274,7 @@ Current behavior:
 - UI-created event categories are limited to Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, and Sleep.
 - Calendar categories remain text in Supabase for compatibility with older and externally created events.
 - AI-created calendar events prefer the same category list and normalize common aliases such as gym, boxing, dentist, errands, family, friends, and journaling when possible.
-- AI and Action API calendar creates normalize common AM/PM time strings into canonical stored `HH:MM`, while the Calendar UI still uses native time inputs.
+- AI and Action API calendar creates normalize common AM/PM strings and messy Gemini time fields into canonical stored `HH:MM`, while the Calendar UI still uses native time inputs.
 - Category badges use consistent subtle color styling. Older unknown category strings remain display-compatible with neutral styling.
 - Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
 - Ignores stale week-range responses during fast week switching and clears calendar state on auth changes.

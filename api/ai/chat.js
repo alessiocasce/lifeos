@@ -43,6 +43,7 @@ Rules:
 - If the user gives DD/MM/YY or DD/MM/YYYY, copy that date into args; the backend can normalize it.
 - Natural "tomorrow" may be represented as "tomorrow" or the provided date.
 - Extract times as 24-hour HH:MM. If natural AM/PM text is preserved, the backend can normalize common formats such as 2:15pm or 9am.
+- For multi-event planning, each event must use separate start_time and end_time fields. Do not put full phrases or ranges inside start_time.
 - For simple expense creation, extract vendor, amount, category, spent_on/date, notes. Amount may include currency words or symbols.
 - Prefer expense categories from this list with canonical casing: Food, Groceries, Transport, Car, Shopping, Health, Entertainment, Bills, Subscriptions, Education, Travel, Personal Care, Other.
 - For calendar creation, extract title, event_date/date, start_time, end_time, category, location, notes. Prefer calendar categories from this list: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
@@ -97,6 +98,7 @@ Rules:
 - Max 8 events.
 - Use only the requested target date.
 - Times must be HH:MM and non-overlapping.
+- Each event must use separate start_time and end_time fields; never put full phrases or time ranges inside one time field.
 - Do not schedule destructive actions.
 - Keep titles short and useful.
 - Prefer categories from this list: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
