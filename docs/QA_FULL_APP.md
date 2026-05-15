@@ -28,11 +28,13 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 ## Home Integration
 
 1. Open Home.
-2. Confirm today's health status is `Logged`.
-3. Confirm today's workout status reflects live or ended state.
-4. Confirm today's expense count and spend include the expense created today.
-5. Confirm latest health, workout, current-month finance, top category, and latest expenses use persisted data.
-6. Confirm no fake dashboard values are shown as real data.
+2. Confirm Today Overview shows the next event, agenda counts, habit completion, workout status, and today's spend.
+3. Confirm Today Agenda shows today's calendar events and handles a no-event day with `No events planned today.`
+4. Confirm Daily Habits shows Brush, Shower, Creatine, Skin, and Journal, with Journal as yes/no.
+5. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
+6. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
+7. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
+8. Confirm no fake dashboard values are shown as real data.
 
 ## Refresh Persistence
 
@@ -116,6 +118,7 @@ Run the focused checklists after the full flow:
 6. Confirm Calendar status buttons wrap without horizontal overflow.
 7. Confirm long labels truncate cleanly in ledger, review archive, and workout history rows.
 8. If installed as a PWA, confirm the shell header sits below the iPhone status bar and does not overlap time, Wi-Fi, or battery.
+9. Confirm Home cards stack cleanly in PWA/iPhone mode and the overview is visible near the top.
 
 ## Desktop / Laptop Layout
 

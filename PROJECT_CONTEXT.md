@@ -326,18 +326,21 @@ Current behavior:
 
 ## Home Module Current Status
 
-`src/tabs/HomeTab.jsx` is now a persisted-data summary dashboard.
+`src/tabs/HomeTab.jsx` is now a Today Command Center.
 
 Current behavior:
 
-- Uses persisted `workoutSessions` and nested `workout_sets` from context.
+- Uses persisted calendar events, health logs, workout sessions/sets, and expenses from context.
+- Loads today's calendar range and the current expense month without duplicating API wrappers.
+- Shows a compact Today Overview with next event, agenda counts, daily habit completion, workout status, and today's spend.
+- Shows Today Agenda as a read-only list of today's events. Calendar editing, deletion, and status controls remain in the Calendar tab.
+- Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
+- Shows Daily Habits from today's health log: Brush, Shower, Creatine, Skin, and Journal. Journal is shown as yes/no and Water is not shown.
+- Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
-- Uses persisted `healthLogs` from context.
-- Uses persisted `expenses` for today's spend and latest expenses.
-- Loads the current month through `loadExpenseMonth` and uses persisted `monthlyExpenses` for current-month spend and category summaries.
-- Shows loading states while persisted lists are syncing and waits until statuses resolve before showing empty states.
-- Prioritizes today's live session, then another today's session, before falling back to an older selected active/latest session in the workout summary.
-- Shows clear empty states instead of mock values when data is missing.
+- Shows Money Snapshot with today's spend, month spend, top category, and latest expense.
+- Avoids duplicate finance ledger surfaces such as a full latest-expenses panel or large Home chart; the Finances tab owns deeper ledger views.
+- Shows compact loading and empty states with user-facing wording.
 - Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
 - Remains mobile-first with compact cards and no wide fixed layout.
 
