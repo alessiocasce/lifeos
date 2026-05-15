@@ -222,7 +222,9 @@ Architecture:
 - AI-created calendar events normalize case-insensitive preferred categories such as `work`, `errands`, `personal`, or `social` to the UI category names when possible.
 - AI and Action API calendar creates normalize common AM/PM and messy Gemini time fields such as `from 12:45pm`, `12:45pm to 2:15pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`.
 - Explicit multi-event calendar prompts are routed through a dedicated extraction/create path instead of the single-event tool. `create_calendar_event` is for one event only.
+- Obvious explicit multi-event calendar schedules bypass the general Gemini planner before it runs because Gemini may return an array of single-event planner objects while the general planner schema expects one object.
 - Explicit multi-event calendar creation does not require read/analysis context and returns a deterministic created/skipped summary.
+- The explicit multi-event path still uses strict extraction, local fallback parsing, and deterministic success messages.
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
 - AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
 - `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
@@ -280,7 +282,7 @@ Current behavior:
 - Calendar categories remain text in Supabase for compatibility with older and externally created events.
 - AI-created calendar events prefer the same category list and normalize common aliases such as gym, boxing, dentist, errands, family, friends, and journaling when possible.
 - AI and Action API calendar creates normalize common AM/PM strings and messy Gemini time fields into canonical stored `HH:MM`, while the Calendar UI still uses native time inputs.
-- Explicit AI multi-event schedules such as comma-separated study/lunch/errand blocks create separate calendar events and support chained ambiguous ranges like `12:45-2:15, 2:15-2:30, 3:45-5:30pm`.
+- Explicit AI multi-event schedules such as comma-separated study/lunch/errand blocks bypass the general planner, create separate calendar events, and support chained ambiguous ranges like `12:45-2:15, 2:15-2:30, 3:45-5:30pm`.
 - Category badges use consistent subtle color styling. Older unknown category strings remain display-compatible with neutral styling.
 - Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
 - Ignores stale week-range responses during fast week switching and clears calendar state on auth changes.

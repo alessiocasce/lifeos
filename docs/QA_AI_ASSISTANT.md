@@ -55,15 +55,20 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 21. Ask: `plan these events for today: science study session from 1:00pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
 22. Confirm all four events are created successfully through the explicit multi-event path.
 23. Confirm created events store/display canonical times: `13:00-14:15` Study, `14:15-14:30` Health, `14:30-15:45` Study, and `15:45-17:30` Health or Errands.
-24. Ask: `plan today: science 12:45-2:15, lunch 2:15-2:30, study 2:30-3:45, mom doctor 3:45-5:30pm`
-25. Confirm all four events are created and no `start_time` validation error appears.
-26. Ask: `create event tomorrow dentist 2pm to 3pm`
-27. Confirm it uses the single-event path and creates one event.
-28. Ask: `analyze my last week and plan a more productive day tomorrow`
-29. Confirm it uses the analyze-and-plan path, reads context, and does not use explicit multi-event extraction.
-30. Ask: `Log 8 energy and 1 coffee today.`
-31. Confirm today's health log updates without overwriting omitted fields.
-32. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+24. Ask the log-proven failing prompt: `plan these events for today: science study session from 12:45pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
+25. Confirm it bypasses the general planner, does not fail with `Gemini returned an invalid planner response.`, and creates four events.
+26. Confirm created events store/display canonical times: `12:45-14:15`, `14:15-14:30`, `14:30-15:45`, and `15:45-17:30`.
+27. Ask: `plan today: science 12:45-2:15, lunch 2:15-2:30, study 2:30-3:45, mom doctor 3:45-5:30pm`
+28. Confirm all four events are created and no `start_time` validation error appears.
+29. Ask: `today i want to study from 2 to 3 pm, work from 4 to 5 pm, dance from 6 to 7 pm`
+30. Confirm it creates three events through the explicit multi-event path and no planner invalid response appears.
+31. Ask: `create event tomorrow dentist 2pm to 3pm`
+32. Confirm it uses the single-event path and creates one event.
+33. Ask: `analyze my last week and plan a more productive day tomorrow`
+34. Confirm it uses the analyze-and-plan path, reads context, and does not use explicit multi-event extraction.
+35. Ask: `Log 8 energy and 1 coffee today.`
+36. Confirm today's health log updates without overwriting omitted fields.
+37. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 
@@ -120,7 +125,7 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 
 ## Temporary Planner Diagnostics
 
-1. Run the failing prompt: `plan these events for today: science study session from 1:30pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
+1. Run a non-obvious request that still reaches the general planner and intentionally produces invalid planner JSON in a test deployment.
 2. If the response says `Gemini returned an invalid planner response.`, open Vercel logs for the `/api/ai/chat` request.
 3. Confirm the log line starts with `[LifeOS AI planner failure]`.
 4. Confirm it includes `requestId`, `stage: planner`, `explicitMultiEventLikely`, `timeRangeCount`, sanitized error details, and any available provider status.

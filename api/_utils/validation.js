@@ -252,7 +252,11 @@ function readTimeField(body, field) {
   const present = hasField(body, field);
   const raw = present ? body[field] : undefined;
   const empty = present && (raw === null || raw === '');
-  const tokens = present && !empty ? extractTimeTokens(raw) : [];
+  let tokens = present && !empty ? extractTimeTokens(raw) : [];
+  if (present && !empty && tokens.length < 2) {
+    const rangeTokens = extractImpliedMeridiemRangeTokens(raw);
+    if (rangeTokens.length > tokens.length) tokens = rangeTokens;
+  }
   return {
     present,
     raw,
@@ -308,6 +312,56 @@ function extractTimeTokens(value) {
   }
 
   return tokens.sort((a, b) => a.index - b.index);
+}
+
+function extractImpliedMeridiemRangeTokens(value) {
+  const text = normalizeTimeText(value);
+  const pattern = /(?:^|[^\d])(?:from\s+)?(\d{1,2})(?::([0-5]\d))?\s*(?:-|to|until)\s*(\d{1,2})(?::([0-5]\d))?\s*(am|pm)(?=$|[^a-z0-9])/i;
+  const match = text.match(pattern);
+  if (!match) return [];
+
+  const startHours = Number(match[1]);
+  const startMinutes = Number(match[2] ?? 0);
+  const endHours = Number(match[3]);
+  const endMinutes = Number(match[4] ?? 0);
+  const endMeridiem = match[5];
+  const startMeridiem = inferStartMeridiem(startHours, endHours, endMeridiem);
+
+  if (!isValidTimeParts(startHours, startMinutes, startMeridiem) || !isValidTimeParts(endHours, endMinutes, endMeridiem)) {
+    return [];
+  }
+
+  const startIndex = match.index + match[0].indexOf(match[1]);
+  const endIndex = match.index + match[0].lastIndexOf(match[3]);
+  return [
+    {
+      index: startIndex,
+      raw: match[1] + (match[2] ? `:${match[2]}` : ''),
+      hours: startHours,
+      minutes: startMinutes,
+      meridiem: startMeridiem,
+      hasColon: Boolean(match[2]),
+      hasLeadingZero: match[1].length > 1 && match[1].startsWith('0'),
+      normalized: formatTimeParts(startHours, startMinutes, startMeridiem),
+    },
+    {
+      index: endIndex,
+      raw: `${match[3]}${match[4] ? `:${match[4]}` : ''}${endMeridiem}`,
+      hours: endHours,
+      minutes: endMinutes,
+      meridiem: endMeridiem,
+      hasColon: Boolean(match[4]),
+      hasLeadingZero: match[3].length > 1 && match[3].startsWith('0'),
+      normalized: formatTimeParts(endHours, endMinutes, endMeridiem),
+    },
+  ];
+}
+
+function inferStartMeridiem(startHours, endHours, endMeridiem) {
+  if (endMeridiem !== 'pm') return endMeridiem;
+  if (startHours === 12) return 'pm';
+  if (startHours > endHours) return 'am';
+  return 'pm';
 }
 
 function shouldPromoteAmbiguousStartToPm(startToken, endToken, endTime) {

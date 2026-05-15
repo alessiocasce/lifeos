@@ -136,7 +136,7 @@ Rules:
 - Use Study for studying/learning, Health for doctor/dentist/medical/recovery, Errands for logistics/appointments/shopping tasks, Social for plans with people, Personal for solo admin/routines, Entertainment for leisure, Sleep for sleep/naps, Workout for gym/boxing/sports.
 `;
 
-const TIME_TEXT_PATTERN = String.raw`(?:\d{1,2}:[0-5]\d\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))`;
+const TIME_TEXT_PATTERN = String.raw`(?:\d{1,2}(?::[0-5]\d)?\s*(?:am|pm)?)`;
 const TIME_RANGE_PATTERN_SOURCE = String.raw`\b(?:from\s+)?${TIME_TEXT_PATTERN}\s*(?:-|to|until)\s*${TIME_TEXT_PATTERN}\b`;
 const SECRET_KEY_PATTERN = /(authorization|bearer|token|secret|password|service_role|api[_-]?key|gemini|supabase)/i;
 
@@ -151,6 +151,22 @@ export default async function handler(req, res) {
     const message = String(body.message ?? '').trim();
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
+
+    if (isObviousExplicitMultiEventCalendarRequest(message)) {
+      const plan = createExplicitCalendarSyntheticPlan(message);
+      const actions = [];
+      let answer = '';
+      try {
+        const writeResult = await executeExplicitCalendarPlan(message, plan);
+        actions.push(...writeResult.actions);
+        answer = writeResult.answer;
+        return sendSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context);
+      } catch (error) {
+        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events_preplanner', error });
+        attachDebugDiagnostics(error, diagnostics);
+        throw error;
+      }
+    }
 
     let plan;
     try {
@@ -268,9 +284,23 @@ export function isExplicitMultiEventCalendarRequest(message, plan = {}) {
 export function isObviousExplicitMultiEventCalendarRequest(message) {
   const text = String(message ?? '').toLowerCase();
   if (!text || looksLikeAnalysisRequest(text)) return false;
-  const hasScheduleAction = /\b(plan|schedule|create|add|put|block)\b/.test(text);
+  const hasScheduleAction = /\b(plan|schedule|create|add|put|block)\b/.test(text) || /\b(?:i\s+)?want to\b/.test(text);
   const hasCalendarLanguage = /\b(events?|schedule|calendar|today|tomorrow|from)\b/.test(text);
   return hasScheduleAction && hasCalendarLanguage && countExplicitTimeRanges(message) >= 2;
+}
+
+function createExplicitCalendarSyntheticPlan(message) {
+  return {
+    intent: 'create_calendar_events',
+    needsRead: false,
+    needsWrite: true,
+    range: inferExplicitRange(message),
+    tables: ['calendar_events'],
+    args: {},
+    clarifyingQuestion: null,
+    riskLevel: 'low',
+    reason: 'Explicit multi-event calendar request detected before planner.',
+  };
 }
 
 async function executeExplicitCalendarPlan(message, plan) {
@@ -503,6 +533,13 @@ function inferExplicitTargetDate(message, plan, fallbackDate) {
   return resolveDate(args.target_date ?? args.event_date ?? args.date, fallbackDate);
 }
 
+function inferExplicitRange(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (/\btomorrow\b/.test(text)) return 'tomorrow';
+  if (/\btoday\b/.test(text)) return 'today';
+  return null;
+}
+
 function splitExplicitScheduleSegments(message) {
   const body = getExplicitScheduleBody(message);
   return body
@@ -537,6 +574,7 @@ function cleanLocalEventTitle(segment, index) {
 
   if (index === 0) {
     title = title.replace(/^\s*(?:plan|schedule|create|add|put|block)\s+(?:these\s+)?(?:events?\s+)?(?:for\s+)?(?:today|tomorrow)?\s*:?\s*/i, '').trim();
+    title = title.replace(/^\s*(?:today|tomorrow)\s+(?:i\s+)?want to\s+/i, '').trim();
   }
 
   title = title
