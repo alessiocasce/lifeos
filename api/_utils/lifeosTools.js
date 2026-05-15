@@ -314,13 +314,15 @@ export async function createCalendarEvent(args) {
   return data;
 }
 
-export async function createCalendarPlanEvents(events, targetDate) {
+export async function createCalendarPlanEvents(events, targetDate, options = {}) {
+  const maxEvents = options.maxEvents ?? 8;
+  const enforceTargetDate = options.enforceTargetDate ?? Boolean(targetDate);
   const valid = [];
   const skipped = [];
-  for (const event of (Array.isArray(events) ? events : []).slice(0, 8)) {
+  for (const event of (Array.isArray(events) ? events : []).slice(0, maxEvents)) {
     try {
       const eventDate = resolveDate(event.event_date ?? event.date, targetDate);
-      if (targetDate && eventDate !== targetDate) throw new HttpError(400, 'Plan event date did not match requested date.');
+      if (enforceTargetDate && targetDate && eventDate !== targetDate) throw new HttpError(400, 'Plan event date did not match requested date.');
       const candidate = {
         ...event,
         event_date: eventDate,

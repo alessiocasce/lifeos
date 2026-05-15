@@ -12,6 +12,7 @@ import {
 } from '../_utils/http.js';
 import { getActionUserId, requireConfiguredUserAccess } from '../_utils/supabaseAdmin.js';
 import {
+  addDays,
   createCalendarEvent,
   createCalendarPlanEvents,
   createExpense,
@@ -136,9 +137,48 @@ Rules:
 - Use Study for studying/learning, Health for doctor/dentist/medical/recovery, Errands for logistics/appointments/shopping tasks, Social for plans with people, Personal for solo admin/routines, Entertainment for leisure, Sleep for sleep/naps, Workout for gym/boxing/sports.
 `;
 
+const RECURRENCE_CALENDAR_EXTRACTOR_SYSTEM = `
+You extract one finite recurring calendar request from the user's message.
+Return strict JSON only:
+{
+  "title": "Deep Work Session",
+  "category": "Work",
+  "start_time": "16:00",
+  "end_time": "20:00",
+  "date_rule": {
+    "frequency": "daily",
+    "interval": 1,
+    "days_of_week": [],
+    "start_date": "YYYY-MM-DD",
+    "end_date": "YYYY-MM-DD"
+  },
+  "location": null,
+  "notes": null,
+  "clarifyingQuestion": null
+}
+Supported frequency values: daily, weekly, every_other_day, every_n_days, weekends, weekdays.
+Rules:
+- Extract only what the user explicitly asks to log/create/schedule. Do not invent unrelated events.
+- Use finite date ranges only.
+- Resolve relative dates using the provided dateReference.
+- If the user says "starting from 17/05/26" or "starting on 17/05/26", start_date must be 2026-05-17.
+- If the user says "for 7 days starting from 17/05/26", end_date must be 2026-05-23.
+- If the user says "next week", use dateReference.nextWeek.start through dateReference.nextWeek.end.
+- If the user says "next month" or "of next month", use dateReference.nextMonth.start through dateReference.nextMonth.end.
+- If the user says a named month such as July, use the most reasonable upcoming month from dateReference.namedMonths.
+- If the user says "for the next 3 weeks" or "for the next 3 months", start from today unless wording implies next week/month.
+- If the date range is ambiguous, set clarifyingQuestion to one concise question and leave date_rule dates null.
+- If the title or time range is missing, set clarifyingQuestion to one concise question.
+- Use canonical HH:MM if possible. The backend can normalize natural time text like 2 to 3 pm or 4pm-8pm.
+- Prefer categories: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
+- Category examples: school appointment = School, deep work = Work, gym/boxing = Workout, family lunch = Social, doctor/dentist = Health, errands/logistics = Errands.
+`;
+
 const TIME_TEXT_PATTERN = String.raw`(?:\d{1,2}(?::[0-5]\d)?\s*(?:am|pm)?)`;
 const TIME_RANGE_PATTERN_SOURCE = String.raw`\b(?:from\s+)?${TIME_TEXT_PATTERN}\s*(?:-|to|until)\s*${TIME_TEXT_PATTERN}\b`;
 const SECRET_KEY_PATTERN = /(authorization|bearer|token|secret|password|service_role|api[_-]?key|gemini|supabase)/i;
+const MAX_RECURRENCE_EVENTS = 60;
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
 export default async function handler(req, res) {
   const context = createRequestContext(req, res);
@@ -151,6 +191,22 @@ export default async function handler(req, res) {
     const message = String(body.message ?? '').trim();
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
+
+    if (isFiniteRecurringCalendarRequest(message)) {
+      const plan = createFiniteRecurringCalendarSyntheticPlan();
+      const actions = [];
+      let answer = '';
+      try {
+        const writeResult = await executeFiniteRecurringCalendarPlan(message, plan);
+        actions.push(...writeResult.actions);
+        answer = writeResult.answer;
+        return sendSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context);
+      } catch (error) {
+        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'finite_recurring_calendar_events', error });
+        attachDebugDiagnostics(error, diagnostics);
+        throw error;
+      }
+    }
 
     if (isObviousExplicitMultiEventCalendarRequest(message)) {
       const plan = createExplicitCalendarSyntheticPlan(message);
@@ -281,6 +337,32 @@ export function isExplicitMultiEventCalendarRequest(message, plan = {}) {
   return hasScheduleAction && hasCalendarLanguage && hasMultipleRanges && plannerAllowsCalendarWrite;
 }
 
+export function isFiniteRecurringCalendarRequest(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (!text || looksLikeAnalysisRequest(text)) return false;
+  if (looksLikeExpenseOrHealthRequest(text)) return false;
+
+  const hasCalendarWrite = /\b(log|create|schedule|plan|add|put|block|i have|i need|i want)\b/.test(text);
+  const hasTime = countExplicitTimeRanges(message) >= 1;
+  const hasRecurrence = /\b(every\s+day|everyday|daily|every\s+weekday|weekdays|every\s+weekend|all\s+weekends|weekends|every\s+other\s+day|every\s+2\s+days|every\s+\d+\s+days|every\s+(?:mon|tues|wednes|thurs|fri|satur|sun)day|all\s+(?:mon|tues|wednes|thurs|fri|satur|sun)days|for\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:days?|weeks?|months?)|for\s+the\s+next\s+\d+\s+(?:weeks?|months?)|next\s+week|next\s+month|of\s+next\s+month|this\s+week|this\s+month|of\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)|starting\s+(?:from|on))\b/.test(text);
+
+  return hasCalendarWrite && hasTime && hasRecurrence;
+}
+
+function createFiniteRecurringCalendarSyntheticPlan() {
+  return {
+    intent: 'create_calendar_events',
+    needsRead: false,
+    needsWrite: true,
+    range: null,
+    tables: ['calendar_events'],
+    args: {},
+    clarifyingQuestion: null,
+    riskLevel: 'low',
+    reason: 'Finite recurring calendar request detected before planner.',
+  };
+}
+
 export function isObviousExplicitMultiEventCalendarRequest(message) {
   const text = String(message ?? '').toLowerCase();
   if (!text || looksLikeAnalysisRequest(text)) return false;
@@ -301,6 +383,233 @@ function createExplicitCalendarSyntheticPlan(message) {
     riskLevel: 'low',
     reason: 'Explicit multi-event calendar request detected before planner.',
   };
+}
+
+async function executeFiniteRecurringCalendarPlan(message, plan) {
+  const recurrence = await extractFiniteRecurrencePlan(message);
+  const clarification = getRecurrenceClarifyingQuestion(recurrence);
+  if (clarification) {
+    return {
+      actions: [],
+      answer: clarification,
+    };
+  }
+
+  const events = expandRecurrenceToEvents(recurrence);
+  if (events.length > MAX_RECURRENCE_EVENTS) {
+    throw new HttpError(400, `This recurrence would create ${events.length} events. Narrow the range to ${MAX_RECURRENCE_EVENTS} events or fewer.`, {
+      eventCount: events.length,
+      extractorShape: describeValueShape(recurrence),
+    });
+  }
+  if (!events.length) {
+    return {
+      actions: [],
+      answer: 'What date range should I use for that recurring event?',
+    };
+  }
+
+  const result = await createCalendarPlanEvents(events, null, {
+    maxEvents: MAX_RECURRENCE_EVENTS,
+    enforceTargetDate: false,
+  });
+  if (!result.created.length) {
+    throw new HttpError(400, 'No calendar events were created from the recurring request.', {
+      skipped: sanitizeValue(result.skipped),
+      extractorShape: describeValueShape(recurrence),
+    });
+  }
+
+  return {
+    actions: [
+      {
+        type: 'create_calendar_events',
+        data: {
+          created: result.created,
+          skipped: result.skipped,
+          source: recurrence.source,
+          recurrence: {
+            frequency: recurrence.date_rule?.frequency,
+            start_date: recurrence.date_rule?.start_date,
+            end_date: recurrence.date_rule?.end_date,
+          },
+        },
+      },
+    ],
+    answer: formatRecurrenceSuccess(result),
+  };
+}
+
+async function extractFiniteRecurrencePlan(message) {
+  const raw = await generateGeminiJson({
+    system: RECURRENCE_CALENDAR_EXTRACTOR_SYSTEM,
+    prompt: JSON.stringify({
+      today: localDate(),
+      tomorrow: localDate(1),
+      dateReference: buildRecurrenceDateReference(),
+      userMessage: message,
+    }),
+    temperature: 0,
+    invalidMessage: 'Gemini returned an invalid recurrence extraction response.',
+    repair: true,
+  });
+  return normalizeFiniteRecurrencePlan(raw, message);
+}
+
+export function normalizeFiniteRecurrencePlan(raw, message = '') {
+  const rule = raw?.date_rule && typeof raw.date_rule === 'object' ? raw.date_rule : {};
+  const frequency = normalizeFrequency(rule.frequency, message);
+  const interval = Number.isInteger(Number(rule.interval)) && Number(rule.interval) > 0
+    ? Number(rule.interval)
+    : frequency === 'every_n_days'
+      ? parseEveryNDaysInterval(message) || 2
+      : 1;
+  const normalized = {
+    title: cleanText(raw?.title ?? raw?.name),
+    category: cleanText(raw?.category),
+    start_time: raw?.start_time,
+    end_time: raw?.end_time,
+    location: cleanText(raw?.location),
+    notes: cleanText(raw?.notes),
+    clarifyingQuestion: cleanText(raw?.clarifyingQuestion ?? raw?.clarifying_question),
+    source: 'gemini_recurrence_extractor',
+    date_rule: {
+      frequency,
+      interval,
+      days_of_week: normalizeDaysOfWeek(rule.days_of_week, message),
+      start_date: normalizeRuleDate(rule.start_date),
+      end_date: normalizeRuleDate(rule.end_date),
+    },
+  };
+
+  if (!normalized.date_rule.start_date || !normalized.date_rule.end_date) {
+    const inferredRange = inferRecurringDateRangeFromMessage(message);
+    normalized.date_rule.start_date ||= inferredRange.start_date;
+    normalized.date_rule.end_date ||= inferredRange.end_date;
+  }
+
+  return normalized;
+}
+
+export function getRecurrenceClarifyingQuestion(recurrence) {
+  if (recurrence?.clarifyingQuestion) return recurrence.clarifyingQuestion;
+  if (!recurrence?.title) return 'What should I call the recurring event?';
+  if (!recurrence?.start_time || !recurrence?.end_time) return 'What time should I use for the recurring event?';
+  if (!recurrence?.date_rule?.start_date || !recurrence?.date_rule?.end_date) return 'What date range should I use for that recurring event?';
+  return '';
+}
+
+export function expandRecurrenceToEvents(recurrence) {
+  const rule = recurrence?.date_rule ?? {};
+  const start = rule.start_date;
+  const end = rule.end_date;
+  if (!start || !end || compareDates(start, end) > 0) return [];
+
+  const frequency = normalizeFrequency(rule.frequency);
+  const interval = Math.max(1, Math.trunc(Number(rule.interval ?? 1)) || 1);
+  const daySet = new Set(normalizeDaysOfWeek(rule.days_of_week));
+  const dates = [];
+  let cursor = start;
+  let index = 0;
+  while (compareDates(cursor, end) <= 0) {
+    if (matchesRecurrenceDate(cursor, start, frequency, interval, daySet, index)) {
+      dates.push(cursor);
+    }
+    cursor = addDays(cursor, 1);
+    index += 1;
+  }
+
+  return dates.map((date) => ({
+    title: recurrence.title,
+    event_date: date,
+    start_time: recurrence.start_time,
+    end_time: recurrence.end_time,
+    category: recurrence.category,
+    location: recurrence.location,
+    notes: recurrence.notes,
+    status: 'planned',
+  }));
+}
+
+function matchesRecurrenceDate(date, startDate, frequency, interval, daySet, index) {
+  const day = dayName(date);
+  if (frequency === 'weekdays') return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].includes(day);
+  if (frequency === 'weekends') return ['saturday', 'sunday'].includes(day);
+  if (frequency === 'weekly') return daySet.size ? daySet.has(day) : index % 7 === 0;
+  if (frequency === 'every_other_day') return daysBetween(startDate, date) % 2 === 0;
+  if (frequency === 'every_n_days') return daysBetween(startDate, date) % interval === 0;
+  return daysBetween(startDate, date) % interval === 0;
+}
+
+function normalizeFrequency(value, message = '') {
+  const text = String(value ?? '').toLowerCase().replace(/[_-]+/g, ' ').trim();
+  const source = `${text} ${String(message ?? '').toLowerCase()}`;
+  if (/\bweekdays?\b|every weekday/.test(source)) return 'weekdays';
+  if (/\bweekends?\b|every weekend|all weekends/.test(source)) return 'weekends';
+  if (/every other day/.test(source)) return 'every_other_day';
+  if (/every\s+\d+\s+days?/.test(source)) return 'every_n_days';
+  if (/(every|all)\s+(mon|tues|wednes|thurs|fri|satur|sun)days?/.test(source)) return 'weekly';
+  if (['daily', 'weekly', 'every_other_day', 'every_n_days', 'weekends', 'weekdays'].includes(String(value ?? ''))) return value;
+  return 'daily';
+}
+
+function normalizeDaysOfWeek(value, message = '') {
+  const rawItems = Array.isArray(value) ? value : [];
+  const text = `${rawItems.join(' ')} ${String(message ?? '')}`.toLowerCase();
+  const days = [
+    ['monday', /\b(mon|monday|mondays)\b/],
+    ['tuesday', /\b(tue|tues|tuesday|tuesdays)\b/],
+    ['wednesday', /\b(wed|wednesday|wednesdays)\b/],
+    ['thursday', /\b(thu|thur|thurs|thursday|thursdays)\b/],
+    ['friday', /\b(fri|friday|fridays)\b/],
+    ['saturday', /\b(sat|saturday|saturdays)\b/],
+    ['sunday', /\b(sun|sunday|sundays)\b/],
+  ];
+  return days.filter(([, pattern]) => pattern.test(text)).map(([day]) => day);
+}
+
+function normalizeRuleDate(value) {
+  if (value === undefined || value === null || value === '') return null;
+  try {
+    return resolveDate(value, null);
+  } catch {
+    return null;
+  }
+}
+
+function inferRecurringDateRangeFromMessage(message) {
+  const text = String(message ?? '').toLowerCase();
+  const explicitStart = text.match(/\bstarting\s+(?:from|on)\s+(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/(?:\d{2}|\d{4}))/);
+  const duration = parseDuration(text);
+  if (explicitStart && duration.days) {
+    const start = resolveDate(explicitStart[1], localDate());
+    return { start_date: start, end_date: addDays(start, duration.days - 1) };
+  }
+  if (explicitStart && duration.weeks) {
+    const start = resolveDate(explicitStart[1], localDate());
+    return { start_date: start, end_date: addDays(start, duration.weeks * 7 - 1) };
+  }
+  if (explicitStart && duration.months) {
+    const start = resolveDate(explicitStart[1], localDate());
+    return { start_date: start, end_date: addDays(addMonthsLocal(start, duration.months), -1) };
+  }
+
+  const reference = buildRecurrenceDateReference();
+  if (/\bnext week\b/.test(text)) return reference.nextWeek;
+  if (/\bthis week\b/.test(text)) return reference.thisWeek;
+  if (/\bnext month\b|of next month\b/.test(text)) return reference.nextMonth;
+  if (/\bthis month\b/.test(text)) return reference.thisMonth;
+
+  const namedMonth = findNamedMonthRange(text);
+  if (namedMonth) return namedMonth;
+
+  if (/for\s+the\s+next\s+/.test(text) || /^for\s+/.test(text)) {
+    if (duration.days) return { start_date: localDate(), end_date: addDays(localDate(), duration.days - 1) };
+    if (duration.weeks) return { start_date: localDate(), end_date: addDays(localDate(), duration.weeks * 7 - 1) };
+    if (duration.months) return { start_date: localDate(), end_date: addDays(addMonthsLocal(localDate(), duration.months), -1) };
+  }
+
+  return { start_date: null, end_date: null };
 }
 
 async function executeExplicitCalendarPlan(message, plan) {
@@ -540,6 +849,94 @@ function inferExplicitRange(message) {
   return null;
 }
 
+function buildRecurrenceDateReference() {
+  const todayDate = localDate();
+  const thisWeek = weekRange(todayDate, 0);
+  const nextWeek = weekRange(todayDate, 1);
+  const thisMonth = monthRange(todayDate, 0);
+  const nextMonth = monthRange(todayDate, 1);
+  return {
+    today: todayDate,
+    tomorrow: localDate(1),
+    thisWeek,
+    nextWeek,
+    thisMonth,
+    nextMonth,
+    namedMonths: Object.fromEntries(MONTH_NAMES.map((name, index) => [name, monthRangeForUpcomingMonth(index + 1)])),
+  };
+}
+
+function weekRange(dateValue, offsetWeeks) {
+  const start = addDays(dateValue, -((dayIndex(dateValue) + 6) % 7) + offsetWeeks * 7);
+  return {
+    start_date: start,
+    end_date: addDays(start, 6),
+    start,
+    end: addDays(start, 6),
+  };
+}
+
+function monthRange(dateValue, offsetMonths) {
+  const date = toUtcDate(dateValue);
+  date.setUTCMonth(date.getUTCMonth() + offsetMonths, 1);
+  const start = formatDate(date);
+  date.setUTCMonth(date.getUTCMonth() + 1, 0);
+  const end = formatDate(date);
+  return { start_date: start, end_date: end, start, end };
+}
+
+function monthRangeForUpcomingMonth(monthNumber) {
+  const todayDate = toUtcDate(localDate());
+  let year = todayDate.getUTCFullYear();
+  if (monthNumber < todayDate.getUTCMonth() + 1) year += 1;
+  const startDate = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const endDate = new Date(Date.UTC(year, monthNumber, 0));
+  const start = formatDate(startDate);
+  const end = formatDate(endDate);
+  return { start_date: start, end_date: end, start, end };
+}
+
+function findNamedMonthRange(text) {
+  const monthIndex = MONTH_NAMES.findIndex((month) => new RegExp(`\\b${month}\\b`).test(text));
+  return monthIndex >= 0 ? monthRangeForUpcomingMonth(monthIndex + 1) : null;
+}
+
+function parseDuration(text) {
+  const durationMatch = text.match(/\bfor\s+(?:the\s+next\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(days?|weeks?|months?)\b/);
+  if (!durationMatch) return {};
+  const amount = parseCountWord(durationMatch[1]);
+  const unit = durationMatch[2];
+  if (!amount) return {};
+  if (unit.startsWith('day')) return { days: amount };
+  if (unit.startsWith('week')) return { weeks: amount };
+  if (unit.startsWith('month')) return { months: amount };
+  return {};
+}
+
+function parseEveryNDaysInterval(message) {
+  const match = String(message ?? '').toLowerCase().match(/\bevery\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+days?\b/);
+  return match ? parseCountWord(match[1]) : 0;
+}
+
+function parseCountWord(value) {
+  const normalized = String(value ?? '').toLowerCase();
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+  }[normalized] ?? 0;
+}
+
 function splitExplicitScheduleSegments(message) {
   const body = getExplicitScheduleBody(message);
   return body
@@ -618,6 +1015,10 @@ function looksLikeAnalysisRequest(text) {
   return /\b(analy[sz]e|review|summari[sz]e|insights?|how (?:have|am|is|are)|last week|last month|last 30 days|more productive)\b/.test(text);
 }
 
+function looksLikeExpenseOrHealthRequest(text) {
+  return /\b(expense|euro|euros|eur|dollar|dollars|usd|€|\$|water|energy|coffee|adc|sleep|wake|brush|shower|creatine|skin|journal)\b/.test(text);
+}
+
 function formatExpenseSuccess(expense) {
   return `Added expense: ${expense.vendor} - EUR ${formatMoney(expense.amount)} - ${expense.category} - ${expense.spent_on}.`;
 }
@@ -638,6 +1039,29 @@ function formatCalendarEventsSuccess(targetDate, result) {
   ];
 
   if (result.skipped.length) {
+    lines.push('', `Skipped ${result.skipped.length} event${result.skipped.length === 1 ? '' : 's'}:`);
+    lines.push(...result.skipped.map((event) => `- ${event.title || 'Untitled'} - ${event.reason || 'Invalid event'}`));
+  }
+
+  return lines.join('\n');
+}
+
+function formatRecurrenceSuccess(result) {
+  const created = result.created ?? [];
+  const dates = created.map((event) => event.event_date).sort();
+  const start = dates[0] ?? 'unknown date';
+  const end = dates[dates.length - 1] ?? start;
+  const lines = [`Created ${created.length} calendar events from ${start} to ${end}:`];
+  const shown = created.length > 10
+    ? [...created.slice(0, 5), ...created.slice(-2)]
+    : created;
+
+  lines.push(...shown.map((event) => `- ${event.title} - ${event.event_date} - ${formatCalendarEventTimeRange(event)} - ${event.category || 'Uncategorized'}`));
+
+  if (created.length > shown.length) {
+    lines.splice(6, 0, `- ... ${created.length - shown.length} more events ...`);
+  }
+  if (result.skipped?.length) {
     lines.push('', `Skipped ${result.skipped.length} event${result.skipped.length === 1 ? '' : 's'}:`);
     lines.push(...result.skipped.map((event) => `- ${event.title || 'Untitled'} - ${event.reason || 'Invalid event'}`));
   }
@@ -784,6 +1208,36 @@ function minutesToTime(value) {
   const hours = Math.floor(value / 60);
   const minutes = value % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function compareDates(a, b) {
+  return a.localeCompare(b);
+}
+
+function toUtcDate(value) {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function formatDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function dayIndex(value) {
+  return toUtcDate(value).getUTCDay();
+}
+
+function dayName(value) {
+  return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayIndex(value)];
+}
+
+function daysBetween(start, end) {
+  return Math.round((toUtcDate(end).getTime() - toUtcDate(start).getTime()) / 86400000);
+}
+
+function addMonthsLocal(dateValue, months) {
+  const date = toUtcDate(dateValue);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return formatDate(date);
 }
 
 function truncate(value, max) {

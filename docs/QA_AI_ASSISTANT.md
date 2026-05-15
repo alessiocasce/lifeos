@@ -70,6 +70,34 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 36. Confirm today's health log updates without overwriting omitted fields.
 37. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
+## Finite Calendar Recurrence
+
+1. Ask: `everyday for 7 days starting from 17/05/26 i have a school appointment from 2pm to 4pm, log that`
+2. Confirm it creates seven normal calendar events, not one event on today.
+3. Confirm event dates are `2026-05-17` through `2026-05-23`, with time `14:00-16:00` and category `School`.
+4. Ask: `for two weeks every monday log a school appointment from 2 to 3 pm`
+5. Confirm it creates two Monday events in the next two weeks, with time `14:00-15:00` and category `School`.
+6. Ask: `log a deep work session every day of next week from 4 to 8 pm`
+7. Confirm it creates seven events for next week, with time `16:00-20:00` and category `Work`.
+8. Ask: `all mondays of next month log school from 2pm to 3pm`
+9. Confirm it creates one event for each Monday in next month.
+10. Ask: `every other day of next month log deep work from 4pm to 8pm`
+11. Confirm it creates every-other-day events within next month and stays under the event cap.
+12. Ask: `every other day of july log deep work from 4pm to 8pm`
+13. Confirm it creates every-other-day events in the next sensible upcoming July.
+14. Ask: `all weekends for the next 3 weeks log boxing from 10am to 12pm`
+15. Confirm it creates six events, Saturday and Sunday for three weeks, with category `Workout`.
+16. Ask: `for the next 3 months every sunday log family lunch from 1pm to 3pm`
+17. Confirm it creates every Sunday in the finite range, remains under the 60-event cap, and uses `Social` or another sensible category.
+18. Ask: `every other day log gym from 5pm to 6pm`
+19. Confirm the assistant asks for the date range and creates nothing.
+20. Re-run: `today i want to study from 2 to 3 pm, work from 4 to 5 pm, dance from 6 to 7 pm`
+21. Confirm it still uses the explicit multi-event path and not recurrence expansion.
+22. Re-run: `create event tomorrow dentist 2pm to 3pm`
+23. Confirm it still uses the single-event path and creates one event.
+24. Re-run: `analyze my last week and plan a more productive day tomorrow`
+25. Confirm it still uses the analyze-and-plan path and not recurrence expansion.
+
 ## Health Habit Context
 
 1. Create several Health logs with different Brush, Shower, Creatine, Skin, and Journal values.

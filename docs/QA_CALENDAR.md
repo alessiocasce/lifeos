@@ -140,6 +140,17 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 12. Confirm explicit multi-event AI prompts create separate events instead of one event with a full schedule inside `start_time`.
 13. Confirm the UI time inputs still save normal browser time values correctly.
 
+## AI Finite Recurrence Expansion
+
+1. Ask the assistant to create a recurring calendar command, such as `everyday for 7 days starting from 17/05/26 i have a school appointment from 2pm to 4pm, log that`.
+2. Confirm recurrence-expanded events are stored as normal `calendar_events` rows.
+3. Confirm no true recurring event schema or recurrence column is required.
+4. Confirm daily, weekday, weekend, weekly day, every-other-day, next-week, next-month, named-month, and explicit start-date-plus-duration commands create the expected concrete dates.
+5. Confirm requests that would create more than 60 events are rejected with a clear narrowing message.
+6. Confirm ambiguous open-ended recurrence requests ask one clarification and create nothing.
+7. Confirm long generated lists do not break the selected-day agenda UI.
+8. Confirm status buttons still work on recurrence-created events.
+
 ## Migration / Error States
 
 1. Test against a Supabase project where `public.calendar_events` has not been created yet.
