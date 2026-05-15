@@ -49,6 +49,9 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 8. Test an old row whose `hygiene` JSON contains Floss or Stretch; confirm the new UI ignores those old items without crashing.
 9. Test an old row whose Journal uses `count: 1` or `done: true`; confirm it displays as journaled.
 10. Confirm forced Journal counts above 1 normalize to journaled rather than displaying as a count.
+11. Ask the AI assistant: `Log that i took creatine today`; confirm the Health tab shows today's Creatine habit incremented/logged.
+12. Ask the AI assistant: `Log that I showered today`; confirm Shower increments/logs and other omitted habits are preserved.
+13. Ask the AI assistant: `I journaled today`; confirm Journal becomes journaled/yes and remains boolean.
 
 ## Standalone Habit Stats
 
@@ -65,6 +68,14 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 3. Confirm the 7-day history has no Water metric.
 4. Confirm saving a newly created Health log still works with the database `water` column left at its default.
 5. If testing an old row with a non-zero water value, update another visible field and confirm the save does not require editing Water.
+6. Confirm AI habit logging does not expose Water, while old Action API calls that include `water` still validate.
+
+## Optional Nullable Fields
+
+1. Ask the AI assistant to log a habit-only update such as `Log that i took creatine today`.
+2. Confirm missing optional fields such as `sleep_hours`, `sleep_start`, and `wake_time` are ignored rather than validated as invalid.
+3. Confirm explicitly clearing nullable fields with `null` or blank values remains safe where supported.
+4. Confirm normal updates like `Log 8 hours of sleep today` still validate and save.
 
 ## ADC Counter
 

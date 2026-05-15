@@ -66,9 +66,17 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 32. Confirm it uses the single-event path and creates one event.
 33. Ask: `analyze my last week and plan a more productive day tomorrow`
 34. Confirm it uses the analyze-and-plan path, reads context, and does not use explicit multi-event extraction.
-35. Ask: `Log 8 energy and 1 coffee today.`
-36. Confirm today's health log updates without overwriting omitted fields.
-37. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+35. Ask: `Log that i took creatine today`
+36. Confirm no `sleep_hours` validation error appears and today's Creatine habit increments or logs.
+37. Ask: `Log that I showered today`
+38. Confirm today's Shower habit increments or logs.
+39. Ask: `I journaled today`
+40. Confirm today's Journal habit is true/journaled, not a numeric count above 1.
+41. Ask: `Log 8 hours of sleep today`
+42. Confirm `sleep_hours` updates normally.
+43. Ask: `Log 8 energy and 1 coffee today.`
+44. Confirm today's health log updates without overwriting omitted fields.
+45. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Finite Calendar Recurrence
 

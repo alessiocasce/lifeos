@@ -103,7 +103,7 @@ export function normalizeTimeRange(body, startField = 'start_time', endField = '
 }
 
 export function optionalNumber(body, field, { min = -Infinity, max = Infinity } = {}) {
-  if (!hasField(body, field)) return undefined;
+  if (!hasField(body, field) || body[field] === undefined) return undefined;
   if (body[field] === null || body[field] === '') {
     throw new HttpError(400, `${field} must be ${formatRange('a number', min, max)}.`);
   }
@@ -115,7 +115,7 @@ export function optionalNumber(body, field, { min = -Infinity, max = Infinity } 
 }
 
 export function optionalNullableNumber(body, field, { min = -Infinity, max = Infinity } = {}) {
-  if (!hasField(body, field)) return undefined;
+  if (!hasField(body, field) || body[field] === undefined) return undefined;
   if (body[field] === null || body[field] === '') return null;
   return optionalNumber(body, field, { min, max });
 }
@@ -134,7 +134,7 @@ export function requiredNumber(body, field, { min = -Infinity, minExclusive = nu
 }
 
 export function optionalInteger(body, field, { min = -Infinity, max = Infinity } = {}) {
-  if (!hasField(body, field)) return undefined;
+  if (!hasField(body, field) || body[field] === undefined) return undefined;
   if (body[field] === null || body[field] === '') {
     throw new HttpError(400, `${field} must be ${formatRange('an integer', min, max)}.`);
   }
@@ -146,7 +146,7 @@ export function optionalInteger(body, field, { min = -Infinity, max = Infinity }
 }
 
 export function optionalNullableInteger(body, field, { min = -Infinity, max = Infinity } = {}) {
-  if (!hasField(body, field)) return undefined;
+  if (!hasField(body, field) || body[field] === undefined) return undefined;
   if (body[field] === null || body[field] === '') return null;
   return optionalInteger(body, field, { min, max });
 }
@@ -249,7 +249,7 @@ function timeToMinutes(value) {
 }
 
 function readTimeField(body, field) {
-  const present = hasField(body, field);
+  const present = hasField(body, field) && body[field] !== undefined;
   const raw = present ? body[field] : undefined;
   const empty = present && (raw === null || raw === '');
   let tokens = present && !empty ? extractTimeTokens(raw) : [];

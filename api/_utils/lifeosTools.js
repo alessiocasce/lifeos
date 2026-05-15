@@ -56,12 +56,13 @@ const CALENDAR_CATEGORY_ALIASES = new Map([
   ['sleeping', 'Sleep'],
 ]);
 const HEALTH_HABITS = [
-  { id: 'brush', type: 'count' },
-  { id: 'shower', type: 'count' },
-  { id: 'creatine', type: 'count' },
-  { id: 'skin', type: 'count' },
-  { id: 'journal', type: 'boolean' },
+  { id: 'brush', label: 'Brush', type: 'count' },
+  { id: 'shower', label: 'Shower', type: 'count' },
+  { id: 'creatine', label: 'Creatine', type: 'count' },
+  { id: 'skin', label: 'Skin', type: 'count' },
+  { id: 'journal', label: 'Journal', type: 'boolean' },
 ];
+const HEALTH_HABIT_IDS = new Set(HEALTH_HABITS.map((habit) => habit.id));
 
 export function localDate(offsetDays = 0) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -243,8 +244,12 @@ export async function createExpense(args) {
 
 export async function updateHealthLog(args) {
   const userId = getActionUserId();
+  const loggedOn = resolveDate(args.logged_on ?? args.date, localDate());
+  const habitUpdate = extractHealthHabitUpdates(args);
+  const hasHabitUpdate = habitUpdate.updatedIds.length > 0;
+  const existingLog = hasHabitUpdate ? await readHealthLogForDate(userId, loggedOn) : null;
   const body = {
-    logged_on: resolveDate(args.logged_on ?? args.date, localDate()),
+    logged_on: loggedOn,
     sleep_hours: args.sleep_hours,
     sleep_start: args.sleep_start,
     wake_time: args.wake_time,
@@ -254,6 +259,7 @@ export async function updateHealthLog(args) {
     adc: args.adc,
     notes: args.notes,
   };
+  const hygiene = hasHabitUpdate ? mergeHealthHabitUpdates(existingLog?.hygiene, habitUpdate.updates) : undefined;
   const payload = compactPayload({
     user_id: userId,
     logged_on: optionalDate(body, 'logged_on', localDate()),
@@ -265,17 +271,23 @@ export async function updateHealthLog(args) {
     coffee: optionalInteger(body, 'coffee', { min: 0, max: 100 }),
     adc: optionalInteger(body, 'adc', { min: 0, max: 100 }),
     notes: optionalText(body.notes, 'notes', { max: 2000 }),
+    hygiene,
   });
   if (Object.keys(payload).filter((key) => !['user_id', 'logged_on'].includes(key)).length === 0) {
     throw new HttpError(400, 'At least one health field is required.');
   }
+  const changedFields = Object.keys(payload).filter((key) => !['user_id', 'logged_on', 'hygiene'].includes(key));
   const { data, error } = await getSupabaseAdmin()
     .from('health_logs')
     .upsert(payload, { onConflict: 'user_id,logged_on' })
-    .select('id, logged_on, sleep_hours, sleep_start, wake_time, energy, water, coffee, adc, notes, updated_at')
+    .select('id, logged_on, sleep_hours, sleep_start, wake_time, energy, water, coffee, adc, notes, hygiene, updated_at')
     .single();
   if (error) throw error;
-  return data;
+  return {
+    ...data,
+    _updatedHabits: habitUpdate.updatedIds,
+    _changedHealthFields: changedFields,
+  };
 }
 
 export async function createCalendarEvent(args) {
@@ -423,6 +435,129 @@ function summarizeHealthHabits(logs) {
   };
 }
 
+async function readHealthLogForDate(userId, loggedOn) {
+  const { data, error } = await getSupabaseAdmin()
+    .from('health_logs')
+    .select('id, hygiene')
+    .eq('user_id', userId)
+    .eq('logged_on', loggedOn)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+function extractHealthHabitUpdates(args = {}) {
+  const updates = {};
+  collectHabitUpdates(updates, args.habits, 'explicit');
+  collectHabitUpdates(updates, args.hygiene, 'explicit');
+
+  for (const habit of HEALTH_HABITS) {
+    if (Object.prototype.hasOwnProperty.call(args, habit.id)) {
+      setHabitUpdate(updates, habit.id, args[habit.id], 'explicit');
+    }
+  }
+
+  collectHabitUpdatesFromNotes(updates, args.notes);
+
+  return {
+    updates,
+    updatedIds: Object.keys(updates),
+  };
+}
+
+function collectHabitUpdates(updates, value, source) {
+  if (!value) return;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!item || typeof item !== 'object') continue;
+      const id = normalizeHabitId(item.id ?? item.name ?? item.label);
+      if (!id) continue;
+      const rawValue = item.type === 'boolean' ? item.done ?? item.count : item.count ?? item.done ?? item.value;
+      setHabitUpdate(updates, id, rawValue, source);
+    }
+    return;
+  }
+  if (typeof value === 'object') {
+    for (const [key, rawValue] of Object.entries(value)) {
+      const id = normalizeHabitId(key);
+      if (id) setHabitUpdate(updates, id, rawValue, source);
+    }
+  }
+}
+
+function collectHabitUpdatesFromNotes(updates, notes) {
+  const text = String(notes ?? '').toLowerCase();
+  if (!text) return;
+  if (/\b(creatine|took creatine|taken creatine|had creatine)\b/.test(text)) {
+    setHabitUpdate(updates, 'creatine', true, 'phrase');
+  }
+  if (/\b(showered|shower|took a shower|had a shower)\b/.test(text)) {
+    setHabitUpdate(updates, 'shower', true, 'phrase');
+  }
+  if (/\b(brushed teeth|brushed my teeth|brush teeth|brush)\b/.test(text)) {
+    setHabitUpdate(updates, 'brush', true, 'phrase');
+  }
+  if (/\b(skincare|skin care|did skin|skin routine)\b/.test(text)) {
+    setHabitUpdate(updates, 'skin', true, 'phrase');
+  }
+  if (/\b(journaled|wrote journal|wrote in my journal|did journal|journal)\b/.test(text)) {
+    setHabitUpdate(updates, 'journal', true, 'phrase');
+  }
+}
+
+function setHabitUpdate(updates, id, value, source) {
+  if (!HEALTH_HABIT_IDS.has(id) || value === undefined || value === null || value === '') return;
+  const habit = HEALTH_HABITS.find((item) => item.id === id);
+  if (habit.type === 'boolean') {
+    updates[id] = { mode: 'set', value: normalizeBooleanHabitValue(value) };
+    return;
+  }
+
+  if (source === 'phrase' || value === true || String(value).toLowerCase() === 'true') {
+    updates[id] = { mode: 'increment', value: 1 };
+    return;
+  }
+  if (value === false || String(value).toLowerCase() === 'false') {
+    updates[id] = { mode: 'set', value: 0 };
+    return;
+  }
+
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new HttpError(400, `${id} habit count must be a non-negative integer.`);
+  }
+  updates[id] = { mode: 'set', value: count };
+}
+
+function mergeHealthHabitUpdates(existingItems, updates) {
+  const current = normalizeHealthHabits(existingItems);
+  return HEALTH_HABITS.map((habit) => {
+    const update = updates[habit.id];
+    if (habit.type === 'boolean') {
+      const done = update ? Boolean(update.value) : Boolean(current[habit.id]);
+      return {
+        id: habit.id,
+        label: habit.label,
+        type: habit.type,
+        done,
+      };
+    }
+
+    const currentCount = Math.max(0, Math.trunc(Number(current[habit.id] ?? 0) || 0));
+    const nextCount = update?.mode === 'increment'
+      ? currentCount + 1
+      : update
+        ? Math.max(0, Math.trunc(Number(update.value) || 0))
+        : currentCount;
+    return {
+      id: habit.id,
+      label: habit.label,
+      type: habit.type,
+      count: nextCount,
+    };
+  });
+}
+
 function normalizeHealthHabits(items = []) {
   const safeItems = Array.isArray(items) ? items : [];
   const byId = new Map(safeItems.map((item) => [item.id, item]));
@@ -435,6 +570,24 @@ function normalizeHealthHabits(items = []) {
     }
     return acc;
   }, {});
+}
+
+function normalizeHabitId(value) {
+  const text = String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+  if (['brush', 'brushing', 'brushed', 'teeth'].includes(text)) return 'brush';
+  if (['shower', 'showered'].includes(text)) return 'shower';
+  if (['creatine'].includes(text)) return 'creatine';
+  if (['skin', 'skincare', 'skin care'].includes(text)) return 'skin';
+  if (['journal', 'journaled', 'journaling'].includes(text)) return 'journal';
+  return HEALTH_HABIT_IDS.has(text) ? text : '';
+}
+
+function normalizeBooleanHabitValue(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value > 0;
+  const text = String(value ?? '').trim().toLowerCase();
+  if (['false', 'no', 'not done', '0'].includes(text)) return false;
+  return Boolean(text);
 }
 
 function sumHabit(logs, id) {

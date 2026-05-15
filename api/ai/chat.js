@@ -51,7 +51,11 @@ Rules:
 - For calendar creation, extract title, event_date/date, start_time, end_time, category, location, notes. Prefer calendar categories from this list: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
 - Calendar category guidance: use Errands for practical tasks/logistics, Social for plans with family/friends, Personal for solo admin/chores/routines/planning, Health for medical/dentist/recovery, and Workout for gym/boxing/sports training.
 - create_calendar_event is only for one event. If the user gives multiple explicit events/times, do not force the whole schedule into one create_calendar_event. Keep calendar_events in tables, set needsWrite true, and avoid needsRead unless the user asks to analyze past data.
-- For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes. Only extract water when the user explicitly asks to log water because it is kept for backward compatibility.
+- For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes, and Daily Habits.
+- Daily Habits are brush, shower, creatine, skin, and journal. Put them in args.habits or direct args fields such as {"creatine": true}.
+- "took creatine" means habit creatine. "showered" means habit shower. "brushed teeth" means habit brush. "skincare" or "did skin" means habit skin. "journaled" or "wrote journal" means habit journal.
+- Do not map habit phrases into sleep_hours. Do not output sleep_hours unless the user explicitly gives sleep duration. Avoid putting habit-only statements only into notes when a habit field can be extracted.
+- Only extract water when the user explicitly asks to log water because it is kept for backward compatibility.
 - For "last week", use range "7d". For "last 30 days" or "last month", use "30d". For "last 3 months", use "3m". For all-time/overall behavior, use "all".
 - For vague "how am I doing?", use intent "analyze", needsRead true, range "30d", and broad LifeOS tables.
 - For analyze plus explicit plan/schedule requests, use "analyze_and_plan" with needsRead true and needsWrite true.
@@ -714,7 +718,7 @@ async function executeWriteIntent(plan, message, lifeosContext) {
     const updated = await updateHealthLog(plan.args);
     return {
       actions: [{ type: 'update_health_log', data: updated }],
-      answer: `Updated health log for ${updated.logged_on}.`,
+      answer: formatHealthSuccess(updated),
     };
   }
 
@@ -1044,6 +1048,19 @@ function formatCalendarEventsSuccess(targetDate, result) {
   }
 
   return lines.join('\n');
+}
+
+function formatHealthSuccess(updated) {
+  const habits = Array.isArray(updated._updatedHabits) ? updated._updatedHabits : [];
+  const fields = Array.isArray(updated._changedHealthFields) ? updated._changedHealthFields : [];
+  const parts = [];
+  if (fields.length) parts.push(fields.join(', '));
+  if (habits.length) parts.push(`habits: ${habits.join(', ')}`);
+  if (habits.length && (!fields.length || fields.every((field) => field === 'notes'))) {
+    return `Updated health habits for ${updated.logged_on}: ${habits.join(', ')}.`;
+  }
+  if (parts.length) return `Updated health log for ${updated.logged_on}: ${parts.join('; ')}.`;
+  return `Updated health log for ${updated.logged_on}.`;
 }
 
 function formatRecurrenceSuccess(result) {

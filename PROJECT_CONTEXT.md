@@ -228,6 +228,9 @@ Architecture:
 - Finite recurring calendar requests bypass the general planner before it runs, then expand into multiple normal `calendar_events` rows.
 - Supported finite recurrence patterns include daily, weekdays, weekends, weekly days, every other day, every N days, next week, next month, named months, next N weeks/months, and explicit start date plus duration.
 - Recurrence expansion is capped at 60 created events per request. Ambiguous recurrence requests ask one clarification instead of writing.
+- AI health logging supports Daily Habits stored in `health_logs.hygiene`: Brush, Shower, Creatine, Skin, and Journal.
+- AI habit updates merge with existing daily habit values. Brush, Shower, Creatine, and Skin are counts; Journal is boolean.
+- Missing optional nullable health fields are ignored instead of being validated as invalid.
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
 - AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
 - `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
@@ -402,6 +405,8 @@ Current behavior:
 - Daily habit trackers are Brush, Shower, Creatine, Skin, and Journal.
 - Brush, Shower, Creatine, and Skin are numeric counts. Journal is boolean: journaled or not journaled.
 - Habits are stored in the existing `hygiene` JSON field. Older boolean rows and older numeric Journal rows are normalized safely; old Floss/Stretch rows are ignored by the new visible UI.
+- AI health habit logging writes to the same `hygiene` JSON field and merges habit-only updates with existing daily values.
+- Missing optional nullable health fields such as `sleep_hours`, `sleep_start`, and `wake_time` are ignored by backend validation unless explicitly provided.
 - Health and AI summaries treat habits as standalone stats instead of one generic hygiene total.
 - Does not use iPhone Screen Time integration yet.
 
