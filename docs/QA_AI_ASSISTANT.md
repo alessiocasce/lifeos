@@ -43,12 +43,18 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 9. Ask with `25 euro`, `€25`, `25 dollar`, `$25`, and `12,50` in test expenses and confirm amounts validate correctly.
 10. Ask: `Plan the dentist for tomorrow from 2 to 3 pm.`
 11. Confirm a calendar event is created with the right date and times.
-12. Confirm AI-created calendar events use preferred categories where possible: Work, Study, School, Health, Workout, Entertainment, Sleep.
+12. Confirm AI-created calendar events use preferred categories where possible: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
 13. Ask for an event with a lowercase preferred category such as `work` or `study`.
 14. Confirm the created event stores/displays the preferred category casing, such as `Work` or `Study`.
-15. Ask: `Log 8 energy and 1 coffee today.`
-16. Confirm today's health log updates without overwriting omitted fields.
-17. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+15. Ask: `Create an event today: take my mom to an appointment from 3:45 PM to 5:30 PM.`
+16. Confirm the created event uses `Errands` or `Health` depending on whether Gemini frames it as logistics or a medical appointment.
+17. Ask: `Plan dinner with friends tonight.`
+18. Confirm the created event uses `Social` or `Entertainment` depending on wording.
+19. Ask: `Block 30 minutes for journaling.`
+20. Confirm the created event uses `Personal`.
+21. Ask: `Log 8 energy and 1 coffee today.`
+22. Confirm today's health log updates without overwriting omitted fields.
+23. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 

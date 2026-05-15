@@ -18,7 +18,42 @@ import {
 const TIME_ZONE = 'Europe/Rome';
 const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews']);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
-const PREFERRED_CALENDAR_CATEGORIES = ['Work', 'Study', 'School', 'Health', 'Workout', 'Entertainment', 'Sleep'];
+const PREFERRED_CALENDAR_CATEGORIES = ['Work', 'Study', 'School', 'Health', 'Workout', 'Errands', 'Personal', 'Social', 'Entertainment', 'Sleep'];
+const CALENDAR_CATEGORY_ALIASES = new Map([
+  ['errand', 'Errands'],
+  ['errands', 'Errands'],
+  ['logistics', 'Errands'],
+  ['shopping task', 'Errands'],
+  ['shopping tasks', 'Errands'],
+  ['chores', 'Personal'],
+  ['chore', 'Personal'],
+  ['personal admin', 'Personal'],
+  ['admin', 'Personal'],
+  ['routine', 'Personal'],
+  ['routines', 'Personal'],
+  ['journaling', 'Personal'],
+  ['journal', 'Personal'],
+  ['family', 'Social'],
+  ['friends', 'Social'],
+  ['friend', 'Social'],
+  ['girlfriend', 'Social'],
+  ['social', 'Social'],
+  ['gym', 'Workout'],
+  ['boxing', 'Workout'],
+  ['cardio', 'Workout'],
+  ['sport', 'Workout'],
+  ['sports', 'Workout'],
+  ['sports training', 'Workout'],
+  ['doctor', 'Health'],
+  ['dentist', 'Health'],
+  ['medical', 'Health'],
+  ['recovery', 'Health'],
+  ['hygiene', 'Health'],
+  ['nap', 'Sleep'],
+  ['naps', 'Sleep'],
+  ['bedtime', 'Sleep'],
+  ['sleeping', 'Sleep'],
+]);
 const HEALTH_HABITS = [
   { id: 'brush', type: 'count' },
   { id: 'shower', type: 'count' },
@@ -308,7 +343,17 @@ export async function createCalendarPlanEvents(events, targetDate) {
 function normalizeCalendarCategory(value) {
   if (value === undefined || value === null || value === '') return value;
   const text = String(value).trim();
-  return PREFERRED_CALENDAR_CATEGORIES.find((category) => category.toLowerCase() === text.toLowerCase()) ?? text;
+  const normalized = text.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const category = PREFERRED_CALENDAR_CATEGORIES.find((item) => item.toLowerCase() === normalized);
+  if (category) return category;
+  if (CALENDAR_CATEGORY_ALIASES.has(normalized)) return CALENDAR_CATEGORY_ALIASES.get(normalized);
+  if (/\b(doctor|dentist|medical|recovery|hygiene)\b/.test(normalized)) return 'Health';
+  if (/\b(gym|boxing|cardio|sport|sports|training)\b/.test(normalized)) return 'Workout';
+  if (/\b(family|friend|friends|girlfriend)\b/.test(normalized)) return 'Social';
+  if (/\b(errand|errands|logistics|appointment|shopping)\b/.test(normalized)) return 'Errands';
+  if (/\b(journal|journaling|admin|chore|chores|routine|planning)\b/.test(normalized)) return 'Personal';
+  if (/\b(nap|naps|bedtime|sleep)\b/.test(normalized)) return 'Sleep';
+  return text;
 }
 
 function queryDateRange(query, column, window) {

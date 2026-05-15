@@ -17,7 +17,7 @@ import { Panel, PanelHeader, Tag } from '../components/ui';
 
 const todayString = () => new Date().toISOString().slice(0, 10);
 const statuses = ['planned', 'done', 'skipped', 'cancelled'];
-const categories = ['Work', 'Study', 'School', 'Health', 'Workout', 'Entertainment', 'Sleep'];
+const categories = ['Work', 'Study', 'School', 'Health', 'Workout', 'Errands', 'Personal', 'Social', 'Entertainment', 'Sleep'];
 
 const emptyForm = (date = todayString()) => ({
   title: '',
@@ -692,6 +692,9 @@ function categoryTone(category) {
   if (category === 'School') return 'border-amber-400/20 bg-amber-400/10 text-amber-300';
   if (category === 'Health') return 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
   if (category === 'Workout') return 'border-red-400/20 bg-red-400/10 text-red-300';
+  if (category === 'Errands') return 'border-lime-400/20 bg-lime-400/10 text-lime-300';
+  if (category === 'Personal') return 'border-sky-400/20 bg-sky-400/10 text-sky-300';
+  if (category === 'Social') return 'border-rose-400/20 bg-rose-400/10 text-rose-300';
   if (category === 'Entertainment') return 'border-fuchsia-400/20 bg-fuchsia-400/10 text-fuchsia-300';
   if (category === 'Sleep') return 'border-indigo-400/20 bg-indigo-400/10 text-indigo-300';
   return 'border-white/10 bg-white/[0.03] text-zinc-400';

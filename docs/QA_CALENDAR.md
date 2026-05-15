@@ -107,11 +107,13 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 ## Categories
 
 1. Confirm the event form uses defined category choices, not a free text hashtag field.
-2. Confirm the visible categories are Work, Study, School, Health, Workout, Entertainment, and Sleep.
+2. Confirm the visible categories are Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, and Sleep.
 3. Create one event in several categories and confirm each uses a distinct but subtle color treatment.
 4. Confirm event cards show category labels without hashtags.
 5. If an older event has an unknown category string, confirm it displays with neutral styling and does not crash.
 6. Confirm Action API or AI-created category strings outside the list remain display-compatible.
+7. Create or edit events with Errands, Personal, and Social and confirm they save and reload.
+8. Ask the assistant to create `take mom somewhere today 15:45-17:30` and confirm the category is Errands or Social depending on the wording.
 
 ## Agenda Readability
 

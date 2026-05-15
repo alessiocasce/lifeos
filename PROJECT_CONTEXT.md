@@ -219,7 +219,7 @@ Architecture:
 - Assistant error cards show safe request/provider details without exposing secrets.
 - Expense, calendar, and health date handling accepts `YYYY-MM-DD`, `DD/MM/YY`, `DD/MM/YYYY`, `today`, and `tomorrow` where relevant.
 - AI-created expense categories normalize to canonical display casing when possible, such as `subscriptions` to `Subscriptions`.
-- AI-created calendar events normalize case-insensitive preferred categories such as `work` or `study` to the UI category names when possible.
+- AI-created calendar events normalize case-insensitive preferred categories such as `work`, `errands`, `personal`, or `social` to the UI category names when possible.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
@@ -270,7 +270,9 @@ Current behavior:
 - Shows all events for the selected date as readable agenda cards.
 - Agenda event cards support quick status changes for planned, done, skipped, and cancelled without opening the editor.
 - Sorts timed events by start time, with untimed events after timed events.
-- UI-created event categories are limited to Work, Study, School, Health, Workout, Entertainment, and Sleep.
+- UI-created event categories are limited to Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, and Sleep.
+- Calendar categories remain text in Supabase for compatibility with older and externally created events.
+- AI-created calendar events prefer the same category list and normalize common aliases such as gym, boxing, dentist, errands, family, friends, and journaling when possible.
 - Category badges use consistent subtle color styling. Older unknown category strings remain display-compatible with neutral styling.
 - Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
 - Ignores stale week-range responses during fast week switching and clears calendar state on auth changes.
