@@ -277,7 +277,7 @@ export function AIAssistantTab() {
     if (types.has('update_health_log')) {
       tasks.push(reloadHealthLogs?.());
     }
-    if (types.has('create_calendar_event') || types.has('analyze_and_plan')) {
+    if (types.has('create_calendar_event') || types.has('create_calendar_events') || types.has('analyze_and_plan')) {
       tasks.push(loadCalendarRange?.(today(), addDays(today(), 45)));
     }
     await Promise.allSettled(tasks.filter(Boolean));
@@ -718,7 +718,7 @@ function ActionResults({ actions }) {
           <p className={`data-text text-[10px] uppercase tracking-wider ${blocked ? 'text-amber-300' : 'text-emerald-300'}`}>
             {formatActionType(action.type)}
           </p>
-          {action.type === 'analyze_and_plan' ? (
+          {action.type === 'analyze_and_plan' || action.type === 'create_calendar_events' ? (
             <p className="mt-1 text-xs text-zinc-300">
               Created {action.data?.created?.length ?? 0} events
               {action.data?.skipped?.length ? ` / skipped ${action.data.skipped.length}` : ''}.

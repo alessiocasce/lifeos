@@ -221,6 +221,9 @@ Architecture:
 - AI-created expense categories normalize to canonical display casing when possible, such as `subscriptions` to `Subscriptions`.
 - AI-created calendar events normalize case-insensitive preferred categories such as `work`, `errands`, `personal`, or `social` to the UI category names when possible.
 - AI and Action API calendar creates normalize common AM/PM and messy Gemini time fields such as `from 12:45pm`, `12:45pm to 2:15pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`.
+- Explicit multi-event calendar prompts are routed through a dedicated extraction/create path instead of the single-event tool. `create_calendar_event` is for one event only.
+- Explicit multi-event calendar creation does not require read/analysis context and returns a deterministic created/skipped summary.
+- AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
@@ -229,7 +232,7 @@ Supported v1 intents/tools:
 
 - Analyze persisted LifeOS context across expenses, health logs, workouts/sets, calendar events, and daily reviews.
 - Create expenses.
-- Create calendar events.
+- Create single calendar events and explicit multi-event calendar schedules.
 - Update provided daily health log fields.
 - Analyze recent context and create a small non-overlapping calendar plan when the user explicitly asks to plan/schedule.
 - Block destructive requests such as deleting records or mass updates.
@@ -275,6 +278,7 @@ Current behavior:
 - Calendar categories remain text in Supabase for compatibility with older and externally created events.
 - AI-created calendar events prefer the same category list and normalize common aliases such as gym, boxing, dentist, errands, family, friends, and journaling when possible.
 - AI and Action API calendar creates normalize common AM/PM strings and messy Gemini time fields into canonical stored `HH:MM`, while the Calendar UI still uses native time inputs.
+- Explicit AI multi-event schedules such as comma-separated study/lunch/errand blocks create separate calendar events and support chained ambiguous ranges like `12:45-2:15, 2:15-2:30, 3:45-5:30pm`.
 - Category badges use consistent subtle color styling. Older unknown category strings remain display-compatible with neutral styling.
 - Uses persisted calendar events only; mock planning data and AI triage were removed from the Calendar tab.
 - Ignores stale week-range responses during fast week switching and clears calendar state on auth changes.

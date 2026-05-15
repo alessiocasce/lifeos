@@ -52,12 +52,18 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 18. Confirm the created event uses `Social` or `Entertainment` depending on wording.
 19. Ask: `Block 30 minutes for journaling.`
 20. Confirm the created event uses `Personal`.
-21. Ask: `plan these events for today: science study session from 12:45pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
-22. Confirm all four events are created successfully.
-23. Confirm created events store/display canonical times: `12:45-14:15` Study, `14:15-14:30` Health, `14:30-15:45` Study, and `15:45-17:30` Health or Errands.
-24. Ask: `Log 8 energy and 1 coffee today.`
-25. Confirm today's health log updates without overwriting omitted fields.
-26. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+21. Ask: `plan these events for today: science study session from 1:00pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
+22. Confirm all four events are created successfully through the explicit multi-event path.
+23. Confirm created events store/display canonical times: `13:00-14:15` Study, `14:15-14:30` Health, `14:30-15:45` Study, and `15:45-17:30` Health or Errands.
+24. Ask: `plan today: science 12:45-2:15, lunch 2:15-2:30, study 2:30-3:45, mom doctor 3:45-5:30pm`
+25. Confirm all four events are created and no `start_time` validation error appears.
+26. Ask: `create event tomorrow dentist 2pm to 3pm`
+27. Confirm it uses the single-event path and creates one event.
+28. Ask: `analyze my last week and plan a more productive day tomorrow`
+29. Confirm it uses the analyze-and-plan path, reads context, and does not use explicit multi-event extraction.
+30. Ask: `Log 8 energy and 1 coffee today.`
+31. Confirm today's health log updates without overwriting omitted fields.
+32. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 
@@ -109,6 +115,8 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 6. Confirm safe provider messages can appear, but no stack traces, API keys, bearer tokens, or env values appear.
 7. Confirm invalid planner JSON returns `Gemini returned an invalid planner response.` and no write is executed.
 8. Confirm complex analysis can still use multiple Gemini calls, while simple create expense/calendar/health writes avoid the final answer call.
+9. Force a write validation failure in a test environment and confirm server logs include a requestId, planner intent, sanitized planner args shape, write path, and error without exposing secrets.
+10. With `LIFEOS_DEBUG_AI=true` in a test deployment only, confirm error responses include sanitized debug diagnostics. Turn it back off after testing.
 
 ## Mobile / iPhone
 

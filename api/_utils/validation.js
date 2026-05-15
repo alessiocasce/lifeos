@@ -90,10 +90,13 @@ export function normalizeTimeRange(body, startField = 'start_time', endField = '
   }
 
   let startTime = start.empty ? null : startToken?.normalized;
-  const endTime = end.empty && !endToken ? null : endToken?.normalized;
+  let endTime = end.empty && !endToken ? null : endToken?.normalized;
 
   if (startTime && endTime && shouldPromoteAmbiguousStartToPm(startToken, endToken, endTime)) {
     startTime = addHours(startTime, 12);
+  }
+  if (startTime && endTime && shouldPromoteAmbiguousEndToPm(startTime, endToken, endTime)) {
+    endTime = addHours(endTime, 12);
   }
 
   return { startTime, endTime };
@@ -317,6 +320,17 @@ function shouldPromoteAmbiguousStartToPm(startToken, endToken, endTime) {
   const endMinutes = timeToMinutes(endTime);
   const endLooksAfternoon = endToken?.meridiem === 'pm' || Number(endTime.slice(0, 2)) >= 13;
   return endLooksAfternoon && shiftedStart < endMinutes;
+}
+
+function shouldPromoteAmbiguousEndToPm(startTime, endToken, endTime) {
+  if (!endToken || endToken.meridiem || !endToken.hasColon || endToken.hasLeadingZero) return false;
+
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
+  if (startMinutes < 12 * 60 || endMinutes >= startMinutes) return false;
+
+  const shiftedEnd = endMinutes + 12 * 60;
+  return shiftedEnd > startMinutes && shiftedEnd < 24 * 60;
 }
 
 function normalizeTimeText(value) {
