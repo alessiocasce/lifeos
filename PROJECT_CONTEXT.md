@@ -224,6 +224,8 @@ Architecture:
 - Explicit multi-event calendar prompts are routed through a dedicated extraction/create path instead of the single-event tool. `create_calendar_event` is for one event only.
 - Explicit multi-event calendar creation does not require read/analysis context and returns a deterministic created/skipped summary.
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
+- AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
+- `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.

@@ -63,12 +63,13 @@ export async function generateGeminiJson({ system, prompt, temperature = 0.1, in
   const parsed = tryParseGeminiJson(text);
   if (parsed.ok) return parsed.value;
 
+  let repairedText = '';
   if (repair) {
     const repairPrompt = JSON.stringify({
       instruction: 'Convert this into valid JSON matching the requested schema. Return JSON only.',
       invalidResponse: text,
     });
-    const repairedText = await generateGeminiText({
+    repairedText = await generateGeminiText({
       system: JSON_REPAIR_SYSTEM,
       prompt: repairPrompt,
       json: true,
@@ -78,7 +79,12 @@ export async function generateGeminiJson({ system, prompt, temperature = 0.1, in
     if (repaired.ok) return repaired.value;
   }
 
-  throw new HttpError(502, invalidMessage);
+  const error = new HttpError(502, invalidMessage);
+  error.debugDetails = {
+    rawTextPreview: previewGeminiText(text),
+    ...(repairedText ? { repairedTextPreview: previewGeminiText(repairedText) } : {}),
+  };
+  throw error;
 }
 
 function tryParseGeminiJson(text) {
@@ -135,4 +141,12 @@ function safeProviderMessage(message) {
     .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[redacted]')
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [redacted]')
     .slice(0, 300);
+}
+
+function previewGeminiText(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [redacted]')
+    .slice(0, 1200);
 }

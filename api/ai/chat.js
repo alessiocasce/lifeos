@@ -152,7 +152,14 @@ export default async function handler(req, res) {
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
 
-    const plan = await planMessage(message);
+    let plan;
+    try {
+      plan = await planMessage(message);
+    } catch (error) {
+      const diagnostics = logAiPlannerFailure({ context, message, error });
+      attachDebugDiagnostics(error, diagnostics);
+      throw error;
+    }
     const actions = [];
     let lifeosContext = null;
     let answer = '';
@@ -256,6 +263,14 @@ export function isExplicitMultiEventCalendarRequest(message, plan = {}) {
   const plannerAllowsCalendarWrite = !['blocked_destructive', 'create_expense', 'update_health_log'].includes(plan.intent);
 
   return hasScheduleAction && hasCalendarLanguage && hasMultipleRanges && plannerAllowsCalendarWrite;
+}
+
+export function isObviousExplicitMultiEventCalendarRequest(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (!text || looksLikeAnalysisRequest(text)) return false;
+  const hasScheduleAction = /\b(plan|schedule|create|add|put|block)\b/.test(text);
+  const hasCalendarLanguage = /\b(events?|schedule|calendar|today|tomorrow|from)\b/.test(text);
+  return hasScheduleAction && hasCalendarLanguage && countExplicitTimeRanges(message) >= 2;
 }
 
 async function executeExplicitCalendarPlan(message, plan) {
@@ -651,6 +666,24 @@ function logAiWriteFailure({ context, message, plan, writePath, error }) {
   };
 
   console.error('[LifeOS AI write failure]', JSON.stringify(diagnostics));
+  return diagnostics;
+}
+
+function logAiPlannerFailure({ context, message, error }) {
+  const diagnostics = {
+    requestId: context?.requestId,
+    stage: 'planner',
+    message: truncate(String(message ?? ''), 1000),
+    explicitMultiEventLikely: isObviousExplicitMultiEventCalendarRequest(message),
+    timeRangeCount: countExplicitTimeRanges(message),
+    status: error instanceof HttpError ? error.status : undefined,
+    providerStatus: error?.details?.providerStatus,
+    error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    details: sanitizeValue(error?.details),
+    debugDetails: sanitizeValue(error?.debugDetails),
+  };
+
+  console.error('[LifeOS AI planner failure]', JSON.stringify(diagnostics));
   return diagnostics;
 }
 

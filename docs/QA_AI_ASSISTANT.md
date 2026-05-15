@@ -118,6 +118,15 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 9. Force a write validation failure in a test environment and confirm server logs include a requestId, planner intent, sanitized planner args shape, write path, and error without exposing secrets.
 10. With `LIFEOS_DEBUG_AI=true` in a test deployment only, confirm error responses include sanitized debug diagnostics. Turn it back off after testing.
 
+## Temporary Planner Diagnostics
+
+1. Run the failing prompt: `plan these events for today: science study session from 1:30pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
+2. If the response says `Gemini returned an invalid planner response.`, open Vercel logs for the `/api/ai/chat` request.
+3. Confirm the log line starts with `[LifeOS AI planner failure]`.
+4. Confirm it includes `requestId`, `stage: planner`, `explicitMultiEventLikely`, `timeRangeCount`, sanitized error details, and any available provider status.
+5. Confirm no Authorization headers, bearer tokens, Supabase keys, Gemini keys, service role keys, cookies, or raw env vars appear.
+6. In a test deployment only, set `LIFEOS_DEBUG_AI=true` and confirm the error response includes sanitized planner debug details. Remove it after testing.
+
 ## Mobile / iPhone
 
 1. Open Assistant on iPhone Safari.
