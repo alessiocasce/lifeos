@@ -63,11 +63,11 @@ export function requiredDate(body, field) {
 export function optionalTime(body, field) {
   if (!hasField(body, field)) return undefined;
   if (body[field] === null || body[field] === '') {
-    throw new HttpError(400, `${field} must use HH:MM time format.`);
+    throw new HttpError(400, `${field} must be a valid time such as HH:MM, 2:15pm, or 9am.`);
   }
-  const value = String(body[field]).trim();
+  const value = normalizeTimeValue(body[field]);
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
-    throw new HttpError(400, `${field} must use HH:MM time format.`);
+    throw new HttpError(400, `${field} must be a valid time such as HH:MM, 2:15pm, or 9am.`);
   }
   return value;
 }
@@ -76,6 +76,18 @@ export function optionalNullableTime(body, field) {
   if (!hasField(body, field)) return undefined;
   if (body[field] === null || body[field] === '') return null;
   return optionalTime(body, field);
+}
+
+export function normalizeTimeRange(body, startField = 'start_time', endField = 'end_time') {
+  const startTime = optionalNullableTime(body, startField);
+  const endTime = optionalNullableTime(body, endField);
+  if (!startTime || !endTime || !shouldPromoteAmbiguousStartToPm(body[startField], body[endField], startTime, endTime)) {
+    return { startTime, endTime };
+  }
+  return {
+    startTime: addHours(startTime, 12),
+    endTime,
+  };
 }
 
 export function optionalNumber(body, field, { min = -Infinity, max = Infinity } = {}) {
@@ -137,6 +149,34 @@ export function parseDecimal(value) {
     .replace(',', '.');
   const match = text.match(/-?\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : Number.NaN;
+}
+
+export function normalizeTimeValue(value) {
+  const text = String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  const meridiemMatch = text.match(/^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)$/);
+  if (meridiemMatch) {
+    let hours = Number(meridiemMatch[1]);
+    const minutes = Number(meridiemMatch[2] ?? '0');
+    const meridiem = meridiemMatch[3];
+    if (!Number.isInteger(hours) || hours < 1 || hours > 12) return text;
+    if (meridiem === 'am') {
+      hours = hours === 12 ? 0 : hours;
+    } else {
+      hours = hours === 12 ? 12 : hours + 12;
+    }
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
+  const twentyFourHourMatch = text.match(/^(\d{1,2}):([0-5]\d)$/);
+  if (twentyFourHourMatch) {
+    const hours = Number(twentyFourHourMatch[1]);
+    const minutes = Number(twentyFourHourMatch[2]);
+    if (!Number.isInteger(hours) || hours < 0 || hours > 23) return text;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
+  return text;
 }
 
 export function normalizeExpenseCategory(category) {
@@ -215,4 +255,42 @@ function validateMaxLength(value, field, max) {
 function timeToMinutes(value) {
   const [hours, minutes] = value.split(':').map(Number);
   return hours * 60 + minutes;
+}
+
+function shouldPromoteAmbiguousStartToPm(rawStart, rawEnd, startTime, endTime) {
+  if (!isAmbiguousUnmarkedTime(rawStart)) return false;
+  if (hasMeridiem(rawStart)) return false;
+
+  const startHours = Number(startTime.slice(0, 2));
+  if (startHours < 1 || startHours > 11) return false;
+
+  const shiftedStart = timeToMinutes(startTime) + 12 * 60;
+  const endMinutes = timeToMinutes(endTime);
+  const endLooksAfternoon = hasPmMeridiem(rawEnd) || Number(endTime.slice(0, 2)) >= 13;
+  return endLooksAfternoon && shiftedStart < endMinutes;
+}
+
+function isAmbiguousUnmarkedTime(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (hasMeridiem(text)) return false;
+  const match = text.match(/^(\d{1,2}):[0-5]\d$/);
+  if (!match) return false;
+  if (text.startsWith('0')) return false;
+  const hours = Number(match[1]);
+  return hours >= 1 && hours <= 11;
+}
+
+function hasMeridiem(value) {
+  return /\b(?:am|pm)\b/i.test(String(value ?? '').replace(/\s+/g, ' ')) || /(?:am|pm)$/i.test(String(value ?? '').trim());
+}
+
+function hasPmMeridiem(value) {
+  return /\bpm\b/i.test(String(value ?? '').replace(/\s+/g, ' ')) || /pm$/i.test(String(value ?? '').trim());
+}
+
+function addHours(value, hoursToAdd) {
+  const minutes = timeToMinutes(value) + hoursToAdd * 60;
+  const hours = Math.floor(minutes / 60) % 24;
+  const minutesRemainder = minutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutesRemainder).padStart(2, '0')}`;
 }

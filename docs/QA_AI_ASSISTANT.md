@@ -52,9 +52,11 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 18. Confirm the created event uses `Social` or `Entertainment` depending on wording.
 19. Ask: `Block 30 minutes for journaling.`
 20. Confirm the created event uses `Personal`.
-21. Ask: `Log 8 energy and 1 coffee today.`
-22. Confirm today's health log updates without overwriting omitted fields.
-23. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+21. Ask: `plan these events for today: science study session from 12:45pm to 2:15pm, lunch from 2:15pm to 2:30pm, study session from 2:30pm to 3:45pm, plan with mom (i gotta take her to the doctor) from 3:45 to 5:30 pm`
+22. Confirm created events store/display canonical times: `12:45-14:15` Study, `14:15-14:30` Health, `14:30-15:45` Study, and `15:45-17:30` Health or Errands.
+23. Ask: `Log 8 energy and 1 coffee today.`
+24. Confirm today's health log updates without overwriting omitted fields.
+25. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
 ## Health Habit Context
 

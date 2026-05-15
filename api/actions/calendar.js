@@ -9,7 +9,7 @@ import {
   sendSuccess,
 } from '../_utils/http.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
-import { assertTimeOrder, compactPayload, optionalNullableTime, optionalText, requiredDate, requiredText } from '../_utils/validation.js';
+import { assertTimeOrder, compactPayload, normalizeTimeRange, optionalText, requiredDate, requiredText } from '../_utils/validation.js';
 
 const VALID_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
 
@@ -29,8 +29,7 @@ export default async function handler(req, res) {
     }
 
     const userId = getActionUserId();
-    const startTime = optionalNullableTime(body, 'start_time');
-    const endTime = optionalNullableTime(body, 'end_time');
+    const { startTime, endTime } = normalizeTimeRange(body, 'start_time', 'end_time');
     assertTimeOrder(startTime, endTime);
 
     const payload = compactPayload({

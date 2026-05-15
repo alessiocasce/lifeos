@@ -42,7 +42,7 @@ Rules:
 - Extract dates as YYYY-MM-DD when possible. Today is provided in the prompt.
 - If the user gives DD/MM/YY or DD/MM/YYYY, copy that date into args; the backend can normalize it.
 - Natural "tomorrow" may be represented as "tomorrow" or the provided date.
-- Extract times as 24-hour HH:MM.
+- Extract times as 24-hour HH:MM. If natural AM/PM text is preserved, the backend can normalize common formats such as 2:15pm or 9am.
 - For simple expense creation, extract vendor, amount, category, spent_on/date, notes. Amount may include currency words or symbols.
 - Prefer expense categories from this list with canonical casing: Food, Groceries, Transport, Car, Shopping, Health, Entertainment, Bills, Subscriptions, Education, Travel, Personal Care, Other.
 - For calendar creation, extract title, event_date/date, start_time, end_time, category, location, notes. Prefer calendar categories from this list: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.

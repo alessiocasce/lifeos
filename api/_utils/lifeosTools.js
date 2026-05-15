@@ -9,6 +9,7 @@ import {
   optionalNullableNumber,
   optionalNullableTime,
   optionalText,
+  normalizeTimeRange,
   normalizeExpenseCategory,
   requiredDate,
   requiredNumber,
@@ -291,8 +292,7 @@ export async function createCalendarEvent(args) {
     location: args.location,
     notes: args.notes,
   };
-  const startTime = optionalNullableTime(body, 'start_time');
-  const endTime = optionalNullableTime(body, 'end_time');
+  const { startTime, endTime } = normalizeTimeRange(body, 'start_time', 'end_time');
   assertTimeOrder(startTime, endTime);
   const payload = compactPayload({
     user_id: getActionUserId(),
@@ -326,8 +326,14 @@ export async function createCalendarPlanEvents(events, targetDate) {
         event_date: eventDate,
         status: event.status ?? 'planned',
       };
-      validatePlanEventDoesNotOverlap(candidate, valid);
-      valid.push(candidate);
+      const { startTime, endTime } = normalizeTimeRange(candidate, 'start_time', 'end_time');
+      const normalizedCandidate = {
+        ...candidate,
+        start_time: startTime,
+        end_time: endTime,
+      };
+      validatePlanEventDoesNotOverlap(normalizedCandidate, valid);
+      valid.push(normalizedCandidate);
     } catch (error) {
       skipped.push({ title: event?.title ?? 'Untitled', reason: error.message || 'Invalid event.' });
     }
