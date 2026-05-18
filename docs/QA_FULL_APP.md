@@ -114,17 +114,23 @@ Run the focused checklists after the full flow:
 ## Memos
 
 1. Open Memos on desktop and mobile.
-2. Confirm the top create card supports title, optional date, optional time, optional notes, Today/Tomorrow/Clear quick buttons, and Create.
-3. Create a timed memo for today and confirm it appears in Today with a time chip.
-4. Create a date-only memo for tomorrow and confirm it appears in Tomorrow.
-5. Create a no-date memo and confirm it appears in No Date.
-6. Edit a memo and confirm changes persist after refresh.
-7. Mark a memo done, dismiss another memo, and reopen each one.
-8. Delete a memo and confirm it disappears.
-9. Confirm Done Recently is secondary/faded.
-10. Confirm no tags/categories appear in the Memos UI.
-11. Confirm the Memos tab appears in desktop sidebar and mobile bottom nav without horizontal overflow.
-12. Run `supabase/schema.sql` again before testing against a live Supabase project.
+2. Confirm the page opens as a Reminder Timeline, not an always-visible create form.
+3. Confirm the Plus button opens the create editor and the X button closes it.
+4. Confirm the create editor supports title, optional date, optional time, optional notes, Today/Tomorrow/Clear Date, +1h, Tonight, Clear Time, and Create.
+5. Confirm the editor is full-screen and tap-stable on mobile, centered on desktop, and has no horizontal overflow.
+6. Create a timed memo for today and confirm it appears in the unified timeline under Today with a time chip and timeline dot.
+7. Create an overdue memo and confirm it appears before Today with subtle warning styling.
+8. Create a date-only memo for tomorrow and confirm it appears under Tomorrow.
+9. Create a future memo and confirm it appears under its date header in the same timeline board.
+10. Create a no-date memo and confirm it appears in Floating Memos.
+11. Edit a memo and confirm the same editor opens prefilled and changes persist after refresh.
+12. Mark a memo done, dismiss another memo, and reopen each one.
+13. Confirm done/dismissed memos are secondary/collapsed and can be reopened.
+14. Delete a memo and confirm it disappears.
+15. Confirm no tags/categories appear in the Memos UI.
+16. Confirm the Memos tab appears in desktop sidebar and mobile bottom nav without horizontal overflow.
+17. Confirm keyboard open/close does not break taps in the memo editor on iPhone/PWA.
+18. Run `supabase/schema.sql` again before testing against a live Supabase project.
 
 ## Summary Consistency
 
