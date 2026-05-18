@@ -8,6 +8,7 @@ import {
   optionalNullableInteger,
   optionalNullableNumber,
   optionalNullableTime,
+  optionalTime,
   optionalText,
   normalizeTimeRange,
   normalizeExpenseCategory,
@@ -17,7 +18,7 @@ import {
 } from './validation.js';
 
 const TIME_ZONE = 'Europe/Rome';
-const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews']);
+const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews', 'memos']);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
 const VALID_AI_LOG_SOURCES = new Set(['app', 'shortcut', 'api']);
 const VALID_AI_LOG_STATUSES = new Set(['success', 'error']);
@@ -79,6 +80,37 @@ export function localDate(offsetDays = 0) {
   return date.toISOString().slice(0, 10);
 }
 
+export function localTime() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  return `${normalizeHourPart(parts.find((part) => part.type === 'hour').value)}:${parts.find((part) => part.type === 'minute').value}`;
+}
+
+export function localDateTime(offsetMinutes = 0) {
+  const now = new Date(Date.now() + offsetMinutes * 60000);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  return {
+    date: `${parts.find((part) => part.type === 'year').value}-${parts.find((part) => part.type === 'month').value}-${parts.find((part) => part.type === 'day').value}`,
+    time: `${normalizeHourPart(parts.find((part) => part.type === 'hour').value)}:${parts.find((part) => part.type === 'minute').value}`,
+  };
+}
+
+function normalizeHourPart(value) {
+  return String(Number(value) % 24).padStart(2, '0');
+}
+
 export function addDays(dateValue, days) {
   const date = new Date(`${dateValue}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -106,10 +138,10 @@ export function getRangeWindow(range) {
 }
 
 export function normalizePlannerPlan(plan) {
-  const allowedIntents = new Set(['analyze', 'create_expense', 'create_calendar_event', 'update_health_log', 'analyze_and_plan', 'clarify', 'unsupported', 'blocked_destructive']);
+  const allowedIntents = new Set(['analyze', 'create_expense', 'create_calendar_event', 'create_memo', 'update_health_log', 'analyze_and_plan', 'clarify', 'unsupported', 'blocked_destructive']);
   const allowedRanges = new Set(['today', 'tomorrow', '7d', '30d', '3m', '6m', '12m', 'all']);
   const intent = allowedIntents.has(plan?.intent) ? plan.intent : 'unsupported';
-  const writeIntents = new Set(['create_expense', 'create_calendar_event', 'update_health_log', 'analyze_and_plan']);
+  const writeIntents = new Set(['create_expense', 'create_calendar_event', 'create_memo', 'update_health_log', 'analyze_and_plan']);
   const readIntents = new Set(['analyze', 'analyze_and_plan', 'blocked_destructive']);
   const tables = Array.isArray(plan?.tables)
     ? plan.tables.filter((table) => VALID_TABLES.has(table))
@@ -239,6 +271,37 @@ export async function createExpense(args) {
     .from('expenses')
     .insert(payload)
     .select('id, vendor, category, amount, spent_on, notes, created_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createMemo(args, userMessage = '') {
+  const due = resolveMemoDue(args, userMessage);
+  const body = {
+    title: args.title ?? args.memo ?? args.reminder ?? args.task,
+    memo_date: due.memo_date,
+    memo_time: due.memo_time,
+    notes: args.notes,
+    status: args.status ?? 'open',
+  };
+  const status = String(body.status ?? 'open').trim();
+  if (!['open', 'done', 'dismissed'].includes(status)) {
+    throw new HttpError(400, 'status must be open, done, or dismissed.');
+  }
+
+  const payload = compactPayload({
+    user_id: getActionUserId(),
+    title: requiredText(body, 'title', { max: 220 }),
+    memo_date: optionalDate(body, 'memo_date', undefined) ?? null,
+    memo_time: optionalTime(body, 'memo_time') ?? null,
+    notes: optionalText(body.notes, 'notes', { max: 2000 }),
+    status,
+  });
+  const { data, error } = await getSupabaseAdmin()
+    .from('memos')
+    .insert(payload)
+    .select('id, title, memo_date, memo_time, notes, status, created_at, updated_at')
     .single();
   if (error) throw error;
   return data;
@@ -415,6 +478,66 @@ function normalizeCalendarCategory(value) {
   if (/\b(journal|journaling|admin|chore|chores|routine|planning)\b/.test(normalized)) return 'Personal';
   if (/\b(nap|naps|bedtime|sleep)\b/.test(normalized)) return 'Sleep';
   return text;
+}
+
+function resolveMemoDue(args = {}, userMessage = '') {
+  const relative = parseRelativeMemoOffset(args.relative_time ?? args.relativeTime ?? userMessage);
+  if (relative !== null) {
+    const resolved = localDateTime(relative);
+    return { memo_date: resolved.date, memo_time: resolved.time };
+  }
+
+  const rawDate = args.memo_date ?? args.date ?? args.due_date;
+  const rawTime = args.memo_time ?? args.time ?? args.due_time;
+  const memoTime = rawTime === undefined || rawTime === null || rawTime === ''
+    ? null
+    : optionalTime({ memo_time: rawTime }, 'memo_time');
+
+  if (rawDate !== undefined && rawDate !== null && rawDate !== '') {
+    return {
+      memo_date: resolveDate(rawDate, localDate()),
+      memo_time: memoTime,
+    };
+  }
+
+  if (memoTime) {
+    const todayDate = localDate();
+    const memoDate = timeToMinutes(memoTime) >= timeToMinutes(localTime()) ? todayDate : addDays(todayDate, 1);
+    return { memo_date: memoDate, memo_time: memoTime };
+  }
+
+  if (/\btomorrow\b/i.test(userMessage)) return { memo_date: localDate(1), memo_time: null };
+  if (/\btoday\b/i.test(userMessage)) return { memo_date: localDate(), memo_time: null };
+
+  return { memo_date: null, memo_time: null };
+}
+
+function parseRelativeMemoOffset(value) {
+  const text = String(value ?? '').toLowerCase();
+  const match = text.match(/\bin\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(minutes?|mins?|hours?|hrs?)\b/);
+  if (!match) return null;
+  const amount = parseCountWord(match[1]);
+  if (!amount) return null;
+  return match[2].startsWith('hour') || match[2].startsWith('hr') ? amount * 60 : amount;
+}
+
+function parseCountWord(value) {
+  const normalized = String(value ?? '').toLowerCase();
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  return {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+  }[normalized] ?? 0;
 }
 
 function queryDateRange(query, column, window) {

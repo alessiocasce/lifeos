@@ -17,8 +17,10 @@ import {
   createCalendarEvent,
   createCalendarPlanEvents,
   createExpense,
+  createMemo,
   getRangeWindow,
   localDate,
+  localTime,
   normalizePlannerPlan,
   readLifeOSContext,
   resolveDate,
@@ -31,11 +33,11 @@ You are the LifeOS planner. Convert the user's message into strict JSON only.
 No markdown. No natural language outside JSON.
 Schema:
 {
-  "intent": "analyze" | "create_expense" | "create_calendar_event" | "update_health_log" | "analyze_and_plan" | "clarify" | "unsupported" | "blocked_destructive",
+  "intent": "analyze" | "create_expense" | "create_calendar_event" | "create_memo" | "update_health_log" | "analyze_and_plan" | "clarify" | "unsupported" | "blocked_destructive",
   "needsRead": boolean,
   "needsWrite": boolean,
   "range": "today" | "tomorrow" | "7d" | "30d" | "3m" | "6m" | "12m" | "all" | null,
-  "tables": ["expenses", "health_logs", "workouts", "workout_sets", "calendar_events", "daily_reviews"],
+  "tables": ["expenses", "health_logs", "workouts", "workout_sets", "calendar_events", "daily_reviews", "memos"],
   "args": {},
   "clarifyingQuestion": string | null,
   "riskLevel": "low" | "medium" | "high",
@@ -52,6 +54,11 @@ Rules:
 - For calendar creation, extract title, event_date/date, start_time, end_time, category, location, notes. Prefer calendar categories from this list: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
 - Calendar category guidance: use Errands for practical tasks/logistics, Social for plans with family/friends, Personal for solo admin/chores/routines/planning, Health for medical/dentist/recovery, and Workout for gym/boxing/sports training.
 - create_calendar_event is only for one event. If the user gives multiple explicit events/times, do not force the whole schedule into one create_calendar_event. Keep calendar_events in tables, set needsWrite true, and avoid needsRead unless the user asks to analyze past data.
+- For reminder/task/memory requests, use intent "create_memo", not calendar_events. Memos are for reminders/tasks/memory points; Calendar is for scheduled events/time blocks.
+- For create_memo, extract title, memo_date/date, memo_time/time, notes, and relative_time if present. Examples: "remind me", "remember to", "i gotta", "buy charger", "take pill".
+- Use create_memo for one-off reminder verbs like call, buy, change, charge, take a pill, remember, or remind when the user is not asking for a calendar time block.
+- If the user says "in an hour" or "in 30 minutes", put that text in args.relative_time. If only a time is given, put it in memo_time.
+- If no date/time is given for a memo, leave memo_date and memo_time null.
 - For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes, and Daily Habits.
 - Daily Habits are brush, shower, creatine, skin, and journal. Put them in args.habits or direct args fields such as {"creatine": true}.
 - "took creatine" means habit creatine. "showered" means habit shower. "brushed teeth" means habit brush. "skincare" or "did skin" means habit skin. "journaled" or "wrote journal" means habit journal.
@@ -62,7 +69,7 @@ Rules:
 - For analyze plus explicit plan/schedule requests, use "analyze_and_plan" with needsRead true and needsWrite true.
 - Destructive delete/remove/wipe requests must use "blocked_destructive".
 - If required details are missing, use "clarify" with one concise clarifyingQuestion.
-- Low-risk additive writes are create_expense, create_calendar_event, update_health_log, and small calendar plans.
+- Low-risk additive writes are create_expense, create_calendar_event, create_memo, update_health_log, and small calendar plans.
 `;
 
 const ANSWER_SYSTEM = `
@@ -340,6 +347,8 @@ async function planMessage(message) {
   const prompt = JSON.stringify({
     today: localDate(),
     tomorrow: localDate(1),
+    localTime: localTime(),
+    timeZone: 'Europe/Rome',
     userMessage: message,
   });
   const rawPlan = await generateGeminiJson({
@@ -738,6 +747,14 @@ async function executeWriteIntent(plan, message, lifeosContext) {
     };
   }
 
+  if (plan.intent === 'create_memo') {
+    const created = await createMemo(plan.args, message);
+    return {
+      actions: [{ type: 'create_memo', data: created }],
+      answer: formatMemoSuccess(created),
+    };
+  }
+
   if (plan.intent === 'update_health_log') {
     const updated = await updateHealthLog(plan.args);
     return {
@@ -1060,6 +1077,13 @@ function formatCalendarSuccess(event) {
   return `Added calendar event: ${event.title} - ${event.event_date}${timeRange}.`;
 }
 
+function formatMemoSuccess(memo) {
+  const due = memo.memo_date
+    ? ` - ${memo.memo_date}${memo.memo_time ? ` ${formatTime(memo.memo_time)}` : ''}`
+    : '';
+  return `Created memo: ${memo.title}${due}.`;
+}
+
 function formatCalendarEventsSuccess(targetDate, result) {
   const lines = [
     `Created ${result.created.length} calendar events for ${targetDate}:`,
@@ -1245,6 +1269,14 @@ function extractRecordRefs(actions) {
         id: action.data.id,
         label: 'Health Log',
         date: action.data.logged_on,
+      });
+    }
+    if (action.type === 'create_memo' && action.data?.id) {
+      refs.push({
+        table: 'memos',
+        id: action.data.id,
+        label: action.data.title,
+        date: action.data.memo_date,
       });
     }
     if (action.type === 'create_calendar_event' && action.data?.id) {

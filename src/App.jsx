@@ -6,11 +6,13 @@ import { CalendarTab } from './tabs/CalendarTab';
 import { FinancesTab } from './tabs/FinancesTab';
 import { HealthTab } from './tabs/HealthTab';
 import { HomeTab } from './tabs/HomeTab';
+import { MemosTab } from './tabs/MemosTab';
 import { WorkoutTab } from './tabs/WorkoutTab';
 
 const tabViews = {
   home: HomeTab,
   calendar: CalendarTab,
+  memos: MemosTab,
   health: HealthTab,
   workout: WorkoutTab,
   finances: FinancesTab,

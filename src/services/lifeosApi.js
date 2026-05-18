@@ -117,6 +117,18 @@ const calendarEventSelect = `
   updated_at
 `;
 
+const memoSelect = `
+  id,
+  user_id,
+  title,
+  memo_date,
+  memo_time,
+  notes,
+  status,
+  created_at,
+  updated_at
+`;
+
 const dailyReviewSelect = `
   id,
   user_id,
@@ -479,6 +491,46 @@ export const calendarEventApi = {
   },
 };
 
+export const memoApi = {
+  async list(limit = 250) {
+    return throwIfError(
+      await requireSupabase()
+        .from('memos')
+        .select(memoSelect)
+        .order('status', { ascending: true })
+        .order('memo_date', { ascending: true, nullsFirst: false })
+        .order('memo_time', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(limit),
+    );
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('memos')
+        .insert(prepareMemoPayload(payload))
+        .select(memoSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('memos')
+        .update(prepareMemoPayload(patch))
+        .eq('id', id)
+        .select(memoSelect)
+        .single(),
+    );
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('memos').delete().eq('id', id));
+  },
+};
+
 export const dailyReviewApi = {
   async list(limit = 30) {
     return throwIfError(
@@ -554,6 +606,7 @@ export const lifeosApi = {
   healthLogs: healthLogApi,
   expenses: expenseApi,
   calendarEvents: calendarEventApi,
+  memos: memoApi,
   dailyReviews: dailyReviewApi,
   aiActionLogs: aiActionLogApi,
   chatMessages: {
@@ -607,6 +660,12 @@ function prepareWorkoutTemplateExercisePayload(payload) {
 }
 
 function prepareCalendarEventPayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareMemoPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   );

@@ -58,6 +58,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - Tab files live in `src/tabs/`:
   - `HomeTab.jsx`
   - `CalendarTab.jsx`
+  - `MemosTab.jsx`
   - `HealthTab.jsx`
   - `WorkoutTab.jsx`
   - `FinancesTab.jsx`
@@ -96,6 +97,7 @@ Current tables:
 - `health_logs`
 - `expenses`
 - `calendar_events`
+- `memos`
 - `daily_reviews`
 - `chat_messages`
 - `ai_action_logs`
@@ -135,9 +137,11 @@ Real/persisted today:
 - Health tab creates or updates one log per `user_id + logged_on` and shows persisted 7-day history/summaries.
 - Expenses persisted in `expenses`.
 - Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
-- Home tab summarizes persisted workout sessions/sets, health logs, and expenses.
+- Home tab summarizes persisted calendar events, memos, workout sessions/sets, health logs, and expenses.
 - Calendar events persisted in `calendar_events`.
 - Calendar tab creates, edits, deletes, and displays persisted user-scoped events in a day-first agenda.
+- Memos persisted in `memos`.
+- Memos tab creates, edits, deletes, completes, dismisses, and reopens time/date-based reminders and memory items.
 - Daily reviews persisted in `daily_reviews`.
 - Assistant tab contains the Ask LifeOS AI chat plus the persisted Daily Review workflow.
 - Token-protected Action API endpoints for external automation:
@@ -244,7 +248,7 @@ Architecture:
 - AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
 - `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
-- Simple successful create expense, create calendar event, and update health log requests return deterministic success messages without a second Gemini answer call.
+- Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
 
 Supported v1 intents/tools:
@@ -252,6 +256,7 @@ Supported v1 intents/tools:
 - Analyze persisted LifeOS context across expenses, health logs, workouts/sets, calendar events, and daily reviews.
 - Create expenses.
 - Create single calendar events, explicit multi-event calendar schedules, and finite recurrence-expanded calendar schedules.
+- Create memos for reminders, tasks, and memory items.
 - Update provided daily health log fields.
 - Analyze recent context and create a small non-overlapping calendar plan when the user explicitly asks to plan/schedule.
 - Block destructive requests such as deleting records or mass updates.
@@ -310,6 +315,36 @@ Current behavior:
 - Does not implement Google Calendar sync yet.
 - Does not implement AI triage yet.
 
+## Memos Module Current Status
+
+`src/tabs/MemosTab.jsx` is Supabase-backed and mobile-first.
+
+Current `memos` fields:
+
+- `title`
+- `memo_date`
+- `memo_time`
+- `notes`
+- `status`
+
+Current behavior:
+
+- Memos are time/date-based reminders, tasks, and memory items. They are not a tags/categories notes system.
+- Calendar remains for scheduled events and time blocks; Memos are not forced into `calendar_events`.
+- Loads the current authenticated user's memos through RLS.
+- Creates, edits, and deletes memos.
+- Supports optional date, optional time, and optional notes.
+- Supports quick date buttons for Today, Tomorrow, and Clear Date.
+- Groups memos into Today, Tomorrow, Upcoming, No Date, and Done Recently.
+- Open overdue memos receive a subtle warning treatment.
+- Memo statuses are `open`, `done`, and `dismissed`; done and dismissed memos can be reopened.
+- Home surfaces due/next memos in Today Overview and a compact Memos panel.
+- AI supports `create_memo` for reminder/task/memory prompts such as "remind me", "remember to", and "i gotta".
+- AI memo creation resolves relative due times such as "in an hour" using Europe/Rome local time.
+- AI-created memos are logged in AI Action History with `memos` record references.
+- Push notifications are not implemented yet.
+- Apple Notes sync is not implemented.
+
 ## Daily Review Module Current Status
 
 `src/tabs/AIAssistantTab.jsx` now hosts the Daily Review workflow.
@@ -339,10 +374,11 @@ Current behavior:
 
 Current behavior:
 
-- Uses persisted calendar events, health logs, workout sessions/sets, and expenses from context.
+- Uses persisted calendar events, memos, health logs, workout sessions/sets, and expenses from context.
 - Loads today's calendar range and the current expense month without duplicating API wrappers.
-- Shows a compact Today Overview with next event, agenda counts, daily habit completion, workout status, and today's spend.
+- Shows a compact Today Overview with next event, agenda counts, daily habit completion, memo count, workout status, and today's spend.
 - Shows Today Agenda as a read-only list of today's events. Calendar editing, deletion, and status controls remain in the Calendar tab.
+- Shows a compact Memos panel with overdue/today reminders or the next open memo. Memo editing remains in the Memos tab.
 - Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
 - Shows Daily Habits from today's health log: Brush, Shower, Creatine, Skin, and Journal. Journal is shown as yes/no and Water is not shown.
 - Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
@@ -498,7 +534,7 @@ The app shell is now mobile-first while preserving desktop:
 
 - Desktop/tablet keeps the fixed left sidebar and full header metrics.
 - Mobile hides the sidebar and uses a compact native-app style shell.
-- Mobile has a fixed bottom tab bar with Home, Calendar, Health, Workout, Finances, and Assistant.
+- Mobile has a fixed bottom tab bar with Home, Calendar, Memos, Health, Workout, Finances, and Assistant.
 - Mobile content is full width with smaller padding and safe-area bottom padding.
 - Header metrics and sidebar pips are hidden on mobile.
 

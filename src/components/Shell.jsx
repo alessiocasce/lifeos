@@ -1,5 +1,6 @@
 import {
   BrainCircuit,
+  Bell,
   CalendarDays,
   Dumbbell,
   HeartPulse,
@@ -14,6 +15,7 @@ import { LifeOSLogo } from './LifeOSLogo';
 const icons = {
   home: Home,
   calendar: CalendarDays,
+  memos: Bell,
   health: HeartPulse,
   workout: Dumbbell,
   finances: Landmark,
@@ -130,7 +132,7 @@ export function Shell({ children }) {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="grid h-16 grid-cols-6">
+        <div className="grid h-16 grid-cols-7">
           {tabs.map((tab) => {
             const Icon = icons[tab.id];
             const active = activeTab === tab.id;
@@ -170,6 +172,7 @@ function formatMetric(value, suffix) {
 function mobileLabel(id, label) {
   if (id === 'assistant') return 'AI';
   if (id === 'finances') return 'Money';
+  if (id === 'calendar') return 'Cal';
   return label;
 }
 

@@ -18,6 +18,7 @@ import {
   dailyReviewApi,
   expenseApi,
   healthLogApi,
+  memoApi,
   workoutApi,
   workoutSetApi,
   workoutTemplateApi,
@@ -61,6 +62,9 @@ export function LifeOSProvider({ children }) {
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [calendarEventsStatus, setCalendarEventsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [calendarEventsError, setCalendarEventsError] = useState('');
+  const [memos, setMemos] = useState([]);
+  const [memosStatus, setMemosStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [memosError, setMemosError] = useState('');
   const [dailyReviews, setDailyReviews] = useState([]);
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
@@ -92,6 +96,9 @@ export function LifeOSProvider({ children }) {
     setCalendarEventsError('');
     setCalendarEventsStatus(status);
     lastCalendarRangeRequest.current += 1;
+    setMemos([]);
+    setMemosError('');
+    setMemosStatus(status);
     setDailyReviews([]);
     setDailyReviewsError('');
     setDailyReviewsStatus(status);
@@ -332,6 +339,38 @@ export function LifeOSProvider({ children }) {
       return [];
     }
   }, [authUser]);
+
+  const loadMemos = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setMemosStatus('not-configured');
+      return [];
+    }
+
+    if (!authUser) {
+      setMemos([]);
+      setMemosStatus('no-session');
+      return [];
+    }
+
+    setMemosStatus('loading');
+    setMemosError('');
+    try {
+      const rows = await memoApi.list();
+      if (lastAuthUserId.current !== authUser.id) return [];
+      const sortedRows = sortMemos(rows ?? []);
+      setMemos(sortedRows);
+      setMemosStatus('ready');
+      return sortedRows;
+    } catch (error) {
+      setMemosError(memoErrorMessage(error, 'Failed to load memos.'));
+      setMemosStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadMemos();
+  }, [loadMemos]);
 
   const loadDailyReviews = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -770,6 +809,54 @@ export function LifeOSProvider({ children }) {
           throw new Error(message);
         }
       },
+      reloadMemos: loadMemos,
+      createMemo: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before creating a memo.');
+        }
+        setMemosError('');
+        try {
+          const created = await memoApi.create(normalizeMemoPayload(payload));
+          setMemos((prev) => sortMemos([created, ...prev]));
+          setMemosStatus('ready');
+          return created;
+        } catch (error) {
+          const message = memoErrorMessage(error, 'Failed to create memo.');
+          setMemosError(message);
+          throw new Error(message);
+        }
+      },
+      updateMemo: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating a memo.');
+        }
+        setMemosError('');
+        try {
+          const updated = await memoApi.update(id, normalizeMemoPayload(patch));
+          setMemos((prev) => sortMemos(prev.map((memo) => (memo.id === id ? updated : memo))));
+          setMemosStatus('ready');
+          return updated;
+        } catch (error) {
+          const message = memoErrorMessage(error, 'Failed to update memo.');
+          setMemosError(message);
+          throw new Error(message);
+        }
+      },
+      deleteMemo: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting a memo.');
+        }
+        setMemosError('');
+        try {
+          await memoApi.delete(id);
+          setMemos((prev) => prev.filter((memo) => memo.id !== id));
+          setMemosStatus('ready');
+        } catch (error) {
+          const message = memoErrorMessage(error, 'Failed to delete memo.');
+          setMemosError(message);
+          throw new Error(message);
+        }
+      },
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,
@@ -818,7 +905,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, loadWorkoutTemplates, workoutSessions, workoutTemplates],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadWorkoutSessions, loadWorkoutTemplates, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -839,6 +926,9 @@ export function LifeOSProvider({ children }) {
     calendarEvents,
     calendarEventsError,
     calendarEventsStatus,
+    memos,
+    memosError,
+    memosStatus,
     dailyReviews,
     dailyReviewsError,
     dailyReviewsStatus,
@@ -896,6 +986,50 @@ function sortCalendarEvents(rows = []) {
     if ((a.start_time || '') !== (b.start_time || '')) return String(a.start_time || '').localeCompare(String(b.start_time || ''));
     return new Date(a.created_at ?? 0) - new Date(b.created_at ?? 0);
   });
+}
+
+function sortMemos(rows = []) {
+  const todayValue = today();
+  return rows.slice().sort((a, b) => {
+    const aStatusRank = memoStatusRank(a.status);
+    const bStatusRank = memoStatusRank(b.status);
+    if (aStatusRank !== bStatusRank) return aStatusRank - bStatusRank;
+    if (aStatusRank > 0) {
+      return new Date(b.updated_at ?? b.created_at ?? 0) - new Date(a.updated_at ?? a.created_at ?? 0);
+    }
+
+    const aDueRank = memoDueRank(a, todayValue);
+    const bDueRank = memoDueRank(b, todayValue);
+    if (aDueRank !== bDueRank) return aDueRank - bDueRank;
+
+    if ((a.memo_date || '') !== (b.memo_date || '')) {
+      if (!a.memo_date) return 1;
+      if (!b.memo_date) return -1;
+      return new Date(a.memo_date) - new Date(b.memo_date);
+    }
+
+    if ((a.memo_time || '') !== (b.memo_time || '')) {
+      if (!a.memo_time) return 1;
+      if (!b.memo_time) return -1;
+      return String(a.memo_time).localeCompare(String(b.memo_time));
+    }
+
+    return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
+  });
+}
+
+function memoStatusRank(status) {
+  if (status === 'open') return 0;
+  if (status === 'done') return 1;
+  return 2;
+}
+
+function memoDueRank(memo, todayValue) {
+  if (memo.status !== 'open') return 4;
+  if (!memo.memo_date) return 3;
+  if (memo.memo_date < todayValue) return 0;
+  if (memo.memo_date === todayValue) return 1;
+  return 2;
 }
 
 function sortDailyReviews(rows = []) {
@@ -1008,6 +1142,18 @@ function normalizeCalendarEventPayload(payload) {
   return normalized;
 }
 
+function normalizeMemoPayload(payload) {
+  const normalized = {};
+  if ('title' in payload) normalized.title = payload.title?.trim();
+  if ('memo_date' in payload) normalized.memo_date = payload.memo_date || null;
+  if ('memo_time' in payload) normalized.memo_time = payload.memo_time || null;
+  if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  if (payload.status !== undefined) {
+    normalized.status = ['open', 'done', 'dismissed'].includes(payload.status) ? payload.status : 'open';
+  }
+  return normalized;
+}
+
 function normalizeDailyReviewPayload(payload) {
   const score = payload.score === null || payload.score === undefined ? '' : String(payload.score).trim();
   return {
@@ -1093,6 +1239,15 @@ function calendarErrorMessage(error, fallback) {
   const isMissingTable = error?.code === '42P01' || /calendar_events/i.test(message) && /does not exist|not found|schema cache/i.test(message);
   if (isMissingTable) {
     return 'Calendar events table is missing. Apply supabase/schema.sql to create public.calendar_events, then reload.';
+  }
+  return message || fallback;
+}
+
+function memoErrorMessage(error, fallback) {
+  const message = String(error?.message ?? '');
+  const isMissingTable = error?.code === '42P01' || /memos/i.test(message) && /does not exist|not found|schema cache/i.test(message);
+  if (isMissingTable) {
+    return 'Memos table is missing. Apply supabase/schema.sql to create public.memos, then reload.';
   }
   return message || fallback;
 }

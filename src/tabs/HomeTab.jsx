@@ -1,6 +1,7 @@
 import {
   Activity,
   Ban,
+  Bell,
   CalendarDays,
   CheckCircle2,
   CircleDollarSign,
@@ -36,6 +37,8 @@ export function HomeTab() {
     healthLogsStatus,
     loadCalendarRange,
     loadExpenseMonth,
+    memos,
+    memosStatus,
     monthlyExpenses,
     monthlyExpensesError,
     monthlyExpensesStatus,
@@ -64,6 +67,15 @@ export function HomeTab() {
   const agendaCounts = getAgendaCounts(todaysEvents);
   const shownAgenda = todaysEvents.slice(0, 5);
   const agendaMoreCount = Math.max(0, todaysEvents.length - shownAgenda.length);
+  const todaysMemos = useMemo(
+    () => memos.filter((memo) => memo.status === 'open' && memo.memo_date === today),
+    [memos, today],
+  );
+  const overdueMemos = useMemo(
+    () => memos.filter((memo) => memo.status === 'open' && memo.memo_date && memo.memo_date < today),
+    [memos, today],
+  );
+  const nextMemo = useMemo(() => getNextMemo(memos, today), [memos, today]);
 
   const todaysHealthLog = useMemo(
     () => healthLogs.find((log) => log.logged_on === today) ?? null,
@@ -99,6 +111,7 @@ export function HomeTab() {
   const workoutsLoading = isInitialLoading(workoutSessionsStatus, workoutSessions);
   const expensesLoading = isInitialLoading(expensesStatus, expenses);
   const monthLoading = isInitialLoading(monthlyExpensesStatus, currentMonthExpenses);
+  const memosLoading = isInitialLoading(memosStatus, memos);
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden">
@@ -108,7 +121,7 @@ export function HomeTab() {
           title="Today Overview"
           right={<span className="data-text text-[11px] text-zinc-500">{formatDate(today)}</span>}
         />
-        <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-6">
           <OverviewMetric
             icon={Clock3}
             label="Next Event"
@@ -129,6 +142,13 @@ export function HomeTab() {
             value={healthLoading ? '...' : `${completedHabitCount}/5`}
             detail={todaysHealthLog ? 'completed today' : 'no health log today'}
             tone={completedHabitCount >= 3 ? 'text-emerald-300' : 'text-amber-300'}
+          />
+          <OverviewMetric
+            icon={Bell}
+            label="Memos"
+            value={memosLoading ? '...' : `${overdueMemos.length + todaysMemos.length}`}
+            detail={nextMemo ? `Next: ${truncateText(nextMemo.title, 24)}` : memosLoading ? 'loading memos...' : 'nothing due'}
+            tone={overdueMemos.length ? 'text-amber-300' : todaysMemos.length ? 'text-cyan-300' : 'text-zinc-100'}
           />
           <OverviewMetric
             icon={Dumbbell}
@@ -163,6 +183,24 @@ export function HomeTab() {
             <EmptyState title="No events planned today." body="Calendar is clear for this selected day." />
           ) : (
             <LoadingState label="Loading today..." />
+          )}
+        </div>
+      </Panel>
+
+      <Panel className="col-span-12 xl:col-span-5">
+        <PanelHeader eyebrow="Reminders" title="Memos" right={<span className="data-text text-[11px] text-cyan-300">{overdueMemos.length + todaysMemos.length} due</span>} />
+        <div className="grid gap-2 p-3">
+          {memosLoading ? (
+            <LoadingState label="Loading memos..." />
+          ) : overdueMemos.length || todaysMemos.length || nextMemo ? (
+            <>
+              {[...overdueMemos, ...todaysMemos].slice(0, 4).map((memo) => (
+                <MemoRow key={memo.id} memo={memo} today={today} />
+              ))}
+              {!overdueMemos.length && !todaysMemos.length && nextMemo ? <MemoRow memo={nextMemo} today={today} /> : null}
+            </>
+          ) : (
+            <EmptyState title="No memos due." body="Open reminders and memory items will appear here." />
           )}
         </div>
       </Panel>
@@ -300,6 +338,23 @@ function AgendaRow({ event }) {
   );
 }
 
+function MemoRow({ memo, today }) {
+  const overdue = memo.memo_date && memo.memo_date < today;
+  return (
+    <div className={`min-w-0 rounded-md border p-3 ${overdue ? 'border-amber-400/20 bg-amber-400/[0.06]' : 'border-white/5 bg-black/25'}`}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`data-text text-[11px] font-semibold ${overdue ? 'text-amber-300' : 'text-cyan-300'}`}>
+            {formatMemoDue(memo)}
+          </p>
+          <p className="mt-1 break-words text-sm font-semibold text-zinc-100">{memo.title}</p>
+        </div>
+        <Bell size={15} className={overdue ? 'shrink-0 text-amber-300' : 'shrink-0 text-cyan-300'} />
+      </div>
+    </div>
+  );
+}
+
 function HabitPill({ habit, value }) {
   const complete = isHabitComplete(value, habit);
   return (
@@ -360,6 +415,10 @@ function getNextEvent(events) {
     if (!event.start_time) return true;
     return timeToMinutes(event.start_time) >= todayMinutes;
   }) ?? null;
+}
+
+function getNextMemo(memos, today) {
+  return memos.find((memo) => memo.status === 'open' && (!memo.memo_date || memo.memo_date >= today)) ?? null;
 }
 
 function getWorkoutStatus(liveWorkout, todaysWorkoutSessions) {
@@ -423,6 +482,12 @@ function formatEventTime(event) {
   if (event.start_time && event.end_time) return `${formatTime(event.start_time)}-${formatTime(event.end_time)}`;
   if (event.start_time) return formatTime(event.start_time);
   return 'Anytime';
+}
+
+function formatMemoDue(memo) {
+  if (!memo.memo_date) return 'No date';
+  const time = memo.memo_time ? ` ${formatTime(memo.memo_time)}` : '';
+  return `${memo.memo_date}${time}`;
 }
 
 function formatTime(value) {

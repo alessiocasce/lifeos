@@ -320,6 +320,7 @@ function getActionLogTitle(log) {
   const refs = Array.isArray(log?.record_refs) ? log.record_refs : [];
   if (type === 'update_health_log' && refs.some((ref) => ref.table === 'health_logs')) return 'HEALTH LOG UPDATE';
   if (type === 'create_expense' && refs[0]?.label) return `EXPENSE: ${truncate(refs[0].label, 28).toUpperCase()}`;
+  if (type === 'create_memo' && refs[0]?.label) return `MEMO: ${truncate(refs[0].label, 30).toUpperCase()}`;
   if ((type === 'create_calendar_events' || type === 'finite_recurring_calendar_events') && Number(log?.action_count ?? 0) > 1) {
     return type === 'finite_recurring_calendar_events' ? 'RECURRING CALENDAR PLAN' : 'CREATE CALENDAR EVENTS';
   }
@@ -329,6 +330,7 @@ function getActionLogTitle(log) {
     finite_recurring_calendar_events: 'RECURRING CALENDAR PLAN',
     create_calendar_events: 'CREATE CALENDAR EVENTS',
     create_calendar_event: 'CREATE CALENDAR EVENT',
+    create_memo: 'CREATE MEMO',
     update_health_log: 'UPDATE HEALTH LOG',
     create_expense: 'CREATE EXPENSE',
     blocked_destructive: 'BLOCKED REQUEST',

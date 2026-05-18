@@ -22,27 +22,31 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 8. Open Calendar.
 9. Create one event dated today.
 10. Confirm the event is created from the modal and appears in the selected-day agenda.
-11. Open Assistant.
-12. Create today's Daily Review with wins, risks, optional score, and next actions.
+11. Open Memos.
+12. Create one memo dated today.
+13. Mark it done, reopen it, dismiss it, edit it, and delete it.
+14. Open Assistant.
+15. Create today's Daily Review with wins, risks, optional score, and next actions.
 
 ## Home Integration
 
 1. Open Home.
-2. Confirm Today Overview shows the next event, agenda counts, habit completion, workout status, and today's spend.
+2. Confirm Today Overview shows the next event, agenda counts, habit completion, memo count, workout status, and today's spend.
 3. Confirm Today Agenda shows today's calendar events and handles a no-event day with `No events planned today.`
-4. Confirm Daily Habits shows Brush, Shower, Creatine, Skin, and Journal, with Journal as yes/no.
-5. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
-6. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
-7. Confirm Recent AI Activity shows compact recent app/Shortcut AI writes with source, status, time, action type/count, and no raw Markdown preview.
-8. Click a Recent AI Activity card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
-9. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
-10. Confirm no fake dashboard values are shown as real data.
+4. Confirm the Home Memos panel shows overdue/today memos or the next open memo.
+5. Confirm Daily Habits shows Brush, Shower, Creatine, Skin, and Journal, with Journal as yes/no.
+6. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
+7. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
+8. Confirm Recent AI Activity shows compact recent app/Shortcut AI writes with source, status, time, action type/count, and no raw Markdown preview.
+9. Click a Recent AI Activity card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
+10. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
+11. Confirm no fake dashboard values are shown as real data.
 
 ## Refresh Persistence
 
 1. Refresh the page.
 2. Confirm auth restores.
-3. Confirm Health, Workout, Finances, Calendar, Home, and Daily Review reload persisted records from Supabase.
+3. Confirm Health, Workout, Finances, Calendar, Memos, Home, and Daily Review reload persisted records from Supabase.
 4. Confirm loading states appear before empty states.
 5. Confirm AI Action History logs survive refresh.
 
@@ -60,7 +64,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Sign out.
 2. Confirm the app returns to the auth screen.
 3. Sign in as a different user.
-4. Confirm the previous user's health logs, workouts, expenses, calendar events, daily reviews, and AI action logs do not appear.
+4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, daily reviews, and AI action logs do not appear.
 5. Create one record as the second user.
 6. Sign out and sign back in as the first user.
 7. Confirm the first user's records are still present and the second user's records are hidden.
@@ -73,6 +77,7 @@ Run the focused checklists after the full flow:
 - `docs/QA_FINANCES.md`
 - `docs/QA_HOME.md`
 - `docs/QA_CALENDAR.md`
+- Memos checks in this file
 - `docs/QA_DAILY_REVIEW.md`
 - `docs/QA_WORKOUT.md`
 - `docs/QA_PWA.md` after deployment over HTTPS
@@ -106,6 +111,21 @@ Run the focused checklists after the full flow:
 4. Confirm permanent delete still uses the Trash icon and confirmation prompt.
 5. Confirm long event titles, notes, locations, and unknown categories stay inside the viewport.
 
+## Memos
+
+1. Open Memos on desktop and mobile.
+2. Confirm the top create card supports title, optional date, optional time, optional notes, Today/Tomorrow/Clear quick buttons, and Create.
+3. Create a timed memo for today and confirm it appears in Today with a time chip.
+4. Create a date-only memo for tomorrow and confirm it appears in Tomorrow.
+5. Create a no-date memo and confirm it appears in No Date.
+6. Edit a memo and confirm changes persist after refresh.
+7. Mark a memo done, dismiss another memo, and reopen each one.
+8. Delete a memo and confirm it disappears.
+9. Confirm Done Recently is secondary/faded.
+10. Confirm no tags/categories appear in the Memos UI.
+11. Confirm the Memos tab appears in desktop sidebar and mobile bottom nav without horizontal overflow.
+12. Run `supabase/schema.sql` again before testing against a live Supabase project.
+
 ## Summary Consistency
 
 1. Log a workout with warmups and working sets.
@@ -115,7 +135,7 @@ Run the focused checklists after the full flow:
 
 1. Open the app on iPhone Safari.
 2. Confirm the mobile shell uses the bottom tab bar.
-3. Confirm no horizontal scrolling on Home, Health, Workout, Finances, Calendar, or Assistant.
+3. Confirm no horizontal scrolling on Home, Calendar, Memos, Health, Workout, Finances, or Assistant.
 4. Confirm inputs do not zoom when focused.
 5. Confirm bottom navigation does not cover primary save buttons.
 6. Confirm Calendar status buttons wrap without horizontal overflow.
@@ -128,7 +148,7 @@ Run the focused checklists after the full flow:
 ## Desktop / Laptop Layout
 
 1. Open the app on a laptop or desktop viewport.
-2. Visit Home, Calendar, Health, Workout, Finances, and Assistant.
+2. Visit Home, Calendar, Memos, Health, Workout, Finances, and Assistant.
 3. Confirm no page-level horizontal scrollbar appears on any tab.
 4. Confirm any intentional internal scroll areas still work normally.
 

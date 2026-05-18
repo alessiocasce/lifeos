@@ -99,6 +99,19 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 17. Confirm error action logs show the error message in the detail view.
 18. Confirm the action detail view has no horizontal overflow on mobile and the X close button is visible.
 
+## AI Memos
+
+1. Ask: `remind me to charge my headphones in an hour`.
+2. Confirm a memo is created with the current Europe/Rome date/time plus one hour.
+3. Ask: `i gotta take the antibiotic pill at 8:30pm`.
+4. Confirm a memo is created for today if 20:30 is still upcoming, otherwise tomorrow, with `memo_time` `20:30`.
+5. Ask: `change the teeth braces on the 20/05/26`.
+6. Confirm a date-only memo is created for `2026-05-20`.
+7. Ask: `remember to buy charger`.
+8. Confirm a no-date memo is created with `memo_date` and `memo_time` empty.
+9. Confirm these prompts do not create `calendar_events`.
+10. Confirm AI Action History logs `create_memo` with a `memos` record reference.
+
 ## Finite Calendar Recurrence
 
 1. Ask: `everyday for 7 days starting from 17/05/26 i have a school appointment from 2pm to 4pm, log that`

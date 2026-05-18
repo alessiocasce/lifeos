@@ -38,6 +38,7 @@ export function AIAssistantTab() {
     reloadExpenses,
     reloadAiActionLogs,
     reloadHealthLogs,
+    reloadMemos,
     saveDailyReview,
     workoutSessions,
     workoutSessionsStatus,
@@ -209,6 +210,9 @@ export function AIAssistantTab() {
     }
     if (types.has('update_health_log')) {
       tasks.push(reloadHealthLogs?.());
+    }
+    if (types.has('create_memo')) {
+      tasks.push(reloadMemos?.());
     }
     if (types.has('create_calendar_event') || types.has('create_calendar_events') || types.has('analyze_and_plan')) {
       tasks.push(loadCalendarRange?.(today(), addDays(today(), 45)));
@@ -606,6 +610,7 @@ function formatActionData(action) {
   const data = action.data;
   if (action.type === 'create_expense') return `${data.vendor} / EUR ${formatMoney(data.amount)} / ${data.spent_on}`;
   if (action.type === 'create_calendar_event') return `${data.title} / ${data.event_date}${data.start_time ? ` ${data.start_time}` : ''}`;
+  if (action.type === 'create_memo') return `${data.title}${data.memo_date ? ` / ${data.memo_date}` : ''}${data.memo_time ? ` ${data.memo_time}` : ''}`;
   if (action.type === 'update_health_log') return `Health log / ${data.logged_on}`;
   return data.title || data.id || 'Updated';
 }

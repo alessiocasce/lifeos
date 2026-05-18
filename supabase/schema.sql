@@ -144,6 +144,18 @@ create table if not exists public.ai_action_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.memos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title text not null,
+  memo_date date,
+  memo_time time,
+  notes text,
+  status text not null default 'open' check (status in ('open', 'done', 'dismissed')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.workouts add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.workouts alter column user_id set default auth.uid();
 alter table public.workouts add column if not exists performed_on date not null default current_date;
@@ -220,6 +232,16 @@ alter table public.ai_action_logs add column if not exists actions jsonb not nul
 alter table public.ai_action_logs add column if not exists record_refs jsonb not null default '[]'::jsonb;
 alter table public.ai_action_logs add column if not exists error_message text;
 alter table public.ai_action_logs add column if not exists created_at timestamptz not null default now();
+
+alter table public.memos add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.memos alter column user_id set default auth.uid();
+alter table public.memos add column if not exists title text;
+alter table public.memos add column if not exists memo_date date;
+alter table public.memos add column if not exists memo_time time;
+alter table public.memos add column if not exists notes text;
+alter table public.memos add column if not exists status text not null default 'open';
+alter table public.memos add column if not exists created_at timestamptz not null default now();
+alter table public.memos add column if not exists updated_at timestamptz not null default now();
 
 do $$
 begin
@@ -346,6 +368,18 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'memos_status_check'
+  ) then
+    alter table public.memos
+    add constraint memos_status_check
+    check (status in ('open', 'done', 'dismissed'));
+  end if;
+end $$;
+
 create or replace function public.set_updated_at()
 returns trigger as $$
 begin
@@ -399,6 +433,11 @@ create trigger set_chat_messages_updated_at
 before update on public.chat_messages
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_memos_updated_at on public.memos;
+create trigger set_memos_updated_at
+before update on public.memos
+for each row execute function public.set_updated_at();
+
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
 create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
 create index if not exists workout_template_exercises_template_order_idx on public.workout_template_exercises (template_id, exercise_order);
@@ -412,6 +451,8 @@ create index if not exists daily_reviews_user_review_on_idx on public.daily_revi
 create index if not exists chat_messages_user_created_at_idx on public.chat_messages (user_id, created_at asc);
 create index if not exists ai_action_logs_user_created_at_idx on public.ai_action_logs (user_id, created_at desc);
 create index if not exists ai_action_logs_user_request_id_idx on public.ai_action_logs (user_id, request_id);
+create index if not exists memos_user_status_due_idx on public.memos (user_id, status, memo_date, memo_time);
+create index if not exists memos_user_created_at_idx on public.memos (user_id, created_at desc);
 
 alter table public.workouts enable row level security;
 alter table public.workout_templates enable row level security;
@@ -423,6 +464,7 @@ alter table public.calendar_events enable row level security;
 alter table public.daily_reviews enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.ai_action_logs enable row level security;
+alter table public.memos enable row level security;
 
 drop policy if exists "lifeos local read workouts" on public.workouts;
 drop policy if exists "lifeos local write workouts" on public.workouts;
@@ -528,6 +570,14 @@ drop policy if exists "lifeos local read ai_action_logs" on public.ai_action_log
 drop policy if exists "lifeos local write ai_action_logs" on public.ai_action_logs;
 drop policy if exists "ai_action_logs are user scoped" on public.ai_action_logs;
 create policy "ai_action_logs are user scoped" on public.ai_action_logs
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "lifeos local read memos" on public.memos;
+drop policy if exists "lifeos local write memos" on public.memos;
+drop policy if exists "memos are user scoped" on public.memos;
+create policy "memos are user scoped" on public.memos
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
