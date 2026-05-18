@@ -236,6 +236,9 @@ Architecture:
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
 - AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
+- AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
+- AI Action History detail views show the full saved request, full saved response, action metadata, request id, record references, and sanitized action payloads. Saved assistant responses render with the same safe Markdown and LifeOS callout renderer used by chat messages.
+- AI Action History titles are deterministic frontend formatting and do not trigger an extra AI call.
 - `GET /api/ai/actions` returns recent action logs for the configured user after Supabase-session or action-token auth.
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
 - AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
@@ -345,7 +348,7 @@ Current behavior:
 - Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
 - Shows Money Snapshot with today's spend, month spend, top category, and latest expense.
-- Shows Recent AI Activity from persisted `ai_action_logs`, including app/shortcut source, status, action type/count, and a short preview.
+- Shows Recent AI Activity from persisted `ai_action_logs`, including compact app/shortcut source, status, time, action type/count, and click-through details.
 - Avoids duplicate finance ledger surfaces such as a full latest-expenses panel or large Home chart; the Finances tab owns deeper ledger views.
 - Shows compact loading and empty states with user-facing wording.
 - Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.

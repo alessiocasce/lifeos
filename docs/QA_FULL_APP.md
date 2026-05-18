@@ -33,9 +33,10 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 4. Confirm Daily Habits shows Brush, Shower, Creatine, Skin, and Journal, with Journal as yes/no.
 5. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
 6. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
-7. Confirm Recent AI Activity shows recent app/Shortcut AI writes with source, status, action type/count, and a short preview.
-8. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
-9. Confirm no fake dashboard values are shown as real data.
+7. Confirm Recent AI Activity shows compact recent app/Shortcut AI writes with source, status, time, action type/count, and no raw Markdown preview.
+8. Click a Recent AI Activity card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
+9. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
+10. Confirm no fake dashboard values are shown as real data.
 
 ## Refresh Persistence
 
@@ -122,6 +123,7 @@ Run the focused checklists after the full flow:
 8. If installed as a PWA, confirm the shell header sits below the iPhone status bar and does not overlap time, Wi-Fi, or battery.
 9. Confirm Home cards stack cleanly in PWA/iPhone mode and the overview is visible near the top.
 10. Confirm Home Recent AI Activity and Assistant Recent Actions do not create horizontal overflow.
+11. Confirm Home Recent AI Activity and Assistant Recent Actions detail views are usable in iPhone/PWA mode and the X close button is visible.
 
 ## Desktop / Laptop Layout
 

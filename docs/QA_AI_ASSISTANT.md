@@ -91,6 +91,13 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 9. Force a validation error, such as an invalid calendar time in a test environment.
 10. Confirm an error action log is created with `status` `error`, safe `error_message`, and no Authorization headers, bearer tokens, Supabase keys, Gemini keys, provider raw debug output, or cookies.
 11. Refresh the app and confirm action history remains visible.
+12. Ask a long analyze-and-plan prompt and confirm Home/Assistant action previews stay compact instead of showing raw request/response text.
+13. Confirm preview cards show source, status, time, uppercase action title, and count only.
+14. Click an action preview and confirm the detail view opens.
+15. Confirm the detail view shows the full request, full response, action type/count, request id when present, and record references.
+16. Confirm saved response Markdown and `[info]`, `[warn]`, `[action]`, etc. render correctly in the detail view.
+17. Confirm error action logs show the error message in the detail view.
+18. Confirm the action detail view has no horizontal overflow on mobile and the X close button is visible.
 
 ## Finite Calendar Recurrence
 
