@@ -1,4 +1,4 @@
-import { Bot, CalendarDays, ClipboardCheck, Dumbbell, Loader2, Plus, Save, Send, Sparkles, Trash2, WalletCards } from 'lucide-react';
+import { Bot, CalendarDays, ClipboardCheck, Dumbbell, History, Loader2, Plus, Save, Send, Sparkles, Trash2, WalletCards } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -97,6 +97,8 @@ const markdownElements = ['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 
 
 export function AIAssistantTab() {
   const {
+    aiActionLogs,
+    aiActionLogsStatus,
     dailyReviews,
     dailyReviewsError,
     dailyReviewsStatus,
@@ -106,6 +108,7 @@ export function AIAssistantTab() {
     loadExpenseMonth,
     loadExpenseRange,
     reloadExpenses,
+    reloadAiActionLogs,
     reloadHealthLogs,
     saveDailyReview,
     workoutSessions,
@@ -254,6 +257,7 @@ export function AIAssistantTab() {
         },
       ]);
       await refreshAfterAiActions(result.actions ?? []);
+      await Promise.allSettled([reloadAiActionLogs?.(10)].filter(Boolean));
       setAiStatus('idle');
     } catch (error) {
       setAiError({
@@ -262,6 +266,7 @@ export function AIAssistantTab() {
         providerStatus: error.providerStatus,
         providerMessage: error.providerMessage,
       });
+      await Promise.allSettled([reloadAiActionLogs?.(10)].filter(Boolean));
       setAiStatus('idle');
     }
   };
@@ -338,6 +343,13 @@ export function AIAssistantTab() {
               </div>
             )}
           </div>
+        </div>
+      </Panel>
+
+      <Panel className="col-span-12">
+        <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
+        <div className="grid gap-2 p-3">
+          <AiActionLogList logs={aiActionLogs.slice(0, 10)} status={aiActionLogsStatus} showRequestId />
         </div>
       </Panel>
 
@@ -735,8 +747,38 @@ function ActionResults({ actions }) {
   );
 }
 
+function AiActionLogList({ logs, showRequestId = false, status }) {
+  if (status === 'loading' && !logs.length) return <LoadingCard label="Loading recent AI actions" />;
+  if (!logs.length) {
+    return (
+      <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
+        <p className="text-sm font-medium text-zinc-100">No AI actions yet.</p>
+      </div>
+    );
+  }
+
+  return logs.map((log) => (
+    <div key={log.id} className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="data-text rounded border border-cyan-400/15 bg-cyan-400/[0.06] px-2 py-1 text-[10px] uppercase text-cyan-300">{log.source || 'app'}</span>
+        <span className={`data-text rounded border px-2 py-1 text-[10px] uppercase ${log.status === 'error' ? 'border-red-400/20 bg-red-400/10 text-red-300' : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'}`}>
+          {log.status || 'success'}
+        </span>
+        <span className="data-text text-[10px] text-zinc-500">{formatLogTime(log.created_at)}</span>
+        {showRequestId && log.status === 'error' && log.request_id ? <span className="data-text text-[10px] text-zinc-600">req {log.request_id}</span> : null}
+      </div>
+      <p className="data-text mt-2 truncate text-sm font-semibold text-zinc-100" title={formatActionType(log.action_type)}>
+        {formatActionType(log.action_type)}{log.action_count ? ` / ${log.action_count}` : ''}
+      </p>
+      <p className="mt-1 line-clamp-2 text-xs text-zinc-400" title={log.error_message || log.answer || log.user_message || ''}>
+        {log.error_message || log.answer || log.user_message || 'Action recorded.'}
+      </p>
+    </div>
+  ));
+}
+
 function formatActionType(type) {
-  return String(type ?? '').replaceAll('_', ' ');
+  return String(type || 'AI action').replaceAll('_', ' ');
 }
 
 function formatActionData(action) {
@@ -745,6 +787,16 @@ function formatActionData(action) {
   if (action.type === 'create_calendar_event') return `${data.title} / ${data.event_date}${data.start_time ? ` ${data.start_time}` : ''}`;
   if (action.type === 'update_health_log') return `Health log / ${data.logged_on}`;
   return data.title || data.id || 'Updated';
+}
+
+function formatLogTime(value) {
+  if (!value) return '--';
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function reviewToForm(review, selectedDate) {

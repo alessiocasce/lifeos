@@ -526,6 +526,26 @@ export const dailyReviewApi = {
   },
 };
 
+export const aiActionLogApi = {
+  async list(limit = 10) {
+    const { data, error } = await requireSupabase().auth.getSession();
+    if (error) throw error;
+    const token = data.session?.access_token;
+    if (!token) throw new Error('Sign in before loading AI action history.');
+
+    const response = await fetch(`/api/ai/actions?limit=${encodeURIComponent(limit)}`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || 'Failed to load AI action history.');
+    }
+    return payload.data?.logs ?? [];
+  },
+};
+
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
@@ -535,6 +555,7 @@ export const lifeosApi = {
   expenses: expenseApi,
   calendarEvents: calendarEventApi,
   dailyReviews: dailyReviewApi,
+  aiActionLogs: aiActionLogApi,
   chatMessages: {
     list: async () => throwIfError(await requireSupabase().from('chat_messages').select('*').order('created_at', { ascending: true })),
     create: async (payload) => throwIfError(await requireSupabase().from('chat_messages').insert(payload).select('*').single()),

@@ -78,6 +78,20 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 44. Confirm today's health log updates without overwriting omitted fields.
 45. Ask with missing expense amount and confirm the assistant asks one concise clarification.
 
+## Action History
+
+1. Ask: `Log that i took creatine today`.
+2. Confirm an `ai_action_logs` row is created with `action_type` `update_health_log`, `status` `success`, and a `health_logs` record reference.
+3. Confirm Home shows the entry in `Recent AI Activity`.
+4. Confirm Assistant shows the entry in `Recent Actions`.
+5. Send a Shortcut-style request to `/api/ai/chat` with `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` if available.
+6. Confirm the action log source is `shortcut` or `api` and no token value is stored.
+7. Ask a recurrence request that creates seven events.
+8. Confirm `action_count` is `7` and `record_refs` includes the created `calendar_events` ids.
+9. Force a validation error, such as an invalid calendar time in a test environment.
+10. Confirm an error action log is created with `status` `error`, safe `error_message`, and no Authorization headers, bearer tokens, Supabase keys, Gemini keys, provider raw debug output, or cookies.
+11. Refresh the app and confirm action history remains visible.
+
 ## Finite Calendar Recurrence
 
 1. Ask: `everyday for 7 days starting from 17/05/26 i have a school appointment from 2pm to 4pm, log that`

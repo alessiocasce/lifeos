@@ -19,6 +19,8 @@ import {
 const TIME_ZONE = 'Europe/Rome';
 const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews']);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
+const VALID_AI_LOG_SOURCES = new Set(['app', 'shortcut', 'api']);
+const VALID_AI_LOG_STATUSES = new Set(['success', 'error']);
 const PREFERRED_CALENDAR_CATEGORIES = ['Work', 'Study', 'School', 'Health', 'Workout', 'Errands', 'Personal', 'Social', 'Entertainment', 'Sleep'];
 const CALENDAR_CATEGORY_ALIASES = new Map([
   ['errand', 'Errands'],
@@ -288,6 +290,45 @@ export async function updateHealthLog(args) {
     _updatedHabits: habitUpdate.updatedIds,
     _changedHealthFields: changedFields,
   };
+}
+
+export async function createAiActionLog(payload) {
+  const userId = getActionUserId();
+  const source = VALID_AI_LOG_SOURCES.has(payload.source) ? payload.source : 'api';
+  const status = VALID_AI_LOG_STATUSES.has(payload.status) ? payload.status : 'success';
+  const actionCount = Math.max(0, Math.trunc(Number(payload.action_count ?? payload.actionCount ?? 0)) || 0);
+  const row = compactPayload({
+    user_id: userId,
+    request_id: optionalText(payload.request_id ?? payload.requestId, 'request_id', { max: 120 }),
+    source,
+    user_message: optionalText(payload.user_message ?? payload.userMessage, 'user_message', { max: 4000 }),
+    answer: optionalText(payload.answer, 'answer', { max: 8000 }),
+    status,
+    action_type: optionalText(payload.action_type ?? payload.actionType, 'action_type', { max: 120 }),
+    action_count: actionCount,
+    actions: Array.isArray(payload.actions) ? payload.actions : [],
+    record_refs: Array.isArray(payload.record_refs ?? payload.recordRefs) ? (payload.record_refs ?? payload.recordRefs) : [],
+    error_message: optionalText(payload.error_message ?? payload.errorMessage, 'error_message', { max: 2000 }),
+  });
+  const { data, error } = await getSupabaseAdmin()
+    .from('ai_action_logs')
+    .insert(row)
+    .select('id, request_id, source, user_message, answer, status, action_type, action_count, actions, record_refs, error_message, created_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listAiActionLogs({ limit = 10 } = {}) {
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(Number(limit)) || 10));
+  const { data, error } = await getSupabaseAdmin()
+    .from('ai_action_logs')
+    .select('id, request_id, source, user_message, answer, status, action_type, action_count, actions, record_refs, error_message, created_at')
+    .eq('user_id', getActionUserId())
+    .order('created_at', { ascending: false })
+    .limit(safeLimit);
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function createCalendarEvent(args) {

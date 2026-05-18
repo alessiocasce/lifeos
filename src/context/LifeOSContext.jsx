@@ -13,6 +13,7 @@ import {
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import {
   authApi,
+  aiActionLogApi,
   calendarEventApi,
   dailyReviewApi,
   expenseApi,
@@ -63,6 +64,9 @@ export function LifeOSProvider({ children }) {
   const [dailyReviews, setDailyReviews] = useState([]);
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
+  const [aiActionLogs, setAiActionLogs] = useState([]);
+  const [aiActionLogsStatus, setAiActionLogsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [aiActionLogsError, setAiActionLogsError] = useState('');
   const lastAuthUserId = useRef(null);
   const lastCalendarRangeRequest = useRef(0);
 
@@ -91,6 +95,9 @@ export function LifeOSProvider({ children }) {
     setDailyReviews([]);
     setDailyReviewsError('');
     setDailyReviewsStatus(status);
+    setAiActionLogs([]);
+    setAiActionLogsError('');
+    setAiActionLogsStatus(status);
   }, []);
 
   useEffect(() => {
@@ -354,6 +361,37 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadDailyReviews();
   }, [loadDailyReviews]);
+
+  const loadAiActionLogs = useCallback(async (limit = 10) => {
+    if (!isSupabaseConfigured) {
+      setAiActionLogsStatus('not-configured');
+      return [];
+    }
+
+    if (!authUser) {
+      setAiActionLogs([]);
+      setAiActionLogsStatus('no-session');
+      return [];
+    }
+
+    setAiActionLogsStatus('loading');
+    setAiActionLogsError('');
+    try {
+      const rows = await aiActionLogApi.list(limit);
+      if (lastAuthUserId.current !== authUser.id) return [];
+      setAiActionLogs(rows ?? []);
+      setAiActionLogsStatus('ready');
+      return rows ?? [];
+    } catch (error) {
+      setAiActionLogsError(error.message || 'Failed to load AI action history.');
+      setAiActionLogsStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadAiActionLogs(10);
+  }, [loadAiActionLogs]);
 
   const activeWorkoutSession = useMemo(
     () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
@@ -733,6 +771,8 @@ export function LifeOSProvider({ children }) {
         }
       },
       reloadDailyReviews: loadDailyReviews,
+      reloadAiActionLogs: loadAiActionLogs,
+      loadAiActionLogs,
       saveDailyReview: async (payload) => {
         if (!authUser) {
           throw new Error('Sign in before saving a daily review.');
@@ -778,7 +818,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, loadWorkoutTemplates, workoutSessions, workoutTemplates],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadWorkoutSessions, loadWorkoutTemplates, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -802,6 +842,9 @@ export function LifeOSProvider({ children }) {
     dailyReviews,
     dailyReviewsError,
     dailyReviewsStatus,
+    aiActionLogs,
+    aiActionLogsError,
+    aiActionLogsStatus,
     expandedWorkout,
     authError,
     authStatus,

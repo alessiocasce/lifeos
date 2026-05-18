@@ -7,6 +7,7 @@ import {
   Clock3,
   Coffee,
   Dumbbell,
+  History,
   Moon,
 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
@@ -24,6 +25,8 @@ const habits = [
 export function HomeTab() {
   const {
     activeWorkoutSession,
+    aiActionLogs,
+    aiActionLogsStatus,
     calendarEvents,
     calendarEventsStatus,
     expenses,
@@ -243,6 +246,23 @@ export function HomeTab() {
           {monthlyExpensesError ? <p className="data-text text-[11px] text-red-300">{monthlyExpensesError}</p> : null}
         </div>
       </Panel>
+
+      <Panel className="col-span-12">
+        <PanelHeader eyebrow="AI" title="Recent AI Activity" right={<History size={16} className="text-violet-300" />} />
+        <div className="grid gap-2 p-3">
+          {isInitialLoading(aiActionLogsStatus, aiActionLogs) ? (
+            <LoadingState label="Loading recent AI actions..." />
+          ) : aiActionLogs.length ? (
+            <div className="grid gap-2 lg:grid-cols-2">
+              {aiActionLogs.slice(0, 5).map((log) => (
+                <AiActionRow key={log.id} log={log} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No AI actions yet." body="AI and Shortcut writes will appear here after they run." />
+          )}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -305,6 +325,23 @@ function IconMetric({ icon: Icon, label, tone, value }) {
   );
 }
 
+function AiActionRow({ log }) {
+  const preview = getActionLogPreview(log);
+  return (
+    <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="data-text rounded border border-cyan-400/15 bg-cyan-400/[0.06] px-2 py-1 text-[10px] uppercase text-cyan-300">{log.source || 'app'}</span>
+        <span className={`data-text rounded border px-2 py-1 text-[10px] uppercase ${log.status === 'error' ? 'border-red-400/20 bg-red-400/10 text-red-300' : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300'}`}>
+          {log.status || 'success'}
+        </span>
+        <span className="data-text text-[10px] text-zinc-500">{formatLogTime(log.created_at)}</span>
+      </div>
+      <p className="data-text mt-2 truncate text-sm font-semibold text-zinc-100" title={preview.title}>{preview.title}</p>
+      <p className="mt-1 truncate text-xs text-zinc-500" title={preview.detail}>{preview.detail}</p>
+    </div>
+  );
+}
+
 function EmptyState({ body, title }) {
   return (
     <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
@@ -312,6 +349,18 @@ function EmptyState({ body, title }) {
       <p className="mt-1 text-xs text-zinc-500">{body}</p>
     </div>
   );
+}
+
+function getActionLogPreview(log) {
+  const refs = Array.isArray(log.record_refs) ? log.record_refs : [];
+  const firstRef = refs[0];
+  const type = formatActionType(log.action_type);
+  const count = Number(log.action_count ?? 0);
+  const countText = count > 1 ? `${count} records` : count === 1 ? '1 record' : 'recorded';
+  return {
+    title: `${type}${count ? ` / ${countText}` : ''}`,
+    detail: log.error_message || firstRef?.label || log.answer || log.user_message || 'Action recorded.',
+  };
 }
 
 function LoadingState({ label }) {
@@ -472,6 +521,20 @@ function statusTone(status) {
   if (status === 'skipped') return 'border-amber-400/20 bg-amber-400/10 text-amber-300';
   if (status === 'cancelled') return 'border-red-400/20 bg-red-400/10 text-red-300';
   return 'border-white/10 bg-white/[0.03] text-zinc-300';
+}
+
+function formatActionType(type) {
+  return String(type ?? 'AI action').replaceAll('_', ' ');
+}
+
+function formatLogTime(value) {
+  if (!value) return '--';
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function getToday() {

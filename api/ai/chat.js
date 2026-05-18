@@ -13,6 +13,7 @@ import {
 import { getActionUserId, requireConfiguredUserAccess } from '../_utils/supabaseAdmin.js';
 import {
   addDays,
+  createAiActionLog,
   createCalendarEvent,
   createCalendarPlanEvents,
   createExpense,
@@ -189,12 +190,13 @@ export default async function handler(req, res) {
   try {
     if (handleOptions(req, res)) return;
     requirePost(req);
-    await requireAssistantAuth(req);
+    const authInfo = await requireAssistantAuth(req);
 
     const body = await readJsonBody(req);
     const message = String(body.message ?? '').trim();
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
+    const source = resolveAssistantSource(authInfo, body);
 
     if (isFiniteRecurringCalendarRequest(message)) {
       const plan = createFiniteRecurringCalendarSyntheticPlan();
@@ -204,9 +206,10 @@ export default async function handler(req, res) {
         const writeResult = await executeFiniteRecurringCalendarPlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context);
+        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'finite_recurring_calendar_events', error });
+        await safeLogAiError({ context, message, source, plan, writePath: 'finite_recurring_calendar_events', error, diagnostics });
         attachDebugDiagnostics(error, diagnostics);
         throw error;
       }
@@ -220,9 +223,10 @@ export default async function handler(req, res) {
         const writeResult = await executeExplicitCalendarPlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context);
+        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events_preplanner', error });
+        await safeLogAiError({ context, message, source, plan, writePath: 'explicit_calendar_events_preplanner', error, diagnostics });
         attachDebugDiagnostics(error, diagnostics);
         throw error;
       }
@@ -246,9 +250,10 @@ export default async function handler(req, res) {
         const writeResult = await executeExplicitCalendarPlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context);
+        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events', error });
+        await safeLogAiError({ context, message, source, plan, writePath: 'explicit_calendar_events', error, diagnostics });
         attachDebugDiagnostics(error, diagnostics);
         throw error;
       }
@@ -256,7 +261,7 @@ export default async function handler(req, res) {
 
     if (plan.intent === 'clarify') {
       answer = plan.clarifyingQuestion || 'What details should I use?';
-      return sendSuccess(res, 200, { answer, plan, actions }, context);
+      return sendAiSuccess(res, 200, { answer, plan, actions }, context, { message, source });
     }
 
     if (plan.needsRead || ['analyze', 'analyze_and_plan', 'blocked_destructive'].includes(plan.intent)) {
@@ -267,12 +272,12 @@ export default async function handler(req, res) {
       answer = await answerWithGemini(message, plan, lifeosContext, [
         { type: 'blocked_destructive', message: 'Deletion and destructive updates are not enabled for the AI assistant yet.' },
       ]);
-      return sendSuccess(res, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context);
+      return sendAiSuccess(res, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
     }
 
     if (plan.intent === 'unsupported') {
       answer = 'I cannot do that in this version of the LifeOS assistant.';
-      return sendSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context);
+      return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
     }
 
     if (plan.needsWrite) {
@@ -281,6 +286,7 @@ export default async function handler(req, res) {
         writeResult = await executeWriteIntent(plan, message, lifeosContext);
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: plan.intent, error });
+        await safeLogAiError({ context, message, source, plan, writePath: plan.intent, error, diagnostics });
         attachDebugDiagnostics(error, diagnostics);
         throw error;
       }
@@ -293,7 +299,7 @@ export default async function handler(req, res) {
       answer = await answerWithGemini(message, plan, lifeosContext, actions);
     }
 
-    sendSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context);
+    return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
   } catch (error) {
     handleApiError(res, error, context);
   }
@@ -310,6 +316,24 @@ async function requireAssistantAuth(req) {
 
   const user = await requireConfiguredUserAccess(token);
   return { type: 'supabase-session', user };
+}
+
+function resolveAssistantSource(authInfo, body = {}) {
+  if (authInfo?.type === 'supabase-session') return 'app';
+  const requested = String(body.source ?? '').trim().toLowerCase();
+  if (['shortcut', 'api'].includes(requested)) return requested;
+  return 'shortcut';
+}
+
+async function sendAiSuccess(res, status, data, context, logInfo) {
+  await safeLogAiSuccess({
+    context,
+    message: logInfo?.message,
+    source: logInfo?.source,
+    answer: data?.answer,
+    actions: data?.actions ?? [],
+  });
+  return sendSuccess(res, status, data, context);
 }
 
 async function planMessage(message) {
@@ -1127,6 +1151,119 @@ async function answerWithGemini(message, plan, lifeosContext, actions) {
     actions,
   });
   return generateGeminiText({ system: ANSWER_SYSTEM, prompt, temperature: 0.25 });
+}
+
+async function safeLogAiSuccess({ context, message, source, answer, actions }) {
+  if (!Array.isArray(actions) || actions.length === 0) return;
+  try {
+    await createAiActionLog({
+      requestId: context?.requestId,
+      source,
+      userMessage: message,
+      answer,
+      status: 'success',
+      actionType: inferActionLogType(actions),
+      actionCount: countLoggedActions(actions),
+      actions: actions.map(sanitizeActionForLog),
+      recordRefs: extractRecordRefs(actions),
+    });
+  } catch (error) {
+    console.error('[LifeOS AI action log failure]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'success_log',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+  }
+}
+
+async function safeLogAiError({ context, message, source, plan, writePath, error, diagnostics }) {
+  try {
+    await createAiActionLog({
+      requestId: context?.requestId,
+      source,
+      userMessage: message,
+      status: 'error',
+      actionType: writePath || plan?.intent,
+      actionCount: 0,
+      actions: [{
+        type: 'error',
+        writePath,
+        plannerIntent: plan?.intent,
+        plannerArgsShape: describeValueShape(plan?.args),
+        details: sanitizeValue(diagnostics?.details),
+      }],
+      errorMessage: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    });
+  } catch (logError) {
+    console.error('[LifeOS AI action error log failure]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'error_log',
+      error: logError instanceof Error ? logError.message : String(logError ?? 'Unknown error'),
+    }));
+  }
+}
+
+function inferActionLogType(actions) {
+  const first = actions[0];
+  if (!first) return null;
+  if (first.type === 'create_calendar_events' && first.data?.recurrence) return 'finite_recurring_calendar_events';
+  return first.type ?? null;
+}
+
+function countLoggedActions(actions) {
+  return actions.reduce((count, action) => {
+    if (action.type === 'create_calendar_events' || action.type === 'analyze_and_plan') {
+      return count + (action.data?.created?.length ?? 0);
+    }
+    if (action.type?.startsWith('blocked')) return count;
+    return count + 1;
+  }, 0);
+}
+
+function sanitizeActionForLog(action) {
+  return sanitizeValue({
+    type: action?.type,
+    data: action?.data,
+    message: action?.message,
+  });
+}
+
+function extractRecordRefs(actions) {
+  const refs = [];
+  for (const action of actions) {
+    if (action.type === 'create_expense' && action.data?.id) {
+      refs.push({
+        table: 'expenses',
+        id: action.data.id,
+        label: action.data.vendor,
+        date: action.data.spent_on,
+      });
+    }
+    if (action.type === 'update_health_log' && action.data?.id) {
+      refs.push({
+        table: 'health_logs',
+        id: action.data.id,
+        label: 'Health Log',
+        date: action.data.logged_on,
+      });
+    }
+    if (action.type === 'create_calendar_event' && action.data?.id) {
+      refs.push(calendarEventRef(action.data));
+    }
+    if ((action.type === 'create_calendar_events' || action.type === 'analyze_and_plan') && Array.isArray(action.data?.created)) {
+      refs.push(...action.data.created.map(calendarEventRef));
+    }
+  }
+  return refs.filter((ref) => ref.id).slice(0, 80);
+}
+
+function calendarEventRef(event) {
+  return {
+    table: 'calendar_events',
+    id: event.id,
+    label: event.title,
+    date: event.event_date,
+  };
 }
 
 function logAiWriteFailure({ context, message, plan, writePath, error }) {

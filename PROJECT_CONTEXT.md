@@ -98,6 +98,7 @@ Current tables:
 - `calendar_events`
 - `daily_reviews`
 - `chat_messages`
+- `ai_action_logs`
 
 All tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`.
 
@@ -138,16 +139,18 @@ Real/persisted today:
 - Calendar events persisted in `calendar_events`.
 - Calendar tab creates, edits, deletes, and displays persisted user-scoped events in a day-first agenda.
 - Daily reviews persisted in `daily_reviews`.
-- Assistant tab is currently a real Daily Review workflow, not AI chat.
+- Assistant tab contains the Ask LifeOS AI chat plus the persisted Daily Review workflow.
 - Token-protected Action API endpoints for external automation:
   - `POST /api/actions/expense`
   - `POST /api/actions/health`
   - `POST /api/actions/calendar`
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
+  - `GET /api/ai/actions`
   - Assistant tab "Ask LifeOS" chat surface.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Daily Review workflow remains available below the AI chat surface.
+- AI Action History persisted in `ai_action_logs` for recent assistant/Shortcut writes and write failures.
 
 Partially wired but not fully used in UI:
 
@@ -156,7 +159,7 @@ Partially wired but not fully used in UI:
 
 Still mostly mock/local:
 
-- Chat messages and AI assistant behavior; no fake AI chat is shown in the Assistant tab.
+- Chat message persistence is not yet used as the main AI conversation store.
 - The real Workout tab no longer displays mock workout examples or archives.
 
 ## PWA Current Status
@@ -231,6 +234,9 @@ Architecture:
 - AI health logging supports Daily Habits stored in `health_logs.hygiene`: Brush, Shower, Creatine, Skin, and Journal.
 - AI habit updates merge with existing daily habit values. Brush, Shower, Creatine, and Skin are counts; Journal is boolean.
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
+- Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
+- AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
+- `GET /api/ai/actions` returns recent action logs for the configured user after Supabase-session or action-token auth.
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
 - AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
 - `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
@@ -339,6 +345,7 @@ Current behavior:
 - Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
 - Shows Money Snapshot with today's spend, month spend, top category, and latest expense.
+- Shows Recent AI Activity from persisted `ai_action_logs`, including app/shortcut source, status, action type/count, and a short preview.
 - Avoids duplicate finance ledger surfaces such as a full latest-expenses panel or large Home chart; the Finances tab owns deeper ledger views.
 - Shows compact loading and empty states with user-facing wording.
 - Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
