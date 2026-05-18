@@ -46,6 +46,11 @@ export function MemosTab() {
   const groups = useMemo(() => groupMemos(memos, now), [memos, now]);
   const timelineGroups = useMemo(() => buildTimelineGroups(groups), [groups]);
   const nextMemo = groups.overdue[0] || groups.today[0] || groups.tomorrow[0] || groups.upcoming[0] || null;
+  const hasTimelineMemos = timelineGroups.length > 0;
+  const hasFloatingMemos = groups.noDate.length > 0;
+  const hasClosedMemos = groups.doneRecently.length > 0;
+  const hasAnyVisibleMemo = hasTimelineMemos || hasFloatingMemos || hasClosedMemos;
+  const isInitialLoading = memosStatus === 'loading' && !memos.length;
   const editingMemo = editingId ? memos.find((memo) => memo.id === editingId) : null;
 
   useEffect(() => {
@@ -178,13 +183,13 @@ export function MemosTab() {
   };
 
   return (
-    <div className="grid min-w-0 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
+    <div className="grid min-w-0 gap-2 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)] sm:gap-3">
       <Panel>
-        <div className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="grid gap-2 p-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 sm:p-3">
           <div className="min-w-0">
             <p className="data-text text-[10px] uppercase tracking-wider text-cyan-300">Reminder Timeline</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-100">Memos</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500">
+            <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-100 sm:mt-1 sm:text-2xl">Memos</h2>
+            <p className="mt-1 hidden max-w-2xl text-sm leading-6 text-zinc-500 sm:block">
               Date-aware reminders, quick memory points, and loose tasks that do not belong on the calendar.
             </p>
           </div>
@@ -192,7 +197,7 @@ export function MemosTab() {
             type="button"
             onClick={openCreate}
             aria-label="Create memo"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 transition hover:border-cyan-300/50"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200 transition hover:border-cyan-300/50 sm:min-h-11 sm:px-4"
           >
             <Plus size={17} />
             New Memo
@@ -200,7 +205,7 @@ export function MemosTab() {
         </div>
       </Panel>
 
-      <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-4 gap-1.5 rounded-md border border-white/5 bg-black/20 p-1.5 sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
         <MemoMetric label="Due Now" value={groups.overdue.length} tone={groups.overdue.length ? 'amber' : 'zinc'} />
         <MemoMetric label="Today" value={groups.today.length + groups.overdue.filter((memo) => memo.memo_date === today).length} tone="cyan" />
         <MemoMetric label="Upcoming" value={groups.tomorrow.length + groups.upcoming.length} tone="emerald" />
@@ -213,99 +218,96 @@ export function MemosTab() {
         </div>
       ) : null}
 
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Panel>
-          <PanelHeader
-            eyebrow="Open Dated Memos"
-            title="Timeline"
-            right={<AlarmClock size={16} className="text-cyan-300" />}
-          />
-          <div className="grid min-w-0 gap-3 p-3">
-            {memosStatus === 'loading' && !memos.length ? (
-              <LoadingState />
-            ) : nextMemo ? (
-              <NextUpCard memo={nextMemo} today={today} />
-            ) : null}
-
-            {timelineGroups.length ? (
-              <div className="grid min-w-0 gap-5">
-                {timelineGroups.map((group) => (
-                  <TimelineGroup
-                    key={group.key}
-                    busyId={busyId}
-                    group={group}
-                    onDelete={removeMemo}
-                    onEdit={openEdit}
-                    onStatus={changeStatus}
-                  />
-                ))}
-              </div>
-            ) : memosStatus === 'loading' ? null : (
-              <EmptyTimeline onCreate={openCreate} />
-            )}
-          </div>
-        </Panel>
-
-        <div className="grid min-w-0 gap-3">
+      {isInitialLoading ? (
+        <LoadingState />
+      ) : !hasAnyVisibleMemo ? (
+        <GlobalEmptyState onCreate={openCreate} />
+      ) : (
+        <div className="grid min-w-0 gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
           <Panel>
             <PanelHeader
-              eyebrow={`${groups.noDate.length} open`}
-              title="Floating Memos"
-              right={<Bell size={16} className="text-violet-300" />}
+              eyebrow="Open Dated Memos"
+              title="Timeline"
+              right={<AlarmClock size={16} className="text-cyan-300" />}
             />
-            <div className="grid min-w-0 gap-2 p-3">
-              {groups.noDate.length ? (
-                groups.noDate.map((memo) => (
-                  <FloatingMemoCard
-                    key={memo.id}
-                    busyId={busyId}
-                    memo={memo}
-                    onDelete={removeMemo}
-                    onEdit={openEdit}
-                    onStatus={changeStatus}
-                  />
-                ))
-              ) : (
-                <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-                  <p className="text-sm font-medium text-zinc-200">No floating memos.</p>
-                  <p className="mt-1 text-xs leading-5 text-zinc-500">Memory items without a date will stay here.</p>
-                </div>
-              )}
-            </div>
-          </Panel>
+            <div className="grid min-w-0 gap-2 p-2.5 sm:gap-3 sm:p-3">
+              {nextMemo ? (
+                <NextUpCard memo={nextMemo} today={today} />
+              ) : null}
 
-          <Panel>
-            <details className="group">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-white/5 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{groups.doneRecently.length} recent</p>
-                  <h2 className="truncate text-sm font-semibold text-zinc-100">Completed / Dismissed</h2>
-                </div>
-                <span className="data-text text-[10px] text-zinc-500 group-open:text-cyan-300">OPEN</span>
-              </summary>
-              <div className="grid min-w-0 gap-2 p-3">
-                {groups.doneRecently.length ? (
-                  groups.doneRecently.map((memo) => (
-                    <FloatingMemoCard
-                      key={memo.id}
+              {hasTimelineMemos ? (
+                <div className="grid min-w-0 gap-4 sm:gap-5">
+                  {timelineGroups.map((group) => (
+                    <TimelineGroup
+                      key={group.key}
                       busyId={busyId}
-                      memo={memo}
-                      muted
+                      group={group}
                       onDelete={removeMemo}
                       onEdit={openEdit}
                       onStatus={changeStatus}
                     />
-                  ))
-                ) : (
-                  <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-sm text-zinc-500">
-                    Completed and dismissed memos will appear here.
-                  </p>
-                )}
-              </div>
-            </details>
+                  ))}
+                </div>
+              ) : (
+                <SmallEmptyTimeline onCreate={openCreate} />
+              )}
+            </div>
           </Panel>
+
+        {(hasFloatingMemos || hasClosedMemos) ? (
+          <div className="grid min-w-0 gap-2 sm:gap-3">
+            {hasFloatingMemos ? (
+              <Panel>
+                <PanelHeader
+                  eyebrow={`${groups.noDate.length} open`}
+                  title="Floating Memos"
+                  right={<Bell size={16} className="text-violet-300" />}
+                />
+                <div className="grid min-w-0 gap-2 p-2.5 sm:p-3">
+                  {groups.noDate.map((memo) => (
+                    <FloatingMemoCard
+                      key={memo.id}
+                      busyId={busyId}
+                      memo={memo}
+                      onDelete={removeMemo}
+                      onEdit={openEdit}
+                      onStatus={changeStatus}
+                    />
+                  ))}
+                </div>
+              </Panel>
+            ) : null}
+
+            {hasClosedMemos ? (
+              <Panel>
+                <details className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-white/5 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{groups.doneRecently.length} recent</p>
+                      <h2 className="truncate text-sm font-semibold text-zinc-100">Completed / Dismissed</h2>
+                    </div>
+                    <span className="data-text text-[10px] text-zinc-500 group-open:text-cyan-300">OPEN</span>
+                  </summary>
+                  <div className="grid min-w-0 gap-2 p-2.5 sm:p-3">
+                    {groups.doneRecently.map((memo) => (
+                      <FloatingMemoCard
+                        key={memo.id}
+                        busyId={busyId}
+                        memo={memo}
+                        muted
+                        onDelete={removeMemo}
+                        onEdit={openEdit}
+                        onStatus={changeStatus}
+                      />
+                    ))}
+                  </div>
+                </details>
+              </Panel>
+            ) : null}
+          </div>
+        ) : null}
         </div>
-      </div>
+      )}
 
       {modalOpen ? (
         <MemoEditorModal
@@ -344,9 +346,29 @@ function MemoMetric({ label, tone, value }) {
           ? 'border-violet-400/20 bg-violet-400/[0.06] text-violet-300'
           : 'border-white/10 bg-white/[0.03] text-zinc-300';
   return (
-    <div className={`min-w-0 rounded-md border px-3 py-2 ${toneClass}`}>
-      <p className="data-text truncate text-[10px] uppercase tracking-wider opacity-80">{label}</p>
-      <p className="data-text mt-1 text-2xl font-bold text-zinc-100">{value}</p>
+    <div className={`min-w-0 rounded border px-1.5 py-1 text-center sm:rounded-md sm:px-3 sm:py-2 sm:text-left ${toneClass}`}>
+      <p className="data-text truncate text-[8px] uppercase tracking-wider opacity-80 sm:text-[10px]">{label}</p>
+      <p className="data-text text-base font-bold text-zinc-100 sm:mt-1 sm:text-2xl">{value}</p>
+    </div>
+  );
+}
+
+function GlobalEmptyState({ onCreate }) {
+  return (
+    <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.04] p-5 text-center sm:p-7">
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-cyan-400/25 bg-cyan-400/10 text-cyan-300 shadow-glow">
+        <Bell size={20} />
+      </div>
+      <p className="mt-4 text-lg font-semibold text-zinc-100">Memory queue clear.</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-zinc-500">Nothing is waiting for you.</p>
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200"
+      >
+        <Plus size={16} />
+        Add Memo
+      </button>
     </div>
   );
 }
@@ -661,18 +683,18 @@ function LoadingState() {
   );
 }
 
-function EmptyTimeline({ onCreate }) {
+function SmallEmptyTimeline({ onCreate }) {
   return (
-    <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-5">
-      <p className="text-base font-semibold text-zinc-100">Memory queue clear.</p>
-      <p className="mt-1 text-sm leading-6 text-zinc-500">Add a reminder when something needs to stay in view without becoming a calendar block.</p>
+    <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
+      <p className="text-sm font-semibold text-zinc-100">No dated memos.</p>
+      <p className="mt-1 text-xs leading-5 text-zinc-500">Floating memos can stay loose until they need a date.</p>
       <button
         type="button"
         onClick={onCreate}
-        className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200"
+        className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200"
       >
         <Plus size={16} />
-        Add Memo
+        Add Dated Memo
       </button>
     </div>
   );

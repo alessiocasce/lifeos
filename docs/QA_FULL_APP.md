@@ -115,22 +115,24 @@ Run the focused checklists after the full flow:
 
 1. Open Memos on desktop and mobile.
 2. Confirm the page opens as a Reminder Timeline, not an always-visible create form.
-3. Confirm the Plus button opens the create editor and the X button closes it.
-4. Confirm the create editor supports title, optional date, optional time, optional notes, Today/Tomorrow/Clear Date, +1h, Tonight, Clear Time, and Create.
-5. Confirm the editor is full-screen and tap-stable on mobile, centered on desktop, and has no horizontal overflow.
-6. Create a timed memo for today and confirm it appears in the unified timeline under Today with a time chip and timeline dot.
-7. Create an overdue memo and confirm it appears before Today with subtle warning styling.
-8. Create a date-only memo for tomorrow and confirm it appears under Tomorrow.
-9. Create a future memo and confirm it appears under its date header in the same timeline board.
-10. Create a no-date memo and confirm it appears in Floating Memos.
-11. Edit a memo and confirm the same editor opens prefilled and changes persist after refresh.
-12. Mark a memo done, dismiss another memo, and reopen each one.
-13. Confirm done/dismissed memos are secondary/collapsed and can be reopened.
-14. Delete a memo and confirm it disappears.
-15. Confirm no tags/categories appear in the Memos UI.
-16. Confirm the Memos tab appears in desktop sidebar and mobile bottom nav without horizontal overflow.
-17. Confirm keyboard open/close does not break taps in the memo editor on iPhone/PWA.
-18. Run `supabase/schema.sql` again before testing against a live Supabase project.
+3. Confirm the mobile header and metrics are compact, with the timeline or empty state visible high on the page.
+4. With no memos, confirm the tab shows one clean `Memory queue clear` empty state and no empty Floating Memos or Completed / Dismissed panels.
+5. Confirm the Plus button opens the create editor and the X button closes it.
+6. Confirm the create editor supports title, optional date, optional time, optional notes, Today/Tomorrow/Clear Date, +1h, Tonight, Clear Time, and Create.
+7. Confirm the editor is full-screen and tap-stable on mobile, centered on desktop, and has no horizontal overflow.
+8. Create a timed memo for today and confirm it appears in the unified timeline under Today with a time chip and timeline dot.
+9. Create an overdue memo and confirm it appears before Today with subtle warning styling.
+10. Create a date-only memo for tomorrow and confirm it appears under Tomorrow.
+11. Create a future memo and confirm it appears under its date header in the same timeline board.
+12. Create a no-date memo and confirm Floating Memos appears; delete/redate it and confirm Floating Memos hides when empty.
+13. Edit a memo and confirm the same editor opens prefilled and changes persist after refresh.
+14. Mark a memo done, dismiss another memo, and reopen each one.
+15. Confirm Completed / Dismissed appears only when it has items, stays secondary/collapsed, and can reopen memos.
+16. Delete a memo and confirm it disappears.
+17. Confirm no tags/categories appear in the Memos UI.
+18. Confirm the Memos tab appears in desktop sidebar and mobile bottom nav without horizontal overflow.
+19. Confirm keyboard open/close does not break taps in the memo editor on iPhone/PWA.
+20. Run `supabase/schema.sql` again before testing against a live Supabase project.
 
 ## Summary Consistency
 

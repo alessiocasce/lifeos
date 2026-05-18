@@ -335,6 +335,7 @@ Current behavior:
 - Creates, edits, and deletes memos.
 - Supports optional date, optional time, and optional notes.
 - The Memos UI is a Reminder Timeline, not a stack of CRUD panels.
+- The Memos mobile UI uses a compact header and slim stats strip so the timeline or empty state appears high on the page.
 - The main page focuses on a unified visual timeline for open dated memos, with overdue, today, tomorrow, and future date headers inside one board.
 - A Plus button opens the create editor; editing opens the same editor prefilled.
 - Mobile create/edit uses a full-screen editor with explicit labels, one scroll path, safe-area padding, and a visible X close button.
@@ -342,6 +343,7 @@ Current behavior:
 - The editor supports quick date buttons for Today, Tomorrow, and Clear Date, plus quick time helpers for +1h, Tonight, and Clear Time.
 - No-date memos appear as compact Floating Memos instead of a full equal-weight panel.
 - Done and dismissed memos are secondary in a collapsed Completed / Dismissed section.
+- Empty secondary panels are hidden. When there are no memos at all, the tab shows one unified `Memory queue clear` empty state.
 - Open overdue memos receive a subtle warning treatment and timed reminders use stronger timeline dots.
 - Memo statuses are `open`, `done`, and `dismissed`; done and dismissed memos can be reopened.
 - Home surfaces due/next memos in Today Overview and a compact Memos panel.
