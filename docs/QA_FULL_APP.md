@@ -68,7 +68,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Sign out.
 2. Confirm the app returns to the auth screen.
 3. Sign in as a different user.
-4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, daily reviews, and AI action logs do not appear.
+4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, project money entries, daily reviews, and AI action logs do not appear.
 5. Create one record as the second user.
 6. Sign out and sign back in as the first user.
 7. Confirm the first user's records are still present and the second user's records are hidden.
@@ -143,20 +143,27 @@ Run the focused checklists after the full flow:
 
 1. Open Projects/Ops on desktop and mobile.
 2. Confirm the Projects tab appears in the desktop sidebar and the mobile bottom nav uses the short `Ops` label without horizontal overflow.
-3. Create an hour-goal project with a 400h target and optional overall cost.
+3. Create an hour-goal project with a 400h target and confirm the create/edit modal does not ask for total cost.
 4. Confirm the project card shows progress based on logged session hours, not `current_value`.
-5. Start a session, enter target output, refresh the page, and confirm the active session survives as resumable.
-6. End the active session with Proof of Work and confirm `duration_minutes` is calculated.
-7. Confirm the recent sessions timeline shows date/time, duration, target output, Proof of Work, and completed status.
-8. Confirm the project progress bar fills from total logged session hours for the hour-goal project.
-9. Create a non-hour project, for example `School Biology` with 12 chapters.
-10. Confirm manual progress/current_value controls fill progress using `current_value / target_value`.
-11. Start and end a non-hour project session with `progress_delta`, then confirm `current_value` increments.
-12. Confirm project `overall_cost` displays and there are no per-session money spent/gained fields.
-13. Confirm the UI prevents or clearly blocks starting a second active project session while one is already open.
-14. Confirm edit/delete project flows work and deleting a project removes its sessions.
-15. Confirm mobile create/edit uses a full-screen editor with visible X, 16px inputs, one scroll path, and no horizontal overflow.
-16. Run `supabase/schema.sql` again before testing against a live Supabase project.
+5. Confirm the project overview card does not show Total Hours, This Week, or Cost metric boxes.
+6. Confirm the project overview card shows the sessions count.
+7. Start a session, enter target output, refresh the page, and confirm the active session survives as resumable.
+8. End the active session with Proof of Work and confirm `duration_minutes` is calculated.
+9. Confirm the recent sessions timeline shows date/time, duration, target output, Proof of Work, and completed status.
+10. Confirm the project progress bar fills from total logged session hours for the hour-goal project.
+11. Create a non-hour project, for example `School Biology` with 12 chapters.
+12. Confirm manual progress/current_value controls fill progress using `current_value / target_value`.
+13. Start and end a non-hour project session with `progress_delta`, then confirm `current_value` increments.
+14. Confirm Project Balance appears in project detail.
+15. Add Expense and confirm Spent increases and net balance becomes negative/amber.
+16. Add Revenue and confirm Revenue increases and net balance becomes positive/green if revenue exceeds expenses.
+17. Confirm recent money entries show date, type, signed EUR amount, and description.
+18. Edit and delete a money entry and confirm the balance recalculates.
+19. Confirm there are no per-session money fields.
+20. Confirm the UI prevents or clearly blocks starting a second active project session while one is already open.
+21. Confirm edit/delete project flows work and deleting a project removes its sessions and money entries.
+22. Confirm mobile create/edit uses a full-screen editor with visible X, 16px inputs, one scroll path, and no horizontal overflow.
+23. Run `supabase/schema.sql` again before testing against a live Supabase project.
 
 ## Summary Consistency
 

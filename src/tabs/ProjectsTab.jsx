@@ -28,17 +28,28 @@ const emptyProjectForm = () => ({
   target_value: '',
   current_value: '0',
   unit_label: 'hours',
-  overall_cost: '0',
   started_on: todayString(),
   notes: '',
 });
 
+const emptyMoneyForm = (type = 'expense') => ({
+  type,
+  amount: '',
+  description: '',
+  entry_date: todayString(),
+});
+
 export function ProjectsTab() {
   const {
+    createProjectMoneyEntry,
     createProject,
     createProjectSession,
     deleteProject,
+    deleteProjectMoneyEntry,
     deleteProjectSession,
+    projectMoneyEntries,
+    projectMoneyEntriesError,
+    projectMoneyEntriesStatus,
     projectSessions,
     projectSessionsError,
     projectSessionsStatus,
@@ -46,6 +57,7 @@ export function ProjectsTab() {
     projectsError,
     projectsStatus,
     updateProject,
+    updateProjectMoneyEntry,
     updateProjectSession,
   } = useLifeOS();
 
@@ -55,6 +67,11 @@ export function ProjectsTab() {
   const [projectForm, setProjectForm] = useState(emptyProjectForm());
   const [projectFormError, setProjectFormError] = useState('');
   const [projectSaveStatus, setProjectSaveStatus] = useState('idle');
+  const [moneyModalOpen, setMoneyModalOpen] = useState(false);
+  const [editingMoneyEntryId, setEditingMoneyEntryId] = useState(null);
+  const [moneyForm, setMoneyForm] = useState(emptyMoneyForm());
+  const [moneyFormError, setMoneyFormError] = useState('');
+  const [moneySaveStatus, setMoneySaveStatus] = useState('idle');
   const [sessionTarget, setSessionTarget] = useState('');
   const [sessionProof, setSessionProof] = useState('');
   const [sessionDelta, setSessionDelta] = useState('');
@@ -72,12 +89,16 @@ export function ProjectsTab() {
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+  const selectedProjectMoneyEntries = useMemo(
+    () => projectMoneyEntries.filter((entry) => entry.project_id === selectedProjectId),
+    [projectMoneyEntries, selectedProjectId],
+  );
   const activeSession = projectSessions.find((session) => !session.ended_at) ?? null;
   const activeSessionProject = activeSession ? projects.find((project) => project.id === activeSession.project_id) : null;
   const activeProjects = projects.filter((project) => project.status === 'active');
   const sessionsThisWeek = projectSessions.filter((session) => isThisWeek(session.started_at));
   const hoursThisWeek = sessionsThisWeek.reduce((sum, session) => sum + getSessionMinutes(session) / 60, 0);
-  const totalCost = projects.reduce((sum, project) => sum + Number(project.overall_cost ?? 0), 0);
+  const totalSessions = projectSessions.length;
   const projectsLoading = isInitialLoading(projectsStatus, projects);
 
   useEffect(() => {
@@ -104,7 +125,6 @@ export function ProjectsTab() {
       target_value: String(project.target_value ?? ''),
       current_value: String(project.current_value ?? 0),
       unit_label: project.unit_label ?? defaultUnitLabel(project.goal_type),
-      overall_cost: String(project.overall_cost ?? 0),
       started_on: project.started_on ?? todayString(),
       notes: project.notes ?? '',
     });
@@ -242,6 +262,74 @@ export function ProjectsTab() {
     }
   };
 
+  const openMoneyModal = (type, entry = null) => {
+    setEditingMoneyEntryId(entry?.id ?? null);
+    setMoneyForm(entry ? {
+      type: entry.type ?? type,
+      amount: String(entry.amount ?? ''),
+      description: entry.description ?? '',
+      entry_date: entry.entry_date ?? todayString(),
+    } : emptyMoneyForm(type));
+    setMoneyFormError('');
+    setMoneySaveStatus('idle');
+    setMoneyModalOpen(true);
+  };
+
+  const closeMoneyModal = () => {
+    setMoneyModalOpen(false);
+    setEditingMoneyEntryId(null);
+    setMoneyForm(emptyMoneyForm());
+    setMoneyFormError('');
+    setMoneySaveStatus('idle');
+  };
+
+  const updateMoneyForm = (field, value) => {
+    setMoneyForm((prev) => ({ ...prev, [field]: value }));
+    setMoneyFormError('');
+  };
+
+  const submitMoneyEntry = async (event) => {
+    event.preventDefault();
+    if (!selectedProject) return;
+    const amount = Number(String(moneyForm.amount).replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMoneyFormError('Amount must be greater than 0.');
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(moneyForm.entry_date)) {
+      setMoneyFormError('Choose a valid entry date.');
+      return;
+    }
+
+    setMoneySaveStatus('saving');
+    try {
+      const payload = {
+        ...moneyForm,
+        project_id: selectedProject.id,
+        amount,
+      };
+      if (editingMoneyEntryId) {
+        await updateProjectMoneyEntry(editingMoneyEntryId, payload);
+      } else {
+        await createProjectMoneyEntry(payload);
+      }
+      closeMoneyModal();
+    } catch (error) {
+      setMoneyFormError(error.message || 'Failed to save project money entry.');
+      setMoneySaveStatus('idle');
+    }
+  };
+
+  const removeMoneyEntry = async (entry) => {
+    if (!window.confirm('Delete this project money entry?')) return;
+    setBusyId(`money:${entry.id}:delete`);
+    try {
+      await deleteProjectMoneyEntry(entry.id);
+    } finally {
+      setBusyId('');
+    }
+  };
+
   if (selectedProject) {
     return (
       <>
@@ -251,12 +339,18 @@ export function ProjectsTab() {
           onAddProgress={addProgress}
           onBack={() => setSelectedProjectId(null)}
           onDeleteProject={removeProject}
+          onDeleteMoneyEntry={removeMoneyEntry}
           onDeleteSession={removeSession}
           onEditProject={openEditProject}
+          onEditMoneyEntry={(entry) => openMoneyModal(entry.type, entry)}
           onEndSession={endSession}
+          onOpenMoneyModal={openMoneyModal}
           onStartSession={startSession}
           progressInput={progressInput}
           project={selectedProject}
+          projectMoneyEntries={selectedProjectMoneyEntries}
+          projectMoneyEntriesError={projectMoneyEntriesError}
+          projectMoneyEntriesStatus={projectMoneyEntriesStatus}
           projectSessions={projectSessions}
           projectsError={projectsError}
           sessionDelta={sessionDelta}
@@ -278,6 +372,17 @@ export function ProjectsTab() {
             onClose={closeProjectModal}
             onSubmit={submitProject}
             saveStatus={projectSaveStatus}
+          />
+        ) : null}
+        {moneyModalOpen ? (
+          <ProjectMoneyModal
+            editing={Boolean(editingMoneyEntryId)}
+            error={moneyFormError}
+            form={moneyForm}
+            onChange={updateMoneyForm}
+            onClose={closeMoneyModal}
+            onSubmit={submitMoneyEntry}
+            saveStatus={moneySaveStatus}
           />
         ) : null}
       </>
@@ -310,7 +415,7 @@ export function ProjectsTab() {
         <MiniMetric label="Active Projects" value={activeProjects.length} tone="text-cyan-300" sub={`${projects.length} total`} />
         <MiniMetric label="Active Sessions" value={activeSession ? 1 : 0} tone={activeSession ? 'text-red-300' : 'text-zinc-100'} sub={activeSessionProject?.name ?? 'none'} />
         <MiniMetric label="Hours This Week" value={formatNumber(hoursThisWeek)} tone="text-emerald-300" sub="project work" />
-        <MiniMetric label="Total Cost" value={`EUR ${formatMoney(totalCost)}`} tone="text-amber-300" sub="overall only" />
+        <MiniMetric label="Sessions" value={totalSessions} tone="text-violet-300" sub="proof logs" />
       </div>
 
       {(projectsError || projectSessionsError) ? (
@@ -379,11 +484,8 @@ function ProjectCard({ onOpen, project, sessions }) {
         <span className="data-text text-xs text-cyan-300">{Math.round(stats.percent)}%</span>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <MiniStat label="Total Hours" value={formatNumber(stats.totalHours)} />
-        <MiniStat label="This Week" value={formatNumber(stats.weekHours)} />
+      <div className="mt-3 grid gap-2">
         <MiniStat label="Sessions" value={sessions.length} />
-        <MiniStat label="Cost" value={`EUR ${formatMoney(project.overall_cost)}`} />
       </div>
       <p className="mt-3 truncate text-xs text-zinc-500">
         {lastSession ? `Last: ${formatDateTime(lastSession.started_at)} · ${formatDuration(getSessionMinutes(lastSession))}` : 'No sessions logged yet'}
@@ -397,13 +499,19 @@ function ProjectDetail({
   busyId,
   onAddProgress,
   onBack,
+  onDeleteMoneyEntry,
   onDeleteProject,
   onDeleteSession,
+  onEditMoneyEntry,
   onEditProject,
   onEndSession,
+  onOpenMoneyModal,
   onStartSession,
   progressInput,
   project,
+  projectMoneyEntries,
+  projectMoneyEntriesError,
+  projectMoneyEntriesStatus,
   projectSessions,
   projectsError,
   sessionDelta,
@@ -421,6 +529,7 @@ function ProjectDetail({
   const projectActiveSession = activeSession?.project_id === project.id ? activeSession : null;
   const otherActiveSession = activeSession && activeSession.project_id !== project.id ? activeSession : null;
   const activeMinutes = projectActiveSession ? getActiveSessionMinutes(projectActiveSession, tick) : 0;
+  const balance = getProjectBalance(projectMoneyEntries);
 
   return (
     <div className="grid min-w-0 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
@@ -470,11 +579,23 @@ function ProjectDetail({
               <MiniMetric label="Total Hours" value={formatNumber(stats.totalHours)} tone="text-cyan-300" sub="all sessions" />
               <MiniMetric label="This Week" value={formatNumber(stats.weekHours)} tone="text-emerald-300" sub="sessions" />
               <MiniMetric label="Sessions" value={sessions.length} tone="text-violet-300" sub="proof logs" />
-              <MiniMetric label="Cost" value={`EUR ${formatMoney(project.overall_cost)}`} tone="text-amber-300" sub="overall" />
+              <MiniMetric label="Started" value={formatShortDate(project.started_on)} tone="text-zinc-100" sub="project date" />
             </div>
           </div>
         </div>
       </Panel>
+
+      <ProjectBalancePanel
+        balance={balance}
+        busyId={busyId}
+        entries={projectMoneyEntries}
+        error={projectMoneyEntriesError}
+        loading={isInitialLoading(projectMoneyEntriesStatus, projectMoneyEntries)}
+        onAddExpense={() => onOpenMoneyModal('expense')}
+        onAddRevenue={() => onOpenMoneyModal('revenue')}
+        onDelete={onDeleteMoneyEntry}
+        onEdit={onEditMoneyEntry}
+      />
 
       {(sessionError || projectsError) ? (
         <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
@@ -577,6 +698,104 @@ function ProjectDetail({
   );
 }
 
+function ProjectBalancePanel({ balance, busyId, entries, error, loading, onAddExpense, onAddRevenue, onDelete, onEdit }) {
+  const netTone = balance.netBalance > 0
+    ? 'text-emerald-300'
+    : balance.netBalance < 0
+      ? 'text-amber-300'
+      : 'text-zinc-100';
+  const subtitle = balance.netBalance > 0
+    ? 'Profitable'
+    : balance.netBalance < 0
+      ? 'Investment phase'
+      : 'No money entries yet';
+  const recentEntries = entries.slice(0, 6);
+
+  return (
+    <Panel>
+      <PanelHeader eyebrow="Project Money" title="Project Balance" />
+      <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-md border border-white/5 bg-black/25 p-4">
+          <p className={`data-text text-3xl font-black ${netTone}`}>{formatSignedMoney(balance.netBalance)}</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-300">{subtitle}</p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <MiniMetric label="Spent" value={`EUR ${formatMoney(balance.totalExpenses)}`} tone="text-red-300" sub="expenses" />
+            <MiniMetric label="Revenue" value={`EUR ${formatMoney(balance.totalRevenue)}`} tone="text-emerald-300" sub="income" />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onAddExpense}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-red-400/25 bg-red-400/10 px-3 text-sm font-semibold text-red-200"
+            >
+              <Plus size={16} />
+              Add Expense
+            </button>
+            <button
+              type="button"
+              onClick={onAddRevenue}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-200"
+            >
+              <Plus size={16} />
+              Add Revenue
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-w-0 gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Recent Money Entries</p>
+            <span className="data-text text-[10px] text-zinc-600">{entries.length} total</span>
+          </div>
+          {error ? <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
+          {loading ? (
+            <LoadingState label="Loading project money..." />
+          ) : recentEntries.length ? (
+            recentEntries.map((entry) => (
+              <MoneyEntryRow
+                key={entry.id}
+                busy={busyId === `money:${entry.id}:delete`}
+                entry={entry}
+                onDelete={onDelete}
+                onEdit={onEdit}
+              />
+            ))
+          ) : (
+            <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
+              <p className="text-sm font-semibold text-zinc-100">No money entries yet.</p>
+              <p className="mt-1 text-xs text-zinc-500">Add project-level expenses or revenue when they happen.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function MoneyEntryRow({ busy, entry, onDelete, onEdit }) {
+  const revenue = entry.type === 'revenue';
+  return (
+    <article className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="data-text text-[11px] text-zinc-500">{formatShortDate(entry.entry_date)}</span>
+            <Tag tone={revenue ? 'emerald' : 'red'}>{entry.type}</Tag>
+            <span className={`data-text text-[11px] font-semibold ${revenue ? 'text-emerald-300' : 'text-red-300'}`}>
+              {revenue ? '+' : '-'} EUR {formatMoney(entry.amount)}
+            </span>
+          </div>
+          <p className="mt-1 break-words text-sm font-semibold text-zinc-100">{entry.description || 'No description'}</p>
+        </div>
+        <div className="flex gap-2">
+          <IconButton label="Edit money entry" onClick={() => onEdit(entry)}><Pencil size={15} /></IconButton>
+          <IconButton label="Delete money entry" tone="red" busy={busy} onClick={() => onDelete(entry)}><Trash2 size={15} /></IconButton>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function SessionRow({ busyId, onDelete, project, session }) {
   const active = !session.ended_at;
   return (
@@ -667,7 +886,6 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
                 <p className="mt-1 text-sm text-zinc-400">Hour goals calculate progress from sessions.</p>
               </div>
             )}
-            <Field label="Overall Cost" type="number" value={form.overall_cost} onChange={(value) => onChange('overall_cost', value)} placeholder="0" />
             <Field label="Started On" type="date" value={form.started_on} onChange={(value) => onChange('started_on', value)} />
             <div className="sm:col-span-2">
               <TextAreaField label="Notes" value={form.notes} onChange={(value) => onChange('notes', value)} placeholder="Scope, constraints, strategy..." />
@@ -679,6 +897,92 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
           </div>
           <div className="hidden min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-white/5 p-3 sm:grid">
             <ProjectFormActions editing={editing} onClose={onClose} saveStatus={saveStatus} />
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, saveStatus }) {
+  useEffect(() => {
+    const bodyStyle = document.body.style;
+    const rootStyle = document.documentElement.style;
+    const previousBody = { overflow: bodyStyle.overflow, overscrollBehavior: bodyStyle.overscrollBehavior };
+    const previousRoot = { overflow: rootStyle.overflow, overscrollBehavior: rootStyle.overscrollBehavior };
+    rootStyle.overflow = 'hidden';
+    rootStyle.overscrollBehavior = 'none';
+    bodyStyle.overflow = 'hidden';
+    bodyStyle.overscrollBehavior = 'none';
+    return () => {
+      rootStyle.overflow = previousRoot.overflow;
+      rootStyle.overscrollBehavior = previousRoot.overscrollBehavior;
+      bodyStyle.overflow = previousBody.overflow;
+      bodyStyle.overscrollBehavior = previousBody.overscrollBehavior;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const title = form.type === 'revenue' ? 'Revenue' : 'Expense';
+
+  return (
+    <div className="fixed inset-0 z-50 flex min-w-0 items-stretch justify-stretch overflow-hidden bg-[#0f0f0f] backdrop-blur sm:items-center sm:justify-center sm:bg-black/70 sm:p-4">
+      <div
+        className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-full flex-col overflow-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[min(82dvh,520px)] sm:max-w-lg sm:rounded-xl sm:border"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="project-money-editor-title"
+      >
+        <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
+          <div className="min-w-0">
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Money Entry' : `Add ${title}`}</p>
+            <h3 id="project-money-editor-title" className="truncate text-lg font-semibold text-zinc-100">Project {title}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
+            aria-label="Close project money editor"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain">
+          <div className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 sm:p-3">
+            <SelectField label="Type" value={form.type} options={['expense', 'revenue']} onChange={(value) => onChange('type', value)} />
+            <Field label="Date" type="date" value={form.entry_date} onChange={(value) => onChange('entry_date', value)} />
+            <div className="sm:col-span-2">
+              <Field label="Amount" type="number" value={form.amount} onChange={(value) => onChange('amount', value)} placeholder="25" />
+            </div>
+            <div className="sm:col-span-2">
+              <Field label="Description" value={form.description} onChange={(value) => onChange('description', value)} placeholder="ChatGPT Plus, first payment..." />
+            </div>
+            {error ? <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
+          </div>
+          <div className="grid min-w-0 gap-2 border-t border-white/5 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:grid-cols-[minmax(0,1fr)_auto] sm:p-3">
+            <button
+              type="submit"
+              disabled={saveStatus === 'saving'}
+              className="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saveStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {saveStatus === 'saving' ? 'Saving Entry' : editing ? 'Update Entry' : `Add ${title}`}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
+            >
+              Cancel
+            </button>
           </div>
         </form>
       </div>
@@ -831,6 +1135,20 @@ function getProjectStats(project, sessions = []) {
   };
 }
 
+function getProjectBalance(entries = []) {
+  const totalExpenses = entries
+    .filter((entry) => entry.type === 'expense')
+    .reduce((sum, entry) => sum + Number(entry.amount ?? 0), 0);
+  const totalRevenue = entries
+    .filter((entry) => entry.type === 'revenue')
+    .reduce((sum, entry) => sum + Number(entry.amount ?? 0), 0);
+  return {
+    netBalance: totalRevenue - totalExpenses,
+    totalExpenses,
+    totalRevenue,
+  };
+}
+
 function getSessionMinutes(session) {
   if (session.duration_minutes !== null && session.duration_minutes !== undefined && Number.isFinite(Number(session.duration_minutes))) {
     return Number(session.duration_minutes);
@@ -914,6 +1232,12 @@ function formatMoney(value) {
   return Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatSignedMoney(value) {
+  const amount = Number(value ?? 0);
+  const prefix = amount > 0 ? '+ ' : amount < 0 ? '- ' : '';
+  return `${prefix}EUR ${formatMoney(Math.abs(amount))}`;
+}
+
 function formatDuration(minutes) {
   const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
   const hours = Math.floor(safeMinutes / 60);
@@ -929,5 +1253,13 @@ function formatDateTime(value) {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+}
+
+function formatShortDate(value) {
+  if (!value) return '--';
+  return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
   });
 }

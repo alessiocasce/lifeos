@@ -20,6 +20,7 @@ import {
   healthLogApi,
   memoApi,
   projectApi,
+  projectMoneyEntryApi,
   projectSessionApi,
   workoutApi,
   workoutSetApi,
@@ -73,6 +74,9 @@ export function LifeOSProvider({ children }) {
   const [projectSessions, setProjectSessions] = useState([]);
   const [projectSessionsStatus, setProjectSessionsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [projectSessionsError, setProjectSessionsError] = useState('');
+  const [projectMoneyEntries, setProjectMoneyEntries] = useState([]);
+  const [projectMoneyEntriesStatus, setProjectMoneyEntriesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [projectMoneyEntriesError, setProjectMoneyEntriesError] = useState('');
   const [dailyReviews, setDailyReviews] = useState([]);
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
@@ -113,6 +117,9 @@ export function LifeOSProvider({ children }) {
     setProjectSessions([]);
     setProjectSessionsError('');
     setProjectSessionsStatus(status);
+    setProjectMoneyEntries([]);
+    setProjectMoneyEntriesError('');
+    setProjectMoneyEntriesStatus(status);
     setDailyReviews([]);
     setDailyReviewsError('');
     setDailyReviewsStatus(status);
@@ -428,6 +435,39 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  const loadProjectMoneyEntries = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setProjectMoneyEntriesStatus('not-configured');
+      return [];
+    }
+
+    if (!authUser) {
+      setProjectMoneyEntries([]);
+      setProjectMoneyEntriesStatus('no-session');
+      return [];
+    }
+
+    setProjectMoneyEntriesStatus('loading');
+    setProjectMoneyEntriesError('');
+    try {
+      const rows = await projectMoneyEntryApi.list();
+      if (lastAuthUserId.current !== authUser.id) return [];
+      const sortedRows = sortProjectMoneyEntries(rows ?? []);
+      setProjectMoneyEntries(sortedRows);
+      setProjectMoneyEntriesStatus('ready');
+      return sortedRows;
+    } catch (error) {
+      const message = projectErrorMessage(error, 'Failed to load project money entries.');
+      setProjectMoneyEntriesError(message);
+      setProjectMoneyEntriesStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadProjectMoneyEntries();
+  }, [loadProjectMoneyEntries]);
 
   const loadDailyReviews = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -962,8 +1002,10 @@ export function LifeOSProvider({ children }) {
           await projectApi.delete(id);
           setProjects((prev) => prev.filter((project) => project.id !== id));
           setProjectSessions((prev) => prev.filter((session) => session.project_id !== id));
+          setProjectMoneyEntries((prev) => prev.filter((entry) => entry.project_id !== id));
           setProjectsStatus('ready');
           setProjectSessionsStatus('ready');
+          setProjectMoneyEntriesStatus('ready');
         } catch (error) {
           const message = projectErrorMessage(error, 'Failed to delete project.');
           setProjectsError(message);
@@ -1036,6 +1078,54 @@ export function LifeOSProvider({ children }) {
           throw new Error(message);
         }
       },
+      reloadProjectMoneyEntries: loadProjectMoneyEntries,
+      createProjectMoneyEntry: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before adding project money.');
+        }
+        setProjectMoneyEntriesError('');
+        try {
+          const created = await projectMoneyEntryApi.create(normalizeProjectMoneyEntryPayload(payload));
+          setProjectMoneyEntries((prev) => sortProjectMoneyEntries([created, ...prev]));
+          setProjectMoneyEntriesStatus('ready');
+          return created;
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to add project money entry.');
+          setProjectMoneyEntriesError(message);
+          throw new Error(message);
+        }
+      },
+      updateProjectMoneyEntry: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating project money.');
+        }
+        setProjectMoneyEntriesError('');
+        try {
+          const updated = await projectMoneyEntryApi.update(id, normalizeProjectMoneyEntryPayload(patch));
+          setProjectMoneyEntries((prev) => sortProjectMoneyEntries(prev.map((entry) => (entry.id === id ? updated : entry))));
+          setProjectMoneyEntriesStatus('ready');
+          return updated;
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to update project money entry.');
+          setProjectMoneyEntriesError(message);
+          throw new Error(message);
+        }
+      },
+      deleteProjectMoneyEntry: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting project money.');
+        }
+        setProjectMoneyEntriesError('');
+        try {
+          await projectMoneyEntryApi.delete(id);
+          setProjectMoneyEntries((prev) => prev.filter((entry) => entry.id !== id));
+          setProjectMoneyEntriesStatus('ready');
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to delete project money entry.');
+          setProjectMoneyEntriesError(message);
+          throw new Error(message);
+        }
+      },
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,
@@ -1084,7 +1174,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, workoutSessions, workoutTemplates],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -1114,6 +1204,9 @@ export function LifeOSProvider({ children }) {
     projectSessions,
     projectSessionsError,
     projectSessionsStatus,
+    projectMoneyEntries,
+    projectMoneyEntriesError,
+    projectMoneyEntriesStatus,
     dailyReviews,
     dailyReviewsError,
     dailyReviewsStatus,
@@ -1228,6 +1321,18 @@ function sortProjectSessions(rows = []) {
       progress_delta: Number(session.progress_delta ?? 0),
     }))
     .sort((a, b) => new Date(b.started_at ?? b.created_at ?? 0) - new Date(a.started_at ?? a.created_at ?? 0));
+}
+
+function sortProjectMoneyEntries(rows = []) {
+  return rows
+    .map((entry) => ({
+      ...entry,
+      amount: Number(entry.amount ?? 0),
+    }))
+    .sort((a, b) => {
+      if ((a.entry_date || '') !== (b.entry_date || '')) return String(b.entry_date || '').localeCompare(String(a.entry_date || ''));
+      return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
+    });
 }
 
 function projectStatusRank(status) {
@@ -1421,6 +1526,16 @@ function normalizeProjectSessionPayload(payload) {
   return normalized;
 }
 
+function normalizeProjectMoneyEntryPayload(payload) {
+  const normalized = {};
+  if ('project_id' in payload) normalized.project_id = payload.project_id;
+  if ('type' in payload) normalized.type = ['expense', 'revenue'].includes(payload.type) ? payload.type : 'expense';
+  if ('amount' in payload) normalized.amount = Math.max(0, numberOrZero(payload.amount));
+  if ('description' in payload) normalized.description = payload.description?.trim() || null;
+  if ('entry_date' in payload) normalized.entry_date = payload.entry_date || today();
+  return normalized;
+}
+
 function normalizeDailyReviewPayload(payload) {
   const score = payload.score === null || payload.score === undefined ? '' : String(payload.score).trim();
   return {
@@ -1527,9 +1642,9 @@ function memoErrorMessage(error, fallback) {
 
 function projectErrorMessage(error, fallback) {
   const message = String(error?.message ?? '');
-  const isMissingTable = error?.code === '42P01' || /projects|project_sessions/i.test(message) && /does not exist|not found|schema cache/i.test(message);
+  const isMissingTable = error?.code === '42P01' || /projects|project_sessions|project_money_entries/i.test(message) && /does not exist|not found|schema cache/i.test(message);
   if (isMissingTable) {
-    return 'Projects tables are missing. Apply supabase/schema.sql to create public.projects and public.project_sessions, then reload.';
+    return 'Projects tables are missing. Apply supabase/schema.sql to create public.projects, public.project_sessions, and public.project_money_entries, then reload.';
   }
   return message || fallback;
 }

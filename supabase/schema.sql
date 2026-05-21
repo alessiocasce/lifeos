@@ -189,6 +189,19 @@ create table if not exists public.project_sessions (
   foreign key (project_id, user_id) references public.projects(id, user_id) on delete cascade
 );
 
+create table if not exists public.project_money_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  project_id uuid not null,
+  type text not null check (type in ('expense', 'revenue')),
+  amount numeric(10,2) not null check (amount >= 0),
+  description text,
+  entry_date date not null default current_date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  foreign key (project_id, user_id) references public.projects(id, user_id) on delete cascade
+);
+
 alter table public.workouts add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.workouts alter column user_id set default auth.uid();
 alter table public.workouts add column if not exists performed_on date not null default current_date;
@@ -305,6 +318,22 @@ alter table public.project_sessions add column if not exists proof_of_work text;
 alter table public.project_sessions add column if not exists progress_delta numeric(10,2) not null default 0;
 alter table public.project_sessions add column if not exists created_at timestamptz not null default now();
 alter table public.project_sessions add column if not exists updated_at timestamptz not null default now();
+
+alter table public.project_money_entries add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.project_money_entries alter column user_id set default auth.uid();
+alter table public.project_money_entries add column if not exists project_id uuid;
+alter table public.project_money_entries add column if not exists type text;
+alter table public.project_money_entries alter column type set default 'expense';
+update public.project_money_entries set type = 'expense' where type is null;
+alter table public.project_money_entries alter column type set not null;
+alter table public.project_money_entries add column if not exists amount numeric(10,2);
+alter table public.project_money_entries alter column amount set default 0;
+update public.project_money_entries set amount = 0 where amount is null;
+alter table public.project_money_entries alter column amount set not null;
+alter table public.project_money_entries add column if not exists description text;
+alter table public.project_money_entries add column if not exists entry_date date not null default current_date;
+alter table public.project_money_entries add column if not exists created_at timestamptz not null default now();
+alter table public.project_money_entries add column if not exists updated_at timestamptz not null default now();
 
 do $$
 begin
@@ -501,6 +530,42 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'project_money_entries_type_check'
+  ) then
+    alter table public.project_money_entries
+    add constraint project_money_entries_type_check
+    check (type in ('expense', 'revenue'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'project_money_entries_amount_check'
+  ) then
+    alter table public.project_money_entries
+    add constraint project_money_entries_amount_check
+    check (amount >= 0);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'project_money_entries_project_id_user_id_fkey'
+  ) then
+    alter table public.project_money_entries
+    add constraint project_money_entries_project_id_user_id_fkey
+    foreign key (project_id, user_id) references public.projects(id, user_id) on delete cascade;
+  end if;
+end $$;
+
 create or replace function public.set_updated_at()
 returns trigger as $$
 begin
@@ -569,6 +634,11 @@ create trigger set_project_sessions_updated_at
 before update on public.project_sessions
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_project_money_entries_updated_at on public.project_money_entries;
+create trigger set_project_money_entries_updated_at
+before update on public.project_money_entries
+for each row execute function public.set_updated_at();
+
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
 create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
 create index if not exists workout_template_exercises_template_order_idx on public.workout_template_exercises (template_id, exercise_order);
@@ -587,6 +657,8 @@ create index if not exists memos_user_created_at_idx on public.memos (user_id, c
 create index if not exists projects_user_status_created_at_idx on public.projects (user_id, status, created_at desc);
 create index if not exists project_sessions_user_project_started_at_idx on public.project_sessions (user_id, project_id, started_at desc);
 create index if not exists project_sessions_user_ended_at_idx on public.project_sessions (user_id, ended_at);
+create index if not exists project_money_entries_user_project_entry_date_idx on public.project_money_entries (user_id, project_id, entry_date desc);
+create index if not exists project_money_entries_user_created_at_idx on public.project_money_entries (user_id, created_at desc);
 
 alter table public.workouts enable row level security;
 alter table public.workout_templates enable row level security;
@@ -601,6 +673,7 @@ alter table public.ai_action_logs enable row level security;
 alter table public.memos enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_sessions enable row level security;
+alter table public.project_money_entries enable row level security;
 
 drop policy if exists "lifeos local read workouts" on public.workouts;
 drop policy if exists "lifeos local write workouts" on public.workouts;
@@ -744,6 +817,28 @@ with check (
   and exists (
     select 1 from public.projects
     where projects.id = project_sessions.project_id
+      and projects.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "lifeos local read project_money_entries" on public.project_money_entries;
+drop policy if exists "lifeos local write project_money_entries" on public.project_money_entries;
+drop policy if exists "project_money_entries are user scoped" on public.project_money_entries;
+create policy "project_money_entries are user scoped" on public.project_money_entries
+for all to authenticated
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.projects
+    where projects.id = project_money_entries.project_id
+      and projects.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.projects
+    where projects.id = project_money_entries.project_id
       and projects.user_id = auth.uid()
   )
 );

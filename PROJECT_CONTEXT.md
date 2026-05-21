@@ -101,6 +101,7 @@ Current tables:
 - `memos`
 - `projects`
 - `project_sessions`
+- `project_money_entries`
 - `daily_reviews`
 - `chat_messages`
 - `ai_action_logs`
@@ -112,6 +113,7 @@ RLS is enabled on all user tables. Current policies are user-scoped for authenti
 - Users can only read/write rows where `auth.uid() = user_id`.
 - `workout_sets` also checks that the referenced `workouts` row belongs to the same authenticated user.
 - `workout_template_exercises` also checks that the referenced `workout_templates` row belongs to the same authenticated user.
+- `project_sessions` and `project_money_entries` also check that the referenced `projects` row belongs to the same authenticated user.
 
 The frontend currently uses Supabase Auth as a global app gate:
 
@@ -147,7 +149,8 @@ Real/persisted today:
 - Memos tab creates, edits, deletes, completes, dismisses, and reopens time/date-based reminders and memory items.
 - Projects persisted in `projects`.
 - Project work sessions persisted in `project_sessions`.
-- Projects/Ops tab creates flexible-goal projects, tracks active/completed work sessions, proof of work, project-level cost, and progress.
+- Project money entries persisted in `project_money_entries`.
+- Projects/Ops tab creates flexible-goal projects, tracks active/completed work sessions, proof of work, project-level money entries, calculated balance, and progress.
 - Daily reviews persisted in `daily_reviews`.
 - Assistant tab contains the Ask LifeOS AI chat plus the persisted Daily Review workflow.
 - Token-protected Action API endpoints for external automation:
@@ -372,7 +375,7 @@ Current `projects` fields:
 - `target_value`
 - `current_value`
 - `unit_label`
-- `overall_cost`
+- `overall_cost` remains for backward compatibility but is not the main UI money source
 - `started_on`
 - `notes`
 
@@ -385,6 +388,14 @@ Current `project_sessions` fields:
 - `target_output`
 - `proof_of_work`
 - `progress_delta`
+
+Current `project_money_entries` fields:
+
+- `project_id`
+- `type`
+- `amount`
+- `description`
+- `entry_date`
 
 Current behavior:
 
@@ -399,11 +410,15 @@ Current behavior:
 - For non-hour projects, positive `progress_delta` increments `current_value` when the session ends.
 - The UI prefers one active project session globally in v1 and prevents starting another while one is open.
 - New/edit project uses a modal/sheet with mobile full-screen behavior and desktop centered dialog behavior.
-- Project detail shows progress, remaining target, total hours, this-week hours, total sessions, overall cost, active/resume session, manual non-hour progress, and recent sessions.
+- New/edit project does not ask for a static total cost.
+- Project overview cards are simplified around project name, status, goal type, progress, percentage, and sessions count. They do not show Total Hours, This Week, or Cost metric boxes.
+- Project detail shows progress, remaining target, total hours, this-week hours, total sessions, active/resume session, manual non-hour progress, recent sessions, and a dedicated Project Balance widget.
+- Project money is managed through project-level `project_money_entries`, not sessions.
+- Project Balance is calculated as total revenue minus total expenses.
+- Balance entries can be expenses or revenue, with amount, description, and entry date.
 - Home surfaces a compact Ops status with active session, project work today, active project count, and latest project.
-- Project cost is stored only as `overall_cost` at the project level.
 - No per-session money spent/gained fields are implemented.
-- No project revenue, AI OFM templates, output counters, metrics snapshots, badges, streaks, or pace predictor are implemented yet.
+- No AI OFM templates, output counters, metrics snapshots, badges, streaks, or pace predictor are implemented yet.
 - AI project planning/session logging is not implemented yet.
 
 ## Daily Review Module Current Status

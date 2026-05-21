@@ -143,6 +143,18 @@ const projectSessionSelect = `
   updated_at
 `;
 
+const projectMoneyEntrySelect = `
+  id,
+  user_id,
+  project_id,
+  type,
+  amount,
+  description,
+  entry_date,
+  created_at,
+  updated_at
+`;
+
 const projectSelect = `
   id,
   user_id,
@@ -651,6 +663,50 @@ export const projectSessionApi = {
   },
 };
 
+export const projectMoneyEntryApi = {
+  async list(limit = 500) {
+    const rows = throwIfError(
+      await requireSupabase()
+        .from('project_money_entries')
+        .select(projectMoneyEntrySelect)
+        .order('entry_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(limit),
+    );
+
+    return normalizeProjectMoneyEntries(rows);
+  },
+
+  async create(payload) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('project_money_entries')
+        .insert(prepareProjectMoneyEntryPayload(payload))
+        .select(projectMoneyEntrySelect)
+        .single(),
+    );
+
+    return normalizeProjectMoneyEntry(row);
+  },
+
+  async update(id, patch) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('project_money_entries')
+        .update(prepareProjectMoneyEntryPayload(patch))
+        .eq('id', id)
+        .select(projectMoneyEntrySelect)
+        .single(),
+    );
+
+    return normalizeProjectMoneyEntry(row);
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('project_money_entries').delete().eq('id', id));
+  },
+};
+
 export const dailyReviewApi = {
   async list(limit = 30) {
     return throwIfError(
@@ -729,6 +785,7 @@ export const lifeosApi = {
   memos: memoApi,
   projects: projectApi,
   projectSessions: projectSessionApi,
+  projectMoneyEntries: projectMoneyEntryApi,
   dailyReviews: dailyReviewApi,
   aiActionLogs: aiActionLogApi,
   chatMessages: {
@@ -820,6 +877,17 @@ function prepareProjectSessionPayload(payload) {
   );
 }
 
+function prepareProjectMoneyEntryPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      type: payload.type === undefined ? undefined : payload.type,
+      amount: payload.amount === undefined ? undefined : Number(payload.amount),
+      description: payload.description === undefined ? undefined : payload.description?.trim() || null,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
 function prepareDailyReviewPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
@@ -896,4 +964,20 @@ function normalizeProjectSession(row) {
 
 function compareProjectSessions(a, b) {
   return new Date(b.started_at ?? b.created_at ?? 0) - new Date(a.started_at ?? a.created_at ?? 0);
+}
+
+function normalizeProjectMoneyEntries(rows = []) {
+  return rows.map(normalizeProjectMoneyEntry).sort(compareProjectMoneyEntries);
+}
+
+function normalizeProjectMoneyEntry(row) {
+  return {
+    ...row,
+    amount: Number(row.amount ?? 0),
+  };
+}
+
+function compareProjectMoneyEntries(a, b) {
+  if ((a.entry_date || '') !== (b.entry_date || '')) return String(b.entry_date || '').localeCompare(String(a.entry_date || ''));
+  return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
 }
