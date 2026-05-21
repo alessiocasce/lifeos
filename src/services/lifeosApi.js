@@ -129,6 +129,40 @@ const memoSelect = `
   updated_at
 `;
 
+const projectSessionSelect = `
+  id,
+  user_id,
+  project_id,
+  started_at,
+  ended_at,
+  duration_minutes,
+  target_output,
+  proof_of_work,
+  progress_delta,
+  created_at,
+  updated_at
+`;
+
+const projectSelect = `
+  id,
+  user_id,
+  name,
+  status,
+  goal_type,
+  goal_label,
+  target_value,
+  current_value,
+  unit_label,
+  overall_cost,
+  started_on,
+  notes,
+  created_at,
+  updated_at,
+  project_sessions (
+    ${projectSessionSelect}
+  )
+`;
+
 const dailyReviewSelect = `
   id,
   user_id,
@@ -531,6 +565,92 @@ export const memoApi = {
   },
 };
 
+export const projectApi = {
+  async list(limit = 100) {
+    const rows = throwIfError(
+      await requireSupabase()
+        .from('projects')
+        .select(projectSelect)
+        .order('status', { ascending: true })
+        .order('created_at', { ascending: false })
+        .limit(limit),
+    );
+
+    return normalizeProjects(rows);
+  },
+
+  async create(payload) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('projects')
+        .insert(prepareProjectPayload(payload))
+        .select(projectSelect)
+        .single(),
+    );
+
+    return normalizeProject(row);
+  },
+
+  async update(id, patch) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('projects')
+        .update(prepareProjectPayload(patch))
+        .eq('id', id)
+        .select(projectSelect)
+        .single(),
+    );
+    return normalizeProject(row);
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('projects').delete().eq('id', id));
+  },
+};
+
+export const projectSessionApi = {
+  async list(limit = 500) {
+    const rows = throwIfError(
+      await requireSupabase()
+        .from('project_sessions')
+        .select(projectSessionSelect)
+        .order('started_at', { ascending: false })
+        .limit(limit),
+    );
+
+    return normalizeProjectSessions(rows);
+  },
+
+  async create(payload) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('project_sessions')
+        .insert(prepareProjectSessionPayload(payload))
+        .select(projectSessionSelect)
+        .single(),
+    );
+
+    return normalizeProjectSession(row);
+  },
+
+  async update(id, patch) {
+    const row = throwIfError(
+      await requireSupabase()
+        .from('project_sessions')
+        .update(prepareProjectSessionPayload(patch))
+        .eq('id', id)
+        .select(projectSessionSelect)
+        .single(),
+    );
+
+    return normalizeProjectSession(row);
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('project_sessions').delete().eq('id', id));
+  },
+};
+
 export const dailyReviewApi = {
   async list(limit = 30) {
     return throwIfError(
@@ -607,6 +727,8 @@ export const lifeosApi = {
   expenses: expenseApi,
   calendarEvents: calendarEventApi,
   memos: memoApi,
+  projects: projectApi,
+  projectSessions: projectSessionApi,
   dailyReviews: dailyReviewApi,
   aiActionLogs: aiActionLogApi,
   chatMessages: {
@@ -671,6 +793,33 @@ function prepareMemoPayload(payload) {
   );
 }
 
+function prepareProjectPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      name: payload.name === undefined ? undefined : payload.name?.trim(),
+      goal_label: payload.goal_label === undefined ? undefined : payload.goal_label?.trim() || null,
+      unit_label: payload.unit_label === undefined ? undefined : payload.unit_label?.trim() || null,
+      target_value: payload.target_value === undefined ? undefined : Number(payload.target_value),
+      current_value: payload.current_value === undefined ? undefined : Number(payload.current_value),
+      overall_cost: payload.overall_cost === undefined ? undefined : Number(payload.overall_cost),
+      notes: payload.notes === undefined ? undefined : payload.notes?.trim() || null,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareProjectSessionPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      duration_minutes: payload.duration_minutes === undefined || payload.duration_minutes === null ? payload.duration_minutes : Number(payload.duration_minutes),
+      progress_delta: payload.progress_delta === undefined ? undefined : Number(payload.progress_delta),
+      target_output: payload.target_output === undefined ? undefined : payload.target_output?.trim() || null,
+      proof_of_work: payload.proof_of_work === undefined ? undefined : payload.proof_of_work?.trim() || null,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
 function prepareDailyReviewPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
@@ -717,4 +866,34 @@ function compareWorkoutTemplates(a, b) {
 function compareWorkoutTemplateExerciseOrder(a, b) {
   if (Number(a.exercise_order) !== Number(b.exercise_order)) return Number(a.exercise_order) - Number(b.exercise_order);
   return String(a.id).localeCompare(String(b.id));
+}
+
+function normalizeProjects(rows = []) {
+  return rows.map(normalizeProject);
+}
+
+function normalizeProject(row) {
+  return {
+    ...row,
+    target_value: Number(row.target_value ?? 0),
+    current_value: Number(row.current_value ?? 0),
+    overall_cost: Number(row.overall_cost ?? 0),
+    project_sessions: normalizeProjectSessions(row.project_sessions ?? []),
+  };
+}
+
+function normalizeProjectSessions(rows = []) {
+  return rows.map(normalizeProjectSession).sort(compareProjectSessions);
+}
+
+function normalizeProjectSession(row) {
+  return {
+    ...row,
+    duration_minutes: row.duration_minutes === null || row.duration_minutes === undefined ? null : Number(row.duration_minutes),
+    progress_delta: Number(row.progress_delta ?? 0),
+  };
+}
+
+function compareProjectSessions(a, b) {
+  return new Date(b.started_at ?? b.created_at ?? 0) - new Date(a.started_at ?? a.created_at ?? 0);
 }

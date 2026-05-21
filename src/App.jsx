@@ -7,12 +7,14 @@ import { FinancesTab } from './tabs/FinancesTab';
 import { HealthTab } from './tabs/HealthTab';
 import { HomeTab } from './tabs/HomeTab';
 import { MemosTab } from './tabs/MemosTab';
+import { ProjectsTab } from './tabs/ProjectsTab';
 import { WorkoutTab } from './tabs/WorkoutTab';
 
 const tabViews = {
   home: HomeTab,
   calendar: CalendarTab,
   memos: MemosTab,
+  projects: ProjectsTab,
   health: HealthTab,
   workout: WorkoutTab,
   finances: FinancesTab,

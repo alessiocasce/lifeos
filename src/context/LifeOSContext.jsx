@@ -19,6 +19,8 @@ import {
   expenseApi,
   healthLogApi,
   memoApi,
+  projectApi,
+  projectSessionApi,
   workoutApi,
   workoutSetApi,
   workoutTemplateApi,
@@ -65,6 +67,12 @@ export function LifeOSProvider({ children }) {
   const [memos, setMemos] = useState([]);
   const [memosStatus, setMemosStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [memosError, setMemosError] = useState('');
+  const [projects, setProjects] = useState([]);
+  const [projectsStatus, setProjectsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [projectsError, setProjectsError] = useState('');
+  const [projectSessions, setProjectSessions] = useState([]);
+  const [projectSessionsStatus, setProjectSessionsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [projectSessionsError, setProjectSessionsError] = useState('');
   const [dailyReviews, setDailyReviews] = useState([]);
   const [dailyReviewsStatus, setDailyReviewsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [dailyReviewsError, setDailyReviewsError] = useState('');
@@ -99,6 +107,12 @@ export function LifeOSProvider({ children }) {
     setMemos([]);
     setMemosError('');
     setMemosStatus(status);
+    setProjects([]);
+    setProjectsError('');
+    setProjectsStatus(status);
+    setProjectSessions([]);
+    setProjectSessionsError('');
+    setProjectSessionsStatus(status);
     setDailyReviews([]);
     setDailyReviewsError('');
     setDailyReviewsStatus(status);
@@ -371,6 +385,49 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadMemos();
   }, [loadMemos]);
+
+  const loadProjects = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setProjectsStatus('not-configured');
+      setProjectSessionsStatus('not-configured');
+      return [];
+    }
+
+    if (!authUser) {
+      setProjects([]);
+      setProjectSessions([]);
+      setProjectsStatus('no-session');
+      setProjectSessionsStatus('no-session');
+      return [];
+    }
+
+    setProjectsStatus('loading');
+    setProjectSessionsStatus('loading');
+    setProjectsError('');
+    setProjectSessionsError('');
+    try {
+      const rows = await projectApi.list();
+      if (lastAuthUserId.current !== authUser.id) return [];
+      const sortedProjects = sortProjects(rows ?? []);
+      const sortedSessions = sortProjectSessions(sortedProjects.flatMap((project) => project.project_sessions ?? []));
+      setProjects(sortedProjects);
+      setProjectSessions(sortedSessions);
+      setProjectsStatus('ready');
+      setProjectSessionsStatus('ready');
+      return sortedProjects;
+    } catch (error) {
+      const message = projectErrorMessage(error, 'Failed to load projects.');
+      setProjectsError(message);
+      setProjectSessionsError(message);
+      setProjectsStatus('error');
+      setProjectSessionsStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
 
   const loadDailyReviews = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -857,6 +914,128 @@ export function LifeOSProvider({ children }) {
           throw new Error(message);
         }
       },
+      reloadProjects: loadProjects,
+      createProject: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before creating a project.');
+        }
+        setProjectsError('');
+        try {
+          const created = await projectApi.create(normalizeProjectPayload(payload));
+          const normalized = sortProjects([created, ...projects]);
+          setProjects(normalized);
+          setProjectSessions(sortProjectSessions(normalized.flatMap((project) => project.project_sessions ?? [])));
+          setProjectsStatus('ready');
+          setProjectSessionsStatus('ready');
+          return created;
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to create project.');
+          setProjectsError(message);
+          throw new Error(message);
+        }
+      },
+      updateProject: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating a project.');
+        }
+        setProjectsError('');
+        try {
+          const updated = await projectApi.update(id, normalizeProjectPayload(patch));
+          const normalized = sortProjects(projects.map((project) => (project.id === id ? updated : project)));
+          setProjects(normalized);
+          setProjectSessions(sortProjectSessions(normalized.flatMap((project) => project.project_sessions ?? [])));
+          setProjectsStatus('ready');
+          setProjectSessionsStatus('ready');
+          return updated;
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to update project.');
+          setProjectsError(message);
+          throw new Error(message);
+        }
+      },
+      deleteProject: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting a project.');
+        }
+        setProjectsError('');
+        try {
+          await projectApi.delete(id);
+          setProjects((prev) => prev.filter((project) => project.id !== id));
+          setProjectSessions((prev) => prev.filter((session) => session.project_id !== id));
+          setProjectsStatus('ready');
+          setProjectSessionsStatus('ready');
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to delete project.');
+          setProjectsError(message);
+          throw new Error(message);
+        }
+      },
+      createProjectSession: async (payload) => {
+        if (!authUser) {
+          throw new Error('Sign in before starting a project session.');
+        }
+        const active = projectSessions.find((session) => !session.ended_at);
+        if (active) {
+          throw new Error('End the active project session before starting another.');
+        }
+        setProjectSessionsError('');
+        try {
+          const created = await projectSessionApi.create(normalizeProjectSessionPayload(payload));
+          setProjectSessions((prev) => sortProjectSessions([created, ...prev]));
+          setProjects((prev) => sortProjects(upsertProjectSession(prev, created)));
+          setProjectSessionsStatus('ready');
+          return created;
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to start project session.');
+          setProjectSessionsError(message);
+          throw new Error(message);
+        }
+      },
+      updateProjectSession: async (id, patch) => {
+        if (!authUser) {
+          throw new Error('Sign in before updating a project session.');
+        }
+        setProjectSessionsError('');
+        try {
+          const existing = projectSessions.find((session) => session.id === id);
+          const normalizedPatch = normalizeProjectSessionPayload(patch);
+          const updated = await projectSessionApi.update(id, normalizedPatch);
+          let nextProjects = sortProjects(upsertProjectSession(projects, updated));
+          const endedNow = !existing?.ended_at && updated.ended_at;
+          const project = nextProjects.find((item) => item.id === updated.project_id);
+          const delta = Number(updated.progress_delta ?? 0);
+          if (endedNow && project && project.goal_type !== 'hours' && delta > 0) {
+            const currentValue = Number(project.current_value ?? 0) + delta;
+            const savedProject = await projectApi.update(project.id, { current_value: currentValue });
+            nextProjects = sortProjects(nextProjects.map((item) => (item.id === savedProject.id ? savedProject : item)));
+          }
+          setProjectSessions((prev) => sortProjectSessions(prev.map((session) => (session.id === id ? updated : session))));
+          setProjects(nextProjects);
+          setProjectSessionsStatus('ready');
+          setProjectsStatus('ready');
+          return updated;
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to update project session.');
+          setProjectSessionsError(message);
+          throw new Error(message);
+        }
+      },
+      deleteProjectSession: async (id) => {
+        if (!authUser) {
+          throw new Error('Sign in before deleting a project session.');
+        }
+        setProjectSessionsError('');
+        try {
+          await projectSessionApi.delete(id);
+          setProjectSessions((prev) => prev.filter((session) => session.id !== id));
+          setProjects((prev) => sortProjects(removeProjectSession(prev, id)));
+          setProjectSessionsStatus('ready');
+        } catch (error) {
+          const message = projectErrorMessage(error, 'Failed to delete project session.');
+          setProjectSessionsError(message);
+          throw new Error(message);
+        }
+      },
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,
@@ -905,7 +1084,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadWorkoutSessions, loadWorkoutTemplates, workoutSessions, workoutTemplates],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -929,6 +1108,12 @@ export function LifeOSProvider({ children }) {
     memos,
     memosError,
     memosStatus,
+    projects,
+    projectsError,
+    projectsStatus,
+    projectSessions,
+    projectSessionsError,
+    projectSessionsStatus,
     dailyReviews,
     dailyReviewsError,
     dailyReviewsStatus,
@@ -1016,6 +1201,61 @@ function sortMemos(rows = []) {
 
     return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
   });
+}
+
+function sortProjects(rows = []) {
+  return rows
+    .map((project) => ({
+      ...project,
+      target_value: Number(project.target_value ?? 0),
+      current_value: Number(project.current_value ?? 0),
+      overall_cost: Number(project.overall_cost ?? 0),
+      project_sessions: sortProjectSessions(project.project_sessions ?? []),
+    }))
+    .sort((a, b) => {
+      const aRank = projectStatusRank(a.status);
+      const bRank = projectStatusRank(b.status);
+      if (aRank !== bRank) return aRank - bRank;
+      return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
+    });
+}
+
+function sortProjectSessions(rows = []) {
+  return rows
+    .map((session) => ({
+      ...session,
+      duration_minutes: session.duration_minutes === null || session.duration_minutes === undefined ? null : Number(session.duration_minutes),
+      progress_delta: Number(session.progress_delta ?? 0),
+    }))
+    .sort((a, b) => new Date(b.started_at ?? b.created_at ?? 0) - new Date(a.started_at ?? a.created_at ?? 0));
+}
+
+function projectStatusRank(status) {
+  if (status === 'active') return 0;
+  if (status === 'paused') return 1;
+  if (status === 'completed') return 2;
+  return 3;
+}
+
+function upsertProjectSession(projects, session) {
+  return projects.map((project) => (
+    project.id === session.project_id
+      ? {
+          ...project,
+          project_sessions: sortProjectSessions([
+            session,
+            ...(project.project_sessions ?? []).filter((item) => item.id !== session.id),
+          ]),
+        }
+      : project
+  ));
+}
+
+function removeProjectSession(projects, sessionId) {
+  return projects.map((project) => ({
+    ...project,
+    project_sessions: (project.project_sessions ?? []).filter((session) => session.id !== sessionId),
+  }));
 }
 
 function memoStatusRank(status) {
@@ -1154,6 +1394,33 @@ function normalizeMemoPayload(payload) {
   return normalized;
 }
 
+function normalizeProjectPayload(payload) {
+  const normalized = {};
+  if ('name' in payload) normalized.name = payload.name?.trim();
+  if ('status' in payload) normalized.status = ['active', 'paused', 'completed', 'archived'].includes(payload.status) ? payload.status : 'active';
+  if ('goal_type' in payload) normalized.goal_type = ['hours', 'units', 'tasks', 'content', 'custom'].includes(payload.goal_type) ? payload.goal_type : 'hours';
+  if ('goal_label' in payload) normalized.goal_label = payload.goal_label?.trim() || null;
+  if ('target_value' in payload) normalized.target_value = Math.max(0, numberOrZero(payload.target_value));
+  if ('current_value' in payload) normalized.current_value = Math.max(0, numberOrZero(payload.current_value));
+  if ('unit_label' in payload) normalized.unit_label = payload.unit_label?.trim() || null;
+  if ('overall_cost' in payload) normalized.overall_cost = Math.max(0, numberOrZero(payload.overall_cost));
+  if ('started_on' in payload) normalized.started_on = payload.started_on;
+  if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  return normalized;
+}
+
+function normalizeProjectSessionPayload(payload) {
+  const normalized = {};
+  if ('project_id' in payload) normalized.project_id = payload.project_id;
+  if ('started_at' in payload) normalized.started_at = payload.started_at;
+  if ('ended_at' in payload) normalized.ended_at = payload.ended_at || null;
+  if ('duration_minutes' in payload) normalized.duration_minutes = payload.duration_minutes === null || payload.duration_minutes === '' ? null : Math.max(0, integerOrZero(payload.duration_minutes));
+  if ('target_output' in payload) normalized.target_output = payload.target_output?.trim() || null;
+  if ('proof_of_work' in payload) normalized.proof_of_work = payload.proof_of_work?.trim() || null;
+  if ('progress_delta' in payload) normalized.progress_delta = Math.max(0, numberOrZero(payload.progress_delta));
+  return normalized;
+}
+
 function normalizeDailyReviewPayload(payload) {
   const score = payload.score === null || payload.score === undefined ? '' : String(payload.score).trim();
   return {
@@ -1218,6 +1485,12 @@ function numberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function numberOrZero(value) {
+  if (value === '' || value === null || value === undefined) return 0;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function integerOrNull(value) {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -1248,6 +1521,15 @@ function memoErrorMessage(error, fallback) {
   const isMissingTable = error?.code === '42P01' || /memos/i.test(message) && /does not exist|not found|schema cache/i.test(message);
   if (isMissingTable) {
     return 'Memos table is missing. Apply supabase/schema.sql to create public.memos, then reload.';
+  }
+  return message || fallback;
+}
+
+function projectErrorMessage(error, fallback) {
+  const message = String(error?.message ?? '');
+  const isMissingTable = error?.code === '42P01' || /projects|project_sessions/i.test(message) && /does not exist|not found|schema cache/i.test(message);
+  if (isMissingTable) {
+    return 'Projects tables are missing. Apply supabase/schema.sql to create public.projects and public.project_sessions, then reload.';
   }
   return message || fallback;
 }

@@ -156,6 +156,39 @@ create table if not exists public.memos (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.projects (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  status text not null default 'active' check (status in ('active', 'paused', 'completed', 'archived')),
+  goal_type text not null default 'hours' check (goal_type in ('hours', 'units', 'tasks', 'content', 'custom')),
+  goal_label text,
+  target_value numeric(10,2) not null,
+  current_value numeric(10,2) not null default 0,
+  unit_label text,
+  overall_cost numeric(10,2) not null default 0,
+  started_on date not null default current_date,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (id, user_id)
+);
+
+create table if not exists public.project_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  project_id uuid not null,
+  started_at timestamptz not null default now(),
+  ended_at timestamptz,
+  duration_minutes integer check (duration_minutes >= 0),
+  target_output text,
+  proof_of_work text,
+  progress_delta numeric(10,2) not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  foreign key (project_id, user_id) references public.projects(id, user_id) on delete cascade
+);
+
 alter table public.workouts add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.workouts alter column user_id set default auth.uid();
 alter table public.workouts add column if not exists performed_on date not null default current_date;
@@ -242,6 +275,36 @@ alter table public.memos add column if not exists notes text;
 alter table public.memos add column if not exists status text not null default 'open';
 alter table public.memos add column if not exists created_at timestamptz not null default now();
 alter table public.memos add column if not exists updated_at timestamptz not null default now();
+
+alter table public.projects add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.projects alter column user_id set default auth.uid();
+alter table public.projects add column if not exists name text;
+alter table public.projects add column if not exists status text not null default 'active';
+alter table public.projects add column if not exists goal_type text not null default 'hours';
+alter table public.projects add column if not exists goal_label text;
+alter table public.projects add column if not exists target_value numeric(10,2);
+alter table public.projects alter column target_value set default 0;
+update public.projects set target_value = 0 where target_value is null;
+alter table public.projects alter column target_value set not null;
+alter table public.projects add column if not exists current_value numeric(10,2) not null default 0;
+alter table public.projects add column if not exists unit_label text;
+alter table public.projects add column if not exists overall_cost numeric(10,2) not null default 0;
+alter table public.projects add column if not exists started_on date not null default current_date;
+alter table public.projects add column if not exists notes text;
+alter table public.projects add column if not exists created_at timestamptz not null default now();
+alter table public.projects add column if not exists updated_at timestamptz not null default now();
+
+alter table public.project_sessions add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.project_sessions alter column user_id set default auth.uid();
+alter table public.project_sessions add column if not exists project_id uuid;
+alter table public.project_sessions add column if not exists started_at timestamptz not null default now();
+alter table public.project_sessions add column if not exists ended_at timestamptz;
+alter table public.project_sessions add column if not exists duration_minutes integer;
+alter table public.project_sessions add column if not exists target_output text;
+alter table public.project_sessions add column if not exists proof_of_work text;
+alter table public.project_sessions add column if not exists progress_delta numeric(10,2) not null default 0;
+alter table public.project_sessions add column if not exists created_at timestamptz not null default now();
+alter table public.project_sessions add column if not exists updated_at timestamptz not null default now();
 
 do $$
 begin
@@ -380,6 +443,64 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'projects_id_user_id_key'
+  ) then
+    alter table public.projects add constraint projects_id_user_id_key unique (id, user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'projects_status_check'
+  ) then
+    alter table public.projects
+    add constraint projects_status_check
+    check (status in ('active', 'paused', 'completed', 'archived'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'projects_goal_type_check'
+  ) then
+    alter table public.projects
+    add constraint projects_goal_type_check
+    check (goal_type in ('hours', 'units', 'tasks', 'content', 'custom'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'project_sessions_duration_minutes_check'
+  ) then
+    alter table public.project_sessions
+    add constraint project_sessions_duration_minutes_check
+    check (duration_minutes >= 0);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'project_sessions_project_id_user_id_fkey'
+  ) then
+    alter table public.project_sessions
+    add constraint project_sessions_project_id_user_id_fkey
+    foreign key (project_id, user_id) references public.projects(id, user_id) on delete cascade;
+  end if;
+end $$;
+
 create or replace function public.set_updated_at()
 returns trigger as $$
 begin
@@ -438,6 +559,16 @@ create trigger set_memos_updated_at
 before update on public.memos
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_projects_updated_at on public.projects;
+create trigger set_projects_updated_at
+before update on public.projects
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_project_sessions_updated_at on public.project_sessions;
+create trigger set_project_sessions_updated_at
+before update on public.project_sessions
+for each row execute function public.set_updated_at();
+
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
 create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
 create index if not exists workout_template_exercises_template_order_idx on public.workout_template_exercises (template_id, exercise_order);
@@ -453,6 +584,9 @@ create index if not exists ai_action_logs_user_created_at_idx on public.ai_actio
 create index if not exists ai_action_logs_user_request_id_idx on public.ai_action_logs (user_id, request_id);
 create index if not exists memos_user_status_due_idx on public.memos (user_id, status, memo_date, memo_time);
 create index if not exists memos_user_created_at_idx on public.memos (user_id, created_at desc);
+create index if not exists projects_user_status_created_at_idx on public.projects (user_id, status, created_at desc);
+create index if not exists project_sessions_user_project_started_at_idx on public.project_sessions (user_id, project_id, started_at desc);
+create index if not exists project_sessions_user_ended_at_idx on public.project_sessions (user_id, ended_at);
 
 alter table public.workouts enable row level security;
 alter table public.workout_templates enable row level security;
@@ -465,6 +599,8 @@ alter table public.daily_reviews enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.ai_action_logs enable row level security;
 alter table public.memos enable row level security;
+alter table public.projects enable row level security;
+alter table public.project_sessions enable row level security;
 
 drop policy if exists "lifeos local read workouts" on public.workouts;
 drop policy if exists "lifeos local write workouts" on public.workouts;
@@ -581,3 +717,33 @@ create policy "memos are user scoped" on public.memos
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+drop policy if exists "lifeos local read projects" on public.projects;
+drop policy if exists "lifeos local write projects" on public.projects;
+drop policy if exists "projects are user scoped" on public.projects;
+create policy "projects are user scoped" on public.projects
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "lifeos local read project_sessions" on public.project_sessions;
+drop policy if exists "lifeos local write project_sessions" on public.project_sessions;
+drop policy if exists "project_sessions are user scoped" on public.project_sessions;
+create policy "project_sessions are user scoped" on public.project_sessions
+for all to authenticated
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.projects
+    where projects.id = project_sessions.project_id
+      and projects.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.projects
+    where projects.id = project_sessions.project_id
+      and projects.user_id = auth.uid()
+  )
+);

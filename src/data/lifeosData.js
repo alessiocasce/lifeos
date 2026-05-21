@@ -2,6 +2,7 @@ export const tabs = [
   { id: 'home', label: 'Pulse' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'memos', label: 'Memos' },
+  { id: 'projects', label: 'Projects' },
   { id: 'health', label: 'Health' },
   { id: 'workout', label: 'Workout' },
   { id: 'finances', label: 'Ledger' },

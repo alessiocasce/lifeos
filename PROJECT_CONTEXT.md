@@ -59,6 +59,7 @@ npm.cmd run dev -- --host 0.0.0.0
   - `HomeTab.jsx`
   - `CalendarTab.jsx`
   - `MemosTab.jsx`
+  - `ProjectsTab.jsx`
   - `HealthTab.jsx`
   - `WorkoutTab.jsx`
   - `FinancesTab.jsx`
@@ -98,6 +99,8 @@ Current tables:
 - `expenses`
 - `calendar_events`
 - `memos`
+- `projects`
+- `project_sessions`
 - `daily_reviews`
 - `chat_messages`
 - `ai_action_logs`
@@ -142,6 +145,9 @@ Real/persisted today:
 - Calendar tab creates, edits, deletes, and displays persisted user-scoped events in a day-first agenda.
 - Memos persisted in `memos`.
 - Memos tab creates, edits, deletes, completes, dismisses, and reopens time/date-based reminders and memory items.
+- Projects persisted in `projects`.
+- Project work sessions persisted in `project_sessions`.
+- Projects/Ops tab creates flexible-goal projects, tracks active/completed work sessions, proof of work, project-level cost, and progress.
 - Daily reviews persisted in `daily_reviews`.
 - Assistant tab contains the Ask LifeOS AI chat plus the persisted Daily Review workflow.
 - Token-protected Action API endpoints for external automation:
@@ -353,6 +359,53 @@ Current behavior:
 - Push notifications are not implemented yet.
 - Apple Notes sync is not implemented.
 
+## Projects/Ops Module Current Status
+
+`src/tabs/ProjectsTab.jsx` is Supabase-backed and mobile-first.
+
+Current `projects` fields:
+
+- `name`
+- `status`
+- `goal_type`
+- `goal_label`
+- `target_value`
+- `current_value`
+- `unit_label`
+- `overall_cost`
+- `started_on`
+- `notes`
+
+Current `project_sessions` fields:
+
+- `project_id`
+- `started_at`
+- `ended_at`
+- `duration_minutes`
+- `target_output`
+- `proof_of_work`
+- `progress_delta`
+
+Current behavior:
+
+- Projects are execution trackers for serious work, not only timers.
+- Supported project statuses are `active`, `paused`, `completed`, and `archived`.
+- Supported goal types are `hours`, `units`, `tasks`, `content`, and `custom`.
+- For `hours` projects, progress is calculated from total logged session duration against `target_value`.
+- For non-hour projects, progress is calculated from `current_value / target_value`.
+- Work sessions are tracked for every project as effort/proof of work, regardless of goal type.
+- A project can have an active session with `target_output`; active sessions survive refresh because they are persisted with `ended_at` null.
+- Ending a session stores `duration_minutes`, `proof_of_work`, and optional `progress_delta`.
+- For non-hour projects, positive `progress_delta` increments `current_value` when the session ends.
+- The UI prefers one active project session globally in v1 and prevents starting another while one is open.
+- New/edit project uses a modal/sheet with mobile full-screen behavior and desktop centered dialog behavior.
+- Project detail shows progress, remaining target, total hours, this-week hours, total sessions, overall cost, active/resume session, manual non-hour progress, and recent sessions.
+- Home surfaces a compact Ops status with active session, project work today, active project count, and latest project.
+- Project cost is stored only as `overall_cost` at the project level.
+- No per-session money spent/gained fields are implemented.
+- No project revenue, AI OFM templates, output counters, metrics snapshots, badges, streaks, or pace predictor are implemented yet.
+- AI project planning/session logging is not implemented yet.
+
 ## Daily Review Module Current Status
 
 `src/tabs/AIAssistantTab.jsx` now hosts the Daily Review workflow.
@@ -382,15 +435,16 @@ Current behavior:
 
 Current behavior:
 
-- Uses persisted calendar events, memos, health logs, workout sessions/sets, and expenses from context.
+- Uses persisted calendar events, memos, project sessions, health logs, workout sessions/sets, and expenses from context.
 - Loads today's calendar range and the current expense month without duplicating API wrappers.
-- Shows a compact Today Overview with next event, agenda counts, daily habit completion, memo count, workout status, and today's spend.
+- Shows a compact Today Overview with next event, agenda counts, daily habit completion, memo count, workout status, project/Ops status, and today's spend.
 - Shows Today Agenda as a read-only list of today's events. Calendar editing, deletion, and status controls remain in the Calendar tab.
 - Shows a compact Memos panel with overdue/today reminders or the next open memo. Memo editing remains in the Memos tab.
 - Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
 - Shows Daily Habits from today's health log: Brush, Shower, Creatine, Skin, and Journal. Journal is shown as yes/no and Water is not shown.
 - Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
+- Shows Ops Status focused on live project sessions, today's logged project work, active project count, and latest project.
 - Shows Money Snapshot with today's spend, month spend, top category, and latest expense.
 - Shows Recent AI Activity from persisted `ai_action_logs`, including compact app/shortcut source, status, time, action type/count, and click-through details.
 - Avoids duplicate finance ledger surfaces such as a full latest-expenses panel or large Home chart; the Finances tab owns deeper ledger views.
@@ -542,7 +596,7 @@ The app shell is now mobile-first while preserving desktop:
 
 - Desktop/tablet keeps the fixed left sidebar and full header metrics.
 - Mobile hides the sidebar and uses a compact native-app style shell.
-- Mobile has a fixed bottom tab bar with Home, Calendar, Memos, Health, Workout, Finances, and Assistant.
+- Mobile has a fixed bottom tab bar with Home, Calendar, Memos, Projects/Ops, Health, Workout, Finances, and Assistant.
 - Mobile content is full width with smaller padding and safe-area bottom padding.
 - Header metrics and sidebar pips are hidden on mobile.
 

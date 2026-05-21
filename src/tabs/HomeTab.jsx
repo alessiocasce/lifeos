@@ -10,6 +10,7 @@ import {
   Dumbbell,
   History,
   Moon,
+  Target,
 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -42,6 +43,10 @@ export function HomeTab() {
     monthlyExpenses,
     monthlyExpensesError,
     monthlyExpensesStatus,
+    projects,
+    projectsStatus,
+    projectSessions,
+    projectSessionsStatus,
     workoutSessions,
     workoutSessionsStatus,
   } = useLifeOS();
@@ -93,6 +98,14 @@ export function HomeTab() {
   const todayWorkoutMetrics = getWorkoutMetrics(todaysWorkoutSessions);
   const workoutStatus = getWorkoutStatus(liveWorkout, todaysWorkoutSessions);
 
+  const activeProjectSession = projectSessions.find((session) => !session.ended_at) ?? null;
+  const activeSessionProject = activeProjectSession ? projects.find((project) => project.id === activeProjectSession.project_id) : null;
+  const todayProjectMinutes = projectSessions
+    .filter((session) => isSameLocalDate(session.started_at, today))
+    .reduce((sum, session) => sum + getProjectSessionMinutes(session), 0);
+  const activeProjectCount = projects.filter((project) => project.status === 'active').length;
+  const projectStatus = getProjectStatus(activeProjectSession, activeSessionProject, activeProjectCount, todayProjectMinutes);
+
   const todaysExpenses = useMemo(
     () => expenses.filter((expense) => expense.spent_on === today),
     [expenses, today],
@@ -109,6 +122,7 @@ export function HomeTab() {
   const calendarLoading = isInitialLoading(calendarEventsStatus, calendarEvents);
   const healthLoading = isInitialLoading(healthLogsStatus, healthLogs);
   const workoutsLoading = isInitialLoading(workoutSessionsStatus, workoutSessions);
+  const projectsLoading = isInitialLoading(projectsStatus, projects) || isInitialLoading(projectSessionsStatus, projectSessions);
   const expensesLoading = isInitialLoading(expensesStatus, expenses);
   const monthLoading = isInitialLoading(monthlyExpensesStatus, currentMonthExpenses);
   const memosLoading = isInitialLoading(memosStatus, memos);
@@ -121,7 +135,7 @@ export function HomeTab() {
           title="Today Overview"
           right={<span className="data-text text-[11px] text-zinc-500">{formatDate(today)}</span>}
         />
-        <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
           <OverviewMetric
             icon={Clock3}
             label="Next Event"
@@ -156,6 +170,13 @@ export function HomeTab() {
             value={workoutsLoading ? '...' : workoutStatus.value}
             detail={workoutStatus.detail}
             tone={workoutStatus.tone}
+          />
+          <OverviewMetric
+            icon={Target}
+            label="Ops"
+            value={projectsLoading ? '...' : projectStatus.value}
+            detail={projectStatus.detail}
+            tone={projectStatus.tone}
           />
           <OverviewMetric
             icon={CircleDollarSign}
@@ -201,6 +222,46 @@ export function HomeTab() {
             </>
           ) : (
             <EmptyState title="No memos due." body="Open reminders and memory items will appear here." />
+          )}
+        </div>
+      </Panel>
+
+      <Panel className="col-span-12 xl:col-span-7">
+        <PanelHeader eyebrow="Projects" title="Ops Status" right={<Target size={16} className="text-cyan-300" />} />
+        <div className="grid gap-3 p-3">
+          {projectsLoading ? (
+            <LoadingState label="Loading projects..." />
+          ) : projects.length || activeProjectSession ? (
+            <>
+              {activeProjectSession ? (
+                <div className="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tag tone="cyan">ACTIVE SESSION</Tag>
+                    <span className="data-text text-[11px] text-zinc-500">{formatDuration(getProjectSessionMinutes(activeProjectSession))}</span>
+                  </div>
+                  <h3 className="mt-2 break-words text-base font-semibold text-zinc-100">
+                    {activeSessionProject?.name ?? 'Project session'}
+                  </h3>
+                  {activeProjectSession.target_output ? (
+                    <p className="mt-1 break-words text-xs text-zinc-500">{activeProjectSession.target_output}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyState title="No active project session." body="Start one from Projects/Ops when it is time to execute." />
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <MiniMetric label="Today" value={formatDuration(todayProjectMinutes)} tone="text-cyan-300" sub="project work" />
+                <MiniMetric label="Active" value={activeProjectCount} tone="text-emerald-300" sub="projects" />
+                <MiniMetric
+                  label="Last Project"
+                  value={truncateText(getLastProjectName(projects, projectSessions), 16)}
+                  tone="text-zinc-100"
+                  sub="latest session"
+                />
+              </div>
+            </>
+          ) : (
+            <EmptyState title="No projects yet." body="Project execution tracking appears here after a project is created." />
           )}
         </div>
       </Panel>
@@ -432,6 +493,64 @@ function getWorkoutMetrics(sessions) {
   const volume = sets.reduce((sum, set) => sum + Number(set.weight ?? 0) * Number(set.reps ?? 0), 0);
   const exerciseCount = new Set(sets.map((set) => set.exercise).filter(Boolean)).size;
   return { exerciseCount, setCount: sets.length, volume };
+}
+
+function getProjectStatus(activeSession, activeProject, activeProjectCount, todayMinutes) {
+  if (activeSession) {
+    return {
+      value: 'Live',
+      tone: 'text-cyan-300',
+      detail: truncateText(activeProject?.name ?? activeSession.target_output ?? 'active session', 28),
+    };
+  }
+  if (todayMinutes > 0) {
+    return { value: formatDuration(todayMinutes), tone: 'text-emerald-300', detail: 'project work today' };
+  }
+  if (activeProjectCount > 0) {
+    return { value: `${activeProjectCount} active`, tone: 'text-zinc-100', detail: 'no project work today' };
+  }
+  return { value: 'None', tone: 'text-zinc-100', detail: 'no active projects' };
+}
+
+function getProjectSessionMinutes(session) {
+  if (session.duration_minutes !== null && session.duration_minutes !== undefined && Number.isFinite(Number(session.duration_minutes))) {
+    return Number(session.duration_minutes);
+  }
+  if (!session.ended_at) {
+    return Math.max(0, Math.round((Date.now() - new Date(session.started_at).getTime()) / 60000));
+  }
+  return Math.max(0, Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 60000));
+}
+
+function getLastProjectName(projects, sessions) {
+  const latestSession = sessions
+    .slice()
+    .sort((a, b) => new Date(b.started_at ?? b.created_at ?? 0) - new Date(a.started_at ?? a.created_at ?? 0))[0];
+  const project = latestSession
+    ? projects.find((item) => item.id === latestSession.project_id)
+    : projects.find((item) => item.status === 'active') ?? projects[0];
+  return project?.name ?? '--';
+}
+
+function formatDuration(minutes) {
+  const safeMinutes = Math.max(0, Math.round(Number(minutes ?? 0)));
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  if (hours && mins) return `${hours}h ${mins}m`;
+  if (hours) return `${hours}h`;
+  return `${mins}m`;
+}
+
+function isSameLocalDate(value, dateValue) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const local = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+  return local === dateValue;
 }
 
 function normalizeHabits(items = []) {

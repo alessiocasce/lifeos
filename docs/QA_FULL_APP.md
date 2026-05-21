@@ -25,34 +25,38 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 11. Open Memos.
 12. Create one memo dated today.
 13. Mark it done, reopen it, dismiss it, edit it, and delete it.
-14. Open Assistant.
-15. Create today's Daily Review with wins, risks, optional score, and next actions.
+14. Open Projects/Ops.
+15. Create one active project.
+16. Start a project session, add target output, end it with Proof of Work, and confirm it appears in recent sessions.
+17. Open Assistant.
+18. Create today's Daily Review with wins, risks, optional score, and next actions.
 
 ## Home Integration
 
 1. Open Home.
-2. Confirm Today Overview shows the next event, agenda counts, habit completion, memo count, workout status, and today's spend.
+2. Confirm Today Overview shows the next event, agenda counts, habit completion, memo count, workout status, Ops status, and today's spend.
 3. Confirm Today Agenda shows today's calendar events and handles a no-event day with `No events planned today.`
 4. Confirm the Home Memos panel shows overdue/today memos or the next open memo.
 5. Confirm Daily Habits shows Brush, Shower, Creatine, Skin, and Journal, with Journal as yes/no.
 6. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
-7. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
-8. Confirm Recent AI Activity shows compact recent app/Shortcut AI writes with source, status, time, action type/count, and no raw Markdown preview.
-9. Click a Recent AI Activity card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
-10. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
-11. Confirm no fake dashboard values are shown as real data.
+7. Confirm Ops Status shows an active project session if one exists, today's project work time, active project count, and latest project.
+8. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
+9. Confirm Recent AI Activity shows compact recent app/Shortcut AI writes with source, status, time, action type/count, and no raw Markdown preview.
+10. Click a Recent AI Activity card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
+11. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
+12. Confirm no fake dashboard values are shown as real data.
 
 ## Refresh Persistence
 
 1. Refresh the page.
 2. Confirm auth restores.
-3. Confirm Health, Workout, Finances, Calendar, Memos, Home, and Daily Review reload persisted records from Supabase.
+3. Confirm Health, Workout, Finances, Calendar, Memos, Projects/Ops, Home, and Daily Review reload persisted records from Supabase.
 4. Confirm loading states appear before empty states.
 5. Confirm AI Action History logs survive refresh.
 
 ## Background Sync Flicker
 
-1. Load the app with existing Health, Workout, Finances, Calendar, and Daily Review records.
+1. Load the app with existing Health, Workout, Finances, Calendar, Memos, Projects/Ops, and Daily Review records.
 2. Switch between tabs several times.
 3. Leave the browser tab and return after Supabase/auth has had time to refresh.
 4. Confirm existing persisted data stays visible while modules show `SYNCING` or status badges.
@@ -64,7 +68,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Sign out.
 2. Confirm the app returns to the auth screen.
 3. Sign in as a different user.
-4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, daily reviews, and AI action logs do not appear.
+4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, daily reviews, and AI action logs do not appear.
 5. Create one record as the second user.
 6. Sign out and sign back in as the first user.
 7. Confirm the first user's records are still present and the second user's records are hidden.
@@ -78,6 +82,7 @@ Run the focused checklists after the full flow:
 - `docs/QA_HOME.md`
 - `docs/QA_CALENDAR.md`
 - Memos checks in this file
+- Projects/Ops checks in this file
 - `docs/QA_DAILY_REVIEW.md`
 - `docs/QA_WORKOUT.md`
 - `docs/QA_PWA.md` after deployment over HTTPS
@@ -134,6 +139,25 @@ Run the focused checklists after the full flow:
 19. Confirm keyboard open/close does not break taps in the memo editor on iPhone/PWA.
 20. Run `supabase/schema.sql` again before testing against a live Supabase project.
 
+## Projects / Ops
+
+1. Open Projects/Ops on desktop and mobile.
+2. Confirm the Projects tab appears in the desktop sidebar and the mobile bottom nav uses the short `Ops` label without horizontal overflow.
+3. Create an hour-goal project with a 400h target and optional overall cost.
+4. Confirm the project card shows progress based on logged session hours, not `current_value`.
+5. Start a session, enter target output, refresh the page, and confirm the active session survives as resumable.
+6. End the active session with Proof of Work and confirm `duration_minutes` is calculated.
+7. Confirm the recent sessions timeline shows date/time, duration, target output, Proof of Work, and completed status.
+8. Confirm the project progress bar fills from total logged session hours for the hour-goal project.
+9. Create a non-hour project, for example `School Biology` with 12 chapters.
+10. Confirm manual progress/current_value controls fill progress using `current_value / target_value`.
+11. Start and end a non-hour project session with `progress_delta`, then confirm `current_value` increments.
+12. Confirm project `overall_cost` displays and there are no per-session money spent/gained fields.
+13. Confirm the UI prevents or clearly blocks starting a second active project session while one is already open.
+14. Confirm edit/delete project flows work and deleting a project removes its sessions.
+15. Confirm mobile create/edit uses a full-screen editor with visible X, 16px inputs, one scroll path, and no horizontal overflow.
+16. Run `supabase/schema.sql` again before testing against a live Supabase project.
+
 ## Summary Consistency
 
 1. Log a workout with warmups and working sets.
@@ -143,7 +167,7 @@ Run the focused checklists after the full flow:
 
 1. Open the app on iPhone Safari.
 2. Confirm the mobile shell uses the bottom tab bar.
-3. Confirm no horizontal scrolling on Home, Calendar, Memos, Health, Workout, Finances, or Assistant.
+3. Confirm no horizontal scrolling on Home, Calendar, Memos, Projects/Ops, Health, Workout, Finances, or Assistant.
 4. Confirm inputs do not zoom when focused.
 5. Confirm bottom navigation does not cover primary save buttons.
 6. Confirm Calendar status buttons wrap without horizontal overflow.
@@ -156,7 +180,7 @@ Run the focused checklists after the full flow:
 ## Desktop / Laptop Layout
 
 1. Open the app on a laptop or desktop viewport.
-2. Visit Home, Calendar, Memos, Health, Workout, Finances, and Assistant.
+2. Visit Home, Calendar, Memos, Projects/Ops, Health, Workout, Finances, and Assistant.
 3. Confirm no page-level horizontal scrollbar appears on any tab.
 4. Confirm any intentional internal scroll areas still work normally.
 
