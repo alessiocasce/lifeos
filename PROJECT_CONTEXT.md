@@ -36,6 +36,11 @@ npm.cmd run dev -- --host 0.0.0.0
 ## Current Architecture
 
 - `src/App.jsx` gates entry into the app. It shows Supabase setup, auth loading, or global auth screens before rendering `Shell`.
+- Top-level tabs use lightweight URL-based routing without React Router. Refreshing `/workout`, `/memos`, `/projects`, `/calendar`, and other tab paths preserves the active tab.
+- Canonical tab paths are `/`, `/calendar`, `/memos`, `/projects`, `/health`, `/workout`, `/finances`, and `/assistant`.
+- Alias paths are supported: `/home` and `/pulse` open Home, `/ops` opens Projects, `/money` opens Finances, and `/ai` opens Assistant.
+- `vercel.json` rewrites non-API routes to the SPA entry while preserving `/api` serverless routes.
+- Major tab components except Home are lazy-loaded with `React.lazy`/`Suspense` to reduce the initial bundle.
 - `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, remaining local mock-backed state, Supabase auth state, persisted module state, and CRUD actions.
 - `src/components/AuthScreen.jsx` owns global sign in, sign up, loading, and Supabase setup screens.
 - `src/components/LifeOSLogo.jsx` contains the custom inline SVG logo used by the shell and favicon artwork.
@@ -188,6 +193,7 @@ Current behavior:
 - Adds iOS Home Screen metadata and `viewport-fit=cover` in `index.html`.
 - Uses a safe-area-aware mobile shell header so the installed iPhone PWA does not overlap the status bar.
 - Caches the built app shell and static assets only.
+- Keeps app-shell navigation fallback compatible with top-level tab URLs while denying `/api` fallback.
 - Does not add runtime caching for `/api`, Supabase, Gemini, auth/session, or user-specific database responses.
 - Does not store Supabase tokens or server-only secrets in service worker code.
 - Supports opening the already-loaded app shell offline where the browser allows it.

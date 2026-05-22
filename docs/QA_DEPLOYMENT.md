@@ -52,6 +52,16 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 2. Confirm Home reflects the persisted Health, Workout, Expense, Calendar-adjacent shell state where applicable, and Daily Review-backed modules that are currently summarized.
 3. Confirm empty states do not show for records just created.
 
+## Direct Tab Routes
+
+1. Directly visit `/calendar`, `/workout`, `/projects`, and `/memos` on the deployed URL.
+2. Refresh each direct route and confirm the app loads without a Vercel 404 and keeps the matching tab active.
+3. Directly visit `/money` and confirm Finances opens.
+4. Directly visit `/ai` and confirm Assistant opens.
+5. Confirm `/api/ai/chat` still returns API behavior and is not rewritten to the SPA.
+6. Confirm `/api/ai/actions` still returns API behavior and is not rewritten to the SPA.
+7. Confirm `/api/actions/expense`, `/api/actions/health`, and `/api/actions/calendar` still reach serverless API behavior.
+
 ## Sign Out / Sign In
 
 1. Sign out.
@@ -81,6 +91,7 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 1. Run `docs/QA_PWA.md` against the deployed HTTPS URL.
 2. Confirm LifeOS can be added to the iPhone Home Screen.
 3. Confirm the installed app opens standalone and keeps API/Supabase/Gemini responses uncached.
+4. Confirm PWA start still opens normally after the tab-route rewrite deployment.
 
 ## Known Non-Failing Build Warning
 

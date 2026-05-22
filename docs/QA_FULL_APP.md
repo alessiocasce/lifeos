@@ -54,6 +54,21 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 4. Confirm loading states appear before empty states.
 5. Confirm AI Action History logs survive refresh.
 
+## Tab URL Routing
+
+1. Navigate to Home and confirm the URL is `/`.
+2. Navigate to Calendar, Memos, Projects/Ops, Health, Workout, Finances, and Assistant and confirm the URLs become `/calendar`, `/memos`, `/projects`, `/health`, `/workout`, `/finances`, and `/assistant`.
+3. Refresh `/workout` and confirm Workout remains active.
+4. Refresh `/projects` and confirm Projects/Ops remains active.
+5. Refresh `/memos` and confirm Memos remains active.
+6. Directly open `/money` and confirm Finances opens.
+7. Directly open `/ai` and confirm Assistant opens.
+8. Directly open `/ops` and confirm Projects opens.
+9. Use browser back/forward and confirm the active tab follows the URL.
+10. While signed out, directly open `/workout` and confirm the auth gate appears; after sign-in, confirm Workout opens.
+11. Confirm PWA/Home Screen launch still opens normally.
+12. Confirm mobile navigation still has no horizontal overflow.
+
 ## Background Sync Flicker
 
 1. Load the app with existing Health, Workout, Finances, Calendar, Memos, Projects/Ops, and Daily Review records.

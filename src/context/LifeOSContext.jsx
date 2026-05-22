@@ -11,6 +11,7 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
 import {
   authApi,
   aiActionLogApi,
@@ -37,7 +38,7 @@ const toMinutes = (time) => {
 };
 
 export function LifeOSProvider({ children }) {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTabState] = useState(() => tabFromCurrentPath());
   const [selectedDay, setSelectedDay] = useState(11);
   const [aiTriage, setAiTriage] = useState(true);
   const [health, setHealth] = useState(initialHealth);
@@ -85,6 +86,27 @@ export function LifeOSProvider({ children }) {
   const [aiActionLogsError, setAiActionLogsError] = useState('');
   const lastAuthUserId = useRef(null);
   const lastCalendarRangeRequest = useRef(0);
+
+  const setActiveTab = useCallback((tabId) => {
+    const nextTab = isValidTabId(tabId) ? tabId : 'home';
+    setActiveTabState(nextTab);
+
+    if (typeof window === 'undefined') return;
+    const nextPath = tabToPath(nextTab);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentPath !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handlePopState = () => {
+      setActiveTabState(pathToTab(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const clearUserScopedState = useCallback((status = 'idle') => {
     setWorkoutSessions([]);
@@ -1174,7 +1196,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, workoutSessions, workoutTemplates],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, setActiveTab, workoutSessions, workoutTemplates],
   );
 
   const value = {
