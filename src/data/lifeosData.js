@@ -106,7 +106,6 @@ export const initialHealth = {
 };
 
 export const workoutData = {
-  restTimerSeconds: 92,
   current: {
     name: 'Incline Dumbbell Press',
     block: 'Push Day A',

@@ -104,15 +104,26 @@ Run the focused checklists after the full flow:
 
 ## Workout Warmup Sets
 
-1. Apply the latest schema migration and confirm existing old workout sets still appear as working sets.
+1. Run the latest `supabase/schema.sql`.
 2. Start or select today's workout session.
-3. Log two warmup sets for one exercise with the Warmup toggle enabled.
-4. Log two working sets for the same exercise with Warmup disabled.
-5. Confirm the current session log displays `W`, `W`, `Set 1`, `Set 2`.
-6. Confirm warmups appear before working sets and do not increment the next working set number.
-7. Confirm active volume, PR tags, previous performance, and exercise history ignore warmup sets.
-8. Log a second exercise and confirm exercise groups stay ordered first-to-last by first logged exercise.
-9. Edit a set and confirm warmup/working status, edit, and delete behavior still work.
+3. Log two warmups, disable Warmup, and confirm the next working set immediately displays `Set 1`.
+4. Log two working sets and confirm the current session log displays `W`, `W`, `Set 1`, `Set 2`.
+5. Toggle Warmup on/off and confirm internal values such as `1001` or `1002` never appear.
+6. Confirm old malformed non-warmup rows with high set numbers display with safe normal labels.
+7. Edit between warmup/working status and confirm numbering remains non-conflicting.
+8. Confirm edit and delete set behavior still works.
+
+## Workout Live Logger
+
+1. Start a workout from a template, refresh `/workout`, and confirm the exercise plan persists.
+2. Background/reopen the app during the live workout and confirm the template snapshot still appears.
+3. Confirm the active header keeps End Workout or Reopen visible without scrolling.
+4. Confirm the rest timer, PR flags, active volume/count summaries, Date field, Other Sessions, and exercise history are absent.
+5. Leave RPE blank, save a set, and confirm it displays `RPE --`.
+6. Type in Exercise and confirm suggestions appear from snapshots, templates, and prior sets.
+7. Tap a suggestion and confirm it fills the field and recalculates the next set.
+8. Confirm only current-session sets are shown, grouped by exercise.
+9. Confirm mobile has no horizontal overflow and the bottom navigation does not cover Save Set.
 
 ## Mock Areas
 

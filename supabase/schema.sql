@@ -7,6 +7,8 @@ create table if not exists public.workouts (
   performed_on date not null default current_date,
   started_at timestamptz,
   ended_at timestamptz,
+  template_id uuid,
+  template_snapshot jsonb not null default '[]'::jsonb,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -46,7 +48,7 @@ create table if not exists public.workout_sets (
   is_warmup boolean not null default false,
   weight numeric(7,2) not null check (weight >= 0),
   reps integer not null check (reps > 0),
-  rpe numeric(3,1) not null check (rpe >= 0 and rpe <= 10),
+  rpe numeric(3,1) check (rpe is null or (rpe >= 0 and rpe <= 10)),
   performed_at timestamptz not null default now(),
   notes text,
   created_at timestamptz not null default now(),
@@ -207,6 +209,8 @@ alter table public.workouts alter column user_id set default auth.uid();
 alter table public.workouts add column if not exists performed_on date not null default current_date;
 alter table public.workouts add column if not exists started_at timestamptz;
 alter table public.workouts add column if not exists ended_at timestamptz;
+alter table public.workouts add column if not exists template_id uuid;
+alter table public.workouts add column if not exists template_snapshot jsonb not null default '[]'::jsonb;
 
 alter table public.workout_templates add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.workout_templates alter column user_id set default auth.uid();
@@ -234,6 +238,8 @@ alter table public.workout_sets alter column set_number set default 1;
 update public.workout_sets set set_number = 1 where set_number is null;
 alter table public.workout_sets alter column set_number set not null;
 alter table public.workout_sets add column if not exists is_warmup boolean not null default false;
+alter table public.workout_sets alter column rpe drop not null;
+alter table public.workout_sets drop constraint if exists workout_sets_rpe_check;
 
 alter table public.health_logs add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.health_logs alter column user_id set default auth.uid();
@@ -334,6 +340,18 @@ alter table public.project_money_entries add column if not exists description te
 alter table public.project_money_entries add column if not exists entry_date date not null default current_date;
 alter table public.project_money_entries add column if not exists created_at timestamptz not null default now();
 alter table public.project_money_entries add column if not exists updated_at timestamptz not null default now();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workout_sets_rpe_check'
+  ) then
+    alter table public.workout_sets
+    add constraint workout_sets_rpe_check
+    check (rpe is null or (rpe >= 0 and rpe <= 10));
+  end if;
+end $$;
 
 do $$
 begin

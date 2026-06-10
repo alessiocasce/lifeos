@@ -19,6 +19,8 @@ const workoutSelect = `
   performed_on,
   started_at,
   ended_at,
+  template_id,
+  template_snapshot,
   notes,
   created_at,
   updated_at,
@@ -234,6 +236,8 @@ export const workoutApi = {
           performed_on: payload.performed_on,
           started_at: payload.started_at || new Date().toISOString(),
           ended_at: payload.ended_at || null,
+          template_id: payload.template_id || null,
+          template_snapshot: Array.isArray(payload.template_snapshot) ? payload.template_snapshot : [],
           notes: payload.notes || null,
         })
         .select(workoutSelect)
@@ -245,7 +249,7 @@ export const workoutApi = {
 
   async update(id, patch) {
     const row = throwIfError(
-      await requireSupabase().from('workouts').update(patch).eq('id', id).select(workoutSelect).single(),
+      await requireSupabase().from('workouts').update(prepareWorkoutPayload(patch)).eq('id', id).select(workoutSelect).single(),
     );
     return normalizeWorkout(row);
   },
@@ -267,7 +271,7 @@ export const workoutSetApi = {
           is_warmup: Boolean(payload.is_warmup),
           weight: Number(payload.weight),
           reps: Number(payload.reps),
-          rpe: Number(payload.rpe),
+          rpe: normalizeNullableNumber(payload.rpe),
           performed_at: payload.performed_at,
           notes: payload.notes || null,
         })
@@ -813,6 +817,19 @@ function prepareWorkoutSetPayload(payload) {
     Object.entries({
       ...payload,
       is_warmup: payload.is_warmup === undefined ? undefined : Boolean(payload.is_warmup),
+      rpe: payload.rpe === undefined ? undefined : normalizeNullableNumber(payload.rpe),
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareWorkoutPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      template_id: payload.template_id === undefined ? undefined : payload.template_id || null,
+      template_snapshot: payload.template_snapshot === undefined
+        ? undefined
+        : Array.isArray(payload.template_snapshot) ? payload.template_snapshot : [],
     }).filter(([, value]) => value !== undefined),
   );
 }
@@ -901,10 +918,21 @@ function normalizeWorkouts(rows = []) {
 function normalizeWorkout(row) {
   return {
     ...row,
+    template_snapshot: Array.isArray(row.template_snapshot) ? row.template_snapshot : [],
     workout_sets: [...(row.workout_sets ?? [])]
-      .map((set) => ({ ...set, is_warmup: Boolean(set.is_warmup) }))
+      .map((set) => ({
+        ...set,
+        is_warmup: Boolean(set.is_warmup),
+        rpe: set.rpe === null || set.rpe === undefined ? null : Number(set.rpe),
+      }))
       .sort(compareWorkoutSetOrder),
   };
+}
+
+function normalizeNullableNumber(value) {
+  if (value === null || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function compareWorkoutSetOrder(a, b) {

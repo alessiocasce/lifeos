@@ -6,11 +6,9 @@ import {
   Dumbbell,
   History,
   Loader2,
-  Medal,
   Pencil,
   Plus,
   Square,
-  Timer,
   Trash2,
   X,
 } from 'lucide-react';
@@ -57,7 +55,6 @@ export function WorkoutTab() {
     reps: '',
     rpe: '',
     is_warmup: false,
-    date: today,
     notes: '',
   });
   const [editingSetId, setEditingSetId] = useState(null);
@@ -71,21 +68,10 @@ export function WorkoutTab() {
   const [reopeningSessionId, setReopeningSessionId] = useState(null);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-  const [collapsedSessions, setCollapsedSessions] = useState({});
   const [formError, setFormError] = useState('');
-  const [restElapsedSeconds, setRestElapsedSeconds] = useState(0);
-  const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
-  const [templatePlan, setTemplatePlan] = useState(null);
   const [startingTemplateId, setStartingTemplateId] = useState(null);
 
-  const activeSetCounts = getSessionSetCounts(activeWorkoutSession);
-  const activeVolume = getSessionVolume(activeWorkoutSession);
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions]);
-  const exerciseAnalytics = useMemo(() => buildExerciseAnalytics(workoutSessions), [workoutSessions]);
-  const selectedExerciseAnalytics = useMemo(
-    () => getExerciseAnalyticsBeforeSession(workoutSessions, activeWorkoutSession, setForm.exercise),
-    [activeWorkoutSession, setForm.exercise, workoutSessions],
-  );
   const previousPerformance = useMemo(
     () => getPreviousPerformance(workoutSessions, activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise, workoutSessions],
@@ -94,44 +80,28 @@ export function WorkoutTab() {
     () => getNextSetNumber(activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise],
   );
-  const visibleTemplatePlan = templatePlan?.sessionId === activeWorkoutSession?.id ? templatePlan : null;
-  const draftPrs = useMemo(() => {
-    if (setForm.is_warmup) {
-      return { setVolume: false, sessionVolume: false, weight: false, reps: false };
-    }
-    const weight = parseDecimal(setForm.weight);
-    const reps = parseInteger(setForm.reps);
-    return detectPrs(
-      { exercise: setForm.exercise, weight, reps, is_warmup: false },
-      selectedExerciseAnalytics,
-      activeWorkoutSession ? getSessionExerciseVolume(activeWorkoutSession, setForm.exercise) + weight * reps : 0,
-      true,
-    );
-  }, [activeWorkoutSession, selectedExerciseAnalytics, setForm.exercise, setForm.is_warmup, setForm.reps, setForm.weight]);
+  const visibleTemplatePlan = useMemo(
+    () => buildPersistedTemplatePlan(activeWorkoutSession),
+    [activeWorkoutSession],
+  );
+  const exerciseSuggestions = useMemo(
+    () => buildExerciseSuggestions(activeWorkoutSession, workoutTemplates, workoutSessions),
+    [activeWorkoutSession, workoutSessions, workoutTemplates],
+  );
 
   useEffect(() => {
     setSetForm((prev) => ({
       ...prev,
       set_number: prev.is_warmup ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise) : nextSetNumber,
     }));
-  }, [activeWorkoutSession, nextSetNumber]);
+  }, [activeWorkoutSession, nextSetNumber, setForm.is_warmup]);
 
   useEffect(() => {
     if (!activeWorkoutSession || activeWorkoutSession.ended_at) {
-      setIsRestTimerRunning(false);
-      setRestElapsedSeconds(0);
       setEditingSetId(null);
       setEditForm(null);
     }
   }, [activeWorkoutSession]);
-
-  useEffect(() => {
-    if (!activeWorkoutSession || activeWorkoutSession.ended_at || !isRestTimerRunning) return undefined;
-    const interval = window.setInterval(() => {
-      setRestElapsedSeconds((seconds) => seconds + 1);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [activeWorkoutSession, isRestTimerRunning]);
 
   const startWorkout = async (event) => {
     event.preventDefault();
@@ -153,9 +123,10 @@ export function WorkoutTab() {
         name: sessionForm.name.trim(),
         performed_on: sessionForm.performed_on,
         started_at: new Date().toISOString(),
+        template_id: null,
+        template_snapshot: [],
         notes: sessionForm.notes.trim(),
       });
-      setTemplatePlan(null);
       setShowCustomSession(false);
     } catch (error) {
       setFormError(error.message || 'Failed to start workout session.');
@@ -178,9 +149,10 @@ export function WorkoutTab() {
         name: sessionForm.name.trim() || 'Today Workout',
         performed_on: today,
         started_at: new Date().toISOString(),
+        template_id: null,
+        template_snapshot: [],
         notes: sessionForm.notes.trim(),
       });
-      setTemplatePlan(null);
     } catch (error) {
       setFormError(error.message || 'Failed to start today workout.');
     } finally {
@@ -196,7 +168,6 @@ export function WorkoutTab() {
       set_number: prev.is_warmup
         ? getNextWarmupSetNumber(session, exercise.exercise)
         : getNextSetNumber(session, exercise.exercise),
-      date: today,
     }));
   };
 
@@ -207,19 +178,19 @@ export function WorkoutTab() {
     setFormError('');
     setStartingTemplateId(templateId);
     try {
+      const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
+      const templateSnapshot = exercises.map((exercise, index) => ({
+        exercise: exercise.exercise,
+        exercise_order: Number(exercise.exercise_order) || index + 1,
+        notes: exercise.notes ?? '',
+      }));
       const created = await createWorkoutSession({
         name: getUniqueSessionName(template.name, todaysSessions),
         performed_on: today,
         started_at: new Date().toISOString(),
+        template_id: template.id,
+        template_snapshot: templateSnapshot,
         notes: '',
-      });
-      const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
-      setTemplatePlan({
-        templateId: template.id,
-        templateName: template.name,
-        sessionId: created.id,
-        sessionName: created.name,
-        exercises,
       });
       if (exercises[0]) fillLoggerFromTemplateExercise(exercises[0], created);
     } catch (error) {
@@ -238,7 +209,11 @@ export function WorkoutTab() {
       return;
     }
 
-    const validationError = validateSetForm(setForm, activeWorkoutSession);
+    const resolvedSetNumber = setForm.is_warmup
+      ? getNextWarmupSetNumber(activeWorkoutSession, setForm.exercise)
+      : getNextSetNumber(activeWorkoutSession, setForm.exercise);
+    const resolvedForm = { ...setForm, set_number: resolvedSetNumber };
+    const validationError = validateSetForm(resolvedForm, activeWorkoutSession);
     if (validationError) {
       setFormError(validationError);
       return;
@@ -246,21 +221,20 @@ export function WorkoutTab() {
 
     const weight = parseDecimal(setForm.weight);
     const reps = parseInteger(setForm.reps);
-    const rpe = parseDecimal(setForm.rpe);
-
+    const rpe = parseOptionalDecimal(setForm.rpe);
     setSavingSet(true);
     try {
       const createdSet = await createWorkoutSet({
         workout_id: activeWorkoutSession.id,
         exercise: setForm.exercise.trim(),
-        set_number: setForm.is_warmup
-          ? getNextWarmupSetNumber(activeWorkoutSession, setForm.exercise)
-          : nextSetNumber,
+        set_number: resolvedSetNumber >= WARMUP_SET_NUMBER_OFFSET && !setForm.is_warmup
+          ? getNextSetNumber(activeWorkoutSession, setForm.exercise)
+          : resolvedSetNumber,
         is_warmup: Boolean(setForm.is_warmup),
         weight,
         reps,
         rpe,
-        performed_at: dateToPerformedAt(setForm.date),
+        performed_at: new Date().toISOString(),
         notes: setForm.notes.trim(),
       });
       const projectedSession = {
@@ -275,8 +249,6 @@ export function WorkoutTab() {
         reps: '',
         notes: '',
       }));
-      setRestElapsedSeconds(0);
-      setIsRestTimerRunning(true);
     } catch (error) {
       setFormError(error.message || 'Failed to save set.');
     } finally {
@@ -297,9 +269,8 @@ export function WorkoutTab() {
       set_number: set.set_number,
       weight: String(set.weight),
       reps: String(set.reps),
-      rpe: String(set.rpe),
+      rpe: set.rpe === null || set.rpe === undefined ? '' : String(set.rpe),
       is_warmup: Boolean(set.is_warmup),
-      date: new Date(set.performed_at).toISOString().slice(0, 10),
       notes: set.notes ?? '',
     });
   };
@@ -312,7 +283,9 @@ export function WorkoutTab() {
       return;
     }
 
-    const validationError = validateSetForm(editForm, activeWorkoutSession);
+    const resolvedSetNumber = resolveEditSetNumber(editForm, activeWorkoutSession, setId);
+    const resolvedEditForm = { ...editForm, set_number: resolvedSetNumber };
+    const validationError = validateSetForm(resolvedEditForm, activeWorkoutSession);
     if (validationError) {
       setFormError(validationError);
       return;
@@ -322,12 +295,11 @@ export function WorkoutTab() {
     try {
       await updateWorkoutSet(setId, {
         exercise: editForm.exercise.trim(),
-        set_number: resolveEditSetNumber(editForm, activeWorkoutSession, setId),
+        set_number: resolvedSetNumber,
         is_warmup: Boolean(editForm.is_warmup),
         weight: parseDecimal(editForm.weight),
         reps: parseInteger(editForm.reps),
-        rpe: parseDecimal(editForm.rpe),
-        performed_at: dateToPerformedAt(editForm.date),
+        rpe: parseOptionalDecimal(editForm.rpe),
         notes: editForm.notes.trim() || null,
       });
       setEditingSetId(null);
@@ -356,8 +328,6 @@ export function WorkoutTab() {
     setFormError('');
     try {
       await endWorkoutSession(sessionId);
-      setIsRestTimerRunning(false);
-      setRestElapsedSeconds(0);
     } catch (error) {
       setFormError(error.message || 'Failed to end workout.');
     } finally {
@@ -401,16 +371,10 @@ export function WorkoutTab() {
         <>
           <ActiveWorkoutHeader
             activeSession={activeWorkoutSession}
-            activeVolume={activeVolume}
-            isRestTimerRunning={isRestTimerRunning}
-            onPauseRestTimer={() => setIsRestTimerRunning(false)}
-            onResetRestTimer={() => {
-              setIsRestTimerRunning(false);
-              setRestElapsedSeconds(0);
-            }}
-            onStartRestTimer={() => activeWorkoutSession && !activeWorkoutSession.ended_at && setIsRestTimerRunning(true)}
-            restElapsedSeconds={restElapsedSeconds}
-            setCounts={activeSetCounts}
+            ending={endingSessionId === activeWorkoutSession.id}
+            onEnd={() => endSession(activeWorkoutSession.id)}
+            onReopen={() => reopenSession(activeWorkoutSession.id)}
+            reopening={reopeningSessionId === activeWorkoutSession.id}
           />
 
           <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
@@ -423,30 +387,46 @@ export function WorkoutTab() {
 
               <SetLogger
                 activeSession={activeWorkoutSession}
-                draftPrs={draftPrs}
+                exerciseSuggestions={exerciseSuggestions}
                 formError={formError}
                 onSetSubmit={submitSet}
                 previousPerformance={previousPerformance}
                 savingSet={savingSet}
                 setFormValue={setForm}
-                updateSetForm={(field, value) => setSetForm((prev) => ({ ...prev, [field]: value }))}
+                updateSetForm={(field, value) => setSetForm((prev) => {
+                  if (field === 'exercise') {
+                    return {
+                      ...prev,
+                      exercise: value,
+                      set_number: prev.is_warmup
+                        ? getNextWarmupSetNumber(activeWorkoutSession, value)
+                        : getNextSetNumber(activeWorkoutSession, value),
+                    };
+                  }
+                  if (field === 'is_warmup') {
+                    return {
+                      ...prev,
+                      is_warmup: value,
+                      set_number: value
+                        ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise)
+                        : getNextSetNumber(activeWorkoutSession, prev.exercise),
+                    };
+                  }
+                  return { ...prev, [field]: value };
+                })}
               />
 
               <TodaySetsLog
                 activeSession={activeWorkoutSession}
                 beginEdit={beginEdit}
-                collapsedSessions={collapsedSessions}
                 deletingSetId={deletingSetId}
                 editForm={editForm}
                 editingSetId={editingSetId}
                 onDeleteSet={removeSet}
                 onSaveEdit={saveEdit}
                 savingEditId={savingEditId}
-                setActiveWorkoutId={setActiveWorkoutId}
-                setCollapsedSessions={setCollapsedSessions}
                 setEditForm={setEditForm}
                 setEditingSetId={setEditingSetId}
-                workoutSessions={workoutSessions}
                 workoutSessionsStatus={workoutSessionsStatus}
               />
             </div>
@@ -460,15 +440,11 @@ export function WorkoutTab() {
               deleteWorkoutTemplate={deleteWorkoutTemplate}
               deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
               deletingSessionId={deletingSessionId}
-              endingSessionId={endingSessionId}
               onDeleteSession={removeSession}
-              onEndSession={endSession}
-              onReopenSession={reopenSession}
               onSelectToday={selectOrStartToday}
               onStartFromTemplate={startFromTemplate}
               onStartWorkout={startWorkout}
               reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
-              reopeningSessionId={reopeningSessionId}
               savingSession={savingSession}
               selectingToday={selectingToday}
               sessionForm={sessionForm}
@@ -487,8 +463,6 @@ export function WorkoutTab() {
               workoutTemplatesStatus={workoutTemplatesStatus}
             />
           </div>
-
-          <ExerciseHistoryPanel exerciseAnalytics={exerciseAnalytics} />
         </>
       ) : (
         <>
@@ -502,15 +476,11 @@ export function WorkoutTab() {
               deleteWorkoutTemplate={deleteWorkoutTemplate}
               deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
               deletingSessionId={deletingSessionId}
-              endingSessionId={endingSessionId}
               onDeleteSession={removeSession}
-              onEndSession={endSession}
-              onReopenSession={reopenSession}
               onSelectToday={selectOrStartToday}
               onStartFromTemplate={startFromTemplate}
               onStartWorkout={startWorkout}
               reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
-              reopeningSessionId={reopeningSessionId}
               savingSession={savingSession}
               selectingToday={selectingToday}
               sessionForm={sessionForm}
@@ -529,88 +499,41 @@ export function WorkoutTab() {
               workoutTemplatesStatus={workoutTemplatesStatus}
             />
           </div>
-
-          <ExerciseHistoryPanel exerciseAnalytics={exerciseAnalytics} />
         </>
       )}
     </div>
   );
 }
 
-function ActiveWorkoutHeader({
-  activeSession,
-  activeVolume,
-  isRestTimerRunning,
-  onPauseRestTimer,
-  onResetRestTimer,
-  onStartRestTimer,
-  restElapsedSeconds,
-  setCounts,
-}) {
+function ActiveWorkoutHeader({ activeSession, ending, onEnd, onReopen, reopening }) {
   const ended = Boolean(activeSession.ended_at);
   const status = ended ? 'ENDED' : 'LIVE';
   const tone = ended ? 'zinc' : 'emerald';
-  const timerInactive = ended;
 
   return (
     <Panel className="sticky top-[calc(env(safe-area-inset-top)+56px)] z-20 col-span-12 md:static md:z-auto">
-      <div className="grid items-center gap-2 p-2 md:gap-3 md:p-3 lg:grid-cols-[1fr_190px]">
-        <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-3 p-2.5 md:p-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
             <Dumbbell size={18} className="text-cyan-300" />
             <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-zinc-100 md:text-lg">{activeSession.name}</h2>
             <Tag tone={tone}>{status}</Tag>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <div className="hidden md:block">
-              <MiniMetric label="Date" value={activeSession?.performed_on ?? today} tone="text-zinc-100" sub="active day" />
-            </div>
-            <MiniMetric label="Sets" value={`${setCounts.working} / ${setCounts.warmup}`} tone="text-cyan-300" sub="working / warmup" />
-            <MiniMetric label="Volume" value={Math.round(activeVolume).toLocaleString()} tone="text-emerald-300" sub="kg x reps" />
-            <div className="hidden md:block">
-              <MiniMetric label="Started" value={formatTime(activeSession?.started_at)} tone="text-amber-300" sub="local" />
-            </div>
-          </div>
+          <p className="mt-0.5 data-text text-[10px] text-zinc-500">{activeSession.performed_on}</p>
         </div>
-        <div
-          className={`rounded-md border px-2 py-2 md:px-3 ${
-            timerInactive ? 'border-white/10 bg-white/[0.03]' : 'border-red-400/20 bg-red-400/10'
+        <button
+          type="button"
+          onClick={ended ? onReopen : onEnd}
+          disabled={ended ? reopening : ending}
+          className={`ml-auto flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
+            ended
+              ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+              : 'border-amber-400/25 bg-amber-400/10 text-amber-300'
           }`}
         >
-          <div className={`flex items-center justify-center gap-1 ${timerInactive ? 'text-zinc-500' : 'text-red-300'}`}>
-            <Timer size={14} />
-            <span className="data-text text-[10px] uppercase tracking-wider">Rest</span>
-          </div>
-          <p className={`data-text text-center text-xl font-black md:text-2xl ${timerInactive ? 'text-zinc-600' : 'text-red-300'}`}>
-            {formatElapsed(restElapsedSeconds)}
-          </p>
-          <div className="mt-2 grid grid-cols-3 gap-1">
-            <button
-              type="button"
-              onClick={onStartRestTimer}
-              disabled={timerInactive || isRestTimerRunning}
-              className="min-h-9 rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 data-text text-[10px] text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-            >
-              START
-            </button>
-            <button
-              type="button"
-              onClick={onPauseRestTimer}
-              disabled={timerInactive || !isRestTimerRunning}
-              className="min-h-9 rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 data-text text-[10px] text-amber-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-            >
-              PAUSE
-            </button>
-            <button
-              type="button"
-              onClick={onResetRestTimer}
-              disabled={timerInactive || (!isRestTimerRunning && restElapsedSeconds === 0)}
-              className="min-h-9 rounded border border-white/10 bg-white/[0.03] px-2 py-1 data-text text-[10px] text-zinc-300 disabled:text-zinc-600"
-            >
-              RESET
-            </button>
-          </div>
-        </div>
+          {ending || reopening ? <Loader2 size={15} className="animate-spin" /> : ended ? <Plus size={15} /> : <Square size={15} />}
+          {ended ? 'Reopen' : 'End Workout'}
+        </button>
       </div>
     </Panel>
   );
@@ -625,15 +548,11 @@ function WorkoutSessionControl({
   deleteWorkoutTemplate,
   deleteWorkoutTemplateExercise,
   deletingSessionId,
-  endingSessionId,
   onDeleteSession,
-  onEndSession,
-  onReopenSession,
   onSelectToday,
   onStartFromTemplate,
   onStartWorkout,
   reorderWorkoutTemplateExercise,
-  reopeningSessionId,
   savingSession,
   selectingToday,
   sessionForm,
@@ -656,15 +575,13 @@ function WorkoutSessionControl({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
-  const activeCounts = getSessionSetCounts(activeSession);
-  const activeVolume = getSessionVolume(activeSession);
   const contentOpen = !activeSession || mobileOpen;
 
   return (
     <Panel className="h-fit">
       <PanelHeader
         eyebrow="Workout"
-        title={activeSession ? 'Current Workout' : 'Start Workout'}
+        title={activeSession ? 'Session Options' : 'Start Workout'}
         right={<SourceStatus status={workoutSessionsStatus} />}
       />
       <button
@@ -672,48 +589,11 @@ function WorkoutSessionControl({
         onClick={() => setMobileOpen((value) => !value)}
         className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
       >
-        <span>{activeSession ? 'Current workout' : 'Start workout'}</span>
+        <span>{activeSession ? 'Session options' : 'Start workout'}</span>
         <ChevronDown size={16} className={`text-zinc-500 transition ${contentOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`${contentOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
-        {activeSession ? (
-          <div className="rounded-md border border-white/5 bg-black/25 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-zinc-100">{activeSession.name}</p>
-                <p className="data-text text-[10px] text-zinc-500">
-                  {activeSession.performed_on} / {activeCounts.working} working / {activeCounts.warmup} warmup
-                </p>
-              </div>
-              <Tag tone={activeSession.ended_at ? 'zinc' : 'emerald'}>{activeSession.ended_at ? 'ENDED' : 'LIVE'}</Tag>
-            </div>
-            <div className="mb-2 grid grid-cols-2 gap-2">
-              <MiniMetric label="Volume" value={Math.round(activeVolume).toLocaleString()} tone="text-emerald-300" sub="kg x reps" />
-              <MiniMetric label="Sets" value={`${activeCounts.working}/${activeCounts.warmup}`} tone="text-cyan-300" sub="work / warmup" />
-            </div>
-            {activeSession.ended_at ? (
-              <button
-                type="button"
-                onClick={() => onReopenSession(activeSession.id)}
-                disabled={reopeningSessionId === activeSession.id}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-              >
-                {reopeningSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                Reopen Workout
-              </button>
-            ) : (
-            <button
-              type="button"
-              onClick={() => onEndSession(activeSession.id)}
-              disabled={endingSessionId === activeSession.id}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-amber-400/20 bg-amber-400/10 text-xs font-medium text-amber-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-            >
-              {endingSessionId === activeSession.id ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-              End Workout
-            </button>
-            )}
-          </div>
-        ) : (
+        {!activeSession ? (
           <div className="space-y-2">
             <div className="rounded-md border border-cyan-400/10 bg-cyan-400/[0.04] p-2">
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -771,7 +651,7 @@ function WorkoutSessionControl({
               </button>
             ) : null}
           </div>
-        )}
+        ) : null}
 
         {!activeSession ? (
           <button
@@ -1152,8 +1032,6 @@ function TemplateManager({
 }
 
 function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
-  const [mobileOpen, setMobileOpen] = useState(true);
-
   if (!plan) return null;
 
   return (
@@ -1163,20 +1041,9 @@ function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
         title="Exercise Plan"
         right={<Tag tone="cyan">{plan.exercises.length} exercises</Tag>}
       />
-      <button
-        type="button"
-        onClick={() => setMobileOpen((value) => !value)}
-        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
-      >
-        <span>{plan.templateName}</span>
-        <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <div className={`${mobileOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
-        <p className="text-xs text-zinc-500">
-          Tap an exercise to load it into the logger. The plan does not affect analytics until sets are saved.
-        </p>
+      <div className="p-2">
         {plan.exercises.length ? (
-          <div className="grid gap-1">
+          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
             {plan.exercises.map((exercise, index) => {
               const selected = normalizeExercise(activeExercise) === normalizeExercise(exercise.exercise);
               return (
@@ -1184,15 +1051,13 @@ function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
                   key={exercise.id}
                   type="button"
                   onClick={() => onSelectExercise(exercise)}
-                  className={`grid min-h-10 grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 text-left transition ${
+                  className={`flex min-h-11 min-w-[150px] max-w-[210px] items-center gap-2 rounded border px-2.5 py-2 text-left transition md:min-w-[170px] ${
                     selected ? 'border-cyan-400/30 bg-cyan-400/10 text-zinc-100' : 'border-white/5 bg-[#121212] text-zinc-300'
                   }`}
                 >
                   <span className="data-text text-xs text-zinc-500">{index + 1}</span>
-                  <span className="truncate text-sm font-medium">{exercise.exercise}</span>
-                  <span className={`data-text text-[10px] ${selected ? 'text-cyan-300' : 'text-zinc-600'}`}>
-                    {selected ? 'ACTIVE' : 'LOAD'}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{exercise.exercise}</span>
+                  {selected ? <Check size={14} className="shrink-0 text-cyan-300" /> : null}
                 </button>
               );
             })}
@@ -1209,7 +1074,7 @@ function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
 
 function SetLogger({
   activeSession,
-  draftPrs,
+  exerciseSuggestions,
   formError,
   onSetSubmit,
   previousPerformance,
@@ -1229,22 +1094,27 @@ function SetLogger({
           </div>
         ) : activeSession ? (
           <div className="grid gap-3">
-            <PreviousPerformanceCard performance={previousPerformance} prs={draftPrs} />
             <form onSubmit={onSetSubmit} className="grid gap-2">
               <div className="grid gap-2 md:grid-cols-[1fr_132px]">
-                <CompactField label="Exercise" value={setFormValue.exercise} onChange={(value) => updateSetForm('exercise', value)} />
+                <ExerciseAutocomplete
+                  suggestions={exerciseSuggestions}
+                  value={setFormValue.exercise}
+                  onChange={(value) => updateSetForm('exercise', value)}
+                />
                 <WarmupToggle checked={Boolean(setFormValue.is_warmup)} onChange={(value) => updateSetForm('is_warmup', value)} />
               </div>
-              <div className="grid grid-cols-[72px_repeat(3,minmax(0,1fr))] gap-2">
-                <CompactField label="Set" value={setFormValue.is_warmup ? 'W' : setFormValue.set_number} onChange={() => {}} readOnly />
+              <div className="flex items-center justify-between rounded-md border border-white/5 bg-black/20 px-3 py-2">
+                <span className="text-xs text-zinc-500">Next set</span>
+                <span className={`data-text text-sm font-bold ${setFormValue.is_warmup ? 'text-amber-300' : 'text-cyan-300'}`}>
+                  {setFormValue.is_warmup ? 'W' : `Set ${getSafeWorkingSetNumber(setFormValue.set_number)}`}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
                 <CompactField label="Weight" inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
                 <CompactField label="Reps" inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
-                <CompactField label="RPE" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
+                <CompactField label="RPE optional" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
               </div>
-              <div className="grid gap-2 md:grid-cols-[180px_1fr]">
-                <CompactField label="Date" type="date" value={setFormValue.date} onChange={(value) => updateSetForm('date', value)} />
-                <CompactField label="Notes" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
-              </div>
+              <CompactField label="Notes optional" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
               <button
                 type="submit"
                 disabled={savingSet || !activeSession}
@@ -1255,6 +1125,7 @@ function SetLogger({
               </button>
               {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
             </form>
+            <PreviousPerformanceCard performance={previousPerformance} />
           </div>
         ) : (
           <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
@@ -1266,41 +1137,18 @@ function SetLogger({
   );
 }
 
-function PreviousPerformanceCard({ performance, prs }) {
-  const prList = Object.entries(prs)
-    .filter(([, active]) => active)
-    .map(([key]) => key);
-
-  if (!performance) {
-    return (
-      <div className="rounded-md border border-white/5 bg-black/25 px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Previous Performance</p>
-          <Tag tone="zinc">NO PRIOR</Tag>
-        </div>
-        <p className="mt-1 text-xs text-zinc-500">No previous session found for this exercise.</p>
-      </div>
-    );
-  }
+function PreviousPerformanceCard({ performance }) {
+  if (!performance) return null;
 
   return (
     <div className="rounded-md border border-white/5 bg-black/25 px-3 py-2">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Previous Performance</p>
-          <p className="data-text text-[10px] text-zinc-600">
-            {performance.sessionName} / {performance.date}
-          </p>
-        </div>
-        <div className="flex flex-wrap justify-end gap-1">
-          {prList.length ? prList.map((pr) => <Tag key={pr} tone="emerald">{formatPrLabel(pr)} PR</Tag>) : <Tag tone="zinc">NO PR</Tag>}
-        </div>
+        <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Previous</p>
+        <p className="data-text text-[10px] text-zinc-600">{performance.date}</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <MiniMetric label="Heaviest" value={`${performance.heaviestSet.weight}kg`} tone="text-cyan-300" sub={`${performance.heaviestSet.reps} reps @ ${performance.heaviestSet.rpe}`} />
-        <MiniMetric label="Best Volume" value={performance.bestVolumeSet.volume.toLocaleString()} tone="text-emerald-300" sub={`${performance.bestVolumeSet.weight}kg x ${performance.bestVolumeSet.reps}`} />
+      <div className="grid grid-cols-2 gap-2">
+        <MiniMetric label="Heaviest" value={`${performance.heaviestSet.weight}kg`} tone="text-cyan-300" sub={`${performance.heaviestSet.reps} reps`} />
         <MiniMetric label="Est 1RM" value={`${formatNumber(performance.bestEstimated1Rm.estimated1Rm)}kg`} tone="text-violet-300" sub="Epley best" />
-        <MiniMetric label="Exercise Vol" value={performance.totalVolume.toLocaleString()} tone="text-amber-300" sub="prior session" />
       </div>
     </div>
   );
@@ -1309,24 +1157,19 @@ function PreviousPerformanceCard({ performance, prs }) {
 function TodaySetsLog({
   activeSession,
   beginEdit,
-  collapsedSessions,
   deletingSetId,
   editForm,
   editingSetId,
   onDeleteSet,
   onSaveEdit,
   savingEditId,
-  setActiveWorkoutId,
-  setCollapsedSessions,
   setEditForm,
   setEditingSetId,
-  workoutSessions,
   workoutSessionsStatus,
 }) {
   const activeSets = activeSession?.workout_sets ?? [];
   const groupedActiveSets = groupSetsByExercise(activeSets);
-  const otherSessions = workoutSessions.filter((session) => session.id !== activeSession?.id);
-  const sessionsInitialLoading = workoutSessionsStatus === 'loading' && workoutSessions.length === 0;
+  const sessionsInitialLoading = workoutSessionsStatus === 'loading' && !activeSession;
 
   return (
     <Panel>
@@ -1351,7 +1194,6 @@ function TodaySetsLog({
                 setEditForm={setEditForm}
                 setEditingSetId={setEditingSetId}
                 sets={sets}
-                workoutSessions={workoutSessions}
               />
             ))
           ) : (
@@ -1361,50 +1203,6 @@ function TodaySetsLog({
           <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">No active session selected.</p>
         )}
 
-        {otherSessions.length ? (
-          <div className="border-t border-white/5 pt-3">
-            <p className="mb-2 data-text text-[10px] uppercase tracking-wider text-zinc-500">Other Sessions</p>
-            <div className="space-y-2">
-              {otherSessions.map((session) => {
-                const collapsed = collapsedSessions[session.id] ?? true;
-                const volume = getSessionVolume(session);
-                const counts = getSessionSetCounts(session);
-                return (
-                  <div key={session.id} className="rounded-md border border-white/5 bg-black/25">
-                    <div className="flex items-center justify-between gap-3 px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-zinc-200">{session.name}</p>
-                        <p className="data-text text-[10px] text-zinc-500">
-                          {session.performed_on} / {counts.working} working / {counts.warmup} warmup / {Math.round(volume).toLocaleString()} volume
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setActiveWorkoutId(session.id)}
-                          className="rounded border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 data-text text-[10px] text-cyan-300"
-                        >
-                          SELECT
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCollapsedSessions((prev) => ({ ...prev, [session.id]: !collapsed }))}
-                          className="grid h-7 w-7 place-items-center rounded border border-white/10 bg-white/[0.03] text-zinc-500"
-                          title={collapsed ? 'Expand session' : 'Collapse session'}
-                        >
-                          <ChevronDown size={15} className={`transition ${collapsed ? '' : 'rotate-180'}`} />
-                        </button>
-                      </div>
-                    </div>
-                    {!collapsed ? (
-                      <SessionSetArchive session={session} />
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
       </div>
     </Panel>
   );
@@ -1423,30 +1221,16 @@ function ExerciseSetGroup({
   setEditForm,
   setEditingSetId,
   sets,
-  workoutSessions,
 }) {
-  const workingSets = sets.filter((set) => !isWarmupSet(set));
-  const warmupSets = sets.filter(isWarmupSet);
-  const volume = workingSets.reduce((total, set) => total + parseDecimal(set.weight) * parseInteger(set.reps), 0);
   const isEnded = Boolean(session?.ended_at);
 
   return (
     <div className="rounded-md border border-white/5 bg-black/25">
       <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
-        <div>
-          <p className="text-sm font-semibold text-zinc-100">{exercise}</p>
-          <p className="data-text text-[10px] text-zinc-500">
-            {workingSets.length} working / {warmupSets.length} warmup / {Math.round(volume).toLocaleString()} volume
-          </p>
-        </div>
+        <p className="text-sm font-semibold text-zinc-100">{exercise}</p>
       </div>
       <div className="grid gap-1 p-2">
         {sets.map((set) => {
-          const priorAnalytics = getExerciseAnalyticsBeforeSession(workoutSessions, session, set.exercise);
-          const sessionExercise = getSessionExerciseSummary(session, set.exercise);
-          const isLastSet = sessionExercise.lastSet?.id === set.id;
-          const prs = detectPrs(set, priorAnalytics, sessionExercise.totalVolume, isLastSet);
-
           if (editingSetId === set.id) {
             return (
               <EditSetRow
@@ -1467,166 +1251,24 @@ function ExerciseSetGroup({
           return (
             <div
               key={set.id}
-              className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-2 sm:grid-cols-[58px_minmax(0,1fr)_auto_72px] ${
+              className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-2 sm:grid-cols-[58px_minmax(0,1fr)_auto] ${
                 isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
               }`}
             >
               <span className={`data-text text-sm font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
-                {formatSetLabel(set)}
+                {formatSetLabel(set, sets)}
               </span>
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
                   <p className="truncate text-xs font-medium text-zinc-100">{formatNumber(set.weight)}kg x {set.reps}</p>
-                  {isWarmupSet(set) ? <Tag tone="amber">WARMUP</Tag> : null}
-                  <PrTags prs={prs} />
                 </div>
-                <p className="data-text text-[10px] text-zinc-500">
-                  RPE {formatNumber(set.rpe)} / {formatDate(set.performed_at)}
-                </p>
+                <p className="data-text text-[10px] text-zinc-500">RPE {formatRpe(set.rpe)}</p>
+                {set.notes ? <p className="mt-0.5 break-words text-[11px] text-zinc-500">{set.notes}</p> : null}
               </div>
-              <span className="hidden data-text text-xs text-zinc-400 sm:block">
-                {isWarmupSet(set) ? 'warmup' : `${Math.round(parseDecimal(set.weight) * parseInteger(set.reps))} vol`}
-              </span>
               <div className="flex gap-1">
                 <IconButton disabled={isEnded} icon={Pencil} onClick={() => beginEdit(set)} title={isEnded ? 'Reopen workout to edit' : 'Edit set'} tone="zinc" size="sm" />
                 <IconButton icon={Trash2} loading={deletingSetId === set.id} onClick={() => onDeleteSet(set.id)} title="Delete set" tone="red" size="sm" />
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function SessionSetArchive({ session }) {
-  const groupedSets = groupSetsByExercise(session.workout_sets ?? []);
-
-  return (
-    <div className="grid gap-2 border-t border-white/5 p-2">
-      {Object.entries(groupedSets).map(([exercise, sets]) => {
-        const working = sets.filter((set) => !isWarmupSet(set)).length;
-        const warmups = sets.filter(isWarmupSet).length;
-        return (
-          <div key={exercise} className="rounded border border-white/5 bg-black/20 p-2">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="truncate text-xs font-medium text-zinc-200">{exercise}</p>
-              <span className="data-text shrink-0 text-[10px] text-zinc-500">{working} work / {warmups} W</span>
-            </div>
-            <div className="grid gap-1">
-              {sets.map((set) => (
-                <div
-                  key={set.id}
-                  className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-1.5 sm:grid-cols-[58px_minmax(0,1fr)_auto] ${
-                    isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
-                  }`}
-                >
-                  <span className={`data-text text-xs font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
-                    {formatSetLabel(set)}
-                  </span>
-                  <span className="truncate text-xs text-zinc-200">{formatNumber(set.weight)}kg x {set.reps}</span>
-                  <span className="data-text text-xs text-zinc-400">RPE {formatNumber(set.rpe)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ExerciseHistoryPanel({ exerciseAnalytics }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  return (
-    <Panel className="col-span-12">
-      <PanelHeader eyebrow="Exercise History" title="Progression" right={<Medal size={16} className="text-amber-300" />} />
-      <button
-        type="button"
-        onClick={() => setMobileOpen((value) => !value)}
-        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
-      >
-        <span>Show exercise history</span>
-        <ChevronDown size={16} className={`text-zinc-500 transition ${mobileOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <div className={`${mobileOpen ? 'grid' : 'hidden'} gap-2 p-3 md:grid xl:grid-cols-2`}>
-        {exerciseAnalytics.exercises.length ? (
-          exerciseAnalytics.exercises.map((exercise) => <ExerciseHistoryCard key={exercise.key} exercise={exercise} />)
-        ) : (
-          <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-            Log persisted sets to build exercise progression.
-          </div>
-        )}
-      </div>
-    </Panel>
-  );
-}
-
-function PrTags({ prs }) {
-  const active = Object.entries(prs).filter(([, value]) => value);
-  if (!active.length) return null;
-  const labels = {
-    setVolume: 'SET VOLUME',
-    sessionVolume: 'SESSION VOLUME',
-    weight: 'WEIGHT',
-    reps: 'REPS',
-  };
-  return (
-    <span className="flex flex-wrap gap-1">
-      {active.map(([key]) => (
-        <span key={key} className="data-text rounded border border-emerald-400/20 bg-emerald-400/10 px-1 text-[9px] text-emerald-300">
-          {labels[key] ?? key.toUpperCase()}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function ExerciseHistoryCard({ exercise }) {
-  return (
-    <div className="rounded-md border border-white/5 bg-black/25 p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-zinc-100">{exercise.name}</p>
-          <p className="data-text text-[10px] text-zinc-500">
-            {exercise.sessions.length} sessions / {exercise.totalSets} sets / {exercise.totalVolume.toLocaleString()} volume
-          </p>
-        </div>
-        <Tag tone="emerald">BEST 1RM {formatNumber(exercise.bestEstimated1Rm.estimated1Rm)}kg</Tag>
-      </div>
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <TrendBars color="emerald" max={exercise.peakSessionVolume} sessions={exercise.sessions} title="Session Volume" valueKey="totalVolume" />
-        <TrendBars color="cyan" max={exercise.peakEstimated1Rm} sessions={exercise.sessions} title="Best Est 1RM" valueKey="bestEstimated1Rm" />
-      </div>
-      <div className="grid gap-1">
-        {exercise.sessions.slice(-4).reverse().map((session) => (
-          <div key={session.sessionId} className="grid grid-cols-[72px_1fr_auto] items-center gap-2 rounded border border-white/5 bg-[#121212] px-2 py-2">
-            <span className="data-text text-[10px] text-zinc-500">{session.date}</span>
-            <span className="truncate text-xs text-zinc-200">{session.sessionName}</span>
-            <span className="data-text text-xs text-cyan-300">
-              {session.totalVolume.toLocaleString()} vol / {formatNumber(session.bestEstimated1Rm.estimated1Rm)}kg e1RM
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TrendBars({ color, max, sessions, title, valueKey }) {
-  const barColor = color === 'cyan' ? 'border-cyan-400/20 bg-cyan-400/50' : 'border-emerald-400/20 bg-emerald-400/50';
-  return (
-    <div className="rounded border border-white/5 bg-[#121212] p-2">
-      <p className="mb-2 data-text text-[10px] uppercase tracking-wider text-zinc-500">{title}</p>
-      <div className="flex h-16 items-end gap-1">
-        {sessions.slice(-12).map((session) => {
-          const value = valueKey === 'bestEstimated1Rm' ? session.bestEstimated1Rm.estimated1Rm : session[valueKey];
-          const height = Math.max(8, Math.round((value / Math.max(max, 1)) * 48));
-          return (
-            <div key={`${title}-${session.sessionId}`} className="flex flex-1 flex-col items-center gap-1">
-              <div className={`w-full rounded-sm border ${barColor}`} style={{ height }} title={`${session.date}: ${formatNumber(value)}`} />
-              <span className="data-text text-[8px] text-zinc-600">{session.date.slice(5)}</span>
             </div>
           );
         })}
@@ -1646,26 +1288,64 @@ function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm 
         : getNextSetNumber(session, prev.exercise, prev.id),
     }));
   return (
-    <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.6fr_0.4fr_0.55fr_0.45fr_0.45fr_0.7fr_1fr_72px]">
+    <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.65fr_0.7fr_0.55fr_0.55fr_1fr_72px]">
       <CompactField label="Exercise" value={editForm.exercise} onChange={(value) => update('exercise', value)} />
       <WarmupToggle checked={Boolean(editForm.is_warmup)} onChange={updateWarmup} compact />
-      <CompactField
-        label="Set"
-        type={editForm.is_warmup ? 'text' : 'number'}
-        inputMode={editForm.is_warmup ? undefined : 'numeric'}
-        value={editForm.is_warmup ? 'W' : editForm.set_number}
-        onChange={(value) => update('set_number', value)}
-        readOnly={Boolean(editForm.is_warmup)}
-      />
       <CompactField label="Weight" inputMode="decimal" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
       <CompactField label="Reps" inputMode="numeric" value={editForm.reps} onChange={(value) => update('reps', value)} />
-      <CompactField label="RPE" inputMode="decimal" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
-      <CompactField label="Date" type="date" value={editForm.date} onChange={(value) => update('date', value)} />
+      <CompactField label="RPE optional" inputMode="decimal" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
       <CompactField label="Notes" value={editForm.notes} onChange={(value) => update('notes', value)} />
       <div className="flex items-end gap-1">
         <IconButton icon={Check} loading={loading} onClick={onSave} title="Save edit" tone="emerald" size="sm" />
         <IconButton icon={X} onClick={onCancel} title="Cancel edit" tone="zinc" size="sm" />
       </div>
+    </div>
+  );
+}
+
+function ExerciseAutocomplete({ onChange, suggestions, value }) {
+  const [open, setOpen] = useState(false);
+  const normalizedValue = normalizeExercise(value);
+  const visibleSuggestions = suggestions
+    .filter((exercise) => !normalizedValue || normalizeExercise(exercise).includes(normalizedValue))
+    .filter((exercise) => normalizeExercise(exercise) !== normalizedValue)
+    .slice(0, 8);
+
+  return (
+    <div className="relative min-w-0">
+      <label className="block rounded-md border border-white/5 bg-[#121212] px-2 py-1.5 focus-within:border-cyan-400/30">
+        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Exercise</span>
+        <input
+          type="text"
+          value={value}
+          autoComplete="off"
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
+          }}
+          className="data-text mt-1 w-full min-w-0 bg-transparent text-base font-semibold text-zinc-100 outline-none"
+        />
+      </label>
+      {open && visibleSuggestions.length ? (
+        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-md border border-cyan-400/20 bg-[#0d0d0d] p-1 shadow-2xl">
+          {visibleSuggestions.map((exercise) => (
+            <button
+              key={normalizeExercise(exercise)}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onChange(exercise);
+                setOpen(false);
+              }}
+              className="block min-h-10 w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-cyan-400/10 hover:text-cyan-200"
+            >
+              {exercise}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1801,6 +1481,46 @@ function sortTemplateExercises(exercises = []) {
   });
 }
 
+function buildPersistedTemplatePlan(session) {
+  const snapshot = Array.isArray(session?.template_snapshot) ? session.template_snapshot : [];
+  if (!snapshot.length) return null;
+
+  const exercises = sortTemplateExercises(snapshot).map((exercise, index) => ({
+    ...exercise,
+    id: `${session.id}-template-${Number(exercise.exercise_order) || index + 1}`,
+    exercise_order: Number(exercise.exercise_order) || index + 1,
+    notes: exercise.notes ?? '',
+  }));
+
+  return {
+    templateId: session.template_id ?? null,
+    templateName: session.name,
+    sessionId: session.id,
+    sessionName: session.name,
+    exercises,
+  };
+}
+
+function buildExerciseSuggestions(activeSession, templates, sessions) {
+  const candidates = [
+    ...(Array.isArray(activeSession?.template_snapshot)
+      ? activeSession.template_snapshot.map((exercise) => exercise.exercise)
+      : []),
+    ...templates.flatMap((template) =>
+      (template.workout_template_exercises ?? []).map((exercise) => exercise.exercise),
+    ),
+    ...sessions.flatMap((session) => (session.workout_sets ?? []).map((set) => set.exercise)),
+  ];
+
+  const seen = new Set();
+  return candidates.filter((exercise) => {
+    const key = normalizeExercise(exercise);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function getUniqueSessionName(sourceName, todaysSessions) {
   const baseName = sourceName?.trim() || 'Today Workout';
   const existingNames = new Set(todaysSessions.map((session) => session.name));
@@ -1835,10 +1555,13 @@ function resolveEditSetNumber(form, session, setId) {
 function getNextSetNumber(session, exercise, excludeSetId = null) {
   if (!session || !exercise.trim()) return 1;
   const normalizedExercise = normalizeExercise(exercise);
-  const matchingSets = (session.workout_sets ?? []).filter(
+  const workingSets = (session.workout_sets ?? []).filter(
     (set) => set.id !== excludeSetId && !isWarmupSet(set) && normalizeExercise(set.exercise) === normalizedExercise,
   );
-  return matchingSets.length ? Math.max(...matchingSets.map((set) => parseInteger(set.set_number))) + 1 : 1;
+  const validSetNumbers = workingSets
+    .map((set) => parseInteger(set.set_number))
+    .filter((setNumber) => Number.isInteger(setNumber) && setNumber > 0 && setNumber < WARMUP_SET_NUMBER_OFFSET);
+  return Math.max(workingSets.length, 0, ...validSetNumbers) + 1;
 }
 
 function getNextWarmupSetNumber(session, exercise, excludeSetId = null) {
@@ -2048,7 +1771,7 @@ function normalizeSet(set) {
     is_warmup: isWarmupSet(set),
     weight,
     reps,
-    rpe: parseDecimal(set.rpe),
+    rpe: parseOptionalDecimal(set.rpe),
     volume: weight * reps,
     estimated1Rm,
   };
@@ -2063,6 +1786,11 @@ function parseDecimal(value) {
   return Number(String(value ?? '').trim().replace(',', '.'));
 }
 
+function parseOptionalDecimal(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  return parseDecimal(value);
+}
+
 function parseInteger(value) {
   return Number(String(value ?? '').trim());
 }
@@ -2071,18 +1799,43 @@ function isWarmupSet(set) {
   return Boolean(set?.is_warmup);
 }
 
-function formatSetLabel(set) {
-  return isWarmupSet(set) ? 'W' : `Set ${parseInteger(set.set_number)}`;
+function formatSetLabel(set, siblingSets = []) {
+  if (isWarmupSet(set)) return 'W';
+  const parsed = parseInteger(set.set_number);
+  if (Number.isInteger(parsed) && parsed > 0 && parsed < WARMUP_SET_NUMBER_OFFSET) {
+    return `Set ${parsed}`;
+  }
+
+  const validNumbers = siblingSets
+    .filter((item) => !isWarmupSet(item))
+    .map((item) => parseInteger(item.set_number))
+    .filter((setNumber) => Number.isInteger(setNumber) && setNumber > 0 && setNumber < WARMUP_SET_NUMBER_OFFSET);
+  const malformedWorkingSets = siblingSets
+    .filter((item) => !isWarmupSet(item))
+    .filter((item) => {
+      const setNumber = parseInteger(item.set_number);
+      return !Number.isInteger(setNumber) || setNumber <= 0 || setNumber >= WARMUP_SET_NUMBER_OFFSET;
+    })
+    .slice()
+    .sort((a, b) => {
+      const aTime = new Date(a.performed_at ?? a.created_at ?? 0).getTime();
+      const bTime = new Date(b.performed_at ?? b.created_at ?? 0).getTime();
+      if (aTime !== bTime) return aTime - bTime;
+      return String(a.id).localeCompare(String(b.id));
+    });
+  const repairedIndex = malformedWorkingSets.findIndex((item) => item.id === set.id);
+  const repairedNumber = Math.max(0, ...validNumbers) + (repairedIndex >= 0 ? repairedIndex + 1 : 1);
+  return `Set ${repairedNumber}`;
 }
 
-function formatPrLabel(key) {
-  const labels = {
-    setVolume: 'SET VOLUME',
-    sessionVolume: 'SESSION VOLUME',
-    weight: 'WEIGHT',
-    reps: 'REPS',
-  };
-  return labels[key] ?? key.toUpperCase();
+function getSafeWorkingSetNumber(value) {
+  const parsed = parseInteger(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed < WARMUP_SET_NUMBER_OFFSET ? parsed : 1;
+}
+
+function formatRpe(value) {
+  const parsed = parseOptionalDecimal(value);
+  return parsed === null || !Number.isFinite(parsed) ? '--' : formatNumber(parsed);
 }
 
 function formatNumber(value) {
@@ -2090,17 +1843,6 @@ function formatNumber(value) {
     maximumFractionDigits: 1,
     minimumFractionDigits: Number.isInteger(Number(value)) ? 0 : 1,
   });
-}
-
-function formatTime(value) {
-  if (!value) return '--:--';
-  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatElapsed(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, '0');
-  return `${minutes}:${seconds}`;
 }
 
 function compareSessionsAscending(a, b) {
@@ -2121,7 +1863,7 @@ function compareSessionPosition(a, b) {
 function validateSetForm(form, activeWorkoutSession) {
   const weight = parseDecimal(form.weight);
   const reps = parseInteger(form.reps);
-  const rpe = parseDecimal(form.rpe);
+  const rpe = parseOptionalDecimal(form.rpe);
   const setNumber = parseInteger(form.set_number);
 
   if (!activeWorkoutSession) return 'Select or start a workout session first.';
@@ -2131,8 +1873,7 @@ function validateSetForm(form, activeWorkoutSession) {
   if (!form.is_warmup && setNumber >= WARMUP_SET_NUMBER_OFFSET) return 'Working set number is invalid.';
   if (!Number.isFinite(weight) || weight < 0) return 'Weight must be 0 or greater.';
   if (!Number.isInteger(reps) || reps <= 0) return 'Reps must be a positive whole number.';
-  if (!Number.isFinite(rpe) || rpe < 0 || rpe > 10) return 'RPE must be between 0 and 10.';
-  if (!isValidDate(form.date)) return 'Date is invalid.';
+  if (rpe !== null && (!Number.isFinite(rpe) || rpe < 0 || rpe > 10)) return 'RPE must be between 0 and 10.';
   return '';
 }
 
@@ -2140,18 +1881,4 @@ function isValidDate(value) {
   if (!value) return false;
   const parsed = new Date(`${value}T00:00:00`);
   return !Number.isNaN(parsed.getTime());
-}
-
-function dateToPerformedAt(value) {
-  const now = new Date();
-  const time = now.toTimeString().slice(0, 8);
-  return new Date(`${value}T${time}`).toISOString();
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleDateString(undefined, {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  });
 }

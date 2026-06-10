@@ -214,6 +214,8 @@ export function LifeOSProvider({ children }) {
       setWorkoutSessions(rows ?? []);
       setActiveWorkoutId((currentId) => {
         if (currentId && rows.some((session) => session.id === currentId)) return currentId;
+        const liveSession = rows.find((session) => !session.ended_at);
+        if (liveSession) return liveSession.id;
         const todaysSession = rows.find((session) => session.performed_on === new Date().toISOString().slice(0, 10));
         return todaysSession?.id ?? null;
       });
@@ -576,7 +578,7 @@ export function LifeOSProvider({ children }) {
       return {
         mode: 'live',
         label: 'Live: Push Day',
-        detail: 'Set 3 active | rest timer armed',
+        detail: 'Set 3 active | session live',
         accent: 'text-red-400',
       };
     }
@@ -660,7 +662,11 @@ export function LifeOSProvider({ children }) {
         const remaining = workoutSessions.filter((session) => session.id !== id);
         setWorkoutSessions(remaining);
         if (activeWorkoutId === id) {
-          setActiveWorkoutId(remaining.find((session) => session.performed_on === today())?.id ?? null);
+          setActiveWorkoutId(
+            remaining.find((session) => !session.ended_at)?.id
+              ?? remaining.find((session) => session.performed_on === today())?.id
+              ?? null,
+          );
         }
       },
       createWorkoutSet: async (payload) => {

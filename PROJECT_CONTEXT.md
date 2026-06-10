@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-05-14
+Last updated: 2026-06-10
 Current branch: `main`
 Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
 
@@ -552,64 +552,49 @@ Current behavior:
 - `TemplatePlanCard`
 - `PreviousPerformanceCard`
 - `TodaySetsLog`
-- `ExerciseHistoryPanel`
 
 Current behavior:
 
 - Assumes the user is already authenticated by the global app gate.
-- Loads persisted workout sessions with nested sets.
+- Loads persisted workout sessions with nested sets, `template_id`, and `template_snapshot`.
 - Loads persisted workout templates with ordered template exercises.
 - The Workout tab is state-based:
   - No active session: Start Workout is the first visible card, with template starts first, Start Empty Workout secondary, and advanced controls collapsed.
-  - Active session: the active header, optional Exercise Plan, Set Logger, Logged Sets, compact current-workout controls, and lower-priority Exercise History are shown.
-- No active-session state hides the active workout header, rest timer, zero set/volume metrics, Set Logger, and Logged Sets panels.
+  - Active session: the sticky active header, optional persisted Exercise Plan, Set Logger, current-session Logged Sets, and secondary session/template controls are shown.
+- No active-session state hides the active workout header, Set Logger, and Logged Sets panels.
 - Uses templates as the primary way to start a workout. The first question in Session Control is what the user is training today.
 - Starting from a template creates a new `workouts` row for today named after the template, with `#2`, `#3`, etc. suffixes when needed to avoid same-day duplicate names.
+- Starting from a template stores `template_id` plus an ordered `template_snapshot` on the workout row.
+- The template snapshot keeps the active exercise plan stable after refresh/backgrounding and after later template edits.
 - Starting from a template does not create any `workout_sets`.
-- A local `Exercise Plan` shows ordered template exercises near the logger. Tapping an exercise fills the Exercise input only.
-- Template exercises are local planning guidance inside the active workout; they do not affect volume, PRs, previous performance, estimated 1RM, Exercise History, or other analytics until sets are saved.
+- The persisted `Exercise Plan` shows ordered template exercises near the logger. Tapping an exercise fills the Exercise input.
 - Starting empty remains available as a secondary action and creates a blank session named `Today Workout` or a user-provided name.
 - Template management is collapsed inside Workout and supports create/edit/delete templates plus add/edit/delete/reorder template exercises.
 - Template management shows clear validation/duplicate-name messages and compacts exercise order after deleting an exercise.
 - Advanced session switching and delete session controls are collapsed away from the primary logging flow.
-- On load, Workout auto-selects today's session when one exists; older sessions remain available from Advanced instead of hiding the template start prompt.
-- Ended sessions cannot use the local rest timer.
+- On load, Workout prefers the latest unfinished session, then falls back to today's session.
+- End Workout or Reopen is always visible in the sticky active workout header.
 - Ended sessions cannot add or edit sets. The logger shows: "This workout is ended. Reopen it to add more sets."
-- Ended sessions can be reopened from Session Control, which sets `ended_at` back to `null`.
+- Ended sessions can be reopened from the active workout header, which sets `ended_at` back to `null`.
 - Deleting a session requires confirmation and cascades sets through the database relationship.
 - Sets belong to workout sessions.
-- Sets include exercise, set number, warmup flag, weight, reps, RPE, performed date/time, and notes.
+- Sets include exercise, internal set number, warmup flag, weight, reps, optional RPE, performed timestamp, and notes.
+- RPE is nullable. Blank RPE is stored as `null` and displayed as `RPE --`.
+- Set logging does not show a date field; new sets use the current timestamp.
 - Warmup sets are stored in `workout_sets.is_warmup`, display as repeated `W` rows before working sets, and do not increment the next working set number.
-- Next working set number is automatic based on selected session plus exercise and ignores warmups.
+- Warmup set numbers may use an internal 1000 offset, but that offset never appears in the UI.
+- Next working set number is automatic, ignores warmups and malformed high working-set numbers, and is recomputed when toggling out of warmup mode and before save.
 - Editing between warmup and working status resolves to a non-conflicting internal set number.
 - Weight and RPE parsing accepts both comma and dot decimals.
-- Validation runs before insert/update for exercise, weight, reps, RPE, and date.
-- Today's active session sets are shown immediately under the logger, grouped by exercise.
+- Validation runs before insert/update for exercise, weight, reps, and optional RPE.
+- The Exercise field suggests names from the current template snapshot, all templates, and prior logged sets.
+- Current active-session sets are shown immediately under the logger, grouped by exercise.
 - Active session logs keep exercises ordered by first logged, with sets displayed as warmups first, then Set 1, Set 2, Set 3.
-- Other sessions are kept visually separate/collapsed in history.
+- Active workout UI does not show the rest timer, PR flags, volume/count summaries, dates, or Other Sessions.
+- Previous performance is reduced to compact Heaviest and estimated 1RM values.
+- Deeper workout analysis is intentionally deferred to a separate analysis surface later.
 - Workout displays persisted/template data only; the previous mock workout archive was removed from the tab.
 - Login/register controls are intentionally absent from the Workout tab.
-
-Workout analytics are frontend-only:
-
-- Previous performance for selected exercise from the most recent prior workout session.
-- Previous heaviest set, best volume set, estimated 1RM, total exercise volume, last weight/reps/RPE, and date.
-- PR detection for weight PR, reps PR, set volume PR, and session-volume PR.
-- Estimated 1RM uses the Epley formula: `weight * (1 + reps / 30)`.
-- Exercise History groups persisted sets by exercise and shows progression over time, including total session volume and best estimated 1RM trend.
-- Warmup sets are excluded from PR detection, previous performance, estimated 1RM trends, exercise volume, and active working volume.
-
-Rest timer status:
-
-- Local-only state in `WorkoutTab.jsx`.
-- Starts at 0 when no set has been logged.
-- After saving a set, starts counting up from 0.
-- Has Start, Pause, and Reset.
-- Displays `mm:ss`.
-- Does not persist to Supabase.
-- Inactive when there is no active workout session or the active session has `ended_at`.
-- Ending a workout stops and resets the timer.
-- Reopening a workout does not automatically start the timer; it stays at 0 until the user starts it or logs another set.
 
 ## Mobile/iPhone UI Direction
 
@@ -626,13 +611,14 @@ Workout mobile direction:
 - Prioritize fast set logging at the gym.
 - Active workout header is compact and sticky on mobile with `top-[calc(env(safe-area-inset-top)+56px)]`, matching the safe-area-aware shell header.
 - Desktop keeps the workout header non-sticky with `md:static`.
-- Rest timer is compact and visible near the top.
+- End Workout/Reopen remains visible in the active header without scrolling.
 - Exercise input is full-width.
+- Exercise suggestions are thumb-friendly and fill the logger when tapped.
 - Weight, reps, and RPE use a compact mobile grid.
 - Save Set is full-width and at least 48px tall.
 - Numeric inputs use `inputMode` to prevent poor mobile keyboard behavior.
 - Font sizes in inputs should stay at least 16px to avoid iOS zoom.
-- Session Control and Exercise History are collapsed by default on mobile where appropriate, except no-session Start Workout content opens immediately.
+- Secondary session/template controls are collapsed by default on mobile, while no-session Start Workout content opens immediately.
 - Avoid fixed desktop widths or wide grids that cause horizontal overflow.
 
 ## Important UX Principles
@@ -707,14 +693,13 @@ Workout mobile direction:
   - Destructive requests are blocked.
   - Daily Review remains usable.
 - Test workout session creation with RLS enabled in a real Supabase project.
-- Test Workout tab with `docs/QA_WORKOUT.md`, especially template CRUD/start flow, warmup display/edit transitions, and analytics exclusion.
-- Test Workout templates after applying the latest `workout_templates` and `workout_template_exercises` schema migration.
+- Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
+- Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.
 - Test deleting a workout session and confirm associated sets disappear.
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
 - Test duplicate set number behavior for the same exercise in one session.
 - Test ended sessions:
-  - Timer should be inactive.
-  - Start should not work.
+  - End Workout should change to Reopen in the sticky header.
   - Adding sets should be blocked.
   - Editing sets should be blocked.
   - Delete session should still work.
