@@ -117,13 +117,16 @@ Run the focused checklists after the full flow:
 
 1. Start a workout from a template, refresh `/workout`, and confirm the exercise plan persists.
 2. Background/reopen the app during the live workout and confirm the template snapshot still appears.
-3. Confirm the active header keeps End Workout or Reopen visible without scrolling.
-4. Confirm the rest timer, PR flags, active volume/count summaries, Date field, Other Sessions, and exercise history are absent.
-5. Leave RPE blank, save a set, and confirm it displays `RPE --`.
-6. Type in Exercise and confirm suggestions appear from snapshots, templates, and prior sets.
-7. Tap a suggestion and confirm it fills the field and recalculates the next set.
-8. Confirm only current-session sets are shown, grouped by exercise.
-9. Confirm mobile has no horizontal overflow and the bottom navigation does not cover Save Set.
+3. On iPhone/PWA with a LIVE workout, confirm no blank space appears between the LifeOS header and Workout content.
+4. Confirm the active command header does not overlap Exercise Plan or Set Logger when opening or scrolling.
+5. End the workout and confirm the ENDED/Reopen header does not overlap Logged Sets.
+6. Confirm End Workout or Reopen is immediately visible when the Workout tab opens.
+7. Confirm the rest timer, PR flags, active volume/count summaries, Date field, Other Sessions, and exercise history are absent.
+8. Leave RPE blank, save a set, and confirm it displays `RPE --`.
+9. Type in Exercise and confirm suggestions appear from snapshots, templates, and prior sets.
+10. Tap a suggestion and confirm it fills the field and recalculates the next set.
+11. Confirm only current-session sets are shown, grouped by exercise.
+12. Confirm mobile has no horizontal overflow and the bottom navigation does not cover Save Set.
 
 ## Mock Areas
 

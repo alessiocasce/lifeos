@@ -6,10 +6,10 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 
 1. Open Workout with no active session and confirm `Start Workout` is the first visible card.
 2. Confirm template starts are primary and `Start Empty Workout` remains available.
-3. Start a workout and confirm the sticky header shows the workout name, LIVE status, date, and visible End Workout button.
+3. Start a workout and confirm the active command header shows the workout name, LIVE status, date, and visible End Workout button.
 4. Confirm End Workout is visible without scrolling or opening another panel.
 5. End the workout and confirm set logging/editing is blocked.
-6. Confirm the sticky header changes to ENDED with a visible Reopen button.
+6. Confirm the active command header changes to ENDED with a visible Reopen button.
 7. Reopen and confirm set logging/editing works again.
 8. Open Session Options, switch sessions through Advanced, and delete a session through the confirmation flow.
 
@@ -76,10 +76,13 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 ## Mobile / iPhone
 
 1. Open `/workout` on iPhone Safari or the installed PWA.
-2. Confirm the safe-area shell and sticky workout header do not overlap.
-3. Confirm End Workout/Reopen is immediately visible and thumb-friendly.
-4. Confirm Exercise, Weight, Reps, RPE, Notes, and Save controls fit without horizontal scrolling.
-5. Confirm inputs do not zoom when focused.
-6. Confirm Save Set / Save Warmup remains above the bottom navigation.
-7. Confirm logged set edit/delete controls remain tappable.
-8. Refresh and background/reopen the app during a live template workout and confirm the active session and plan persist.
+2. With a LIVE workout, confirm there is no blank space between the LifeOS shell header and Workout content.
+3. Confirm the active workout command header stays in normal flow and does not overlap Exercise Plan or Set Logger.
+4. Scroll up and down and confirm no Workout content is hidden behind the command header.
+5. End the workout and confirm the ENDED/Reopen command header does not overlap Logged Sets.
+6. Confirm End Workout/Reopen is immediately visible and thumb-friendly when the Workout tab opens.
+7. Confirm Exercise, Weight, Reps, RPE, Notes, and Save controls fit without horizontal scrolling.
+8. Confirm inputs do not zoom when focused.
+9. Confirm Save Set / Save Warmup remains above the bottom navigation.
+10. Confirm logged set edit/delete controls remain tappable.
+11. Refresh and background/reopen the app during a live template workout and confirm the active session and plan persist.

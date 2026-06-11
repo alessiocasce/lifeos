@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-06-10
+Last updated: 2026-06-11
 Current branch: `main`
 Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
 
@@ -560,7 +560,7 @@ Current behavior:
 - Loads persisted workout templates with ordered template exercises.
 - The Workout tab is state-based:
   - No active session: Start Workout is the first visible card, with template starts first, Start Empty Workout secondary, and advanced controls collapsed.
-  - Active session: the sticky active header, optional persisted Exercise Plan, Set Logger, current-session Logged Sets, and secondary session/template controls are shown.
+  - Active session: the active command header, optional persisted Exercise Plan, Set Logger, current-session Logged Sets, and secondary session/template controls are shown.
 - No active-session state hides the active workout header, Set Logger, and Logged Sets panels.
 - Uses templates as the primary way to start a workout. The first question in Session Control is what the user is training today.
 - Starting from a template creates a new `workouts` row for today named after the template, with `#2`, `#3`, etc. suffixes when needed to avoid same-day duplicate names.
@@ -573,9 +573,9 @@ Current behavior:
 - Template management shows clear validation/duplicate-name messages and compacts exercise order after deleting an exercise.
 - Advanced session switching and delete session controls are collapsed away from the primary logging flow.
 - On load, Workout prefers the latest unfinished session, then falls back to today's session.
-- End Workout or Reopen is always visible in the sticky active workout header.
+- End Workout or Reopen is immediately visible in the active workout command header.
 - Ended sessions cannot add or edit sets. The logger shows: "This workout is ended. Reopen it to add more sets."
-- Ended sessions can be reopened from the active workout header, which sets `ended_at` back to `null`.
+- Ended sessions can be reopened from the active workout command header, which sets `ended_at` back to `null`.
 - Deleting a session requires confirmation and cascades sets through the database relationship.
 - Sets belong to workout sessions.
 - Sets include exercise, internal set number, warmup flag, weight, reps, optional RPE, performed timestamp, and notes.
@@ -609,8 +609,9 @@ The app shell is now mobile-first while preserving desktop:
 Workout mobile direction:
 
 - Prioritize fast set logging at the gym.
-- Active workout header is compact and sticky on mobile with `top-[calc(env(safe-area-inset-top)+56px)]`, matching the safe-area-aware shell header.
-- Desktop keeps the workout header non-sticky with `md:static`.
+- The active workout command header stays in normal document flow on mobile and desktop.
+- Workout does not add a second sticky safe-area offset below the shell header, so it does not create blank space or overlap the Exercise Plan, Set Logger, or Logged Sets.
+- The Workout root uses horizontal clipping instead of a sticky-breaking hidden overflow container.
 - End Workout/Reopen remains visible in the active header without scrolling.
 - Exercise input is full-width.
 - Exercise suggestions are thumb-friendly and fill the logger when tapped.
@@ -699,13 +700,13 @@ Workout mobile direction:
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
 - Test duplicate set number behavior for the same exercise in one session.
 - Test ended sessions:
-  - End Workout should change to Reopen in the sticky header.
+  - End Workout should change to Reopen in the active command header.
   - Adding sets should be blocked.
   - Editing sets should be blocked.
   - Delete session should still work.
   - Reopen Workout should clear `ended_at` and restore logging.
 - Test iPhone Safari:
-  - Sticky shell header plus workout header should not overlap.
+  - The shell header and normal-flow workout command header should not overlap or create a blank safe-area gap.
   - Bottom nav should not cover Save Set.
   - Inputs should not trigger iOS zoom.
   - No horizontal scrolling.

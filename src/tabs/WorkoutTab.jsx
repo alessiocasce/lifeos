@@ -366,7 +366,7 @@ export function WorkoutTab() {
   };
 
   return (
-    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
+    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4">
       {activeWorkoutSession ? (
         <>
           <ActiveWorkoutHeader
@@ -511,7 +511,7 @@ function ActiveWorkoutHeader({ activeSession, ending, onEnd, onReopen, reopening
   const tone = ended ? 'zinc' : 'emerald';
 
   return (
-    <Panel className="sticky top-[calc(env(safe-area-inset-top)+56px)] z-20 col-span-12 md:static md:z-auto">
+    <Panel className="col-span-12">
       <div className="flex items-center gap-3 p-2.5 md:p-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
