@@ -388,7 +388,11 @@ function shouldPromoteAmbiguousEndToPm(startTime, endToken, endTime) {
 }
 
 function normalizeTimeText(value) {
-  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/(\d{1,2})\.(\d{2})/g, '$1:$2')
+    .replace(/\s+/g, ' ');
 }
 
 function isValidTimeParts(hours, minutes, meridiem) {

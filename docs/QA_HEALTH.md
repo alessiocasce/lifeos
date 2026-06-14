@@ -69,6 +69,8 @@ Run this after applying `supabase/schema.sql` to the target Supabase project and
 4. Confirm saving a newly created Health log still works with the database `water` column left at its default.
 5. If testing an old row with a non-zero water value, update another visible field and confirm the save does not require editing Water.
 6. Confirm AI habit logging does not expose Water, while old Action API calls that include `water` still validate.
+7. Call `POST /api/actions/wake` with `{"time":"8.37"}` and confirm today's wake time becomes `08:37` without changing other health values.
+8. Confirm the wake endpoint also accepts `wake_time` and `wakeTime`, rejects invalid time text clearly, and requires the Action API bearer token.
 
 ## Optional Nullable Fields
 

@@ -140,6 +140,16 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 12. Confirm explicit multi-event AI prompts create separate events instead of one event with a full schedule inside `start_time`.
 13. Confirm the UI time inputs still save normal browser time values correctly.
 
+## Mixed Day Schedules
+
+1. Ask: `Segna la giornata di oggi: sveglia 12.30pm, pranzo 13.30pm, matematica da 13.40pm a 4.30pm, palestra da 4.40pm a 6.40pm, cena 8pm`.
+2. Confirm five events are created with canonical times: `12:30-12:45`, `13:30-14:00`, `13:40-16:30`, `16:40-18:40`, and `20:00-20:45`.
+3. Confirm the explicit lunch/math overlap is allowed for this day-log path instead of dropping Mathematics.
+4. Ask: `plan today: wake up 9am, lunch 1pm, study from 2pm to 4pm, gym 5pm to 6pm, dinner 8pm`.
+5. Confirm point-time events receive the documented default durations and ranged events retain their provided times.
+6. Confirm decimal-dot inputs such as `12.30pm` normalize to stored/displayed `12:30`.
+7. Confirm malformed agenda extraction produces a helpful schedule-format message instead of raw `title is required` or time-order errors.
+
 ## AI Finite Recurrence Expansion
 
 1. Ask the assistant to create a recurring calendar command, such as `everyday for 7 days starting from 17/05/26 i have a school appointment from 2pm to 4pm, log that`.

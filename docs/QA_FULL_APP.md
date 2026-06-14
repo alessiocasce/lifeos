@@ -199,6 +199,16 @@ Run the focused checklists after the full flow:
 1. Log a workout with warmups and working sets.
 2. Confirm Home and Assistant selected-date workout summaries count working sets and working volume, not warmups.
 
+## Wake Time Action API
+
+1. Call `POST /api/actions/wake` with a valid action token and `{"time":"8.37"}`.
+2. Confirm the response and Health UI show wake time `08:37` for today's Europe/Rome date.
+3. Repeat with `{"wake_time":"08:37"}` and confirm the alias works.
+4. Send `{"time":"banana"}` and confirm a clear `400` response.
+5. Confirm existing sleep, energy, habits, coffee, water, ADC, and notes remain unchanged.
+6. Call without Authorization and with an invalid token; confirm both return `401`.
+7. Confirm the existing `/api/actions/health` endpoint still accepts `wake_time`.
+
 ## iPhone Safari Basics
 
 1. Open the app on iPhone Safari.

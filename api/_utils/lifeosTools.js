@@ -433,6 +433,7 @@ export async function createCalendarEvent(args) {
 export async function createCalendarPlanEvents(events, targetDate, options = {}) {
   const maxEvents = options.maxEvents ?? 8;
   const enforceTargetDate = options.enforceTargetDate ?? Boolean(targetDate);
+  const allowOverlaps = options.allowOverlaps ?? false;
   const valid = [];
   const skipped = [];
   for (const event of (Array.isArray(events) ? events : []).slice(0, maxEvents)) {
@@ -450,7 +451,7 @@ export async function createCalendarPlanEvents(events, targetDate, options = {})
         start_time: startTime,
         end_time: endTime,
       };
-      validatePlanEventDoesNotOverlap(normalizedCandidate, valid);
+      if (!allowOverlaps) validatePlanEventDoesNotOverlap(normalizedCandidate, valid);
       valid.push(normalizedCandidate);
     } catch (error) {
       skipped.push({ title: event?.title ?? 'Untitled', reason: error.message || 'Invalid event.' });

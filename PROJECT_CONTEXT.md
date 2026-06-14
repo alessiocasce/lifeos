@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-06-11
+Last updated: 2026-06-14
 Current branch: `main`
 Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
 
@@ -161,6 +161,7 @@ Real/persisted today:
 - Token-protected Action API endpoints for external automation:
   - `POST /api/actions/expense`
   - `POST /api/actions/health`
+  - `POST /api/actions/wake`
   - `POST /api/actions/calendar`
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
@@ -215,7 +216,8 @@ Current behavior:
 - Uses `SUPABASE_SERVICE_ROLE_KEY` only inside `/api` serverless functions.
 - Validates server-only config and requires `LIFEOS_ACTION_USER_ID` to be a UUID.
 - Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
-- Supports creating expenses, upserting partial daily health logs, and creating calendar events.
+- Supports creating expenses, upserting partial daily health logs, logging wake time through `POST /api/actions/wake`, and creating calendar events.
+- The dedicated wake endpoint accepts `time`, `wake_time`, or `wakeTime`, defaults `logged_on` to the Europe/Rome local date, and updates only `health_logs.wake_time` while preserving other health fields.
 - Expense categories created through the Action API normalize to canonical display casing when possible.
 - Enforces endpoint field limits and numeric caps before writing to Supabase.
 - Does not implement AI, chat behavior, external model calls, or frontend UI changes.
@@ -247,6 +249,9 @@ Architecture:
 - Obvious explicit multi-event calendar schedules bypass the general Gemini planner before it runs because Gemini may return an array of single-event planner objects while the general planner schema expects one object.
 - Explicit multi-event calendar creation does not require read/analysis context and returns a deterministic created/skipped summary.
 - The explicit multi-event path still uses strict extraction, local fallback parsing, and deterministic success messages.
+- Obvious Italian or English day-agenda requests with mixed point times and time ranges bypass the general planner through a dedicated day-schedule extraction path.
+- Day-schedule point items receive short deterministic durations: wake-up 15 minutes, lunch 30 minutes, dinner 45 minutes, and other point items 30 minutes.
+- The day-schedule path has a local parser for comma-separated Italian/English agendas, decimal-dot times, point events, and ranges. It allows explicitly requested overlaps instead of dropping an item.
 - Finite recurring calendar requests bypass the general planner before it runs, then expand into multiple normal `calendar_events` rows.
 - Supported finite recurrence patterns include daily, weekdays, weekends, weekly days, every other day, every N days, next week, next month, named months, next N weeks/months, and explicit start date plus duration.
 - Recurrence expansion is capped at 60 created events per request. Ambiguous recurrence requests ask one clarification instead of writing.
@@ -260,7 +265,7 @@ Architecture:
 - AI Action History titles are deterministic frontend formatting and do not trigger an extra AI call.
 - `GET /api/ai/actions` returns recent action logs for the configured user after Supabase-session or action-token auth.
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
-- AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event calendar request and the detected time-range count.
+- AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event or day-schedule calendar request and the detected item/time-range counts.
 - `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
@@ -270,7 +275,7 @@ Supported v1 intents/tools:
 
 - Analyze persisted LifeOS context across expenses, health logs, workouts/sets, calendar events, and daily reviews.
 - Create expenses.
-- Create single calendar events, explicit multi-event calendar schedules, and finite recurrence-expanded calendar schedules.
+- Create single calendar events, mixed point/range day schedules, explicit multi-event calendar schedules, and finite recurrence-expanded calendar schedules.
 - Create memos for reminders, tasks, and memory items.
 - Update provided daily health log fields.
 - Analyze recent context and create a small non-overlapping calendar plan when the user explicitly asks to plan/schedule.
@@ -687,7 +692,7 @@ Workout mobile direction:
   - Wrong methods return `405`.
   - Oversized JSON payloads return `413`.
   - Invalid payloads return clear `400` errors.
-  - Expense, Health, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
+  - Expense, Health, Wake, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
 - Run `docs/QA_AI_ASSISTANT.md` after deploying `GEMINI_API_KEY`:
   - Natural-language analysis uses persisted context only.
   - Low-risk additive actions execute directly.

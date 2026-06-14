@@ -149,6 +149,38 @@ Rules:
 - Use Study for studying/learning, Health for doctor/dentist/medical/recovery, Errands for logistics/appointments/shopping tasks, Social for plans with people, Personal for solo admin/routines, Entertainment for leisure, Sleep for sleep/naps, Workout for gym/boxing/sports.
 `;
 
+const DAY_SCHEDULE_EXTRACTOR_SYSTEM = `
+You extract an explicit day schedule from one Italian or English message.
+Return strict JSON only:
+{
+  "target_date": "YYYY-MM-DD",
+  "events": [
+    {
+      "title": "Sveglia",
+      "event_date": "YYYY-MM-DD",
+      "start_time": "12:30",
+      "end_time": "12:45",
+      "category": "Personal",
+      "location": null,
+      "notes": null
+    }
+  ],
+  "skipped": []
+}
+Rules:
+- Extract only schedule items explicitly stated by the user. Do not invent unrelated events.
+- Support Italian and English, comma/semicolon/newline-separated items, "da X a Y", "from X to Y", "X-Y", and "X to Y".
+- Max 10 events.
+- Every event needs a non-empty title and start_time.
+- For a point-time item with no end_time, infer a short duration: wake up/sveglia 15 minutes, lunch/pranzo 30 minutes, dinner/cena 45 minutes, otherwise 30 minutes.
+- Use the provided today/tomorrow dates and targetDate.
+- Use canonical HH:MM when possible. Interpret dots in times as colons, such as 12.30pm = 12:30pm.
+- Treat invalid mixed notation conservatively: 13.40pm means 13:40, while 4.30pm means 16:30.
+- Prefer categories: Work, Study, School, Health, Workout, Errands, Personal, Social, Entertainment, Sleep.
+- Category guidance: matematica/studio/study = Study; palestra/gym/workout = Workout; pranzo/cena/lunch/dinner = Health or Personal; sveglia/wake up = Personal; sleep/nap = Sleep; school = School; work/deep work = Work.
+- Keep explicit overlaps instead of dropping an item.
+`;
+
 const RECURRENCE_CALENDAR_EXTRACTOR_SYSTEM = `
 You extract one finite recurring calendar request from the user's message.
 Return strict JSON only:
@@ -188,6 +220,8 @@ Rules:
 
 const TIME_TEXT_PATTERN = String.raw`(?:\d{1,2}(?::[0-5]\d)?\s*(?:am|pm)?)`;
 const TIME_RANGE_PATTERN_SOURCE = String.raw`\b(?:from\s+)?${TIME_TEXT_PATTERN}\s*(?:-|to|until)\s*${TIME_TEXT_PATTERN}\b`;
+const DAY_TIME_TOKEN_SOURCE = String.raw`\d{1,2}(?:[.:][0-5]\d)?\s*(?:am|pm)?`;
+const DAY_POINT_TIME_TOKEN_SOURCE = String.raw`(?:\d{1,2}[.:][0-5]\d\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))`;
 const SECRET_KEY_PATTERN = /(authorization|bearer|token|secret|password|service_role|api[_-]?key|gemini|supabase)/i;
 const MAX_RECURRENCE_EVENTS = 60;
 const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -222,6 +256,25 @@ export default async function handler(req, res) {
       }
     }
 
+    if (isObviousDayScheduleRequest(message)) {
+      const plan = createDayScheduleSyntheticPlan(message);
+      try {
+        const writeResult = await executeDaySchedulePlan(message, plan);
+        return sendAiSuccess(res, 200, {
+          answer: writeResult.answer,
+          plan,
+          actions: writeResult.actions,
+          contextSummary: null,
+        }, context, { message, source });
+      } catch (error) {
+        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'day_schedule_events_preplanner', error });
+        await safeLogAiError({ context, message, source, plan, writePath: 'day_schedule_events_preplanner', error, diagnostics });
+        const friendlyError = friendlyDayScheduleError(error);
+        attachDebugDiagnostics(friendlyError, diagnostics);
+        throw friendlyError;
+      }
+    }
+
     if (isObviousExplicitMultiEventCalendarRequest(message)) {
       const plan = createExplicitCalendarSyntheticPlan(message);
       const actions = [];
@@ -250,7 +303,23 @@ export default async function handler(req, res) {
     const actions = [];
     let lifeosContext = null;
     let answer = '';
+    const dayScheduleRequest = isDaySchedulePlannerGuard(message, plan);
     const explicitMultiEventRequest = isExplicitMultiEventCalendarRequest(message, plan);
+
+    if (dayScheduleRequest) {
+      try {
+        const writeResult = await executeDaySchedulePlan(message, plan);
+        actions.push(...writeResult.actions);
+        answer = writeResult.answer;
+        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
+      } catch (error) {
+        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'day_schedule_events', error });
+        await safeLogAiError({ context, message, source, plan, writePath: 'day_schedule_events', error, diagnostics });
+        const friendlyError = friendlyDayScheduleError(error);
+        attachDebugDiagnostics(friendlyError, diagnostics);
+        throw friendlyError;
+      }
+    }
 
     if (explicitMultiEventRequest) {
       try {
@@ -386,6 +455,20 @@ export function isFiniteRecurringCalendarRequest(message) {
   return hasCalendarWrite && hasTime && hasRecurrence;
 }
 
+export function isObviousDayScheduleRequest(message) {
+  const text = String(message ?? '').trim().toLowerCase();
+  if (!text || looksLikeAnalysisRequest(text)) return false;
+  if (/\b(remind me|remember to|ricordami|memo)\b/.test(text)) return false;
+  if (/\b(expense|spesa|euro|euros|eur|dollar|dollars|usd|€|\$)\b/.test(text)) return false;
+
+  const hasDayLanguage = /(?:^|\b)(?:segna|programma|pianifica)\s+(?:la\s+)?giornata(?:\s+di\s+oggi)?\b/.test(text)
+    || /\b(?:log|plan|schedule)\s+(?:my\s+)?day\b/.test(text)
+    || /^(?:plan|schedule|log)\s+(?:today|oggi)\s*:/i.test(text)
+    || /^(?:today|oggi)\s*:/i.test(text);
+
+  return hasDayLanguage && countDayScheduleItems(message) >= 2;
+}
+
 function createFiniteRecurringCalendarSyntheticPlan() {
   return {
     intent: 'create_calendar_events',
@@ -397,6 +480,20 @@ function createFiniteRecurringCalendarSyntheticPlan() {
     clarifyingQuestion: null,
     riskLevel: 'low',
     reason: 'Finite recurring calendar request detected before planner.',
+  };
+}
+
+function createDayScheduleSyntheticPlan(message) {
+  return {
+    intent: 'create_calendar_events',
+    needsRead: false,
+    needsWrite: true,
+    range: inferExplicitRange(message),
+    tables: ['calendar_events'],
+    args: {},
+    clarifyingQuestion: null,
+    riskLevel: 'low',
+    reason: 'Mixed point-time and ranged day schedule detected before planner.',
   };
 }
 
@@ -420,6 +517,12 @@ function createExplicitCalendarSyntheticPlan(message) {
     riskLevel: 'low',
     reason: 'Explicit multi-event calendar request detected before planner.',
   };
+}
+
+function isDaySchedulePlannerGuard(message, plan) {
+  if (plan?.intent !== 'create_calendar_event') return false;
+  return isObviousDayScheduleRequest(message)
+    || looksLikeMultiItemScheduleMessage(message);
 }
 
 async function executeFiniteRecurringCalendarPlan(message, plan) {
@@ -677,6 +780,96 @@ async function executeExplicitCalendarPlan(message, plan) {
   };
 }
 
+async function executeDaySchedulePlan(message, plan) {
+  const extracted = await extractDaySchedulePlan(message, plan);
+  if (!extracted.events.length) {
+    return {
+      actions: [],
+      answer: dayScheduleClarification(message),
+    };
+  }
+
+  const result = await createCalendarPlanEvents(extracted.events, extracted.target_date, {
+    maxEvents: 10,
+    allowOverlaps: true,
+  });
+  if (!result.created.length) {
+    return {
+      actions: [],
+      answer: dayScheduleClarification(message),
+    };
+  }
+
+  return {
+    actions: [
+      {
+        type: 'create_calendar_events',
+        data: {
+          created: result.created,
+          skipped: [...(extracted.skipped ?? []), ...result.skipped],
+          source: extracted.source,
+        },
+      },
+    ],
+    answer: formatDayScheduleSuccess(extracted.target_date, result, message),
+  };
+}
+
+async function extractDaySchedulePlan(message, plan) {
+  const targetDate = inferDayScheduleTargetDate(message, plan, localDate());
+  const localPlan = extractDayScheduleEventsLocally(message, targetDate);
+  let geminiPlan = { target_date: targetDate, events: [], skipped: [] };
+
+  try {
+    const raw = await generateGeminiJson({
+      system: DAY_SCHEDULE_EXTRACTOR_SYSTEM,
+      prompt: JSON.stringify({
+        today: localDate(),
+        tomorrow: localDate(1),
+        targetDate,
+        userMessage: message,
+      }),
+      temperature: 0,
+      invalidMessage: 'Gemini returned an invalid day schedule extraction response.',
+      repair: true,
+    });
+    geminiPlan = normalizeDayScheduleExtraction(raw, targetDate);
+  } catch (error) {
+    if (localPlan.events.length) {
+      return { ...localPlan, source: 'local_day_schedule_fallback' };
+    }
+    throw error;
+  }
+
+  if (localPlan.events.length >= geminiPlan.events.length) {
+    return {
+      ...localPlan,
+      source: geminiPlan.events.length ? 'local_day_schedule_preferred' : 'local_day_schedule_fallback',
+    };
+  }
+
+  return { ...geminiPlan, source: 'gemini_day_schedule_extractor' };
+}
+
+export function extractDayScheduleEventsLocally(message, fallbackDate = localDate()) {
+  const targetDate = inferDayScheduleTargetDate(message, null, fallbackDate);
+  const segments = splitDayScheduleSegments(message);
+  const skipped = [];
+  const events = [];
+
+  for (const segment of segments) {
+    const event = buildLocalDayScheduleEvent(segment, targetDate);
+    if (event) events.push(event);
+    else skipped.push({ title: cleanDayScheduleTitle(segment) || 'Untitled', reason: 'Could not extract a title and time.' });
+  }
+
+  return {
+    target_date: targetDate,
+    events: normalizeEventSequence(events).slice(0, 10),
+    skipped: skipped.slice(0, 10),
+  };
+}
+
 async function extractExplicitCalendarPlan(message, plan) {
   const targetDate = inferExplicitTargetDate(message, plan, localDate());
   const localPlan = extractExplicitCalendarEventsLocally(message, targetDate);
@@ -813,6 +1006,34 @@ function normalizeExplicitCalendarExtraction(raw, fallbackDate) {
   };
 }
 
+function normalizeDayScheduleExtraction(raw, fallbackDate) {
+  const targetDate = resolveDate(raw?.target_date ?? raw?.event_date ?? raw?.date, fallbackDate);
+  const skipped = Array.isArray(raw?.skipped) ? raw.skipped.slice(0, 10).map((item) => sanitizeValue(item)) : [];
+  const events = (Array.isArray(raw?.events) ? raw.events : []).slice(0, 10).map((event) => {
+    const title = cleanText(event?.title ?? event?.name);
+    const startTime = normalizeDayScheduleTime(event?.start_time ?? event?.time);
+    let endTime = normalizeDayScheduleTime(event?.end_time);
+    if (title && startTime && !endTime) endTime = addMinutesToTime(startTime, defaultDayScheduleDuration(title));
+    if (!title || !startTime || !endTime) return null;
+    return {
+      title,
+      event_date: resolveDate(event?.event_date ?? event?.date, targetDate),
+      start_time: startTime,
+      end_time: endTime,
+      category: cleanText(event?.category) || inferCalendarCategoryFromText(title),
+      location: cleanText(event?.location),
+      notes: cleanText(event?.notes),
+      status: 'planned',
+    };
+  }).filter(Boolean);
+
+  return {
+    target_date: targetDate,
+    events: normalizeEventSequence(events),
+    skipped,
+  };
+}
+
 function buildLocalCalendarEvent(segment, targetDate, index) {
   try {
     const { startTime, endTime } = normalizeTimeRange({ start_time: segment }, 'start_time', 'end_time');
@@ -834,6 +1055,37 @@ function buildLocalCalendarEvent(segment, targetDate, index) {
   } catch {
     return null;
   }
+}
+
+function buildLocalDayScheduleEvent(segment, targetDate) {
+  const range = extractDayScheduleRange(segment);
+  if (range) {
+    const title = cleanDayScheduleTitle(`${segment.slice(0, range.index)} ${segment.slice(range.index + range.raw.length)}`);
+    if (!title) return null;
+    return {
+      title,
+      event_date: targetDate,
+      start_time: range.startTime,
+      end_time: range.endTime,
+      category: inferCalendarCategoryFromText(segment),
+      notes: extractParentheticalNotes(segment),
+      status: 'planned',
+    };
+  }
+
+  const point = extractDaySchedulePoint(segment);
+  if (!point) return null;
+  const title = cleanDayScheduleTitle(`${segment.slice(0, point.index)} ${segment.slice(point.index + point.raw.length)}`);
+  if (!title) return null;
+  return {
+    title,
+    event_date: targetDate,
+    start_time: point.time,
+    end_time: addMinutesToTime(point.time, defaultDayScheduleDuration(title)),
+    category: inferCalendarCategoryFromText(segment),
+    notes: extractParentheticalNotes(segment),
+    status: 'planned',
+  };
 }
 
 function normalizeEventSequence(events) {
@@ -885,6 +1137,13 @@ function inferExplicitTargetDate(message, plan, fallbackDate) {
 
   const args = plan?.args ?? {};
   return resolveDate(args.target_date ?? args.event_date ?? args.date, fallbackDate);
+}
+
+function inferDayScheduleTargetDate(message, plan, fallbackDate) {
+  const text = String(message ?? '').toLowerCase();
+  if (/\bdomani\b/.test(text)) return localDate(1);
+  if (/\boggi\b/.test(text)) return localDate();
+  return inferExplicitTargetDate(message, plan, fallbackDate);
 }
 
 function inferExplicitRange(message) {
@@ -990,6 +1249,112 @@ function splitExplicitScheduleSegments(message) {
     .filter((segment) => segment && segmentHasTimeRange(segment));
 }
 
+function splitDayScheduleSegments(message) {
+  return getDayScheduleBody(message)
+    .split(/[,;\n]+|\s+\b(?:then|poi)\b\s+/i)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment && segmentHasScheduleTime(segment));
+}
+
+function getDayScheduleBody(message) {
+  const value = String(message ?? '').trim();
+  const colonIndex = value.indexOf(':');
+  if (colonIndex >= 0 && colonIndex < value.length - 1) return value.slice(colonIndex + 1);
+  return value.replace(/^\s*(?:(?:segna|programma|pianifica)\s+(?:la\s+)?giornata(?:\s+di\s+oggi)?|(?:log|plan|schedule)\s+(?:my\s+)?day)\s*/i, '');
+}
+
+function segmentHasScheduleTime(segment) {
+  return Boolean(extractDayScheduleRange(segment) || extractDaySchedulePoint(segment));
+}
+
+function extractDayScheduleRange(segment) {
+  const patterns = [
+    new RegExp(String.raw`\bda\s+(${DAY_TIME_TOKEN_SOURCE})\s+a\s+(${DAY_TIME_TOKEN_SOURCE})(?=$|[^\da-z])`, 'i'),
+    new RegExp(String.raw`\bfrom\s+(${DAY_TIME_TOKEN_SOURCE})\s+to\s+(${DAY_TIME_TOKEN_SOURCE})(?=$|[^\da-z])`, 'i'),
+    new RegExp(String.raw`(${DAY_TIME_TOKEN_SOURCE})\s*(?:-|–|—|\bto\b)\s*(${DAY_TIME_TOKEN_SOURCE})(?=$|[^\da-z])`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(String(segment ?? ''));
+    if (!match) continue;
+    const startMeridiem = readMeridiem(match[1]);
+    const endMeridiem = readMeridiem(match[2]);
+    const startTime = normalizeDayScheduleTime(match[1], endMeridiem);
+    const endTime = normalizeDayScheduleTime(match[2], startMeridiem);
+    if (!startTime || !endTime) continue;
+    const adjustedEnd = timeToMinutes(endTime) <= timeToMinutes(startTime) && !endMeridiem
+      ? addMinutesToTime(endTime, 12 * 60)
+      : endTime;
+    if (timeToMinutes(adjustedEnd) <= timeToMinutes(startTime)) continue;
+    return {
+      index: match.index,
+      raw: match[0],
+      startTime,
+      endTime: adjustedEnd,
+    };
+  }
+  return null;
+}
+
+function extractDaySchedulePoint(segment) {
+  const pattern = new RegExp(String.raw`(${DAY_POINT_TIME_TOKEN_SOURCE})\s*[.!?]?\s*$`, 'i');
+  const match = pattern.exec(String(segment ?? '').trim());
+  if (!match) return null;
+  const time = normalizeDayScheduleTime(match[1]);
+  if (!time) return null;
+  return { index: match.index, raw: match[0], time };
+}
+
+function normalizeDayScheduleTime(value, inheritedMeridiem = null) {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/(\d)\.(\d)/g, '$1:$2')
+    .replace(/\s+/g, '');
+  const match = text.match(/^(\d{1,2})(?::([0-5]\d))?(am|pm)?$/);
+  if (!match) return null;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] ?? 0);
+  const meridiem = match[3] ?? inheritedMeridiem;
+  if (meridiem && hours <= 12) {
+    if (hours < 1) return null;
+    if (meridiem === 'am') hours = hours === 12 ? 0 : hours;
+    if (meridiem === 'pm') hours = hours === 12 ? 12 : hours + 12;
+  }
+  if (hours < 0 || hours > 23) return null;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function readMeridiem(value) {
+  return String(value ?? '').trim().toLowerCase().match(/(am|pm)$/)?.[1] ?? null;
+}
+
+function cleanDayScheduleTitle(value) {
+  const title = String(value ?? '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/^\s*(?:e|and|then|poi)\s+/i, '')
+    .replace(/\b(?:da|from|to|a)\s*$/i, '')
+    .replace(/^\s*[-:]\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return title ? titleCaseTitle(title) : '';
+}
+
+function defaultDayScheduleDuration(title) {
+  const text = String(title ?? '').toLowerCase();
+  if (/\b(sveglia|wake(?:\s+up)?)\b/.test(text)) return 15;
+  if (/\b(pranzo|lunch)\b/.test(text)) return 30;
+  if (/\b(cena|dinner)\b/.test(text)) return 45;
+  return 30;
+}
+
+function addMinutesToTime(value, minutesToAdd) {
+  const total = timeToMinutes(value) + minutesToAdd;
+  if (total < 0 || total >= 24 * 60) return null;
+  return minutesToTime(total);
+}
+
 function getExplicitScheduleBody(message) {
   const value = String(message ?? '').trim();
   const colonIndex = value.indexOf(':');
@@ -1037,14 +1402,14 @@ function extractParentheticalNotes(value) {
 
 function inferCalendarCategoryFromText(value) {
   const text = String(value ?? '').toLowerCase();
-  if (/\b(science|study|studying|lesson|learning|exam|homework)\b/.test(text)) return 'Study';
-  if (/\b(doctor|dentist|medical|hospital|health|recovery|lunch|meal|eat|eating)\b/.test(text)) return 'Health';
-  if (/\b(gym|workout|boxing|cardio|training|sport|sports)\b/.test(text)) return 'Workout';
+  if (/\b(science|study|studying|lesson|learning|exam|homework|matematica|studio|studiare)\b/.test(text)) return 'Study';
+  if (/\b(doctor|dentist|medical|hospital|health|recovery|lunch|meal|eat|eating|pranzo|cena|dinner)\b/.test(text)) return 'Health';
+  if (/\b(gym|workout|boxing|cardio|training|sport|sports|palestra|allenamento)\b/.test(text)) return 'Workout';
   if (/\b(work|coding|business|content|client|money)\b/.test(text)) return 'Work';
   if (/\b(errand|errands|appointment|shopping|take .+ somewhere|logistics)\b/.test(text)) return 'Errands';
   if (/\b(mom|mother|dad|father|family|friend|friends|girlfriend|dinner with)\b/.test(text)) return 'Social';
   if (/\b(movie|game|games|leisure|fun|entertainment)\b/.test(text)) return 'Entertainment';
-  if (/\b(journal|journaling|admin|routine|planning|chores?)\b/.test(text)) return 'Personal';
+  if (/\b(journal|journaling|admin|routine|planning|chores?|sveglia|wake up)\b/.test(text)) return 'Personal';
   if (/\b(sleep|nap|bedtime)\b/.test(text)) return 'Sleep';
   return 'Personal';
 }
@@ -1054,6 +1419,36 @@ function countExplicitTimeRanges(message) {
   const regexMatches = [...text.matchAll(new RegExp(TIME_RANGE_PATTERN_SOURCE, 'gi'))].length;
   const segmentMatches = splitExplicitScheduleSegments(text).length;
   return Math.max(regexMatches, segmentMatches);
+}
+
+function countDayScheduleItems(message) {
+  return splitDayScheduleSegments(message).length;
+}
+
+function hasDayScheduleLanguage(message) {
+  const text = String(message ?? '').trim().toLowerCase();
+  return /(?:^|\b)(?:segna|programma|pianifica)\s+(?:la\s+)?giornata/.test(text)
+    || /\b(?:log|plan|schedule)\s+(?:my\s+)?day\b/.test(text)
+    || /^(?:plan|schedule|log)\s+(?:today|oggi)\s*:/.test(text)
+    || /^(?:today|oggi)\s*:/.test(text);
+}
+
+function hasMixedPointAndRangeItems(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (/\b(remind me|remember to|ricordami|memo|expense|spesa|euro|euros|eur)\b/.test(text)) return false;
+  const segments = splitDayScheduleSegments(message);
+  const hasRange = segments.some((segment) => Boolean(extractDayScheduleRange(segment)));
+  const hasPoint = segments.some((segment) => !extractDayScheduleRange(segment) && Boolean(extractDaySchedulePoint(segment)));
+  return hasRange && hasPoint;
+}
+
+function looksLikeMultiItemScheduleMessage(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (countDayScheduleItems(message) < 2) return false;
+  if (/\b(remind me|remember to|ricordami|memo|expense|spesa|euro|euros|eur)\b/.test(text)) return false;
+  const hasScheduleAction = /\b(plan|schedule|add|create|log|programma|pianifica|segna)\b/.test(text);
+  const hasDayReference = /\b(today|tomorrow|oggi|domani|day|giornata)\b/.test(text);
+  return hasMixedPointAndRangeItems(message) || hasScheduleAction || hasDayReference;
 }
 
 function looksLikeAnalysisRequest(text) {
@@ -1096,6 +1491,30 @@ function formatCalendarEventsSuccess(targetDate, result) {
   }
 
   return lines.join('\n');
+}
+
+function formatDayScheduleSuccess(targetDate, result, message) {
+  const names = result.created.map((event) => event.title).join(', ');
+  const skipped = result.skipped.length ? ` ${result.skipped.length} item${result.skipped.length === 1 ? '' : 's'} could not be created.` : '';
+  if (/\b(?:segna|giornata|oggi|pranzo|cena|palestra|sveglia)\b/i.test(message)) {
+    return `Ho creato ${result.created.length} eventi per ${targetDate}: ${names}.${skipped}`;
+  }
+  return `Created ${result.created.length} calendar events for ${targetDate}: ${names}.${skipped}`;
+}
+
+function dayScheduleClarification(message) {
+  if (/\b(?:segna|giornata|oggi|pranzo|cena|palestra|sveglia)\b/i.test(message)) {
+    return 'Ho capito che vuoi segnare la giornata, ma non sono riuscito a ricavare bene alcuni orari. Scrivila tipo: pranzo 13:30, studio 14:00-16:00.';
+  }
+  return 'I understood that you want to schedule your day, but I could not read some times. Try: lunch 13:30, study 14:00-16:00.';
+}
+
+function friendlyDayScheduleError(error) {
+  const message = error instanceof Error ? error.message : '';
+  if (/title is required|start_time is required|end_time must be (?:after|later)|no calendar events|could not extract/i.test(message)) {
+    return new HttpError(400, 'I understood that you want to schedule your day, but I could not read some times. Try: lunch 13:30, study 14:00-16:00.');
+  }
+  return error;
 }
 
 function formatHealthSuccess(updated) {
@@ -1323,6 +1742,8 @@ function logAiPlannerFailure({ context, message, error }) {
     stage: 'planner',
     message: truncate(String(message ?? ''), 1000),
     explicitMultiEventLikely: isObviousExplicitMultiEventCalendarRequest(message),
+    dayScheduleLikely: isObviousDayScheduleRequest(message),
+    dayScheduleItemCount: countDayScheduleItems(message),
     timeRangeCount: countExplicitTimeRanges(message),
     status: error instanceof HttpError ? error.status : undefined,
     providerStatus: error?.details?.providerStatus,

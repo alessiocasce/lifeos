@@ -77,6 +77,16 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 43. Ask: `Log 8 energy and 1 coffee today.`
 44. Confirm today's health log updates without overwriting omitted fields.
 45. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+46. Ask: `Segna la giornata di oggi: sveglia 12.30pm, pranzo 13.30pm, matematica da 13.40pm a 4.30pm, palestra da 4.40pm a 6.40pm, cena 8pm`
+47. Confirm the day-schedule path creates: Sveglia `12:30-12:45`, Pranzo `13:30-14:00`, Matematica `13:40-16:30`, Palestra `16:40-18:40`, and Cena `20:00-20:45`.
+48. Confirm the explicit Pranzo/Matematica overlap is preserved and no `title is required` error appears.
+49. Ask: `plan today: wake up 9am, lunch 1pm, study from 2pm to 4pm, gym 5pm to 6pm, dinner 8pm`
+50. Confirm it creates Wake Up `09:00-09:15`, Lunch `13:00-13:30`, Study `14:00-16:00`, Gym `17:00-18:00`, and Dinner `20:00-20:45`.
+51. Confirm both mixed schedules log `create_calendar_events`, the created event count, and calendar record references in AI Action History.
+52. Re-run the existing range-only prompt and confirm it still uses the explicit multi-event path.
+53. Re-run `create event tomorrow dentist 2pm to 3pm` and confirm it remains a single event.
+54. Re-run `remind me to take the pill at 8:30pm` and confirm it creates a memo, not a calendar event.
+55. Re-run `25 euro expense for ChatGPT Plus` and confirm it creates an expense.
 
 ## Action History
 

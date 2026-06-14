@@ -152,6 +152,36 @@ Validation:
 - `water`, `coffee`, `adc`: optional, integers 0-100
 - `notes`: 2000 characters
 
+### Log Wake Time
+
+```bash
+curl -X POST https://your-lifeos.vercel.app/api/actions/wake \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "time": "08:37"
+  }'
+```
+
+`time` is required. The aliases `wake_time` and `wakeTime` are also accepted.
+
+`logged_on` is optional and defaults to the current date in `Europe/Rome`. Accepted time formats include `HH:MM`, `H:MM`, `H.MM`, `HH.MM`, and `H:MM AM/PM`. The stored value is canonical `HH:MM`.
+
+The endpoint updates only `wake_time` on an existing health log, preserving sleep, energy, habits, coffee, water, ADC, and other fields. Optional `notes` is limited to 1000 characters and only fills an empty existing notes field; it does not overwrite an existing note.
+
+Success example:
+
+```json
+{
+  "ok": true,
+  "requestId": "generated-request-id",
+  "data": {
+    "logged_on": "2026-06-12",
+    "wake_time": "08:37"
+  }
+}
+```
+
 ### Create Calendar Event
 
 ```bash
@@ -197,6 +227,25 @@ Create a shortcut with:
 5. Request Body: JSON.
 
 Keep the token private. Treat anyone with the token as able to create records for `LIFEOS_ACTION_USER_ID`.
+
+### iPhone Wake Automation
+
+1. Create or choose the wake automation trigger.
+2. Add `Get Current Date`.
+3. Add `Format Date` with custom format `HH:mm`.
+4. Add `Get Contents of URL`.
+5. Set URL to `https://your-lifeos.vercel.app/api/actions/wake`.
+6. Set method to `POST`.
+7. Add headers:
+   - `Authorization`: `Bearer <LIFEOS_ACTION_TOKEN>`
+   - `Content-Type`: `application/json`
+8. Set the JSON body to:
+
+```json
+{
+  "time": "<formatted time>"
+}
+```
 
 ## Curl Smoke Tests
 
@@ -248,4 +297,8 @@ curl -i -X OPTIONS https://your-lifeos.vercel.app/api/actions/expense
 10. Send `null` for `energy` or `sleep_start` and confirm the existing value is cleared.
 11. Create a calendar event and confirm it appears in Calendar.
 12. Try a calendar event where `end_time` is earlier than `start_time` and confirm it is rejected.
-13. Sign in as another user and confirm the action-created records are not visible.
+13. Call `/api/actions/wake` with `{"time":"8.37"}` and confirm Health shows `08:37`.
+14. Repeat with `{"wake_time":"08:37"}` and `{"wakeTime":"8:37 AM"}`.
+15. Call it with `{"time":"banana"}` and confirm a clear `400` error.
+16. Confirm an existing health log keeps its other fields after the wake update.
+17. Sign in as another user and confirm the action-created records are not visible.
