@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
-export async function sendLifeOSAiMessage(message) {
+export async function sendLifeOSAiMessage(message, threadId) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured.');
   }
@@ -16,7 +16,10 @@ export async function sendLifeOSAiMessage(message) {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      ...(threadId ? { thread_id: threadId } : {}),
+    }),
   });
 
   const payload = await response.json().catch(() => null);

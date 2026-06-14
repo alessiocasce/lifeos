@@ -40,16 +40,20 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 3. Confirm selected-month spend updates.
 4. Refresh and confirm the expense reloads.
 
-## Daily Review
+## Brain Persistence And Memory
 
 1. Open Assistant.
-2. Create today's Daily Review with optional score and next actions.
-3. Refresh and confirm the review reloads.
+2. Send a Brain message and refresh; confirm the thread and messages reload.
+3. Create a second thread and confirm both active threads remain available.
+4. Add an explicit durable memory and confirm it appears in `What LifeOS Knows`.
+5. Archive the memory and confirm it is no longer active AI context.
+6. Verify RLS with a second user: threads, messages, memories, and insights must remain user-scoped.
+7. Confirm `/api/ai/chat` persists app messages without changing Shortcut/API action behavior.
 
 ## Home
 
 1. Open Home.
-2. Confirm Home reflects the persisted Health, Workout, Expense, Calendar-adjacent shell state where applicable, and Daily Review-backed modules that are currently summarized.
+2. Confirm Home reflects persisted Health, Workout, Expense, Calendar-adjacent shell state, and recent AI actions where applicable.
 3. Confirm empty states do not show for records just created.
 
 ## Direct Tab Routes
@@ -102,6 +106,15 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 12. Confirm `/api/ai/chat`, `/api/ai/actions`, and `/api/actions/*` still return API behavior after the update.
 13. Confirm the installed iPhone PWA moves the main tab content with the pull gesture, holds it lowered during refresh, and smoothly returns it afterward.
 14. Confirm the shell header and bottom navigation remain stable and no content remains stuck translated after success, failure, or an update-ready guard.
+15. Pull to refresh on Brain and confirm threads, current messages, memories, insights, and Recent Actions update without wiping typed composer text.
+
+## Brain Schema Deployment
+
+1. Run the latest `supabase/schema.sql` before testing Brain persistence.
+2. Confirm `ai_chat_threads`, `ai_chat_messages`, `ai_memories`, and `ai_insights` exist.
+3. Confirm authenticated users can only read/write their own rows.
+4. Confirm the composite thread/message ownership foreign key rejects cross-user message insertion.
+5. Confirm deploying Brain changes does not break `/api/actions/health`, `/api/actions/wake`, `/api/actions/sleep-start`, `/api/actions/habit`, `/api/actions/calendar`, or `/api/actions/expense`.
 
 ## Known Non-Failing Build Warning
 

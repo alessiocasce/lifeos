@@ -103,10 +103,10 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Sign out.
 2. Confirm the app returns to the auth screen.
 3. Sign in as a different user.
-4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, project money entries, daily reviews, and AI action logs do not appear.
-5. Create one record as the second user.
+4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, project money entries, daily reviews, AI action logs, Brain threads/messages, memories, and insights do not appear.
+5. Create one record and one Brain conversation as the second user.
 6. Sign out and sign back in as the first user.
-7. Confirm the first user's records are still present and the second user's records are hidden.
+7. Confirm the first user's records are still present and the second user's records and Brain context are hidden.
 
 ## Module QA References
 
@@ -158,12 +158,20 @@ Run the focused checklists after the full flow:
 
 ## Brain
 
-1. Open Assistant/Brain.
-2. Confirm the main chat composer and Recent Actions are present.
+1. Run the latest `supabase/schema.sql`, then open Assistant/Brain.
+2. Confirm persistent chat, thread selector, New Chat, `What LifeOS Knows`, and Recent Actions are present.
 3. Confirm Daily Review is not rendered.
 4. Confirm canned Suggestions or prompt chips are not rendered.
 5. Send a normal analysis prompt and confirm Markdown/callouts still render.
-6. Open a Recent Action and confirm its detail view still works.
+6. Refresh and confirm persisted user/assistant messages remain.
+7. Create a New Chat and confirm the old thread remains accessible.
+8. Confirm deterministic thread title generation works after the first message.
+9. Add a durable preference with `Remember that...` and confirm it appears in the memory panel.
+10. Edit and archive a memory and confirm both operations persist.
+11. Confirm simple habit/expense/calendar commands do not flood memory.
+12. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
+13. Open a Recent Action and confirm its detail view still works.
+14. On mobile, confirm thread controls and the collapsed memory panel do not overflow.
 
 ## Workout Advice Write Boundary
 

@@ -1,5 +1,14 @@
 import { generateGeminiJson, generateGeminiText } from '../_utils/gemini.js';
 import {
+  beginBrainChat,
+  extractAndPersistBrainKnowledge,
+  formatBrainConversationForPrompt,
+  formatBrainContextForPrompt,
+  loadBrainContext,
+  persistBrainAssistantMessage,
+  persistBrainErrorMessage,
+} from '../_utils/brain.js';
+import {
   HttpError,
   createRequestContext,
   getBearerToken,
@@ -73,17 +82,29 @@ Rules:
 - Do not use analyze_and_plan merely because workout advice mentions today/oggi.
 - Do not create a calendar event for workout advice unless the user explicitly asks to schedule/create/add it in the calendar, for example "schedule", "create event", "put it in calendar", "program it in calendar", "crea evento", "segnalo in calendario", or "programmamelo in calendario".
 - If the user appears to be inside or about to start a workout, give advice without scheduling another workout unless explicitly requested.
+- Saved memory and earlier conversation can clarify context, but they never supply write intent. Set needsWrite true only when the current user message clearly asks for a supported write.
+- Do not repeat or continue an earlier write merely because it appears in conversation history.
 - Destructive delete/remove/wipe requests must use "blocked_destructive".
 - If required details are missing, use "clarify" with one concise clarifyingQuestion.
 - Low-risk additive writes are create_expense, create_calendar_event, create_memo, update_health_log, and small calendar plans.
 `;
 
 const ANSWER_SYSTEM = `
-You are the in-app LifeOS assistant.
+You are LifeOS Brain, the user's personal operating layer inside LifeOS.
 Use only the provided LifeOS data and action results.
 Do not pretend unavailable data exists.
 Distinguish facts from suggestions.
 Be direct, practical, and concise.
+Connect relevant domains such as sleep, health, workouts, projects, money, calendar, and memos.
+Saved memory is helpful context, not absolute truth. Prefer the current message if it conflicts.
+Do not claim an action was completed unless the provided action result confirms success.
+Default to read-only advice unless the user clearly asks for a write.
+Capability levels:
+- Level 0: answer, analysis, advice, and coaching only.
+- Level 1: explicit low-risk logs such as health habits, memos, expenses, wake, and sleep.
+- Level 2: explicit structured writes such as calendar events and supported LifeOS records.
+- Level 3: plans should remain previews unless the user explicitly asks to create them.
+- Level 4: external email or messaging is not implemented and must not be claimed.
 Format responses with concise Markdown:
 - Use short paragraphs.
 - Use bullet lists when helpful.
@@ -245,6 +266,31 @@ export default async function handler(req, res) {
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
     const source = resolveAssistantSource(authInfo, body);
+    context.brainChat = await safeBeginBrainChat({
+      threadId: body.thread_id,
+      source,
+      message,
+      requestId: context.requestId,
+    });
+    context.brainContext = await safeLoadBrainContext(context);
+
+    if (isExplicitRememberRequest(message)) {
+      const plan = createReadOnlyBrainPlan('Remember an explicit durable user memory.');
+      const answer = 'Remembered. You can review or remove it in **What LifeOS Knows**.';
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null }, context, { message, source });
+    }
+
+    if (isMemoryRecallRequest(message)) {
+      const plan = createReadOnlyBrainPlan('Summarize active long-term memory.');
+      const answer = formatMemoryRecallAnswer(context.brainContext);
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null }, context, { message, source });
+    }
+
+    if (isMemoryForgetRequest(message)) {
+      const plan = createReadOnlyBrainPlan('Direct the user to the explicit memory controls.');
+      const answer = 'Use **What LifeOS Knows** to remove the exact memory. I will not guess which memory to forget.';
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null }, context, { message, source });
+    }
 
     if (isFiniteRecurringCalendarRequest(message)) {
       const plan = createFiniteRecurringCalendarSyntheticPlan();
@@ -301,7 +347,7 @@ export default async function handler(req, res) {
 
     let plan;
     try {
-      plan = await planMessage(message);
+      plan = await planMessage(message, context.brainContext, context.brainChat);
     } catch (error) {
       const diagnostics = logAiPlannerFailure({ context, message, error });
       attachDebugDiagnostics(error, diagnostics);
@@ -356,7 +402,7 @@ export default async function handler(req, res) {
     if (plan.intent === 'blocked_destructive') {
       answer = await answerWithGemini(message, plan, lifeosContext, [
         { type: 'blocked_destructive', message: 'Deletion and destructive updates are not enabled for the AI assistant yet.' },
-      ]);
+      ], context.brainContext, context.brainChat);
       return sendAiSuccess(res, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
     }
 
@@ -368,7 +414,7 @@ export default async function handler(req, res) {
     if (plan.needsWrite) {
       let writeResult;
       try {
-        writeResult = await executeWriteIntent(plan, message, lifeosContext);
+        writeResult = await executeWriteIntent(plan, message, lifeosContext, context.brainContext, context.brainChat);
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: plan.intent, error });
         await safeLogAiError({ context, message, source, plan, writePath: plan.intent, error, diagnostics });
@@ -381,7 +427,7 @@ export default async function handler(req, res) {
     }
 
     if (!answer) {
-      answer = await answerWithGemini(message, plan, lifeosContext, actions);
+      answer = await answerWithGemini(message, plan, lifeosContext, actions, context.brainContext, context.brainChat);
     }
     if (workoutAdviceOnly) {
       answer = appendWorkoutReadOnlyConfirmation(answer, message);
@@ -389,8 +435,130 @@ export default async function handler(req, res) {
 
     return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
   } catch (error) {
+    await safePersistBrainError(context, error);
     handleApiError(res, error, context);
   }
+}
+
+async function safeBeginBrainChat(options) {
+  try {
+    return await beginBrainChat(options);
+  } catch (error) {
+    console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
+      requestId: options?.requestId,
+      stage: 'begin_chat',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return null;
+  }
+}
+
+async function safeLoadBrainContext(context) {
+  try {
+    return await loadBrainContext();
+  } catch (error) {
+    console.error('[LifeOS Brain memory warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'load_context',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return { memories: [], insights: [] };
+  }
+}
+
+async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs }) {
+  try {
+    return await persistBrainAssistantMessage({
+      chat: context?.brainChat,
+      answer,
+      requestId: context?.requestId,
+      actionType,
+      actions,
+      plan,
+      recordRefs,
+    });
+  } catch (error) {
+    console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'assistant_message',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return null;
+  }
+}
+
+async function safePersistBrainError(context, error) {
+  try {
+    await persistBrainErrorMessage({
+      chat: context?.brainChat,
+      error,
+      requestId: context?.requestId,
+    });
+  } catch (persistenceError) {
+    console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'assistant_error_message',
+      error: persistenceError instanceof Error ? persistenceError.message : String(persistenceError ?? 'Unknown error'),
+    }));
+  }
+}
+
+async function safeExtractBrainKnowledge({ context, message, answer, actionType }) {
+  if (!context?.brainChat) return;
+  try {
+    await extractAndPersistBrainKnowledge({
+      userMessage: message,
+      assistantAnswer: answer,
+      actionType,
+      existingMemories: context?.brainContext?.memories ?? [],
+    });
+  } catch (error) {
+    console.error('[LifeOS Brain memory extraction warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'memory_extraction',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+  }
+}
+
+function createReadOnlyBrainPlan(reason) {
+  return {
+    intent: 'analyze',
+    needsRead: false,
+    needsWrite: false,
+    range: null,
+    tables: [],
+    args: {},
+    clarifyingQuestion: null,
+    riskLevel: 'low',
+    reason,
+  };
+}
+
+function isExplicitRememberRequest(message) {
+  return /^\s*(?:please\s+)?(?:remember that|remember this|ricorda che)\b/i.test(String(message ?? ''));
+}
+
+function isMemoryRecallRequest(message) {
+  return /\b(?:what do you remember about me|what does lifeos know about me|cosa ricordi di me|cosa sai di me)\b/i.test(String(message ?? ''));
+}
+
+function isMemoryForgetRequest(message) {
+  return /^\s*(?:please\s+)?(?:forget that|forget what|dimentica che|dimentica quello)\b/i.test(String(message ?? ''));
+}
+
+function formatMemoryRecallAnswer(brainContext) {
+  const memories = Array.isArray(brainContext?.memories) ? brainContext.memories : [];
+  if (!memories.length) {
+    return 'I do not have any active long-term memories yet. Memory will build from meaningful Brain conversations.';
+  }
+  const shown = memories.slice(0, 12);
+  return [
+    'Here is what I currently remember:',
+    '',
+    ...shown.map((memory) => `- **${memory.title}**: ${memory.content}`),
+    ...(memories.length > shown.length ? ['', `There are ${memories.length - shown.length} more active memories in **What LifeOS Knows**.`] : []),
+  ].join('\n');
 }
 
 async function requireAssistantAuth(req) {
@@ -421,16 +589,40 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     answer: data?.answer,
     actions: data?.actions ?? [],
   });
-  return sendSuccess(res, status, data, context);
+  const actionType = inferActionLogType(data?.actions ?? []);
+  const recordRefs = extractRecordRefs(data?.actions ?? []);
+  const assistantMessage = await safePersistBrainSuccess({
+    context,
+    answer: data?.answer,
+    plan: data?.plan,
+    actions: data?.actions ?? [],
+    actionType,
+    recordRefs,
+  });
+  await safeExtractBrainKnowledge({
+    context,
+    message: logInfo?.message,
+    answer: data?.answer,
+    actionType,
+  });
+  return sendSuccess(res, status, {
+    ...data,
+    ...(context?.brainChat?.thread?.id ? {
+      thread_id: context.brainChat.thread.id,
+      persisted_message: assistantMessage,
+    } : {}),
+  }, context);
 }
 
-async function planMessage(message) {
+async function planMessage(message, brainContext, brainChat) {
   const prompt = JSON.stringify({
     today: localDate(),
     tomorrow: localDate(1),
     localTime: localTime(),
     timeZone: 'Europe/Rome',
     userMessage: message,
+    userMemoryContext: formatBrainContextForPrompt(brainContext),
+    recentConversation: formatBrainConversationForPrompt(brainChat),
   });
   const rawPlan = await generateGeminiJson({
     system: PLANNER_SYSTEM,
@@ -976,7 +1168,7 @@ export function extractExplicitCalendarEventsLocally(message, fallbackDate = loc
   };
 }
 
-async function executeWriteIntent(plan, message, lifeosContext) {
+async function executeWriteIntent(plan, message, lifeosContext, brainContext, brainChat) {
   if (plan.riskLevel === 'high') {
     return { actions: [{ type: 'blocked_high_risk', message: 'High-risk actions are blocked in v1.' }] };
   }
@@ -1023,7 +1215,7 @@ async function executeWriteIntent(plan, message, lifeosContext) {
 
   if (plan.intent === 'analyze_and_plan') {
     const targetDate = resolveDate(plan.args?.target_date || plan.args?.event_date || plan.args?.date, localDate(1));
-    const proposal = await proposeCalendarPlan(message, plan, lifeosContext, targetDate);
+    const proposal = await proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat);
     if (!proposal.events.length) {
       throw new HttpError(400, 'Gemini did not return any calendar events to create.');
     }
@@ -1646,13 +1838,15 @@ function formatMoney(value) {
   });
 }
 
-async function proposeCalendarPlan(message, plan, lifeosContext, targetDate) {
+async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat) {
   const prompt = JSON.stringify({
     userMessage: message,
     targetDate,
     range: getRangeWindow(plan.range),
     plan,
     lifeosContext,
+    userMemoryContext: formatBrainContextForPrompt(brainContext),
+    recentConversation: formatBrainConversationForPrompt(brainChat),
   });
   const proposal = await generateGeminiJson({ system: PLAN_SYSTEM, prompt, temperature: 0.25 });
   return {
@@ -1662,12 +1856,14 @@ async function proposeCalendarPlan(message, plan, lifeosContext, targetDate) {
   };
 }
 
-async function answerWithGemini(message, plan, lifeosContext, actions) {
+async function answerWithGemini(message, plan, lifeosContext, actions, brainContext, brainChat) {
   const prompt = JSON.stringify({
     userMessage: message,
     plan,
     lifeosContext,
     actions,
+    userMemoryContext: formatBrainContextForPrompt(brainContext),
+    recentConversation: formatBrainConversationForPrompt(brainChat),
   });
   return generateGeminiText({ system: ANSWER_SYSTEM, prompt, temperature: 0.25 });
 }

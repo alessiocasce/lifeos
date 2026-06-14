@@ -112,6 +112,10 @@ Current tables:
 - `daily_reviews`
 - `chat_messages`
 - `ai_action_logs`
+- `ai_chat_threads`
+- `ai_chat_messages`
+- `ai_memories`
+- `ai_insights`
 
 All tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`.
 
@@ -121,6 +125,7 @@ RLS is enabled on all user tables. Current policies are user-scoped for authenti
 - `workout_sets` also checks that the referenced `workouts` row belongs to the same authenticated user.
 - `workout_template_exercises` also checks that the referenced `workout_templates` row belongs to the same authenticated user.
 - `project_sessions` and `project_money_entries` also check that the referenced `projects` row belongs to the same authenticated user.
+- `ai_chat_messages` also checks that the referenced `ai_chat_threads` row belongs to the same authenticated user.
 
 The frontend currently uses Supabase Auth as a global app gate:
 
@@ -159,7 +164,9 @@ Real/persisted today:
 - Project money entries persisted in `project_money_entries`.
 - Projects/Ops tab creates flexible-goal projects, tracks active/completed work sessions, proof of work, project-level money entries, calculated balance, and progress.
 - Daily reviews persisted in `daily_reviews`.
-- Assistant/Brain contains the Ask LifeOS chat and Recent Actions. Daily Review remains persisted for backward compatibility but is hidden from Brain.
+- Brain persists user-scoped chat threads/messages, uses curated long-term memories as bounded AI context, and keeps Recent Actions available as a secondary surface.
+- Brain exposes a collapsible `What LifeOS Knows` panel where active memories can be reviewed, edited, or archived.
+- Daily Review remains persisted for backward compatibility but is hidden from Brain.
 - Token-protected Action API endpoints for external automation:
   - `POST /api/actions/expense`
   - `POST /api/actions/health`
@@ -170,19 +177,15 @@ Real/persisted today:
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
-  - Assistant tab "Ask LifeOS" chat surface.
+  - Persistent Brain chat with thread selection and New Chat.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
 - AI Action History persisted in `ai_action_logs` for recent assistant/Shortcut writes and write failures.
-
-Partially wired but not fully used in UI:
-
-- `lifeosApi.js` has basic list/create/update/delete wrappers for `chat_messages`.
-- The database schema and RLS support these tables.
+- Durable Brain memory persisted in `ai_memories`; saved observations are kept separately in `ai_insights`.
+- Meaningful conversations can extract a small number of durable memory/insight candidates. Simple logs and one-off writes skip extraction.
 
 Still mostly mock/local:
 
-- Chat message persistence is not yet used as the main AI conversation store.
 - The real Workout tab no longer displays mock workout examples or archives.
 
 ## PWA Current Status
@@ -205,7 +208,7 @@ Current behavior:
 - Does not implement full offline data sync, offline write queues, or cached personal data.
 - Mobile/iPhone PWA supports pull-to-refresh from the top of the app content.
 - Pull-to-refresh physically translates the tab content downward with resisted, Safari-like feedback, holds it slightly lowered while refreshing, then smoothly snaps it back.
-- One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, and recent AI actions.
+- One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, Brain threads/current messages/memories/insights, and recent AI actions.
 - Pull-to-refresh also asks the service worker to check for a newly deployed app version.
 - A waiting app update activates and reloads automatically when there is no meaningful unsaved work.
 - A complete unsaved Workout set or meaningful Project session draft blocks only the app reload; persisted data still refreshes and the indicator asks the user to save first.
@@ -243,13 +246,20 @@ Current behavior:
 
 ## AI Assistant Current Status
 
-`src/tabs/AIAssistantTab.jsx` is a focused Brain surface with Ask LifeOS chat and Recent Actions.
+`src/tabs/AIAssistantTab.jsx` is a persistent Brain chat surface with thread controls, long-term memory, and secondary Recent Actions.
 
 Architecture:
 
-- Frontend sends only the raw message to `POST /api/ai/chat`.
+- Frontend sends the raw message and active `thread_id` to `POST /api/ai/chat`.
 - The frontend sends the current Supabase access token; the backend verifies it and ensures it matches `LIFEOS_ACTION_USER_ID`.
 - The endpoint can also accept `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` for trusted server/tool callers.
+- App chat requests append user/assistant messages to `ai_chat_messages`; Shortcut/API calls do not create personal chat history by default.
+- Threads are titled deterministically from the first meaningful user message without an extra Gemini title call.
+- The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
+- Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
+- Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
+- Memory deduplication uses normalized title/category/key-term overlap; no vector database is used in v1.
+- Explicit `remember that ...` requests confirm memory capture, memory recall requests summarize active memories, and ambiguous forget requests direct the user to the memory panel.
 - Gemini receives no database credentials and cannot run SQL.
 - Gemini first returns a strict JSON planner object.
 - Backend tools perform controlled reads/writes through Supabase service-role access and always filter/write `user_id = LIFEOS_ACTION_USER_ID`.
@@ -275,6 +285,7 @@ Architecture:
 - Supported finite recurrence patterns include daily, weekdays, weekends, weekly days, every other day, every N days, next week, next month, named months, next N weeks/months, and explicit start date plus duration.
 - Recurrence expansion is capped at 60 created events per request. Ambiguous recurrence requests ask one clarification instead of writing.
 - Workout analysis and advice prompts are read-only unless the user explicitly asks to create or schedule a calendar item. A deterministic post-planner guard prevents accidental calendar writes for exercise-performance questions.
+- Brain memory and conversation history do not override deterministic write guards. Calendar/memo/health/expense/recurrence writes still require the same explicit supported intent.
 - AI health logging supports time-aware Daily Habits stored in `health_logs.hygiene`: Shower, Creatine, and Skin.
 - AI habit updates merge with existing daily values and attach an explicit or current Europe/Rome time. Brush and Journal remain legacy-only and are no longer shown or updated.
 - AI prefers `sleep_start` and `wake_time`; when both required times exist, automatic sleep calculation overrides a manual duration.
@@ -291,6 +302,7 @@ Architecture:
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
+- Proactive Morning Briefings, voice, external email/messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase.
 
 Supported v1 intents/tools:
 

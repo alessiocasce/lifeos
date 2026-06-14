@@ -146,6 +146,60 @@ create table if not exists public.ai_action_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.ai_chat_threads (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title text not null default 'New Chat',
+  status text not null default 'active' check (status in ('active', 'archived')),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  last_message_at timestamptz,
+  unique (id, user_id)
+);
+
+create table if not exists public.ai_chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  thread_id uuid not null,
+  role text not null check (role in ('user', 'assistant', 'system', 'tool')),
+  content text not null,
+  request_id uuid,
+  action_type text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  foreign key (thread_id, user_id) references public.ai_chat_threads(id, user_id) on delete cascade
+);
+
+create table if not exists public.ai_memories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  category text not null,
+  title text not null,
+  content text not null,
+  source text not null default 'assistant_inferred' check (source in ('user_explicit', 'assistant_inferred', 'system', 'manual')),
+  confidence numeric(3,2) not null default 0.80 check (confidence >= 0 and confidence <= 1),
+  importance integer not null default 3 check (importance between 1 and 5),
+  status text not null default 'active' check (status in ('active', 'archived')),
+  last_seen_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.ai_insights (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  insight_type text not null,
+  title text not null,
+  content text not null,
+  evidence jsonb not null default '[]'::jsonb,
+  confidence numeric(3,2) not null default 0.70 check (confidence >= 0 and confidence <= 1),
+  status text not null default 'active' check (status in ('active', 'archived')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.memos (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -285,6 +339,50 @@ alter table public.ai_action_logs add column if not exists record_refs jsonb not
 alter table public.ai_action_logs add column if not exists error_message text;
 alter table public.ai_action_logs add column if not exists created_at timestamptz not null default now();
 
+alter table public.ai_chat_threads add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.ai_chat_threads alter column user_id set default auth.uid();
+alter table public.ai_chat_threads add column if not exists title text not null default 'New Chat';
+alter table public.ai_chat_threads add column if not exists status text not null default 'active';
+alter table public.ai_chat_threads add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.ai_chat_threads add column if not exists created_at timestamptz not null default now();
+alter table public.ai_chat_threads add column if not exists updated_at timestamptz not null default now();
+alter table public.ai_chat_threads add column if not exists last_message_at timestamptz;
+
+alter table public.ai_chat_messages add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.ai_chat_messages alter column user_id set default auth.uid();
+alter table public.ai_chat_messages add column if not exists thread_id uuid;
+alter table public.ai_chat_messages add column if not exists role text;
+alter table public.ai_chat_messages add column if not exists content text;
+alter table public.ai_chat_messages add column if not exists request_id uuid;
+alter table public.ai_chat_messages add column if not exists action_type text;
+alter table public.ai_chat_messages add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.ai_chat_messages add column if not exists created_at timestamptz not null default now();
+
+alter table public.ai_memories add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.ai_memories alter column user_id set default auth.uid();
+alter table public.ai_memories add column if not exists category text;
+alter table public.ai_memories add column if not exists title text;
+alter table public.ai_memories add column if not exists content text;
+alter table public.ai_memories add column if not exists source text not null default 'assistant_inferred';
+alter table public.ai_memories add column if not exists confidence numeric(3,2) not null default 0.80;
+alter table public.ai_memories add column if not exists importance integer not null default 3;
+alter table public.ai_memories add column if not exists status text not null default 'active';
+alter table public.ai_memories add column if not exists last_seen_at timestamptz;
+alter table public.ai_memories add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.ai_memories add column if not exists created_at timestamptz not null default now();
+alter table public.ai_memories add column if not exists updated_at timestamptz not null default now();
+
+alter table public.ai_insights add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.ai_insights alter column user_id set default auth.uid();
+alter table public.ai_insights add column if not exists insight_type text;
+alter table public.ai_insights add column if not exists title text;
+alter table public.ai_insights add column if not exists content text;
+alter table public.ai_insights add column if not exists evidence jsonb not null default '[]'::jsonb;
+alter table public.ai_insights add column if not exists confidence numeric(3,2) not null default 0.70;
+alter table public.ai_insights add column if not exists status text not null default 'active';
+alter table public.ai_insights add column if not exists created_at timestamptz not null default now();
+alter table public.ai_insights add column if not exists updated_at timestamptz not null default now();
+
 alter table public.memos add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.memos alter column user_id set default auth.uid();
 alter table public.memos add column if not exists title text;
@@ -350,6 +448,125 @@ begin
     alter table public.workout_sets
     add constraint workout_sets_rpe_check
     check (rpe is null or (rpe >= 0 and rpe <= 10));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_chat_threads_id_user_id_key'
+  ) then
+    alter table public.ai_chat_threads
+    add constraint ai_chat_threads_id_user_id_key unique (id, user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_chat_threads_status_check'
+  ) then
+    alter table public.ai_chat_threads
+    add constraint ai_chat_threads_status_check
+    check (status in ('active', 'archived'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_chat_messages_role_check'
+  ) then
+    alter table public.ai_chat_messages
+    add constraint ai_chat_messages_role_check
+    check (role in ('user', 'assistant', 'system', 'tool'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_chat_messages_thread_id_user_id_fkey'
+  ) then
+    alter table public.ai_chat_messages
+    add constraint ai_chat_messages_thread_id_user_id_fkey
+    foreign key (thread_id, user_id) references public.ai_chat_threads(id, user_id) on delete cascade;
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_memories_source_check'
+  ) then
+    alter table public.ai_memories
+    add constraint ai_memories_source_check
+    check (source in ('user_explicit', 'assistant_inferred', 'system', 'manual'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_memories_confidence_check'
+  ) then
+    alter table public.ai_memories
+    add constraint ai_memories_confidence_check
+    check (confidence >= 0 and confidence <= 1);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_memories_importance_check'
+  ) then
+    alter table public.ai_memories
+    add constraint ai_memories_importance_check
+    check (importance between 1 and 5);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_memories_status_check'
+  ) then
+    alter table public.ai_memories
+    add constraint ai_memories_status_check
+    check (status in ('active', 'archived'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_insights_confidence_check'
+  ) then
+    alter table public.ai_insights
+    add constraint ai_insights_confidence_check
+    check (confidence >= 0 and confidence <= 1);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_insights_status_check'
+  ) then
+    alter table public.ai_insights
+    add constraint ai_insights_status_check
+    check (status in ('active', 'archived'));
   end if;
 end $$;
 
@@ -637,6 +854,21 @@ create trigger set_chat_messages_updated_at
 before update on public.chat_messages
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_ai_chat_threads_updated_at on public.ai_chat_threads;
+create trigger set_ai_chat_threads_updated_at
+before update on public.ai_chat_threads
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_ai_memories_updated_at on public.ai_memories;
+create trigger set_ai_memories_updated_at
+before update on public.ai_memories
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_ai_insights_updated_at on public.ai_insights;
+create trigger set_ai_insights_updated_at
+before update on public.ai_insights
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_memos_updated_at on public.memos;
 create trigger set_memos_updated_at
 before update on public.memos
@@ -670,6 +902,17 @@ create index if not exists daily_reviews_user_review_on_idx on public.daily_revi
 create index if not exists chat_messages_user_created_at_idx on public.chat_messages (user_id, created_at asc);
 create index if not exists ai_action_logs_user_created_at_idx on public.ai_action_logs (user_id, created_at desc);
 create index if not exists ai_action_logs_user_request_id_idx on public.ai_action_logs (user_id, request_id);
+create index if not exists ai_chat_threads_user_updated_at_idx on public.ai_chat_threads (user_id, updated_at desc);
+create index if not exists ai_chat_threads_user_last_message_at_idx on public.ai_chat_threads (user_id, last_message_at desc);
+create index if not exists ai_chat_threads_user_status_idx on public.ai_chat_threads (user_id, status);
+create index if not exists ai_chat_messages_user_thread_created_at_idx on public.ai_chat_messages (user_id, thread_id, created_at asc);
+create index if not exists ai_chat_messages_user_created_at_idx on public.ai_chat_messages (user_id, created_at desc);
+create index if not exists ai_chat_messages_user_request_id_idx on public.ai_chat_messages (user_id, request_id);
+create index if not exists ai_memories_user_status_importance_idx on public.ai_memories (user_id, status, importance desc, updated_at desc);
+create index if not exists ai_memories_user_category_idx on public.ai_memories (user_id, category);
+create index if not exists ai_memories_user_last_seen_at_idx on public.ai_memories (user_id, last_seen_at desc);
+create index if not exists ai_insights_user_status_created_at_idx on public.ai_insights (user_id, status, created_at desc);
+create index if not exists ai_insights_user_type_created_at_idx on public.ai_insights (user_id, insight_type, created_at desc);
 create index if not exists memos_user_status_due_idx on public.memos (user_id, status, memo_date, memo_time);
 create index if not exists memos_user_created_at_idx on public.memos (user_id, created_at desc);
 create index if not exists projects_user_status_created_at_idx on public.projects (user_id, status, created_at desc);
@@ -688,6 +931,10 @@ alter table public.calendar_events enable row level security;
 alter table public.daily_reviews enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.ai_action_logs enable row level security;
+alter table public.ai_chat_threads enable row level security;
+alter table public.ai_chat_messages enable row level security;
+alter table public.ai_memories enable row level security;
+alter table public.ai_insights enable row level security;
 alter table public.memos enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_sessions enable row level security;
@@ -797,6 +1044,44 @@ drop policy if exists "lifeos local read ai_action_logs" on public.ai_action_log
 drop policy if exists "lifeos local write ai_action_logs" on public.ai_action_logs;
 drop policy if exists "ai_action_logs are user scoped" on public.ai_action_logs;
 create policy "ai_action_logs are user scoped" on public.ai_action_logs
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_chat_threads are user scoped" on public.ai_chat_threads;
+create policy "ai_chat_threads are user scoped" on public.ai_chat_threads
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_chat_messages are user scoped" on public.ai_chat_messages;
+create policy "ai_chat_messages are user scoped" on public.ai_chat_messages
+for all to authenticated
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.ai_chat_threads
+    where ai_chat_threads.id = ai_chat_messages.thread_id
+      and ai_chat_threads.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.ai_chat_threads
+    where ai_chat_threads.id = ai_chat_messages.thread_id
+      and ai_chat_threads.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "ai_memories are user scoped" on public.ai_memories;
+create policy "ai_memories are user scoped" on public.ai_memories
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_insights are user scoped" on public.ai_insights;
+create policy "ai_insights are user scoped" on public.ai_insights
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);

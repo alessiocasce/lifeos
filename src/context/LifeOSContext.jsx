@@ -17,6 +17,10 @@ import { buildHabitUpdate, getHabitEntry, normalizeHygieneObject } from '../util
 import {
   authApi,
   aiActionLogApi,
+  aiChatMessageApi,
+  aiChatThreadApi,
+  aiInsightApi,
+  aiMemoryApi,
   calendarEventApi,
   dailyReviewApi,
   expenseApi,
@@ -86,6 +90,19 @@ export function LifeOSProvider({ children }) {
   const [aiActionLogs, setAiActionLogs] = useState([]);
   const [aiActionLogsStatus, setAiActionLogsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [aiActionLogsError, setAiActionLogsError] = useState('');
+  const [aiChatThreads, setAiChatThreads] = useState([]);
+  const [aiChatThreadsStatus, setAiChatThreadsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [aiChatThreadsError, setAiChatThreadsError] = useState('');
+  const [activeAiThreadId, setActiveAiThreadId] = useState(null);
+  const [activeAiChatMessages, setActiveAiChatMessages] = useState([]);
+  const [aiChatMessagesStatus, setAiChatMessagesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [aiChatMessagesError, setAiChatMessagesError] = useState('');
+  const [aiMemories, setAiMemories] = useState([]);
+  const [aiMemoriesStatus, setAiMemoriesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [aiMemoriesError, setAiMemoriesError] = useState('');
+  const [aiInsights, setAiInsights] = useState([]);
+  const [aiInsightsStatus, setAiInsightsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [aiInsightsError, setAiInsightsError] = useState('');
   const [refreshState, setRefreshState] = useState('idle');
   const [refreshError, setRefreshError] = useState('');
   const [lastRefreshAt, setLastRefreshAt] = useState(null);
@@ -94,6 +111,7 @@ export function LifeOSProvider({ children }) {
   const lastCalendarRangeRequest = useRef(0);
   const lastExpenseMonthRange = useRef(null);
   const refreshPromiseRef = useRef(null);
+  const activeAiThreadIdRef = useRef(null);
 
   const setActiveTab = useCallback((tabId) => {
     const nextTab = isValidTabId(tabId) ? tabId : 'home';
@@ -156,6 +174,20 @@ export function LifeOSProvider({ children }) {
     setAiActionLogs([]);
     setAiActionLogsError('');
     setAiActionLogsStatus(status);
+    setAiChatThreads([]);
+    setAiChatThreadsError('');
+    setAiChatThreadsStatus(status);
+    setActiveAiThreadId(null);
+    activeAiThreadIdRef.current = null;
+    setActiveAiChatMessages([]);
+    setAiChatMessagesError('');
+    setAiChatMessagesStatus(status);
+    setAiMemories([]);
+    setAiMemoriesError('');
+    setAiMemoriesStatus(status);
+    setAiInsights([]);
+    setAiInsightsError('');
+    setAiInsightsStatus(status);
     setRefreshState('idle');
     setRefreshError('');
     setLastRefreshAt(null);
@@ -598,6 +630,141 @@ export function LifeOSProvider({ children }) {
     loadAiActionLogs(10);
   }, [loadAiActionLogs]);
 
+  const loadAiChatThreads = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setAiChatThreadsStatus('not-configured');
+      return [];
+    }
+    if (!authUser) {
+      setAiChatThreads([]);
+      setActiveAiThreadId(null);
+      activeAiThreadIdRef.current = null;
+      setAiChatThreadsStatus('no-session');
+      return [];
+    }
+
+    setAiChatThreadsStatus('loading');
+    setAiChatThreadsError('');
+    try {
+      const rows = await aiChatThreadApi.list();
+      if (lastAuthUserId.current !== authUser.id) return [];
+      const sortedRows = sortAiChatThreads(rows ?? []);
+      setAiChatThreads(sortedRows);
+      setActiveAiThreadId((currentId) => {
+        const nextId = currentId && sortedRows.some((thread) => thread.id === currentId && thread.status === 'active')
+          ? currentId
+          : sortedRows.find((thread) => thread.status === 'active')?.id ?? null;
+        activeAiThreadIdRef.current = nextId;
+        return nextId;
+      });
+      setAiChatThreadsStatus('ready');
+      return sortedRows;
+    } catch (error) {
+      setAiChatThreadsError(brainErrorMessage(error, 'Failed to load Brain conversations.'));
+      setAiChatThreadsStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadAiChatThreads();
+  }, [loadAiChatThreads]);
+
+  const loadAiChatMessages = useCallback(async (threadId = activeAiThreadId) => {
+    if (!threadId) {
+      setActiveAiChatMessages([]);
+      setAiChatMessagesStatus(authUser ? 'ready' : 'no-session');
+      return [];
+    }
+    if (!isSupabaseConfigured) {
+      setAiChatMessagesStatus('not-configured');
+      return [];
+    }
+    if (!authUser) {
+      setActiveAiChatMessages([]);
+      setAiChatMessagesStatus('no-session');
+      return [];
+    }
+
+    setAiChatMessagesStatus('loading');
+    setAiChatMessagesError('');
+    try {
+      const rows = await aiChatMessageApi.list(threadId);
+      if (lastAuthUserId.current !== authUser.id || threadId !== activeAiThreadIdRef.current) return rows ?? [];
+      setActiveAiChatMessages(rows ?? []);
+      setAiChatMessagesStatus('ready');
+      return rows ?? [];
+    } catch (error) {
+      setAiChatMessagesError(brainErrorMessage(error, 'Failed to load Brain messages.'));
+      setAiChatMessagesStatus('error');
+      return [];
+    }
+  }, [activeAiThreadId, authUser]);
+
+  useEffect(() => {
+    loadAiChatMessages(activeAiThreadId);
+  }, [activeAiThreadId, loadAiChatMessages]);
+
+  const loadAiMemories = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setAiMemoriesStatus('not-configured');
+      return [];
+    }
+    if (!authUser) {
+      setAiMemories([]);
+      setAiMemoriesStatus('no-session');
+      return [];
+    }
+
+    setAiMemoriesStatus('loading');
+    setAiMemoriesError('');
+    try {
+      const rows = await aiMemoryApi.list();
+      if (lastAuthUserId.current !== authUser.id) return [];
+      setAiMemories(rows ?? []);
+      setAiMemoriesStatus('ready');
+      return rows ?? [];
+    } catch (error) {
+      setAiMemoriesError(brainErrorMessage(error, 'Failed to load Brain memory.'));
+      setAiMemoriesStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadAiMemories();
+  }, [loadAiMemories]);
+
+  const loadAiInsights = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setAiInsightsStatus('not-configured');
+      return [];
+    }
+    if (!authUser) {
+      setAiInsights([]);
+      setAiInsightsStatus('no-session');
+      return [];
+    }
+
+    setAiInsightsStatus('loading');
+    setAiInsightsError('');
+    try {
+      const rows = await aiInsightApi.list();
+      if (lastAuthUserId.current !== authUser.id) return [];
+      setAiInsights(rows ?? []);
+      setAiInsightsStatus('ready');
+      return rows ?? [];
+    } catch (error) {
+      setAiInsightsError(brainErrorMessage(error, 'Failed to load Brain insights.'));
+      setAiInsightsStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadAiInsights();
+  }, [loadAiInsights]);
+
   const setUnsavedWork = useCallback((sourceId, meaningful, label = '') => {
     if (!sourceId) return;
     setUnsavedWorkBySource((current) => {
@@ -641,6 +808,10 @@ export function LifeOSProvider({ children }) {
       ['memos', loadMemos()],
       ['projects', loadProjects()],
       ['project_money', loadProjectMoneyEntries()],
+      ['ai_chat_threads', loadAiChatThreads()],
+      ['ai_chat_messages', loadAiChatMessages(activeAiThreadId)],
+      ['ai_memories', loadAiMemories()],
+      ['ai_insights', loadAiInsights()],
       ['ai_actions', loadAiActionLogs(10)],
     ];
 
@@ -676,7 +847,12 @@ export function LifeOSProvider({ children }) {
     return refreshPromise;
   }, [
     authUser,
+    activeAiThreadId,
     loadAiActionLogs,
+    loadAiChatMessages,
+    loadAiChatThreads,
+    loadAiInsights,
+    loadAiMemories,
     loadAllCalendarEvents,
     loadExpenseMonth,
     loadExpenses,
@@ -1290,6 +1466,60 @@ export function LifeOSProvider({ children }) {
           throw new Error(message);
         }
       },
+      loadAiChatThreads,
+      loadAiChatMessages,
+      createAiChatThread: async (payload = {}) => {
+        if (!authUser) throw new Error('Sign in before creating a Brain conversation.');
+        const created = await aiChatThreadApi.create(payload);
+        setAiChatThreads((prev) => sortAiChatThreads([created, ...prev]));
+        activeAiThreadIdRef.current = created.id;
+        setActiveAiThreadId(created.id);
+        setActiveAiChatMessages([]);
+        setAiChatThreadsStatus('ready');
+        setAiChatMessagesStatus('ready');
+        return created;
+      },
+      selectAiChatThread: (threadId) => {
+        if (!threadId || threadId === activeAiThreadId) return;
+        activeAiThreadIdRef.current = threadId;
+        setActiveAiThreadId(threadId);
+        setActiveAiChatMessages([]);
+        setAiChatMessagesStatus('loading');
+      },
+      archiveAiChatThread: async (threadId) => {
+        const archived = await aiChatThreadApi.archive(threadId);
+        const remaining = sortAiChatThreads(aiChatThreads.map((thread) => (thread.id === threadId ? archived : thread)));
+        setAiChatThreads(remaining);
+        if (activeAiThreadId === threadId) {
+          const nextId = remaining.find((thread) => thread.status === 'active')?.id ?? null;
+          activeAiThreadIdRef.current = nextId;
+          setActiveAiThreadId(nextId);
+          setActiveAiChatMessages([]);
+        }
+        return archived;
+      },
+      renameAiChatThread: async (threadId, title) => {
+        const updated = await aiChatThreadApi.update(threadId, { title });
+        setAiChatThreads((prev) => sortAiChatThreads(prev.map((thread) => (thread.id === threadId ? updated : thread))));
+        return updated;
+      },
+      reloadAiMemories: loadAiMemories,
+      archiveAiMemory: async (memoryId) => {
+        const archived = await aiMemoryApi.archive(memoryId);
+        setAiMemories((prev) => prev.filter((memory) => memory.id !== memoryId));
+        return archived;
+      },
+      updateAiMemory: async (memoryId, patch) => {
+        const updated = await aiMemoryApi.update(memoryId, patch);
+        setAiMemories((prev) => prev.map((memory) => (memory.id === memoryId ? updated : memory)));
+        return updated;
+      },
+      reloadAiInsights: loadAiInsights,
+      archiveAiInsight: async (insightId) => {
+        const archived = await aiInsightApi.archive(insightId);
+        setAiInsights((prev) => prev.filter((insight) => insight.id !== insightId));
+        return archived;
+      },
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,
@@ -1340,7 +1570,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, refreshLifeOS, setActiveTab, setUnsavedWork, workoutSessions, workoutTemplates],
+    [activeAiThreadId, activeWorkoutId, aiChatThreads, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadAiChatMessages, loadAiChatThreads, loadAiInsights, loadAiMemories, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, refreshLifeOS, setActiveTab, setUnsavedWork, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -1379,6 +1609,19 @@ export function LifeOSProvider({ children }) {
     aiActionLogs,
     aiActionLogsError,
     aiActionLogsStatus,
+    aiChatThreads,
+    aiChatThreadsError,
+    aiChatThreadsStatus,
+    activeAiThreadId,
+    activeAiChatMessages,
+    aiChatMessagesError,
+    aiChatMessagesStatus,
+    aiMemories,
+    aiMemoriesError,
+    aiMemoriesStatus,
+    aiInsights,
+    aiInsightsError,
+    aiInsightsStatus,
     refreshState,
     refreshError,
     lastRefreshAt,
@@ -1560,6 +1803,14 @@ function sortDailyReviews(rows = []) {
   return rows.slice().sort((a, b) => {
     if (a.review_on !== b.review_on) return new Date(b.review_on) - new Date(a.review_on);
     return new Date(b.updated_at ?? 0) - new Date(a.updated_at ?? 0);
+  });
+}
+
+function sortAiChatThreads(rows = []) {
+  return rows.slice().sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
+    return new Date(b.last_message_at ?? b.updated_at ?? b.created_at ?? 0)
+      - new Date(a.last_message_at ?? a.updated_at ?? a.created_at ?? 0);
   });
 }
 
@@ -1793,6 +2044,17 @@ function projectErrorMessage(error, fallback) {
   const isMissingTable = error?.code === '42P01' || /projects|project_sessions|project_money_entries/i.test(message) && /does not exist|not found|schema cache/i.test(message);
   if (isMissingTable) {
     return 'Projects tables are missing. Apply supabase/schema.sql to create public.projects, public.project_sessions, and public.project_money_entries, then reload.';
+  }
+  return message || fallback;
+}
+
+function brainErrorMessage(error, fallback) {
+  const message = String(error?.message ?? '');
+  const isMissingTable = error?.code === '42P01'
+    || /ai_chat_threads|ai_chat_messages|ai_memories|ai_insights/i.test(message)
+      && /does not exist|not found|schema cache/i.test(message);
+  if (isMissingTable) {
+    return 'Brain persistence tables are missing. Apply supabase/schema.sql, then reload.';
   }
   return message || fallback;
 }

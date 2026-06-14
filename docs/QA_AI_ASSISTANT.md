@@ -11,6 +11,34 @@ Run this after deploying to Vercel with:
 
 The in-app Assistant sends the signed-in user's Supabase access token to `/api/ai/chat`. The backend verifies that user against `LIFEOS_ACTION_USER_ID`. The endpoint also accepts the action token for trusted server/tool callers.
 
+Run the latest `supabase/schema.sql` before this checklist so Brain thread, message, memory, and insight tables exist.
+
+## Persistent Brain Chat
+
+1. Send a message in Brain and wait for the assistant response.
+2. Refresh `/assistant` and confirm both user and assistant messages remain.
+3. Send a follow-up that depends on the previous exchange and confirm Brain retains bounded conversation context.
+4. Create `New Chat` and confirm the old active thread remains selectable.
+5. Confirm the new thread title changes from `New Chat` to a deterministic title based on the first message.
+6. Archive the current thread and confirm another active thread is selected without affecting its messages.
+7. Pull to refresh and confirm the thread list and active thread messages reload.
+8. Confirm a failed AI request stores only a safe user-facing assistant error, not raw server/provider internals.
+
+## Brain Memory
+
+1. Say: `Remember that I prefer direct practical advice and hate noisy dashboards.`
+2. Confirm the response acknowledges it and a memory appears under `What LifeOS Knows`.
+3. Ask later: `How should you answer me?`
+4. Confirm Brain applies the preference without dumping the entire memory list.
+5. Ask: `What do you remember about me?` and confirm active memories are summarized.
+6. Edit the memory in the panel, refresh, and confirm the edit persists.
+7. Archive/forget the memory from the panel and confirm it disappears from active memory and future prompt context.
+8. Discuss LifeOS as a SaaS/business direction and confirm a concise useful memory may be extracted.
+9. Repeat a similar durable statement and confirm it updates/deduplicates rather than creating obvious duplicates.
+10. Log a simple habit, expense, memo, or calendar event and confirm it does not create a durable memory.
+11. Confirm memory extraction failure does not prevent the main assistant response.
+12. Confirm no passwords, tokens, API keys, or secrets are saved as memories.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.
@@ -228,9 +256,10 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 ## Mobile / iPhone
 
 1. Open Assistant on iPhone Safari.
-2. Confirm Brain contains Ask LifeOS chat and Recent Actions.
-3. Confirm no range/scope dropdowns exist.
-4. Confirm Daily Review and canned prompt Suggestions are absent.
-5. Confirm the textarea uses 16px text and does not zoom.
-6. Confirm the send button is thumb-friendly and not covered by bottom nav.
-7. Confirm Recent Actions remains compact and opens its detail view.
+2. Confirm Brain contains persistent chat, compact thread selection, New Chat, `What LifeOS Knows`, and Recent Actions.
+3. Confirm the thread selector and memory panel do not overflow horizontally.
+4. Confirm no range/scope dropdowns exist.
+5. Confirm Daily Review and canned prompt Suggestions are absent.
+6. Confirm the textarea uses 16px text and does not zoom.
+7. Confirm the sticky composer/send button is thumb-friendly and not covered by bottom nav.
+8. Confirm Recent Actions remains compact and opens its detail view.

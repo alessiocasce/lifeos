@@ -191,6 +191,58 @@ const dailyReviewSelect = `
   updated_at
 `;
 
+const aiChatThreadSelect = `
+  id,
+  user_id,
+  title,
+  status,
+  metadata,
+  created_at,
+  updated_at,
+  last_message_at
+`;
+
+const aiChatMessageSelect = `
+  id,
+  user_id,
+  thread_id,
+  role,
+  content,
+  request_id,
+  action_type,
+  metadata,
+  created_at
+`;
+
+const aiMemorySelect = `
+  id,
+  user_id,
+  category,
+  title,
+  content,
+  source,
+  confidence,
+  importance,
+  status,
+  last_seen_at,
+  metadata,
+  created_at,
+  updated_at
+`;
+
+const aiInsightSelect = `
+  id,
+  user_id,
+  insight_type,
+  title,
+  content,
+  evidence,
+  confidence,
+  status,
+  created_at,
+  updated_at
+`;
+
 export const authApi = {
   async getSession() {
     return throwIfError(await requireSupabase().auth.getSession());
@@ -798,6 +850,143 @@ export const aiActionLogApi = {
   },
 };
 
+export const aiChatThreadApi = {
+  async list(limit = 50) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_chat_threads')
+        .select(aiChatThreadSelect)
+        .order('updated_at', { ascending: false })
+        .limit(limit),
+    );
+  },
+
+  async create(payload = {}) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_chat_threads')
+        .insert({
+          title: payload.title?.trim() || 'New Chat',
+          status: payload.status || 'active',
+          metadata: payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {},
+        })
+        .select(aiChatThreadSelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_chat_threads')
+        .update(prepareAiChatThreadPayload(patch))
+        .eq('id', id)
+        .select(aiChatThreadSelect)
+        .single(),
+    );
+  },
+
+  async archive(id) {
+    return this.update(id, { status: 'archived' });
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('ai_chat_threads').delete().eq('id', id));
+  },
+};
+
+export const aiChatMessageApi = {
+  async list(threadId, { limit = 200 } = {}) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_chat_messages')
+        .select(aiChatMessageSelect)
+        .eq('thread_id', threadId)
+        .order('created_at', { ascending: true })
+        .limit(limit),
+    );
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_chat_messages')
+        .insert(prepareAiChatMessagePayload(payload))
+        .select(aiChatMessageSelect)
+        .single(),
+    );
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('ai_chat_messages').delete().eq('id', id));
+  },
+};
+
+export const aiMemoryApi = {
+  async list({ status = 'active', limit = 100 } = {}) {
+    let query = requireSupabase()
+      .from('ai_memories')
+      .select(aiMemorySelect)
+      .order('importance', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+    if (status) query = query.eq('status', status);
+    return throwIfError(await query);
+  },
+
+  async create(payload) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_memories')
+        .insert(prepareAiMemoryPayload(payload))
+        .select(aiMemorySelect)
+        .single(),
+    );
+  },
+
+  async update(id, patch) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_memories')
+        .update(prepareAiMemoryPayload(patch))
+        .eq('id', id)
+        .select(aiMemorySelect)
+        .single(),
+    );
+  },
+
+  async archive(id) {
+    return this.update(id, { status: 'archived' });
+  },
+
+  async delete(id) {
+    return throwIfError(await requireSupabase().from('ai_memories').delete().eq('id', id));
+  },
+};
+
+export const aiInsightApi = {
+  async list({ status = 'active', limit = 30 } = {}) {
+    let query = requireSupabase()
+      .from('ai_insights')
+      .select(aiInsightSelect)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (status) query = query.eq('status', status);
+    return throwIfError(await query);
+  },
+
+  async archive(id) {
+    return throwIfError(
+      await requireSupabase()
+        .from('ai_insights')
+        .update({ status: 'archived' })
+        .eq('id', id)
+        .select(aiInsightSelect)
+        .single(),
+    );
+  },
+};
+
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
@@ -812,6 +1001,10 @@ export const lifeosApi = {
   projectMoneyEntries: projectMoneyEntryApi,
   dailyReviews: dailyReviewApi,
   aiActionLogs: aiActionLogApi,
+  aiChatThreads: aiChatThreadApi,
+  aiChatMessages: aiChatMessageApi,
+  aiMemories: aiMemoryApi,
+  aiInsights: aiInsightApi,
   chatMessages: {
     list: async () => throwIfError(await requireSupabase().from('chat_messages').select('*').order('created_at', { ascending: true })),
     create: async (payload) => throwIfError(await requireSupabase().from('chat_messages').insert(payload).select('*').single()),
@@ -955,6 +1148,41 @@ function prepareProjectMoneyEntryPayload(payload) {
 function prepareDailyReviewPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareAiChatThreadPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      title: payload.title === undefined ? undefined : payload.title?.trim() || 'New Chat',
+      status: payload.status === undefined ? undefined : payload.status,
+      metadata: payload.metadata === undefined ? undefined : payload.metadata,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareAiChatMessagePayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      content: payload.content?.trim(),
+      metadata: payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {},
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+function prepareAiMemoryPayload(payload) {
+  return Object.fromEntries(
+    Object.entries({
+      ...payload,
+      category: payload.category === undefined ? undefined : payload.category?.trim(),
+      title: payload.title === undefined ? undefined : payload.title?.trim(),
+      content: payload.content === undefined ? undefined : payload.content?.trim(),
+      confidence: payload.confidence === undefined ? undefined : Number(payload.confidence),
+      importance: payload.importance === undefined ? undefined : Number(payload.importance),
+      metadata: payload.metadata === undefined ? undefined : payload.metadata,
+    }).filter(([, value]) => value !== undefined),
   );
 }
 
