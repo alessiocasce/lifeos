@@ -539,9 +539,14 @@ Current behavior:
 - If a duplicate-key insert happens, the app fetches the existing log for that date and updates it.
 - Changing the form date loads the persisted log for that date or clears the form for a new date.
 - A selected non-today Health date remains stable during background health-log refreshes.
+- Health field changes autosave; there is no manual Save/Update Check-In button.
+- Wake Time and Sleep Start save on blur or Enter once valid. Notes save on blur, while Coffee, ADC, and habit controls save immediately.
+- Autosave uses serialized, field-level patches tied to the selected date so quick changes and date switching do not overwrite unrelated or newer values.
+- The Health header shows compact Saving, Saved, Unsaved changes, or Failed to save feedback.
 - Shows compact 7-day history from persisted rows only.
 - Shows measurable summaries for calculated sleep, coffee, ADC, and standalone daily habit stats.
 - `sleep_hours` is display-only in Health and is calculated from the previous calendar day's `sleep_start` plus the current day's `wake_time`.
+- Wake Time appears before Sleep Start. Sleep Start is labeled as affecting the following morning, while calculated Sleep Hours explains its previous-day sleep-start relationship.
 - Calculated sleep is rounded to the nearest 0.5 hour. Missing or nonsensical durations remain unavailable instead of being stored.
 - `sleep_quality`, `mood`, `social_time_minutes`, and `main_time_waster` remain in the database for backward compatibility but are not displayed in the Health check-in, 7-day summary, or 7-day history.
 - `energy` remains in the database for backward compatibility but is hidden from Health and Home.
@@ -659,7 +664,7 @@ Workout mobile direction:
 - Test app behavior when Supabase env vars are missing.
 - Test Health tab after running the latest `health_logs` migration:
   - Create today's log when none exists.
-  - Save today's log again and confirm it updates instead of duplicating.
+  - Change another field in today's log and confirm autosave updates instead of duplicating.
   - Create yesterday's log and switch between dates to confirm the form loads the correct persisted row.
   - Confirm 7-day summaries use persisted rows only.
   - Confirm numeric fields reject out-of-range values.

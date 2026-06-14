@@ -4,16 +4,33 @@ Run this after signing in through the global auth gate. This pass does not requi
 
 ## Visible Health Fields
 
-1. Open Health and confirm Sleep Start, Wake Time, Coffee, ADC, Notes, and Daily Habits are available.
+1. Open Health and confirm Wake Time, Sleep Start, Coffee, ADC, Notes, and Daily Habits are available.
 2. Confirm Sleep Hours is read-only and cannot be typed or incremented.
-3. Confirm the Sleep Hours hint says it is calculated from the previous sleep start and today's wake time.
-4. Confirm Energy, Water, Brush, sleep quality, mood, social time, and main time waster are not shown.
-5. Confirm hidden legacy database values are not cleared when another visible field is updated.
+3. Confirm Wake Time appears before Sleep Start.
+4. Confirm Sleep Start says `Used for the following morning.`
+5. Confirm the Sleep Hours hint says it is calculated from the previous day's sleep start and this day's wake time.
+6. Confirm there is no Save Check-In or Update Check-In button.
+7. Confirm Energy, Water, Brush, Journal, sleep quality, mood, social time, and main time waster are not shown.
+8. Confirm hidden legacy database values are not cleared when another visible field is updated.
+
+## Autosave
+
+1. Change Wake Time and blur or press Enter; confirm the status moves through `Saving...` to `Saved`.
+2. Change Sleep Start and blur or press Enter; confirm it autosaves.
+3. Clear a time field and blur; confirm null is saved.
+4. Enter an invalid or incomplete time and confirm it is not saved and a subtle unsaved/error state remains.
+5. Change Notes and blur; confirm it autosaves without writing on every keystroke.
+6. Increment and decrement Coffee and ADC; confirm each control change autosaves.
+7. Increment Creatine and Skin; confirm each change autosaves immediately and appends the current Europe/Rome time.
+8. Change several controls quickly; confirm the final values persist without older responses replacing newer changes.
+9. Edit a field, change the selected date before committing it, and confirm the pending edit is not written to the new date.
+10. Queue a save, change dates, and confirm the queued save remains tied to its original date.
+11. Force a write failure and confirm the input remains visible with `Failed to save`.
 
 ## Automatic Sleep Calculation
 
-1. Set yesterday's `sleep_start` to `01:30` and save.
-2. Set today's `wake_time` to `09:00` and save.
+1. Set yesterday's `sleep_start` to `01:30` and blur.
+2. Set today's `wake_time` to `09:00` and blur.
 3. Confirm today's Sleep Hours displays and persists as `7.5`.
 4. Change today's wake time to `08:00`; confirm Sleep Hours recalculates to `6.5`.
 5. Change yesterday's sleep start to `00:30`; confirm today's Sleep Hours recalculates to `7.5`.
@@ -29,7 +46,7 @@ Run this after signing in through the global auth gate. This pass does not requi
 2. Confirm Brush and Journal are not shown.
 3. Increase each habit; confirm the count increments and the current Europe/Rome time is appended.
 4. Decrease a habit; confirm the count decrements safely and the latest timestamp is removed when present.
-5. Save and refresh; confirm counts and times reload.
+5. Refresh and confirm autosaved counts and times reload.
 6. Test legacy numeric and boolean habit values and confirm they display as counts without crashing.
 7. Test a legacy row containing Brush, Journal, Floss, or Stretch and confirm those values remain stored but are not displayed.
 8. Ask the assistant `Log that i took creatine today`; confirm Creatine updates with a timestamp and omitted habits remain unchanged.
@@ -70,8 +87,8 @@ Run this after signing in through the global auth gate. This pass does not requi
 
 ## Persistence And Mobile
 
-1. Save today and yesterday, refresh, and confirm both logs reload.
+1. Autosave today and yesterday, refresh, and confirm both logs reload.
 2. Switch dates and confirm the selected non-today date remains stable during refreshes.
 3. Confirm 7-day summaries and history use persisted rows and do not show Energy, Water, or Brush.
-4. On iPhone/PWA, confirm no horizontal overflow, no input zoom, and the bottom nav does not cover Save Check-In.
+4. On iPhone/PWA, confirm no horizontal overflow, no input zoom, and the bottom nav does not cover Health controls.
 5. Confirm the read-only sleep value and time-aware habit controls remain easy to scan and tap.

@@ -1,5 +1,5 @@
-import { Ban, Coffee, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Ban, Check, Coffee, Loader2, Minus, Moon, Plus, ShieldCheck, TriangleAlert, Users } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import { localDate, localTime } from '../utils/date';
@@ -39,73 +39,126 @@ export function HealthTab() {
   const historyResolved = ['ready', 'error', 'not-configured', 'no-session'].includes(healthLogsStatus);
 
   const [form, setForm] = useState(() => formFromLog(todaysLog));
-  const [saving, setSaving] = useState(false);
+  const formRef = useRef(form);
+  const selectedDateRef = useRef(form.logged_on);
+  const changeSequenceRef = useRef(0);
+  const dirtyVersionsRef = useRef({});
+  const saveQueueRef = useRef(Promise.resolve());
+  const pendingSavesRef = useRef(0);
+  const [saveState, setSaveState] = useState('idle');
   const [formError, setFormError] = useState('');
-  const [savedMessage, setSavedMessage] = useState('');
   const selectedLog = useMemo(
     () => sortedLogs.find((log) => log.logged_on === form.logged_on) ?? null,
     [form.logged_on, sortedLogs],
   );
   const selectedIsToday = form.logged_on === today;
-  const panelTitle = `${selectedLog ? 'Update' : 'Create'} ${selectedIsToday ? 'Today' : 'Selected Date'}`;
+  const panelTitle = selectedIsToday ? 'Today Check-In' : 'Selected Date';
 
   useEffect(() => {
-    setForm((prev) => (prev.logged_on === today ? formFromLog(todaysLog) : prev));
-  }, [todaysLog?.id, todaysLog?.updated_at]);
+    if (!selectedLog || selectedDateRef.current !== selectedLog.logged_on) return;
+    if (Object.keys(dirtyVersionsRef.current).length > 0) return;
+    replaceForm(formFromLog(selectedLog));
+  }, [selectedLog?.id, selectedLog?.updated_at]);
 
   const updateField = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    setSavedMessage('');
+    changeSequenceRef.current += 1;
+    dirtyVersionsRef.current[field] = changeSequenceRef.current;
+    replaceForm({ ...formRef.current, [field]: value });
+    setSaveState('dirty');
+    setFormError('');
   };
 
   const updateLoggedOn = (value) => {
+    if (!isValidDate(value)) return;
     const existing = sortedLogs.find((log) => log.logged_on === value);
-    setForm(existing ? formFromLog(existing) : emptyFormForDate(value));
+    selectedDateRef.current = value;
+    dirtyVersionsRef.current = {};
+    replaceForm(existing ? formFromLog(existing) : emptyFormForDate(value));
     setFormError('');
-    setSavedMessage('');
+    setSaveState('idle');
   };
 
   const stepField = (field, delta, min = 0, max = 20) => {
-    setForm((prev) => {
-      const next = Math.max(min, Math.min(max, parseInteger(prev[field]) + delta));
-      return { ...prev, [field]: String(next) };
-    });
-    setSavedMessage('');
+    const next = Math.max(min, Math.min(max, parseInteger(formRef.current[field]) + delta));
+    updateField(field, String(next));
+    queueSave(formRef.current.logged_on, { [field]: next }, { [field]: dirtyVersionsRef.current[field] });
   };
 
   const stepHabit = (id, delta) => {
-    setForm((prev) => ({ ...prev, hygiene: buildHabitUpdate(prev.hygiene, id, delta, localTime()) }));
-    setSavedMessage('');
+    const hygiene = buildHabitUpdate(formRef.current.hygiene, id, delta, localTime());
+    updateField('hygiene', hygiene);
+    queueSave(formRef.current.logged_on, { hygiene }, { hygiene: dirtyVersionsRef.current.hygiene });
   };
 
-  const submit = async (event) => {
-    event.preventDefault();
-    setFormError('');
-    setSavedMessage('');
-
-    const validationError = validateHealthForm(form);
+  const commitField = (field) => {
+    const version = dirtyVersionsRef.current[field];
+    if (!version) return;
+    const value = formRef.current[field];
+    const validationError = validateAutosaveField(field, value);
     if (validationError) {
       setFormError(validationError);
+      setSaveState('dirty');
       return;
     }
+    queueSave(
+      formRef.current.logged_on,
+      { [field]: normalizeAutosaveValue(field, value) },
+      { [field]: version },
+    );
+  };
 
-    setSaving(true);
-    try {
-      const saved = await saveHealthLog(toPayload(form));
-      setForm(formFromLog(saved));
-      setSavedMessage(saved.logged_on === today ? 'Today saved.' : `${saved.logged_on} saved.`);
-    } catch (error) {
-      setFormError(error.message || 'Failed to save health log.');
-    } finally {
-      setSaving(false);
-    }
+  function replaceForm(next) {
+    formRef.current = next;
+    setForm(next);
+  }
+
+  function queueSave(loggedOn, patch, versions) {
+    pendingSavesRef.current += 1;
+    if (selectedDateRef.current === loggedOn) setSaveState('saving');
+
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        let failed = false;
+        if (selectedDateRef.current === loggedOn) {
+          setSaveState('saving');
+          setFormError('');
+        }
+        try {
+          const saved = await saveHealthLog({ logged_on: loggedOn, ...patch });
+          if (selectedDateRef.current === loggedOn) {
+            const serverForm = formFromLog(saved);
+            const next = { ...formRef.current };
+            const savedCurrentWakeEdit = Object.prototype.hasOwnProperty.call(patch, 'wake_time')
+              && dirtyVersionsRef.current.wake_time === versions.wake_time;
+            if (!dirtyVersionsRef.current.wake_time || savedCurrentWakeEdit) next.sleep_hours = serverForm.sleep_hours;
+            for (const field of Object.keys(patch)) {
+              if (dirtyVersionsRef.current[field] !== versions[field]) continue;
+              next[field] = serverForm[field];
+              delete dirtyVersionsRef.current[field];
+            }
+            replaceForm(next);
+          }
+        } catch (error) {
+          failed = true;
+          if (selectedDateRef.current === loggedOn) {
+            setFormError(error.message || 'Failed to save changes.');
+            setSaveState('error');
+          }
+        } finally {
+          pendingSavesRef.current = Math.max(0, pendingSavesRef.current - 1);
+          if (selectedDateRef.current === loggedOn && pendingSavesRef.current === 0) {
+            setSaveState(failed ? 'error' : Object.keys(dirtyVersionsRef.current).length ? 'dirty' : 'saved');
+          }
+        }
+      });
   };
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel className="col-span-12 xl:col-span-8">
-        <PanelHeader eyebrow="Daily Check-In" title={panelTitle} right={<SourceStatus status={healthLogsStatus} />} />
-        <form onSubmit={submit} className="grid gap-3 p-3">
+        <PanelHeader eyebrow="Daily Check-In" title={panelTitle} right={<AutosaveStatus saveState={saveState} sourceStatus={healthLogsStatus} />} />
+        <div className="grid gap-3 p-3">
           <section className="rounded-md border border-white/5 bg-black/25 p-2">
             <div className="mb-2 flex items-center gap-2">
               <Moon size={15} className="text-cyan-300" />
@@ -113,9 +166,23 @@ export function HealthTab() {
             </div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} />
+              <HealthField
+                label="Wake Time"
+                helper="Used for this selected day."
+                type="time"
+                value={form.wake_time}
+                onChange={(value) => updateField('wake_time', value)}
+                onCommit={() => commitField('wake_time')}
+              />
+              <HealthField
+                label="Sleep Start"
+                helper="Used for the following morning."
+                type="time"
+                value={form.sleep_start}
+                onChange={(value) => updateField('sleep_start', value)}
+                onCommit={() => commitField('sleep_start')}
+              />
               <CalculatedSleepHours value={form.sleep_hours} />
-              <HealthField label="Sleep Start" type="time" value={form.sleep_start} onChange={(value) => updateField('sleep_start', value)} />
-              <HealthField label="Wake Time" type="time" value={form.wake_time} onChange={(value) => updateField('wake_time', value)} />
             </div>
           </section>
 
@@ -144,20 +211,16 @@ export function HealthTab() {
             </div>
           </section>
 
-          <HealthField label="Notes" value={form.notes} placeholder="Optional context" onChange={(value) => updateField('notes', value)} />
+          <HealthField
+            label="Notes"
+            value={form.notes}
+            placeholder="Optional context"
+            onChange={(value) => updateField('notes', value)}
+            onCommit={() => commitField('notes')}
+          />
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-          >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saving ? 'Saving Check-In' : selectedLog ? 'Update Check-In' : 'Save Check-In'}
-          </button>
-
-          {savedMessage ? <p className="data-text text-[11px] text-emerald-300">{savedMessage}</p> : null}
           {formError || healthLogsError ? <p className="data-text text-[11px] text-red-300">{formError || healthLogsError}</p> : null}
-        </form>
+        </div>
       </Panel>
 
       <Panel className="col-span-12 xl:col-span-4">
@@ -189,7 +252,7 @@ export function HealthTab() {
             visibleLogs.map((log) => <HistoryRow key={log.id} log={log} current={log.logged_on === today} />)
           ) : historyResolved ? (
             <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-              No persisted health logs yet. Save today&apos;s check-in to start the history.
+              No persisted health logs yet. Change a field to start today&apos;s history.
             </div>
           ) : (
             <LoadingRow label="Health history pending" />
@@ -200,7 +263,7 @@ export function HealthTab() {
   );
 }
 
-function HealthField({ inputMode, label, onChange, placeholder = '', suffix, type = 'text', value }) {
+function HealthField({ helper, inputMode, label, onChange, onCommit, placeholder = '', suffix, type = 'text', value }) {
   return (
     <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
       <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
@@ -211,10 +274,15 @@ function HealthField({ inputMode, label, onChange, placeholder = '', suffix, typ
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={onCommit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && onCommit) event.currentTarget.blur();
+          }}
           className="data-text min-w-0 flex-1 bg-transparent text-base font-semibold text-zinc-100 outline-none placeholder:text-zinc-700"
         />
         {suffix ? <span className="data-text text-xs text-zinc-500">{suffix}</span> : null}
       </div>
+      {helper ? <span className="mt-1 block text-[10px] leading-4 text-zinc-600">{helper}</span> : null}
     </label>
   );
 }
@@ -224,7 +292,7 @@ function CalculatedSleepHours({ value }) {
     <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.05] px-2 py-1.5">
       <span className="text-[10px] uppercase tracking-wider text-zinc-500">Sleep Hours</span>
       <p className="data-text mt-1 text-base font-semibold text-cyan-200">{value === '' ? '--' : `${value}h`}</p>
-      <p className="mt-1 text-[10px] leading-4 text-zinc-500">Previous sleep start + today&apos;s wake time</p>
+      <p className="mt-1 text-[10px] leading-4 text-zinc-500">Previous day&apos;s sleep start + this day&apos;s wake time</p>
     </div>
   );
 }
@@ -279,7 +347,7 @@ function HabitTracker({ habit, entry, onStep }) {
         <span className="data-text text-lg font-black text-emerald-300">{entry.count}</span>
       </div>
       <p className={`data-text mb-2 min-h-4 text-[10px] ${entry.count ? 'text-emerald-300' : 'text-zinc-600'}`}>
-        {entry.count ? `${entry.count} logged${times ? ` · ${times}` : ''}` : 'Not logged'}
+        {entry.count ? `${entry.count} logged${times ? ` | ${times}` : ''}` : 'Not logged'}
       </p>
       <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onStep(-1)} className="grid h-9 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
@@ -341,12 +409,20 @@ function LoadingRow({ label }) {
   );
 }
 
-function SourceStatus({ status }) {
-  const label = status === 'loading' ? 'SYNCING' : status === 'error' ? 'ERROR' : 'LIVE';
-  const tone = status === 'error'
-    ? 'border-red-400/20 bg-red-400/10 text-red-300'
-    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
-  return <span className={`data-text rounded border px-2 py-1 text-[10px] ${tone}`}>{label}</span>;
+function AutosaveStatus({ saveState, sourceStatus }) {
+  if (saveState === 'saving') {
+    return <span className="data-text flex items-center gap-1 text-[10px] text-cyan-300"><Loader2 size={12} className="animate-spin" />Saving...</span>;
+  }
+  if (saveState === 'saved') {
+    return <span className="data-text flex items-center gap-1 text-[10px] text-emerald-300"><Check size={12} />Saved</span>;
+  }
+  if (saveState === 'dirty') {
+    return <span className="data-text text-[10px] text-amber-300">Unsaved changes</span>;
+  }
+  if (saveState === 'error' || sourceStatus === 'error') {
+    return <span className="data-text flex items-center gap-1 text-[10px] text-red-300"><TriangleAlert size={12} />Failed to save</span>;
+  }
+  return <span className="data-text text-[10px] text-zinc-600">Autosave</span>;
 }
 
 function formFromLog(log) {
@@ -371,32 +447,24 @@ function emptyFormForDate(loggedOn) {
   };
 }
 
-function toPayload(form) {
-  return {
-    logged_on: form.logged_on,
-    sleep_start: form.sleep_start || null,
-    wake_time: form.wake_time || null,
-    coffee: parseOptionalInteger(form.coffee) ?? 0,
-    adc: parseOptionalInteger(form.adc) ?? 0,
-    notes: form.notes.trim(),
-    hygiene: normalizeHygieneObject(form.hygiene),
-  };
+function validateAutosaveField(field, value) {
+  if (['sleep_start', 'wake_time'].includes(field) && value && !isValidTime(value)) {
+    return 'Enter a complete time before leaving the field.';
+  }
+  if (['coffee', 'adc'].includes(field)) {
+    const parsed = parseOptionalInteger(value);
+    if (parsed === null || !Number.isInteger(parsed) || parsed < 0) {
+      return `${field === 'adc' ? 'ADC' : 'Coffee'} must be zero or higher.`;
+    }
+  }
+  return '';
 }
 
-function validateHealthForm(form) {
-  if (!isValidDate(form.logged_on)) return 'Log date is invalid.';
-
-  const coffee = parseOptionalInteger(form.coffee);
-  if (coffee === null || !Number.isInteger(coffee) || coffee < 0) return 'Coffee must be zero or higher.';
-
-  const adc = parseOptionalInteger(form.adc);
-  if (adc === null || !Number.isInteger(adc) || adc < 0) return 'ADC must be zero or higher.';
-
-  if (!hasValidHabitValues(form.hygiene)) {
-    return 'Habit counts must be zero or higher.';
-  }
-
-  return '';
+function normalizeAutosaveValue(field, value) {
+  if (['sleep_start', 'wake_time'].includes(field)) return value || null;
+  if (['coffee', 'adc'].includes(field)) return parseOptionalInteger(value) ?? 0;
+  if (field === 'notes') return value.trim();
+  return value;
 }
 
 function summarizeLogs(logs) {
@@ -407,13 +475,6 @@ function summarizeLogs(logs) {
     totalAdc: normalized.reduce((total, log) => total + (parseOptionalInteger(log.adc) ?? 0), 0),
     habits: summarizeHabits(normalized),
   };
-}
-
-function hasValidHabitValues(items = []) {
-  return HEALTH_HABITS.every((habit) => {
-    const parsed = parseOptionalInteger(getHabitEntry(items, habit.id).count);
-    return parsed !== null && Number.isInteger(parsed) && parsed >= 0;
-  });
 }
 
 function summarizeHabits(logs) {
@@ -482,6 +543,11 @@ function isValidDate(value) {
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-') === value;
+}
+
+function isValidTime(value) {
+  const match = String(value).match(/^(\d{2}):([0-5]\d)$/);
+  return Boolean(match && Number(match[1]) <= 23);
 }
 
 function stringValue(value) {

@@ -245,13 +245,23 @@ Run the focused checklists after the full flow:
 ## Health Sleep And Cleanup
 
 1. Confirm Sleep Hours is display-only in Health.
-2. Set yesterday's Sleep Start to `01:30` and today's Wake Time to `09:00`; confirm today displays `7.5`.
-3. Change today's Wake Time to `08:00`; confirm it recalculates to `6.5`.
-4. Change yesterday's Sleep Start to `00:30`; confirm today recalculates to `7.5`.
-5. Confirm Energy is not shown in Health or Home.
-6. Confirm Brush is not shown in Health or Home.
-7. Confirm Shower, Creatine, and Skin counts/times save and reload.
-8. Confirm `/api/actions/health` defaults `logged_on` to the Europe/Rome date.
+2. Confirm Wake Time appears above Sleep Start.
+3. Confirm Sleep Start says it affects the following morning.
+4. Confirm the manual Save/Update Check-In button is absent.
+5. Change Wake Time and blur; confirm autosave and calculated sleep refresh.
+6. Change Sleep Start and blur; confirm autosave.
+7. Set yesterday's Sleep Start to `01:30` and today's Wake Time to `09:00`; confirm today displays `7.5`.
+8. Change today's Wake Time to `08:00`; confirm it recalculates to `6.5`.
+9. Change yesterday's Sleep Start to `00:30`; confirm today recalculates to `7.5`.
+10. Change today's Sleep Start and confirm it does not falsely change today's Sleep Hours.
+11. Change Coffee/ADC and confirm immediate autosave.
+12. Click Creatine and Skin; confirm immediate autosave and timestamps.
+13. Confirm invalid partial time does not save and shows subtle unsaved/error feedback.
+14. Change selected dates with pending edits and confirm no value writes to the wrong date.
+15. Confirm Energy is not shown in Health or Home.
+16. Confirm Brush and Journal are not shown in Health or Home.
+17. Confirm Shower, Creatine, and Skin counts/times autosave and reload.
+18. Confirm `/api/actions/health` defaults `logged_on` to the Europe/Rome date.
 
 ## iPhone Safari Basics
 

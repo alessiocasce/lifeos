@@ -82,7 +82,7 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 1. Open the deployed URL in iPhone Safari.
 2. Confirm no horizontal scrolling on Home, Health, Workout, Finances, Calendar, or Assistant.
 3. Confirm inputs do not zoom on focus.
-4. Confirm the bottom navigation does not cover Save Check-In, Save Set, Create Event, Save Expense, or Save Review.
+4. Confirm the bottom navigation does not cover Health controls, Save Set, Create Event, Save Expense, or Save Review.
 5. Confirm Health Coffee/ADC counters and time-aware Daily Habits are thumb-friendly.
 6. Confirm Workout set logging is usable one-handed.
 
