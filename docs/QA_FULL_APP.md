@@ -56,19 +56,23 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 
 ## PWA Pull To Refresh
 
-1. In the installed iPhone PWA, pull down from the top without crossing the threshold and confirm no refresh runs.
-2. Pull past the threshold and confirm the indicator moves through Pull, Release, Refreshing, and Updated.
-3. Change Health and Finances on desktop, pull once from any iPhone tab, then confirm both modules show the new persisted data.
-4. Change a Memo from desktop or Shortcut, pull from another tab, and confirm Memos reloads.
-5. Start a Workout, pull refresh, and confirm the active workout, persisted sets, templates, and template snapshot remain active.
-6. Enter only an exercise or incomplete weight/reps and confirm incomplete logger input does not block an available app update.
-7. Enter a complete unsaved set with exercise, valid weight, and valid reps. With a new app version waiting, pull and confirm the app does not reload.
-8. Confirm the indicator says `Update ready - save current workout set first.`
-9. Save the set, pull again, and confirm the waiting update can activate and reload.
-10. Start a Project session, enter meaningful Proof of Work, and confirm a waiting update asks to save the project session draft first.
-11. Confirm pull does not trigger while typing in an input, textarea, select, contenteditable field, or while a dialog/editor is open.
-12. Confirm Health autosave, active Project sessions, URL routing, bottom navigation, and horizontal layout remain intact.
-13. Confirm no duplicate refresh runs start while one refresh is already active.
+1. In the installed iPhone PWA, pull down and confirm the main tab content visibly moves with the finger while the shell header and bottom navigation stay fixed.
+2. Release below the threshold and confirm the content smoothly snaps back without refreshing.
+3. Pull past the threshold and confirm the indicator moves through Pull and Release while being revealed above the translated content.
+4. Release past the threshold and confirm the content stays slightly lowered during Refreshing.
+5. Confirm Updated, Failed, or Update Ready remains visible briefly, then the content returns smoothly to its normal position before the indicator fades.
+6. Confirm the header/content do not overlap strangely and the bottom navigation never moves or covers content.
+7. Change Health and Finances on desktop, pull once from any iPhone tab, then confirm both modules show the new persisted data.
+8. Change a Memo from desktop or Shortcut, pull from another tab, and confirm Memos reloads.
+9. Start a Workout, pull refresh, and confirm the active workout, persisted sets, templates, and template snapshot remain active.
+10. Enter only an exercise or incomplete weight/reps and confirm incomplete logger input does not block an available app update.
+11. Enter a complete unsaved set with exercise, valid weight, and valid reps. With a new app version waiting, pull and confirm the app does not reload.
+12. Confirm the indicator says `Update ready - save current workout set first.`
+13. Save the set, pull again, and confirm the waiting update can activate and reload.
+14. Start a Project session, enter meaningful Proof of Work, and confirm a waiting update asks to save the project session draft first.
+15. Confirm pull does not trigger while typing in an input, textarea, select, contenteditable field, or while a dialog/editor is open.
+16. Confirm Health autosave, active Project sessions, URL routing, bottom navigation, and horizontal layout remain intact.
+17. Confirm no duplicate refresh runs start while one refresh is already active.
 
 ## Tab URL Routing
 

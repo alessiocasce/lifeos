@@ -204,12 +204,14 @@ Current behavior:
 - Supports opening the already-loaded app shell offline where the browser allows it.
 - Does not implement full offline data sync, offline write queues, or cached personal data.
 - Mobile/iPhone PWA supports pull-to-refresh from the top of the app content.
+- Pull-to-refresh physically translates the tab content downward with resisted, Safari-like feedback, holds it slightly lowered while refreshing, then smoothly snaps it back.
 - One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, and recent AI actions.
 - Pull-to-refresh also asks the service worker to check for a newly deployed app version.
 - A waiting app update activates and reloads automatically when there is no meaningful unsaved work.
 - A complete unsaved Workout set or meaningful Project session draft blocks only the app reload; persisted data still refreshes and the indicator asks the user to save first.
 - Incomplete half-written fields are intentionally not protected by the app-update guard.
 - Pull-to-refresh is touch/mobile focused, ignores form controls and open dialogs, and is disabled on desktop.
+- The shell header and fixed mobile bottom navigation remain stable while only the main tab content moves.
 
 ## Action API Current Status
 

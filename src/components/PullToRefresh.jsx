@@ -5,6 +5,8 @@ import { applyAppUpdate, checkForAppUpdate } from '../utils/pwaUpdate';
 
 const PULL_THRESHOLD = 72;
 const MAX_PULL = 112;
+const REFRESH_HOLD_OFFSET = 56;
+const SNAP_BACK_DURATION = 220;
 
 export function PullToRefresh({ children }) {
   const { meaningfulUnsavedWork, refreshLifeOS } = useLifeOS();
@@ -13,9 +15,11 @@ export function PullToRefresh({ children }) {
   const pullDistanceRef = useRef(0);
   const refreshRunningRef = useRef(false);
   const resetTimerRef = useRef(null);
+  const fadeTimerRef = useRef(null);
   const unsavedWorkRef = useRef(meaningfulUnsavedWork);
   const [state, setState] = useState('idle');
-  const [pullDistance, setPullDistance] = useState(0);
+  const [contentOffset, setContentOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -35,6 +39,7 @@ export function PullToRefresh({ children }) {
         startY: touch.clientY,
         active: true,
       };
+      setIsDragging(true);
     };
 
     const handleTouchMove = (event) => {
@@ -56,7 +61,7 @@ export function PullToRefresh({ children }) {
       event.preventDefault();
       const distance = Math.min(MAX_PULL, deltaY * 0.62);
       pullDistanceRef.current = distance;
-      setPullDistance(distance);
+      setContentOffset(distance);
       setState(distance >= PULL_THRESHOLD ? 'ready' : 'pulling');
       setMessage('');
     };
@@ -65,38 +70,64 @@ export function PullToRefresh({ children }) {
       const shouldRefresh = gestureRef.current?.active && pullDistanceRef.current >= PULL_THRESHOLD;
       gestureRef.current = null;
       pullDistanceRef.current = 0;
-      setPullDistance(0);
-      if (shouldRefresh) runRefresh();
-      else setState('idle');
+      setIsDragging(false);
+      if (shouldRefresh) {
+        setContentOffset(REFRESH_HOLD_OFFSET);
+        runRefresh();
+      } else {
+        snapContentBack();
+      }
+    };
+
+    const handleTouchCancel = () => {
+      gestureRef.current = null;
+      pullDistanceRef.current = 0;
+      setIsDragging(false);
+      snapContentBack();
     };
 
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchCancel, { passive: true });
     return () => {
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchCancel);
       window.clearTimeout(resetTimerRef.current);
+      window.clearTimeout(fadeTimerRef.current);
     };
   }, [refreshLifeOS]);
 
   const resetPull = () => {
     gestureRef.current = null;
     pullDistanceRef.current = 0;
-    setPullDistance(0);
-    setState('idle');
+    setIsDragging(false);
+    snapContentBack();
+  };
+
+  const snapContentBack = (delay = 0) => {
+    window.clearTimeout(resetTimerRef.current);
+    window.clearTimeout(fadeTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => {
+      setContentOffset(0);
+      fadeTimerRef.current = window.setTimeout(() => {
+        setState('idle');
+        setMessage('');
+      }, SNAP_BACK_DURATION);
+    }, delay);
   };
 
   const runRefresh = async () => {
     if (refreshRunningRef.current) return;
     refreshRunningRef.current = true;
     window.clearTimeout(resetTimerRef.current);
+    window.clearTimeout(fadeTimerRef.current);
+    setContentOffset(REFRESH_HOLD_OFFSET);
     setState('refreshing');
     setMessage('Refreshing...');
-    let resetDelay = 1800;
+    let resultDisplayDuration = 900;
 
     try {
       const [dataResult, updateResult] = await Promise.all([
@@ -109,7 +140,7 @@ export function PullToRefresh({ children }) {
         if (blockingWork) {
           setState('update-ready');
           setMessage(`Update ready - ${blockingWork.label}.`);
-          resetDelay = 4500;
+          resultDisplayDuration = 4000;
         } else {
           setState('updating');
           setMessage('Updating LifeOS...');
@@ -117,7 +148,7 @@ export function PullToRefresh({ children }) {
           if (applied) return;
           setState('update-ready');
           setMessage('Update ready - pull again to apply.');
-          resetDelay = 4500;
+          resultDisplayDuration = 4000;
         }
       } else if (dataResult.ok) {
         setState('updated');
@@ -131,32 +162,40 @@ export function PullToRefresh({ children }) {
       setMessage('Refresh failed');
     } finally {
       refreshRunningRef.current = false;
-      resetTimerRef.current = window.setTimeout(() => {
-        setState('idle');
-        setMessage('');
-      }, resetDelay);
+      snapContentBack(resultDisplayDuration);
     }
   };
 
   const visible = state !== 'idle';
+  const indicatorOffset = Math.max(-40, contentOffset - 48);
+  const indicatorOpacity = visible ? Math.min(1, Math.max(0.2, contentOffset / 36)) : 0;
   return (
     <div ref={containerRef} className="relative min-w-0">
       <div
         aria-live="polite"
-        className={`pointer-events-none fixed inset-x-0 z-[9] flex justify-center px-3 transition-opacity duration-150 md:hidden ${
-          visible ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{ top: 'calc(env(safe-area-inset-top) + 60px)' }}
+        className="pointer-events-none absolute inset-x-0 top-0 z-[9] flex justify-center px-3 transition-opacity duration-150 md:hidden"
+        style={{ opacity: indicatorOpacity }}
       >
         <div
           className="flex min-h-9 max-w-[calc(100vw-24px)] items-center gap-2 rounded-md border border-cyan-400/20 bg-[#0a0a0a]/95 px-3 py-2 shadow-glow backdrop-blur"
-          style={{ transform: `translateY(${state === 'pulling' || state === 'ready' ? Math.max(-36, pullDistance - 72) : 0}px)` }}
+          style={{
+            transform: `translate3d(0, ${indicatorOffset}px, 0)`,
+            transition: isDragging ? 'none' : `transform ${SNAP_BACK_DURATION}ms ease`,
+          }}
         >
           <RefreshIcon state={state} />
           <span className="data-text truncate text-[11px] text-zinc-200">{message || refreshLabel(state)}</span>
         </div>
       </div>
-      {children}
+      <div
+        style={{
+          transform: contentOffset > 0 ? `translate3d(0, ${contentOffset}px, 0)` : 'none',
+          transition: isDragging ? 'none' : `transform ${SNAP_BACK_DURATION}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+          willChange: visible ? 'transform' : 'auto',
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }

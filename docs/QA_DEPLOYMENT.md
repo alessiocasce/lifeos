@@ -100,6 +100,8 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 10. Save the set, pull again, and confirm the update applies.
 11. Confirm there is no repeated or infinite reload loop.
 12. Confirm `/api/ai/chat`, `/api/ai/actions`, and `/api/actions/*` still return API behavior after the update.
+13. Confirm the installed iPhone PWA moves the main tab content with the pull gesture, holds it lowered during refresh, and smoothly returns it afterward.
+14. Confirm the shell header and bottom navigation remain stable and no content remains stuck translated after success, failure, or an update-ready guard.
 
 ## Known Non-Failing Build Warning
 
