@@ -1,5 +1,7 @@
 import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
+import { addDays, localDate, localDateTime, localTime } from './date.js';
+import { recalculateSleepAfterHealthChange } from './health.js';
 import {
   assertTimeOrder,
   compactPayload,
@@ -17,7 +19,6 @@ import {
   requiredText,
 } from './validation.js';
 
-const TIME_ZONE = 'Europe/Rome';
 const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews', 'memos']);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
 const VALID_AI_LOG_SOURCES = new Set(['app', 'shortcut', 'api']);
@@ -59,7 +60,6 @@ const CALENDAR_CATEGORY_ALIASES = new Map([
   ['sleeping', 'Sleep'],
 ]);
 const HEALTH_HABITS = [
-  { id: 'brush', label: 'Brush', type: 'count' },
   { id: 'shower', label: 'Shower', type: 'count' },
   { id: 'creatine', label: 'Creatine', type: 'count' },
   { id: 'skin', label: 'Skin', type: 'count' },
@@ -67,55 +67,7 @@ const HEALTH_HABITS = [
 ];
 const HEALTH_HABIT_IDS = new Set(HEALTH_HABITS.map((habit) => habit.id));
 
-export function localDate(offsetDays = 0) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const value = `${parts.find((part) => part.type === 'year').value}-${parts.find((part) => part.type === 'month').value}-${parts.find((part) => part.type === 'day').value}`;
-  const date = new Date(`${value}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + offsetDays);
-  return date.toISOString().slice(0, 10);
-}
-
-export function localTime() {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(new Date());
-  return `${normalizeHourPart(parts.find((part) => part.type === 'hour').value)}:${parts.find((part) => part.type === 'minute').value}`;
-}
-
-export function localDateTime(offsetMinutes = 0) {
-  const now = new Date(Date.now() + offsetMinutes * 60000);
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-  return {
-    date: `${parts.find((part) => part.type === 'year').value}-${parts.find((part) => part.type === 'month').value}-${parts.find((part) => part.type === 'day').value}`,
-    time: `${normalizeHourPart(parts.find((part) => part.type === 'hour').value)}:${parts.find((part) => part.type === 'minute').value}`,
-  };
-}
-
-function normalizeHourPart(value) {
-  return String(Number(value) % 24).padStart(2, '0');
-}
-
-export function addDays(dateValue, days) {
-  const date = new Date(`${dateValue}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
+export { addDays, localDate, localDateTime, localTime };
 
 export function resolveDate(value, fallback = localDate()) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -309,6 +261,7 @@ export async function createMemo(args, userMessage = '') {
 
 export async function updateHealthLog(args) {
   const userId = getActionUserId();
+  const client = getSupabaseAdmin();
   const loggedOn = resolveDate(args.logged_on ?? args.date, localDate());
   const habitUpdate = extractHealthHabitUpdates(args);
   const hasHabitUpdate = habitUpdate.updatedIds.length > 0;
@@ -342,14 +295,21 @@ export async function updateHealthLog(args) {
     throw new HttpError(400, 'At least one health field is required.');
   }
   const changedFields = Object.keys(payload).filter((key) => !['user_id', 'logged_on', 'hygiene'].includes(key));
-  const { data, error } = await getSupabaseAdmin()
+  const { data, error } = await client
     .from('health_logs')
     .upsert(payload, { onConflict: 'user_id,logged_on' })
     .select('id, logged_on, sleep_hours, sleep_start, wake_time, energy, water, coffee, adc, notes, hygiene, updated_at')
     .single();
   if (error) throw error;
+  await recalculateSleepAfterHealthChange(client, userId, loggedOn, changedFields);
+  const { data: refreshed, error: refreshError } = await client
+    .from('health_logs')
+    .select('id, logged_on, sleep_hours, sleep_start, wake_time, energy, water, coffee, adc, notes, hygiene, updated_at')
+    .eq('id', data.id)
+    .single();
+  if (refreshError) throw refreshError;
   return {
-    ...data,
+    ...refreshed,
     _updatedHabits: habitUpdate.updatedIds,
     _changedHealthFields: changedFields,
   };
@@ -590,7 +550,6 @@ function formatHealthExample(log) {
 function summarizeHealthHabits(logs) {
   const normalizedLogs = logs.map((log) => normalizeHealthHabits(log.hygiene));
   return {
-    brushTotal: sumHabit(normalizedLogs, 'brush'),
     showerTotal: sumHabit(normalizedLogs, 'shower'),
     creatineTotal: sumHabit(normalizedLogs, 'creatine'),
     skinTotal: sumHabit(normalizedLogs, 'skin'),
@@ -659,9 +618,6 @@ function collectHabitUpdatesFromNotes(updates, notes) {
   if (/\b(showered|shower|took a shower|had a shower)\b/.test(text)) {
     setHabitUpdate(updates, 'shower', true, 'phrase');
   }
-  if (/\b(brushed teeth|brushed my teeth|brush teeth|brush)\b/.test(text)) {
-    setHabitUpdate(updates, 'brush', true, 'phrase');
-  }
   if (/\b(skincare|skin care|did skin|skin routine)\b/.test(text)) {
     setHabitUpdate(updates, 'skin', true, 'phrase');
   }
@@ -696,7 +652,7 @@ function setHabitUpdate(updates, id, value, source) {
 
 function mergeHealthHabitUpdates(existingItems, updates) {
   const current = normalizeHealthHabits(existingItems);
-  return HEALTH_HABITS.map((habit) => {
+  const tracked = HEALTH_HABITS.map((habit) => {
     const update = updates[habit.id];
     if (habit.type === 'boolean') {
       const done = update ? Boolean(update.value) : Boolean(current[habit.id]);
@@ -721,6 +677,10 @@ function mergeHealthHabitUpdates(existingItems, updates) {
       count: nextCount,
     };
   });
+  const trackedIds = new Set(HEALTH_HABITS.map((habit) => habit.id));
+  const legacyItems = (Array.isArray(existingItems) ? existingItems : [])
+    .filter((item) => item?.id && !trackedIds.has(item.id));
+  return [...tracked, ...legacyItems];
 }
 
 function normalizeHealthHabits(items = []) {
@@ -739,7 +699,6 @@ function normalizeHealthHabits(items = []) {
 
 function normalizeHabitId(value) {
   const text = String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
-  if (['brush', 'brushing', 'brushed', 'teeth'].includes(text)) return 'brush';
   if (['shower', 'showered'].includes(text)) return 'shower';
   if (['creatine'].includes(text)) return 'creatine';
   if (['skin', 'skincare', 'skin care'].includes(text)) return 'skin';

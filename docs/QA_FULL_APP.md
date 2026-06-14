@@ -13,7 +13,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 ## Create Persisted Records
 
 1. Open Health.
-2. Create today's health log with sleep, Energy, Coffee, ADC, Daily Habits, and optional notes.
+2. Create today's health log with Sleep Start, Wake Time, Coffee, ADC, Daily Habits, and optional notes.
 3. Open Workout.
 4. Start today's workout session.
 5. Add one set with exercise, weight, reps, RPE, and date.
@@ -29,7 +29,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 15. Create one active project.
 16. Start a project session, add target output, end it with Proof of Work, and confirm it appears in recent sessions.
 17. Open Assistant.
-18. Create today's Daily Review with wins, risks, optional score, and next actions.
+18. Send an analysis prompt and confirm Recent Actions remains available below the chat.
 
 ## Home Integration
 
@@ -37,7 +37,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 2. Confirm Today Overview shows the next event, agenda counts, habit completion, memo count, workout status, Ops status, and today's spend.
 3. Confirm Today Agenda shows today's calendar events and handles a no-event day with `No events planned today.`
 4. Confirm the Home Memos panel shows overdue/today memos or the next open memo.
-5. Confirm Daily Habits shows Brush, Shower, Creatine, Skin, and Journal, with Journal as yes/no.
+5. Confirm Daily Habits shows Shower, Creatine, Skin, and Journal, with Journal as yes/no.
 6. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
 7. Confirm Ops Status shows an active project session if one exists, today's project work time, active project count, and latest project.
 8. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
@@ -50,7 +50,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 
 1. Refresh the page.
 2. Confirm auth restores.
-3. Confirm Health, Workout, Finances, Calendar, Memos, Projects/Ops, Home, and Daily Review reload persisted records from Supabase.
+3. Confirm Health, Workout, Finances, Calendar, Memos, Projects/Ops, Home, and AI Action History reload persisted records from Supabase.
 4. Confirm loading states appear before empty states.
 5. Confirm AI Action History logs survive refresh.
 
@@ -71,7 +71,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 
 ## Background Sync Flicker
 
-1. Load the app with existing Health, Workout, Finances, Calendar, Memos, Projects/Ops, and Daily Review records.
+1. Load the app with existing Health, Workout, Finances, Calendar, Memos, Projects/Ops, and AI Action History records.
 2. Switch between tabs several times.
 3. Leave the browser tab and return after Supabase/auth has had time to refresh.
 4. Confirm existing persisted data stays visible while modules show `SYNCING` or status badges.
@@ -98,7 +98,6 @@ Run the focused checklists after the full flow:
 - `docs/QA_CALENDAR.md`
 - Memos checks in this file
 - Projects/Ops checks in this file
-- `docs/QA_DAILY_REVIEW.md`
 - `docs/QA_WORKOUT.md`
 - `docs/QA_PWA.md` after deployment over HTTPS
 
@@ -135,7 +134,25 @@ Run the focused checklists after the full flow:
 3. Confirm Calendar opens to the selected-day agenda, not a week board or always-open side form.
 4. Open Workout.
 5. Confirm the real Workout tab does not show the old mock workout archive.
-6. Confirm Home, Health, Finances, Calendar, Workout, and Daily Review do not show fake data as real persisted data.
+6. Confirm Home, Health, Finances, Calendar, Workout, and Assistant do not show fake data as real persisted data.
+
+## Brain
+
+1. Open Assistant/Brain.
+2. Confirm the main chat composer and Recent Actions are present.
+3. Confirm Daily Review is not rendered.
+4. Confirm canned Suggestions or prompt chips are not rendered.
+5. Send a normal analysis prompt and confirm Markdown/callouts still render.
+6. Open a Recent Action and confirm its detail view still works.
+
+## Workout Advice Write Boundary
+
+1. Ask `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+2. Confirm the response is analysis/advice only and no calendar event is created.
+3. Ask `Analizza i workout degli ultimi giorni e dimmi cosa dovrei allenare oggi`.
+4. Confirm no actions are created.
+5. Ask `Programma petto oggi dalle 17 alle 18`.
+6. Confirm explicit scheduling can still create a Calendar event.
 
 ## Calendar Polish
 
@@ -205,9 +222,21 @@ Run the focused checklists after the full flow:
 2. Confirm the response and Health UI show wake time `08:37` for today's Europe/Rome date.
 3. Repeat with `{"wake_time":"08:37"}` and confirm the alias works.
 4. Send `{"time":"banana"}` and confirm a clear `400` response.
-5. Confirm existing sleep, energy, habits, coffee, water, ADC, and notes remain unchanged.
+5. Confirm existing Energy, habits, coffee, water, ADC, and notes remain unchanged.
 6. Call without Authorization and with an invalid token; confirm both return `401`.
 7. Confirm the existing `/api/actions/health` endpoint still accepts `wake_time`.
+8. Set yesterday's sleep start to `01:30`, log today's wake time as `09:00`, and confirm today's persisted `sleep_hours` becomes `7.5`.
+
+## Health Sleep And Cleanup
+
+1. Confirm Sleep Hours is display-only in Health.
+2. Set yesterday's Sleep Start to `01:30` and today's Wake Time to `09:00`; confirm today displays `7.5`.
+3. Change today's Wake Time to `08:00`; confirm it recalculates to `6.5`.
+4. Change yesterday's Sleep Start to `00:30`; confirm today recalculates to `7.5`.
+5. Confirm Energy is not shown in Health or Home.
+6. Confirm Brush is not shown in Health or Home.
+7. Confirm Shower, Creatine, Skin, and Journal still save and reload.
+8. Confirm `/api/actions/health` defaults `logged_on` to the Europe/Rome date.
 
 ## iPhone Safari Basics
 

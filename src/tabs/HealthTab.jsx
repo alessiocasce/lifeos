@@ -1,12 +1,12 @@
-import { Ban, Coffee, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users, Zap } from 'lucide-react';
+import { Ban, Coffee, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
+import { localDate } from '../utils/date';
 
-const today = new Date().toISOString().slice(0, 10);
+const today = localDate();
 
 const defaultHabits = [
-  { id: 'brush', label: 'Brush', type: 'count', count: 0 },
   { id: 'shower', label: 'Shower', type: 'count', count: 0 },
   { id: 'creatine', label: 'Creatine', type: 'count', count: 0 },
   { id: 'skin', label: 'Skin', type: 'count', count: 0 },
@@ -18,7 +18,6 @@ const emptyForm = {
   sleep_hours: '',
   sleep_start: '',
   wake_time: '',
-  energy: '',
   coffee: '0',
   adc: '0',
   notes: '',
@@ -72,35 +71,23 @@ export function HealthTab() {
     setSavedMessage('');
   };
 
-  const stepEnergy = (delta) => {
+  const stepHabit = (id, delta) => {
     setForm((prev) => {
-      const current = parseOptionalInteger(prev.energy);
-      if (current === null || !Number.isInteger(current)) {
-        return { ...prev, energy: delta > 0 ? '1' : '' };
-      }
-      const next = current + delta;
-      return { ...prev, energy: next < 1 ? '' : String(Math.min(10, next)) };
+      const tracked = normalizeHygiene(prev.hygiene).map((item) =>
+        item.id === id && item.type === 'count' ? { ...item, count: Math.max(0, item.count + delta) } : item,
+      );
+      return { ...prev, hygiene: mergeTrackedHygiene(prev.hygiene, tracked) };
     });
     setSavedMessage('');
   };
 
-  const stepHabit = (id, delta) => {
-    setForm((prev) => ({
-      ...prev,
-      hygiene: normalizeHygiene(prev.hygiene).map((item) =>
-        item.id === id && item.type === 'count' ? { ...item, count: Math.max(0, item.count + delta) } : item,
-      ),
-    }));
-    setSavedMessage('');
-  };
-
   const toggleHabit = (id) => {
-    setForm((prev) => ({
-      ...prev,
-      hygiene: normalizeHygiene(prev.hygiene).map((item) =>
+    setForm((prev) => {
+      const tracked = normalizeHygiene(prev.hygiene).map((item) =>
         item.id === id && item.type === 'boolean' ? { ...item, done: !item.done } : item,
-      ),
-    }));
+      );
+      return { ...prev, hygiene: mergeTrackedHygiene(prev.hygiene, tracked) };
+    });
     setSavedMessage('');
   };
 
@@ -139,26 +126,16 @@ export function HealthTab() {
             </div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} />
-              <HealthField
-                label="Sleep Hours"
-                inputMode="decimal"
-                value={form.sleep_hours}
-                suffix="h"
-                onChange={(value) => updateField('sleep_hours', value)}
-              />
+              <CalculatedSleepHours value={form.sleep_hours} />
               <HealthField label="Sleep Start" type="time" value={form.sleep_start} onChange={(value) => updateField('sleep_start', value)} />
               <HealthField label="Wake Time" type="time" value={form.wake_time} onChange={(value) => updateField('wake_time', value)} />
             </div>
           </section>
 
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-            <EnergyControl value={form.energy} onStep={stepEnergy} />
-
-            <section className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(124px,1fr))]">
-              <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
-              <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
-            </section>
-          </div>
+          <section className="grid gap-2 sm:grid-cols-2">
+            <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
+            <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
+          </section>
 
           <section className="rounded-md border border-white/5 bg-black/25 p-2">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -168,7 +145,7 @@ export function HealthTab() {
               </div>
               <span className="data-text text-[10px] text-zinc-500">tracked separately</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {normalizeHygiene(form.hygiene).map((item) => (
                 <HabitTracker key={item.id} item={item} onStep={(delta) => stepHabit(item.id, delta)} onToggle={() => toggleHabit(item.id)} />
               ))}
@@ -195,12 +172,11 @@ export function HealthTab() {
         <PanelHeader eyebrow="7-Day Summary" title="Measurable Signals" />
         <div className="grid grid-cols-2 gap-2 p-3">
           <MiniMetric label="Avg Sleep" value={formatSummary(summary.avgSleep, 'h')} tone="text-cyan-300" sub={`${visibleLogs.length} logs`} />
-          <MiniMetric label="Avg Energy" value={formatSummary(summary.avgEnergy, '/10')} tone="text-amber-300" sub="readiness" />
           <MiniMetric label="Coffee" value={`${summary.totalCoffee}`} tone="text-amber-300" sub="total" />
           <MiniMetric label="ADC" value={`${summary.totalAdc}`} tone="text-red-300" sub="total" />
           <div className="col-span-2 rounded-md border border-white/5 bg-black/25 p-3">
             <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">Habits</p>
-            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5 xl:grid-cols-2 2xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
               {summary.habits.counts.map((habit) => (
                 <div key={habit.id} className="min-w-0">
                   <p className="truncate text-zinc-500">{habit.label}</p>
@@ -255,6 +231,16 @@ function HealthField({ inputMode, label, onChange, placeholder = '', suffix, typ
   );
 }
 
+function CalculatedSleepHours({ value }) {
+  return (
+    <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.05] px-2 py-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">Sleep Hours</span>
+      <p className="data-text mt-1 text-base font-semibold text-cyan-200">{value === '' ? '--' : `${value}h`}</p>
+      <p className="mt-1 text-[10px] leading-4 text-zinc-500">Previous sleep start + today&apos;s wake time</p>
+    </div>
+  );
+}
+
 function Stepper({ icon: Icon, label, onStep, tone, value }) {
   const tones = {
     cyan: {
@@ -293,31 +279,6 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
         </button>
       </div>
     </div>
-  );
-}
-
-function EnergyControl({ onStep, value }) {
-  return (
-    <section className="min-w-0 rounded-md border border-amber-400/20 bg-amber-400/10 p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-300">
-          <Zap size={15} className="shrink-0 text-amber-300" />
-          <span className="truncate">Energy</span>
-        </div>
-        <div className="text-right">
-          <p className="data-text text-2xl font-black leading-none text-amber-300">{value || '--'}</p>
-          <p className="data-text mt-0.5 text-[10px] text-zinc-500">{value ? '/10' : 'not set'}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onStep(-1)} className="grid h-10 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
-          <Minus size={15} />
-        </button>
-        <button type="button" onClick={() => onStep(1)} className="grid h-10 place-items-center rounded border border-amber-400/20 bg-amber-400/10 text-amber-300">
-          <Plus size={15} />
-        </button>
-      </div>
-    </section>
   );
 }
 
@@ -375,12 +336,11 @@ function HistoryRow({ current, log }) {
         </div>
         <p className="data-text text-[10px] text-zinc-500">updated {formatShortDate(log.updated_at)}</p>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <HistoryMetric icon={Moon} label="Sleep" value={`${formatNumber(log.sleep_hours)}h`} tone="text-cyan-300" />
-        <HistoryMetric icon={Zap} label="Energy" value={`${log.energy ?? '--'}/10`} tone="text-amber-300" />
         <HistoryMetric icon={Coffee} label="Coffee" value={String(log.coffee ?? 0)} tone="text-amber-300" />
         <HistoryMetric icon={Ban} label="ADC" value={String(log.adc ?? 0)} tone="text-red-300" />
-        <div className="col-span-2 min-w-0 rounded border border-white/5 bg-[#121212] px-2 py-1 sm:col-span-4">
+        <div className="col-span-2 min-w-0 rounded border border-white/5 bg-[#121212] px-2 py-1 sm:col-span-3">
           <p className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-500">
             <ShieldCheck size={11} />
             Habits
@@ -428,11 +388,10 @@ function formFromLog(log) {
     sleep_hours: stringValue(log.sleep_hours),
     sleep_start: log.sleep_start ?? '',
     wake_time: log.wake_time ?? '',
-    energy: stringValue(log.energy),
     coffee: stringValue(log.coffee ?? 0),
     adc: stringValue(log.adc ?? 0),
     notes: log.notes ?? '',
-    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? normalizeHygiene(log.hygiene) : normalizeHygiene(defaultHabits),
+    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? log.hygiene : normalizeHygiene(defaultHabits),
   };
 }
 
@@ -447,25 +406,17 @@ function emptyFormForDate(loggedOn) {
 function toPayload(form) {
   return {
     logged_on: form.logged_on,
-    sleep_hours: parseOptionalDecimal(form.sleep_hours),
     sleep_start: form.sleep_start || null,
     wake_time: form.wake_time || null,
-    energy: parseOptionalInteger(form.energy),
     coffee: parseOptionalInteger(form.coffee) ?? 0,
     adc: parseOptionalInteger(form.adc) ?? 0,
     notes: form.notes.trim(),
-    hygiene: normalizeHygiene(form.hygiene),
+    hygiene: mergeTrackedHygiene(form.hygiene, normalizeHygiene(form.hygiene)),
   };
 }
 
 function validateHealthForm(form) {
   if (!isValidDate(form.logged_on)) return 'Log date is invalid.';
-
-  const sleepHours = parseOptionalDecimal(form.sleep_hours);
-  if (sleepHours !== null && (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 24)) return 'Sleep hours must be between 0 and 24.';
-
-  const energy = parseOptionalInteger(form.energy);
-  if (energy !== null && (!Number.isInteger(energy) || energy < 1 || energy > 10)) return 'Energy must be between 1 and 10.';
 
   const coffee = parseOptionalInteger(form.coffee);
   if (coffee === null || !Number.isInteger(coffee) || coffee < 0) return 'Coffee must be zero or higher.';
@@ -484,7 +435,6 @@ function summarizeLogs(logs) {
   const normalized = logs.map((log) => ({ ...log, hygiene: normalizeHygiene(log.hygiene) }));
   return {
     avgSleep: average(normalized.map((log) => optionalLogNumber(log.sleep_hours)).filter(Number.isFinite)),
-    avgEnergy: average(normalized.map((log) => optionalLogNumber(log.energy)).filter(Number.isFinite)),
     totalCoffee: normalized.reduce((total, log) => total + (parseOptionalInteger(log.coffee) ?? 0), 0),
     totalAdc: normalized.reduce((total, log) => total + (parseOptionalInteger(log.adc) ?? 0), 0),
     habits: summarizeHabits(normalized),
@@ -513,6 +463,13 @@ function normalizeHygiene(items = []) {
       count: Math.max(0, parseInteger(count)),
     };
   });
+}
+
+function mergeTrackedHygiene(existingItems, trackedItems) {
+  const trackedIds = new Set(defaultHabits.map((habit) => habit.id));
+  const legacyItems = (Array.isArray(existingItems) ? existingItems : [])
+    .filter((item) => item?.id && !trackedIds.has(item.id));
+  return [...trackedItems, ...legacyItems];
 }
 
 function hasValidHabitValues(items = []) {
@@ -599,6 +556,7 @@ function stringValue(value) {
 }
 
 function formatNumber(value) {
+  if (value === null || value === undefined || value === '') return '--';
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '--';
   return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);

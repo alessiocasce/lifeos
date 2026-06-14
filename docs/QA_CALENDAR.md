@@ -144,11 +144,12 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 
 1. Ask: `Segna la giornata di oggi: sveglia 12.30pm, pranzo 13.30pm, matematica da 13.40pm a 4.30pm, palestra da 4.40pm a 6.40pm, cena 8pm`.
 2. Confirm five events are created with canonical times: `12:30-12:45`, `13:30-14:00`, `13:40-16:30`, `16:40-18:40`, and `20:00-20:45`.
-3. Confirm the explicit lunch/math overlap is allowed for this day-log path instead of dropping Mathematics.
-4. Ask: `plan today: wake up 9am, lunch 1pm, study from 2pm to 4pm, gym 5pm to 6pm, dinner 8pm`.
-5. Confirm point-time events receive the documented default durations and ranged events retain their provided times.
-6. Confirm decimal-dot inputs such as `12.30pm` normalize to stored/displayed `12:30`.
-7. Confirm malformed agenda extraction produces a helpful schedule-format message instead of raw `title is required` or time-order errors.
+3. Confirm all five events use the current Europe/Rome date, including around UTC/local midnight boundaries.
+4. Confirm the explicit lunch/math overlap is allowed for this day-log path instead of dropping Mathematics.
+5. Ask: `plan today: wake up 9am, lunch 1pm, study from 2pm to 4pm, gym 5pm to 6pm, dinner 8pm`.
+6. Confirm point-time events receive the documented default durations and ranged events retain their provided times.
+7. Confirm decimal-dot inputs such as `12.30pm` normalize to stored/displayed `12:30`.
+8. Confirm malformed agenda extraction produces a helpful schedule-format message instead of raw `title is required` or time-order errors.
 
 ## AI Finite Recurrence Expansion
 

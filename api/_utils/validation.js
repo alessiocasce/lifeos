@@ -1,6 +1,7 @@
 import { HttpError } from './http.js';
+import { localDate } from './date.js';
 
-export const today = () => new Date().toISOString().slice(0, 10);
+export const today = () => localDate();
 
 const CANONICAL_EXPENSE_CATEGORIES = [
   'Food',

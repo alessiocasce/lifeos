@@ -1,4 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { addDays } from '../utils/date';
+import { calculateSleepHoursFromTimes } from '../utils/health';
 
 const requireSupabase = () => {
   if (!isSupabaseConfigured || !supabase) {
@@ -428,24 +430,30 @@ export const healthLogApi = {
   },
 
   async create(payload) {
-    return throwIfError(
-      await requireSupabase()
+    const client = requireSupabase();
+    const row = throwIfError(
+      await client
         .from('health_logs')
         .insert(prepareHealthLogPayload(payload))
         .select(healthLogSelect)
         .single(),
     );
+    await recalculateHealthSleepAfterChange(client, row.logged_on, Object.keys(payload));
+    return throwIfError(await client.from('health_logs').select(healthLogSelect).eq('id', row.id).single());
   },
 
   async update(id, patch) {
-    return throwIfError(
-      await requireSupabase()
+    const client = requireSupabase();
+    const row = throwIfError(
+      await client
         .from('health_logs')
         .update(prepareHealthLogPayload(patch))
         .eq('id', id)
         .select(healthLogSelect)
         .single(),
     );
+    await recalculateHealthSleepAfterChange(client, row.logged_on, Object.keys(patch));
+    return throwIfError(await client.from('health_logs').select(healthLogSelect).eq('id', row.id).single());
   },
 };
 
@@ -803,6 +811,33 @@ export const lifeosApi = {
 function prepareHealthLogPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+async function recalculateHealthSleepAfterChange(client, loggedOn, changedFields) {
+  const changed = new Set(changedFields);
+  if (changed.has('wake_time')) await recalculateHealthSleepForDate(client, loggedOn);
+  if (changed.has('sleep_start')) await recalculateHealthSleepForDate(client, addDays(loggedOn, 1));
+}
+
+async function recalculateHealthSleepForDate(client, loggedOn) {
+  const previousDate = addDays(loggedOn, -1);
+  const [previousResult, currentResult] = await Promise.all([
+    client.from('health_logs').select('sleep_start').eq('logged_on', previousDate).maybeSingle(),
+    client.from('health_logs').select('id, wake_time').eq('logged_on', loggedOn).maybeSingle(),
+  ]);
+  if (previousResult.error) throw previousResult.error;
+  if (currentResult.error) throw currentResult.error;
+  if (!currentResult.data) return null;
+
+  const sleepHours = calculateSleepHoursFromTimes(previousResult.data?.sleep_start, currentResult.data.wake_time);
+  return throwIfError(
+    await client
+      .from('health_logs')
+      .update({ sleep_hours: sleepHours })
+      .eq('id', currentResult.data.id)
+      .select(healthLogSelect)
+      .single(),
   );
 }
 

@@ -51,6 +51,8 @@ npm.cmd run dev -- --host 0.0.0.0
   - Header/sidebar metrics use persisted health, workout, and expense state where available instead of mock finance/training values.
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
+- `api/_utils/date.js` is the shared backend source for Europe/Rome local date/time defaults. Backend code must not use UTC ISO slicing for user-facing "today" behavior.
+- `api/_utils/health.js` owns persisted sleep-hour recalculation from the previous day's `sleep_start` and the current day's `wake_time`.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `api/actions/` contains token-protected Vercel Serverless Functions for external automation. These are server-only and use `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
 - `api/ai/chat.js` contains the in-app Gemini-powered LifeOS assistant endpoint. Gemini plans intent, while backend-controlled tools read/write Supabase.
@@ -157,7 +159,7 @@ Real/persisted today:
 - Project money entries persisted in `project_money_entries`.
 - Projects/Ops tab creates flexible-goal projects, tracks active/completed work sessions, proof of work, project-level money entries, calculated balance, and progress.
 - Daily reviews persisted in `daily_reviews`.
-- Assistant tab contains the Ask LifeOS AI chat plus the persisted Daily Review workflow.
+- Assistant/Brain contains the Ask LifeOS chat and Recent Actions. Daily Review remains persisted for backward compatibility but is hidden from Brain.
 - Token-protected Action API endpoints for external automation:
   - `POST /api/actions/expense`
   - `POST /api/actions/health`
@@ -168,7 +170,7 @@ Real/persisted today:
   - `GET /api/ai/actions`
   - Assistant tab "Ask LifeOS" chat surface.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
-  - Daily Review workflow remains available below the AI chat surface.
+  - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
 - AI Action History persisted in `ai_action_logs` for recent assistant/Shortcut writes and write failures.
 
 Partially wired but not fully used in UI:
@@ -217,7 +219,7 @@ Current behavior:
 - Validates server-only config and requires `LIFEOS_ACTION_USER_ID` to be a UUID.
 - Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
 - Supports creating expenses, upserting partial daily health logs, logging wake time through `POST /api/actions/wake`, and creating calendar events.
-- The dedicated wake endpoint accepts `time`, `wake_time`, or `wakeTime`, defaults `logged_on` to the Europe/Rome local date, and updates only `health_logs.wake_time` while preserving other health fields.
+- The dedicated wake endpoint accepts `time`, `wake_time`, or `wakeTime`, defaults `logged_on` to the Europe/Rome local date, preserves other health fields, and recalculates persisted `sleep_hours` when the previous day's sleep start exists.
 - Expense categories created through the Action API normalize to canonical display casing when possible.
 - Enforces endpoint field limits and numeric caps before writing to Supabase.
 - Does not implement AI, chat behavior, external model calls, or frontend UI changes.
@@ -225,7 +227,7 @@ Current behavior:
 
 ## AI Assistant Current Status
 
-`src/tabs/AIAssistantTab.jsx` now includes an in-app "Ask LifeOS" chat area above the persisted Daily Review workflow.
+`src/tabs/AIAssistantTab.jsx` is a focused Brain surface with Ask LifeOS chat and Recent Actions.
 
 Architecture:
 
@@ -242,6 +244,7 @@ Architecture:
 - Gemini provider failures are mapped to clean errors: rate limits, temporary outages, rejected requests, empty responses, and invalid planner JSON.
 - Assistant error cards show safe request/provider details without exposing secrets.
 - Expense, calendar, and health date handling accepts `YYYY-MM-DD`, `DD/MM/YY`, `DD/MM/YYYY`, `today`, and `tomorrow` where relevant.
+- All backend default dates and relative `today`/`tomorrow` references use Europe/Rome local time through the shared date helper.
 - AI-created expense categories normalize to canonical display casing when possible, such as `subscriptions` to `Subscriptions`.
 - AI-created calendar events normalize case-insensitive preferred categories such as `work`, `errands`, `personal`, or `social` to the UI category names when possible.
 - AI and Action API calendar creates normalize common AM/PM and messy Gemini time fields such as `from 12:45pm`, `12:45pm to 2:15pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`.
@@ -255,8 +258,10 @@ Architecture:
 - Finite recurring calendar requests bypass the general planner before it runs, then expand into multiple normal `calendar_events` rows.
 - Supported finite recurrence patterns include daily, weekdays, weekends, weekly days, every other day, every N days, next week, next month, named months, next N weeks/months, and explicit start date plus duration.
 - Recurrence expansion is capped at 60 created events per request. Ambiguous recurrence requests ask one clarification instead of writing.
-- AI health logging supports Daily Habits stored in `health_logs.hygiene`: Brush, Shower, Creatine, Skin, and Journal.
-- AI habit updates merge with existing daily habit values. Brush, Shower, Creatine, and Skin are counts; Journal is boolean.
+- Workout analysis and advice prompts are read-only unless the user explicitly asks to create or schedule a calendar item. A deterministic post-planner guard prevents accidental calendar writes for exercise-performance questions.
+- AI health logging supports Daily Habits stored in `health_logs.hygiene`: Shower, Creatine, Skin, and Journal.
+- AI habit updates merge with existing daily habit values. Shower, Creatine, and Skin are counts; Journal is boolean. Legacy Brush data is preserved but no longer shown or updated.
+- AI prefers `sleep_start` and `wake_time`; when both required times exist, automatic sleep calculation overrides a manual duration.
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
 - AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
@@ -434,7 +439,7 @@ Current behavior:
 
 ## Daily Review Module Current Status
 
-`src/tabs/AIAssistantTab.jsx` now hosts the Daily Review workflow.
+Daily Review persistence and context actions remain for backward compatibility, but the workflow is no longer rendered in Brain.
 
 Current behavior:
 
@@ -446,14 +451,8 @@ Current behavior:
 - Supports selecting another review date and loading that date's persisted review.
 - Stores `next_actions` as a JSON array of strings.
 - Validates optional `score` as a whole number from 1 to 100.
-- Shows recent persisted reviews.
-- Shows loading states before review archive empty states and warns if selected-date expense context fails.
-- Defensively sorts recent reviews newest-first in the Review surface.
-- Shows read-only context cards for the selected date using persisted health logs, workout sessions/sets, and expenses.
-- Selected-date workout context counts working sets and working volume, excluding warmups.
-- Keeps one empty next-action input row in the UI when all actions are removed, while saving an empty `next_actions` array.
 - Does not save context summaries redundantly into the review.
-- Does not implement AI behavior yet.
+- The `daily_reviews` table and existing service/context support are not deleted.
 
 ## Home Module Current Status
 
@@ -467,7 +466,7 @@ Current behavior:
 - Shows Today Agenda as a read-only list of today's events. Calendar editing, deletion, and status controls remain in the Calendar tab.
 - Shows a compact Memos panel with overdue/today reminders or the next open memo. Memo editing remains in the Memos tab.
 - Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
-- Shows Daily Habits from today's health log: Brush, Shower, Creatine, Skin, and Journal. Journal is shown as yes/no and Water is not shown.
+- Shows Daily Habits from today's health log: Shower, Creatine, Skin, and Journal. Journal is shown as yes/no; Brush and Water are not shown.
 - Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
 - Shows Ops Status focused on live project sessions, today's logged project work, active project count, and latest project.
@@ -534,16 +533,20 @@ Current behavior:
 - Changing the form date loads the persisted log for that date or clears the form for a new date.
 - A selected non-today Health date remains stable during background health-log refreshes.
 - Shows compact 7-day history from persisted rows only.
-- Shows measurable summaries: average sleep, average energy, total coffee, total ADC, and standalone daily habit stats.
-- Does not auto-calculate sleep time; `sleep_hours` is manually entered.
+- Shows measurable summaries for calculated sleep, coffee, ADC, and standalone daily habit stats.
+- `sleep_hours` is display-only in Health and is calculated from the previous calendar day's `sleep_start` plus the current day's `wake_time`.
+- Calculated sleep is rounded to the nearest 0.5 hour. Missing or nonsensical durations remain unavailable instead of being stored.
 - `sleep_quality`, `mood`, `social_time_minutes`, and `main_time_waster` remain in the database for backward compatibility but are not displayed in the Health check-in, 7-day summary, or 7-day history.
-- `sleep_hours` and `energy` may be left blank; coffee, ADC, and numeric habit counts must be non-negative numbers.
+- `energy` remains in the database for backward compatibility but is hidden from Health and Home.
+- Coffee, ADC, and numeric habit counts must be non-negative numbers.
 - Visible Health no longer includes a Water counter. The `water` column remains in the schema and Action API for backward compatibility, but visible UI and AI summaries do not emphasize it.
-- Daily habit trackers are Brush, Shower, Creatine, Skin, and Journal.
-- Brush, Shower, Creatine, and Skin are numeric counts. Journal is boolean: journaled or not journaled.
+- Daily habit trackers are Shower, Creatine, Skin, and Journal.
+- Shower, Creatine, and Skin are numeric counts. Journal is boolean: journaled or not journaled.
+- Legacy `hygiene.brush` data remains untouched but is no longer visible or updated.
 - Habits are stored in the existing `hygiene` JSON field. Older boolean rows and older numeric Journal rows are normalized safely; old Floss/Stretch rows are ignored by the new visible UI.
 - AI health habit logging writes to the same `hygiene` JSON field and merges habit-only updates with existing daily values.
 - Missing optional nullable health fields such as `sleep_hours`, `sleep_start`, and `wake_time` are ignored by backend validation unless explicitly provided.
+- Health UI saves, AI health writes, `/api/actions/health`, and `/api/actions/wake` recalculate affected sleep hours when sleep start or wake time changes.
 - Health and AI summaries treat habits as standalone stats instead of one generic hygiene total.
 - Does not use iPhone Screen Time integration yet.
 
@@ -665,12 +668,7 @@ Workout mobile direction:
   - Create health, workout, and expense records and confirm Home updates.
   - Refresh and confirm persisted summaries reload.
   - Confirm Home handles zero-set workouts, blank optional health fields, older-only expenses, long labels, and multiple sessions today.
-- Test Daily Review workflow with `docs/QA_DAILY_REVIEW.md`:
-  - Create and update today's review.
-  - Create reviews for other dates and switch between them.
-  - Confirm duplicate-date saves update the existing row.
-  - Confirm read-only context cards use persisted health, workout, and expense data.
-  - Confirm blank wins/risks, empty next actions, fast date switching, and expense context errors behave correctly.
+- Daily Review persistence remains available for backward compatibility, but it is no longer a visible Brain workflow.
 - Test Calendar tab with `docs/QA_CALENDAR.md`:
   - Create, edit, and delete persisted events.
   - Confirm the selected-day agenda defaults to today and date picker navigation works.
@@ -697,7 +695,8 @@ Workout mobile direction:
   - Natural-language analysis uses persisted context only.
   - Low-risk additive actions execute directly.
   - Destructive requests are blocked.
-  - Daily Review remains usable.
+  - Workout analysis/advice remains read-only unless calendar creation is explicit.
+  - Brain shows chat and Recent Actions without Daily Review or suggestion chips.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.
@@ -724,13 +723,11 @@ Workout mobile direction:
 3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
 4. QA the Finances tab against a real Supabase project.
 5. QA the Home dashboard against a real Supabase project after creating records in Health, Workout, and Finances.
-6. Harden the Daily Review workflow against a real Supabase project.
-7. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
-8. Deploy the app and complete live iPhone QA against the real Supabase project.
-9. Live-test Action API calls from iPhone Shortcuts before relying on external automation.
-10. Live-test the Gemini in-app assistant with `docs/QA_AI_ASSISTANT.md`.
-11. Convert Chat Messages only after assistant transcript persistence is clearly defined and live QA has passed.
-12. Consider route-level or tab-level code splitting later to reduce the Vite chunk warning.
+6. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
+7. Deploy the app and complete live iPhone QA against the real Supabase project.
+8. Live-test Action API calls from iPhone Shortcuts before relying on external automation.
+9. Live-test the Gemini in-app assistant with `docs/QA_AI_ASSISTANT.md`.
+10. Convert Chat Messages only after assistant transcript persistence is clearly defined and live QA has passed.
 
 ## Rules For Future Work
 

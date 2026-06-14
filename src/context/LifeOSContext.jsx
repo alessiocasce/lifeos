@@ -12,6 +12,7 @@ import {
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
+import { localDate } from '../utils/date';
 import {
   authApi,
   aiActionLogApi,
@@ -30,7 +31,7 @@ import {
 } from '../services/lifeosApi';
 
 const LifeOSContext = createContext(null);
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDate();
 
 const toMinutes = (time) => {
   const [hours, minutes] = time.split(':').map(Number);
@@ -216,7 +217,7 @@ export function LifeOSProvider({ children }) {
         if (currentId && rows.some((session) => session.id === currentId)) return currentId;
         const liveSession = rows.find((session) => !session.ended_at);
         if (liveSession) return liveSession.id;
-        const todaysSession = rows.find((session) => session.performed_on === new Date().toISOString().slice(0, 10));
+        const todaysSession = rows.find((session) => session.performed_on === today());
         return todaysSession?.id ?? null;
       });
       setWorkoutSessionsStatus('ready');
@@ -847,12 +848,12 @@ export function LifeOSProvider({ children }) {
           saved = await healthLogApi.update(duplicate.id, normalizedPayload);
         }
 
-        setHealthLogs((prev) => sortHealthLogs([saved, ...prev.filter((log) => log.id !== saved.id)]));
-        if (saved.logged_on === today()) {
-          setHealth(healthSnapshotFromLog(saved));
-        }
+        const refreshedRows = sortHealthLogs(await healthLogApi.list());
+        setHealthLogs(refreshedRows);
+        const refreshedSaved = refreshedRows.find((log) => log.logged_on === normalizedPayload.logged_on) ?? saved;
+        setHealth(healthSnapshotFromLog(refreshedRows.find((log) => log.logged_on === today()) ?? refreshedRows[0]));
         setHealthLogsStatus('ready');
-        return saved;
+        return refreshedSaved;
       },
       reloadExpenses: loadExpenses,
       loadExpenseMonth,
@@ -1457,7 +1458,6 @@ function compareWorkoutSets(a, b) {
 function normalizeHealthLogPayload(payload) {
   const normalized = {};
   if ('logged_on' in payload) normalized.logged_on = payload.logged_on;
-  if ('sleep_hours' in payload) normalized.sleep_hours = numberOrNull(payload.sleep_hours);
   if ('sleep_start' in payload) normalized.sleep_start = payload.sleep_start || null;
   if ('wake_time' in payload) normalized.wake_time = payload.wake_time || null;
   if ('sleep_quality' in payload) normalized.sleep_quality = integerOrNull(payload.sleep_quality);
@@ -1595,7 +1595,7 @@ function healthSnapshotFromLog(log) {
 function normalizeHygieneCounts(items = []) {
   const safeItems = Array.isArray(items) ? items : [];
   const byId = new Map(safeItems.map((item) => [item.id, item]));
-  return HEALTH_HABITS.map((base) => {
+  const tracked = HEALTH_HABITS.map((base) => {
     const item = byId.get(base.id) ?? base;
     if (base.type === 'boolean') {
       return {
@@ -1612,10 +1612,11 @@ function normalizeHygieneCounts(items = []) {
       count: Math.max(0, integerOrZero(item.count ?? (item.done ? 1 : 0))),
     };
   });
+  const trackedIds = new Set(HEALTH_HABITS.map((habit) => habit.id));
+  return [...tracked, ...safeItems.filter((item) => item?.id && !trackedIds.has(item.id))];
 }
 
 const HEALTH_HABITS = [
-  { id: 'brush', label: 'Brush', type: 'count', count: 0 },
   { id: 'shower', label: 'Shower', type: 'count', count: 0 },
   { id: 'creatine', label: 'Creatine', type: 'count', count: 0 },
   { id: 'skin', label: 'Skin', type: 'count', count: 0 },

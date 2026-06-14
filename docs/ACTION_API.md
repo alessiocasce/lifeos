@@ -111,7 +111,7 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/expense \
 
 Required: `vendor`, `category`, `amount > 0`.
 
-`spent_on` defaults to today when omitted.
+`spent_on` defaults to the current date in `Europe/Rome` when omitted.
 Expense categories are normalized to canonical display casing when possible. For example, `subscription` or `subscriptions` becomes `Subscriptions`, `grocery` becomes `Groceries`, and `personal-care` becomes `Personal Care`. Unknown categories are title-cased instead of rejected.
 
 Limits:
@@ -140,9 +140,11 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/health \
   }'
 ```
 
-`logged_on` defaults to today. The API upserts by `user_id + logged_on` and only updates fields provided in the request.
+`logged_on` defaults to the current date in `Europe/Rome`. The API upserts by `user_id + logged_on` and only updates fields provided in the request.
 
 Omitted fields preserve existing health values. Explicit `null` or empty strings clear nullable fields: `sleep_hours`, `sleep_start`, `wake_time`, `energy`, and `notes`. Counter fields must be valid integers when provided.
+
+When `wake_time` changes, the endpoint recalculates that day's `sleep_hours` from the previous calendar day's `sleep_start`. When `sleep_start` changes, it recalculates the next day's sleep if that row has a wake time. Calculated values are rounded to the nearest 0.5 hour. A direct `sleep_hours` value remains accepted for backward compatibility when the same request does not also change sleep/wake fields.
 
 Validation:
 
@@ -167,7 +169,7 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/wake \
 
 `logged_on` is optional and defaults to the current date in `Europe/Rome`. Accepted time formats include `HH:MM`, `H:MM`, `H.MM`, `HH.MM`, and `H:MM AM/PM`. The stored value is canonical `HH:MM`.
 
-The endpoint updates only `wake_time` on an existing health log, preserving sleep, energy, habits, coffee, water, ADC, and other fields. Optional `notes` is limited to 1000 characters and only fills an empty existing notes field; it does not overwrite an existing note.
+The endpoint updates `wake_time`, preserves Energy, habits, coffee, water, ADC, and other health fields, and recalculates `sleep_hours` when the previous day's `sleep_start` exists. Optional `notes` is limited to 1000 characters and only fills an empty existing notes field; it does not overwrite an existing note.
 
 Success example:
 
@@ -200,7 +202,9 @@ curl -X POST https://your-lifeos.vercel.app/api/actions/calendar \
   }'
 ```
 
-Required: `title`, `event_date`.
+`event_date` is optional and defaults to the current date in `Europe/Rome`.
+
+Required: `title`.
 
 `status` defaults to `planned` and must be `planned`, `done`, `skipped`, or `cancelled`.
 The Action API keeps accepting compatible category strings, but the app UI prefers: `Work`, `Study`, `School`, `Health`, `Workout`, `Entertainment`, `Sleep`.

@@ -1,134 +1,55 @@
 # Health Tab Manual QA
 
-Run this after applying `supabase/schema.sql` to the target Supabase project and signing in through the global auth gate.
+Run this after signing in through the global auth gate. This pass does not require a schema rerun.
 
-## Create Today's Log
+## Visible Health Fields
 
-1. Open the Health tab.
-2. Confirm the main form does not show sleep quality, mood, social time, or main time waster.
-3. Confirm the Sleep card is compact and includes date, sleep hours, sleep start, and wake time.
-4. Enter sleep hours, optional sleep times, energy, coffee, ADC, notes, and Daily Habit values.
-5. Confirm Energy uses compact `-` and `+` controls, not a nested input card.
-6. Click `Save Check-In`.
-7. Confirm today's row appears in `7-Day History` with the `TODAY` tag.
+1. Open Health and confirm Sleep Start, Wake Time, Coffee, ADC, Notes, and Daily Habits are available.
+2. Confirm Sleep Hours is read-only and cannot be typed or incremented.
+3. Confirm the Sleep Hours hint says it is calculated from the previous sleep start and today's wake time.
+4. Confirm Energy, Water, Brush, sleep quality, mood, social time, and main time waster are not shown.
+5. Confirm hidden legacy database values are not cleared when another visible field is updated.
 
-## Update Today's Log
+## Automatic Sleep Calculation
 
-1. Change at least one measurable value on today's form.
-2. Increment and decrement Energy, Coffee, ADC, and at least one numeric Daily Habit.
-3. Click `Update Check-In`.
-4. Confirm only one row exists for today.
-5. Refresh the page and confirm the updated values persist.
-
-## Create Yesterday's Log
-
-1. Change the date to yesterday.
-2. Confirm the form clears for that selected date if no log exists.
-3. Enter valid values.
-4. Save the check-in.
-5. Confirm yesterday appears in `7-Day History`.
-
-## Switch Dates
-
-1. Switch the date back to today.
-2. Confirm today's persisted values load into the form.
-3. Switch the date to yesterday.
-4. Confirm yesterday's persisted values load into the form.
-5. Switch to a date with no log and confirm the form is empty for that date.
-6. While a non-today date is selected, refresh/sync health logs and confirm the form does not jump back to today.
+1. Set yesterday's `sleep_start` to `01:30` and save.
+2. Set today's `wake_time` to `09:00` and save.
+3. Confirm today's Sleep Hours displays and persists as `7.5`.
+4. Change today's wake time to `08:00`; confirm Sleep Hours recalculates to `6.5`.
+5. Change yesterday's sleep start to `00:30`; confirm today's Sleep Hours recalculates to `7.5`.
+6. Test previous sleep start `00:45` and wake time `08:10`; confirm rounding produces `7.5`.
+7. Test previous sleep start `23:30` and wake time `08:00`; confirm the result is `8.5`.
+8. Remove either required time and confirm the calculated display becomes `--` or remains unavailable.
+9. Confirm invalid durations at or below zero or above 24 hours are not persisted.
+10. Refresh and confirm the calculated value remains consistent.
 
 ## Daily Habits
 
-1. Confirm the visible habit list is Brush, Shower, Creatine, Skin, and Journal.
-2. Increase Brush to 2, Shower to 1, Creatine to 1, and Skin to 3.
-3. Toggle Journal on and confirm it displays as journaled/yes rather than a numeric counter.
-4. Toggle Journal off and confirm it displays as not journaled/no.
-5. Save and refresh.
-6. Confirm the same values reload.
-7. Decrease a numeric counter repeatedly and confirm it never goes below 0.
-8. Test an old row whose `hygiene` JSON contains Floss or Stretch; confirm the new UI ignores those old items without crashing.
-9. Test an old row whose Journal uses `count: 1` or `done: true`; confirm it displays as journaled.
-10. Confirm forced Journal counts above 1 normalize to journaled rather than displaying as a count.
-11. Ask the AI assistant: `Log that i took creatine today`; confirm the Health tab shows today's Creatine habit incremented/logged.
-12. Ask the AI assistant: `Log that I showered today`; confirm Shower increments/logs and other omitted habits are preserved.
-13. Ask the AI assistant: `I journaled today`; confirm Journal becomes journaled/yes and remains boolean.
+1. Confirm the visible habit list is Shower, Creatine, Skin, and Journal.
+2. Increase Shower, Creatine, and Skin; confirm counters never go below zero.
+3. Toggle Journal and confirm it remains boolean rather than becoming a count.
+4. Save and refresh; confirm all four values reload.
+5. Test a legacy row containing Brush, Floss, or Stretch and confirm the UI ignores those entries without deleting or displaying them.
+6. Ask the assistant `Log that i took creatine today`; confirm Creatine updates and omitted habits remain unchanged.
+7. Ask `Log that I showered today`; confirm Shower updates.
+8. Ask `I journaled today`; confirm Journal becomes true.
+9. Ask to log brushing teeth and confirm no `hygiene.brush` habit update is created.
 
-## Standalone Habit Stats
+## API And AI Recalculation
 
-1. Save at least two logs with different Brush, Shower, Creatine, Skin, and Journal values.
-2. Confirm the 7-day summary shows standalone habit stats, not one generic hygiene total.
-3. Confirm the 7-day history shows a compact habit breakdown per row.
-4. Confirm Brush/Skin values from old compatible rows carry forward when present.
-5. Confirm Shower and Creatine default to 0 for older rows.
+1. Call `POST /api/actions/wake` with `{"time":"8.37"}` and confirm wake time becomes `08:37`.
+2. Ensure the previous day's sleep start exists and confirm the wake endpoint also recalculates today's `sleep_hours`.
+3. Call `/api/actions/health` without `logged_on` and confirm it uses the Europe/Rome current date.
+4. Update `wake_time` through `/api/actions/health`; confirm same-day sleep recalculation.
+5. Update `sleep_start` through `/api/actions/health`; if the next day's wake time exists, confirm next-day sleep recalculation.
+6. Ask the AI to update wake time or sleep start and confirm the same recalculation rules apply.
+7. Confirm omitted nullable health fields do not produce validation errors.
+8. Confirm direct `sleep_hours` writes remain backward-compatible when the same update does not change sleep/wake fields.
 
-## Hidden Water Compatibility
+## Persistence And Mobile
 
-1. Confirm the Health form has no visible Water counter.
-2. Confirm the 7-day summary has no Avg Water metric.
-3. Confirm the 7-day history has no Water metric.
-4. Confirm saving a newly created Health log still works with the database `water` column left at its default.
-5. If testing an old row with a non-zero water value, update another visible field and confirm the save does not require editing Water.
-6. Confirm AI habit logging does not expose Water, while old Action API calls that include `water` still validate.
-7. Call `POST /api/actions/wake` with `{"time":"8.37"}` and confirm today's wake time becomes `08:37` without changing other health values.
-8. Confirm the wake endpoint also accepts `wake_time` and `wakeTime`, rejects invalid time text clearly, and requires the Action API bearer token.
-
-## Optional Nullable Fields
-
-1. Ask the AI assistant to log a habit-only update such as `Log that i took creatine today`.
-2. Confirm missing optional fields such as `sleep_hours`, `sleep_start`, and `wake_time` are ignored rather than validated as invalid.
-3. Confirm explicitly clearing nullable fields with `null` or blank values remains safe where supported.
-4. Confirm normal updates like `Log 8 hours of sleep today` still validate and save.
-
-## ADC Counter
-
-1. Increase ADC above 0.
-2. Save and refresh.
-3. Confirm ADC appears in the form, 7-day summary, and history.
-4. Decrease ADC repeatedly and confirm it never goes below 0.
-
-## Energy Control
-
-1. Leave Energy blank and save; confirm blank Energy is allowed.
-2. Press `+` from blank and confirm Energy becomes 1.
-3. Press `+` repeatedly and confirm Energy does not exceed 10.
-4. Press `-` from 1 and confirm Energy returns to blank.
-5. Save and refresh with Energy set, then confirm the value reloads.
-
-## Invalid Values
-
-Try each invalid value and confirm save is blocked with a clear message:
-
-- Invalid `logged_on` date.
-- `sleep_hours` below 0 or above 24.
-- `energy` below 1 or above 10 through any forced/manual test path.
-- Negative coffee.
-- Negative ADC.
-- Negative numeric habit count through any forced/manual test path.
-- Forced Journal counts above 1 normalize safely.
-- Non-numeric values in numeric fields.
-- Comma decimal sleep value such as `7,5` should save as valid.
-
-## Removed Subjective Fields
-
-1. Confirm sleep quality, mood, social time, and main time waster do not appear in the Health form.
-2. Confirm those fields do not appear in the 7-day summary.
-3. Confirm those fields do not appear in the 7-day history.
-4. Confirm updating an old row that already has those database values does not require re-entering them.
-5. Confirm updating an old row does not wipe those hidden database values unless a future migration explicitly removes them.
-
-## Persistence
-
-1. Save today and yesterday.
-2. Refresh the browser.
-3. Confirm the form and 7-day history reload from Supabase.
-4. Confirm 7-day summaries reflect persisted measurable rows only.
-
-## iPhone Safari
-
-1. Open the app on iPhone Safari.
-2. Confirm no horizontal scrolling.
-3. Confirm inputs do not zoom when focused.
-4. Confirm the bottom nav does not cover `Save Check-In`.
-5. Confirm Energy, Coffee, ADC, and Daily Habit cards wrap instead of feeling cramped on narrow screens.
-6. Confirm the Sleep card, counters, and Journal toggle are thumb-friendly.
-7. Confirm date switching and saving works with the mobile keyboard.
+1. Save today and yesterday, refresh, and confirm both logs reload.
+2. Switch dates and confirm the selected non-today date remains stable during refreshes.
+3. Confirm 7-day summaries and history use persisted rows and do not show Energy, Water, or Brush.
+4. On iPhone/PWA, confirm no horizontal overflow, no input zoom, and the bottom nav does not cover Save Check-In.
+5. Confirm the read-only sleep value, counters, and Journal toggle remain easy to scan and tap.

@@ -60,13 +60,18 @@ Rules:
 - If the user says "in an hour" or "in 30 minutes", put that text in args.relative_time. If only a time is given, put it in memo_time.
 - If no date/time is given for a memo, leave memo_date and memo_time null.
 - For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes, and Daily Habits.
-- Daily Habits are brush, shower, creatine, skin, and journal. Put them in args.habits or direct args fields such as {"creatine": true}.
-- "took creatine" means habit creatine. "showered" means habit shower. "brushed teeth" means habit brush. "skincare" or "did skin" means habit skin. "journaled" or "wrote journal" means habit journal.
-- Do not map habit phrases into sleep_hours. Do not output sleep_hours unless the user explicitly gives sleep duration. Avoid putting habit-only statements only into notes when a habit field can be extracted.
+- Daily Habits are shower, creatine, skin, and journal. Put them in args.habits or direct args fields such as {"creatine": true}.
+- "took creatine" means habit creatine. "showered" means habit shower. "skincare" or "did skin" means habit skin. "journaled" or "wrote journal" means habit journal.
+- Brushing teeth is not a tracked Daily Habit. Do not output brush or hygiene.brush; notes may preserve the statement if useful.
+- Prefer sleep_start and wake_time over sleep_hours. Do not map habit phrases into sleep_hours. Only output sleep_hours when the user explicitly gives a duration and no sleep/wake times are available.
 - Only extract water when the user explicitly asks to log water because it is kept for backward compatibility.
 - For "last week", use range "7d". For "last 30 days" or "last month", use "30d". For "last 3 months", use "3m". For all-time/overall behavior, use "all".
 - For vague "how am I doing?", use intent "analyze", needsRead true, range "30d", and broad LifeOS tables.
 - For analyze plus explicit plan/schedule requests, use "analyze_and_plan" with needsRead true and needsWrite true.
+- Workout performance analysis and advice are read-only. Requests such as "what should I train today?", "how should I improve today?", "dimmi prestazioni passate", "analizza workout", "cosa dovrei allenare oggi", and concern about fatigue or shoulders use intent "analyze", needsRead true, needsWrite false.
+- Do not use analyze_and_plan merely because workout advice mentions today/oggi.
+- Do not create a calendar event for workout advice unless the user explicitly asks to schedule/create/add it in the calendar, for example "schedule", "create event", "put it in calendar", "program it in calendar", "crea evento", "segnalo in calendario", or "programmamelo in calendario".
+- If the user appears to be inside or about to start a workout, give advice without scheduling another workout unless explicitly requested.
 - Destructive delete/remove/wipe requests must use "blocked_destructive".
 - If required details are missing, use "clarify" with one concise clarifyingQuestion.
 - Low-risk additive writes are create_expense, create_calendar_event, create_memo, update_health_log, and small calendar plans.
@@ -97,6 +102,7 @@ For health, give lifestyle-pattern insights, not medical diagnosis.
 For workout, give training observations, not medical advice.
 If data is sparse, say that clearly.
 If actions were created, state exactly what was created.
+For workout advice-only requests, give analysis/recommendations and do not claim that an event or action was created.
 `;
 
 const PLAN_SYSTEM = `
@@ -300,11 +306,13 @@ export default async function handler(req, res) {
       attachDebugDiagnostics(error, diagnostics);
       throw error;
     }
+    plan = enforceWorkoutAdviceReadOnly(message, plan);
     const actions = [];
     let lifeosContext = null;
     let answer = '';
-    const dayScheduleRequest = isDaySchedulePlannerGuard(message, plan);
-    const explicitMultiEventRequest = isExplicitMultiEventCalendarRequest(message, plan);
+    const workoutAdviceOnly = isWorkoutAdviceOnlyRequest(message);
+    const dayScheduleRequest = !workoutAdviceOnly && isDaySchedulePlannerGuard(message, plan);
+    const explicitMultiEventRequest = !workoutAdviceOnly && isExplicitMultiEventCalendarRequest(message, plan);
 
     if (dayScheduleRequest) {
       try {
@@ -373,6 +381,9 @@ export default async function handler(req, res) {
 
     if (!answer) {
       answer = await answerWithGemini(message, plan, lifeosContext, actions);
+    }
+    if (workoutAdviceOnly) {
+      answer = appendWorkoutReadOnlyConfirmation(answer, message);
     }
 
     return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
@@ -453,6 +464,42 @@ export function isFiniteRecurringCalendarRequest(message) {
   const hasRecurrence = /\b(every\s+day|everyday|daily|every\s+weekday|weekdays|every\s+weekend|all\s+weekends|weekends|every\s+other\s+day|every\s+2\s+days|every\s+\d+\s+days|every\s+(?:mon|tues|wednes|thurs|fri|satur|sun)day|all\s+(?:mon|tues|wednes|thurs|fri|satur|sun)days|for\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:days?|weeks?|months?)|for\s+the\s+next\s+\d+\s+(?:weeks?|months?)|next\s+week|next\s+month|of\s+next\s+month|this\s+week|this\s+month|of\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)|starting\s+(?:from|on))\b/.test(text);
 
   return hasCalendarWrite && hasTime && hasRecurrence;
+}
+
+export function hasExplicitCalendarCreationRequest(message) {
+  const text = String(message ?? '').toLowerCase();
+  const explicitCalendarPhrase = /\b(?:calendar|calendario)\b/.test(text)
+    && /\b(?:add|create|put|schedule|plan|log|crea|aggiungi|segna|segnalo|segnala|programma|programmamelo|pianifica)\b/.test(text);
+  const explicitEventPhrase = /\b(?:create|add|schedule)\s+(?:an?\s+)?event\b/.test(text)
+    || /\bcrea\s+(?:un\s+)?evento\b/.test(text);
+  const scheduleWithTime = /\b(?:schedule|programma|programmare|pianifica)\b/.test(text)
+    && /\b(?:today|tomorrow|oggi|domani|at|alle|dalle|from)\b/.test(text)
+    && /\d{1,2}(?:(?:[:.]\d{2})|\s*(?:am|pm))?/.test(text);
+  return explicitCalendarPhrase || explicitEventPhrase || scheduleWithTime;
+}
+
+export function isWorkoutAdviceOnlyRequest(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (!text || hasExplicitCalendarCreationRequest(text)) return false;
+  const hasWorkoutTerms = /\b(workouts?|exercise|training|train|allenament[oi]|allenare|petto|chest|schiena|back|gambe|legs?|spalle|shoulders?|biceps?|triceps?|panca|bench|dumbbell bench press|military|squat|leg press|pull[- ]?ups?|prestazioni|performance|serie|sets?|reps?|rpe)\b/.test(text);
+  const hasAdviceTerms = /\b(analy[sz]e|analizza|dimmi|tell me|come migliorare|how (?:can|should) i improve|cosa dovrei|dovrei allenare|what should i train|prestazioni passate|past performance|consigli|advice|recommend|oggi|today|paura|scared|fatigue|cedere)\b/.test(text);
+  return hasWorkoutTerms && hasAdviceTerms;
+}
+
+export function enforceWorkoutAdviceReadOnly(message, plan = {}) {
+  if (!isWorkoutAdviceOnlyRequest(message)) return plan;
+  return {
+    ...plan,
+    intent: 'analyze',
+    needsRead: true,
+    needsWrite: false,
+    range: plan.range ?? '30d',
+    tables: ['workouts', 'workout_sets'],
+    args: {},
+    clarifyingQuestion: null,
+    riskLevel: 'low',
+    reason: 'Workout analysis/advice request forced to read-only; no explicit calendar creation request.',
+  };
 }
 
 export function isObviousDayScheduleRequest(message) {
@@ -568,6 +615,9 @@ async function executeFiniteRecurringCalendarPlan(message, plan) {
           created: result.created,
           skipped: result.skipped,
           source: recurrence.source,
+          sourcePath: 'recurrence',
+          target_date: null,
+          created_dates: [...new Set(result.created.map((event) => event.event_date))],
           recurrence: {
             frequency: recurrence.date_rule?.frequency,
             start_date: recurrence.date_rule?.start_date,
@@ -773,6 +823,9 @@ async function executeExplicitCalendarPlan(message, plan) {
           created: result.created,
           skipped: result.skipped,
           source: extracted.source,
+          sourcePath: 'explicit_multi_event',
+          target_date: extracted.target_date,
+          created_dates: [...new Set(result.created.map((event) => event.event_date))],
         },
       },
     ],
@@ -808,6 +861,9 @@ async function executeDaySchedulePlan(message, plan) {
           created: result.created,
           skipped: [...(extracted.skipped ?? []), ...result.skipped],
           source: extracted.source,
+          sourcePath: 'day_schedule',
+          target_date: extracted.target_date,
+          created_dates: [...new Set(result.created.map((event) => event.event_date))],
         },
       },
     ],
@@ -935,7 +991,15 @@ async function executeWriteIntent(plan, message, lifeosContext) {
   if (plan.intent === 'create_calendar_event') {
     const created = await createCalendarEvent({ ...plan.args, range: plan.range });
     return {
-      actions: [{ type: 'create_calendar_event', data: created }],
+      actions: [{
+        type: 'create_calendar_event',
+        data: {
+          ...created,
+          sourcePath: 'single_event',
+          target_date: created.event_date,
+          created_dates: [created.event_date],
+        },
+      }],
       answer: formatCalendarSuccess(created),
     };
   }
@@ -976,6 +1040,9 @@ async function executeWriteIntent(plan, message, lifeosContext) {
             analysis: proposal.analysis,
             created: result.created,
             skipped: [...(proposal.skipped ?? []), ...result.skipped],
+            sourcePath: 'analyze_and_plan',
+            target_date: targetDate,
+            created_dates: [...new Set(result.created.map((event) => event.event_date))],
           },
         },
       ],
@@ -1515,6 +1582,14 @@ function friendlyDayScheduleError(error) {
     return new HttpError(400, 'I understood that you want to schedule your day, but I could not read some times. Try: lunch 13:30, study 14:00-16:00.');
   }
   return error;
+}
+
+function appendWorkoutReadOnlyConfirmation(answer, message) {
+  const text = String(answer ?? '').trim();
+  const isItalian = /\b(analizza|dimmi|allenamento|allenare|petto|schiena|gambe|spalle|panca|oggi|prestazioni)\b/i.test(message);
+  const confirmation = isItalian ? 'Non ho creato eventi o attività.' : 'No calendar events or activities were created.';
+  if (text.toLowerCase().includes(confirmation.toLowerCase())) return text;
+  return `${text}\n\n${confirmation}`;
 }
 
 function formatHealthSuccess(updated) {

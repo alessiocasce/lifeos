@@ -72,21 +72,34 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 38. Confirm today's Shower habit increments or logs.
 39. Ask: `I journaled today`
 40. Confirm today's Journal habit is true/journaled, not a numeric count above 1.
-41. Ask: `Log 8 hours of sleep today`
-42. Confirm `sleep_hours` updates normally.
-43. Ask: `Log 8 energy and 1 coffee today.`
-44. Confirm today's health log updates without overwriting omitted fields.
-45. Ask with missing expense amount and confirm the assistant asks one concise clarification.
-46. Ask: `Segna la giornata di oggi: sveglia 12.30pm, pranzo 13.30pm, matematica da 13.40pm a 4.30pm, palestra da 4.40pm a 6.40pm, cena 8pm`
-47. Confirm the day-schedule path creates: Sveglia `12:30-12:45`, Pranzo `13:30-14:00`, Matematica `13:40-16:30`, Palestra `16:40-18:40`, and Cena `20:00-20:45`.
+41. Ask: `Log 8 hours of sleep today`.
+42. Confirm direct duration logging remains backward-compatible when no complete sleep/wake pair exists.
+43. Set a previous-day sleep start and ask the AI to update today's wake time; confirm calculated `sleep_hours` is refreshed.
+44. Ask with missing expense amount and confirm the assistant asks one concise clarification.
+45. Ask: `Segna la giornata di oggi: sveglia 12.30pm, pranzo 13.30pm, matematica da 13.40pm a 4.30pm, palestra da 4.40pm a 6.40pm, cena 8pm`
+46. Confirm the day-schedule path creates: Sveglia `12:30-12:45`, Pranzo `13:30-14:00`, Matematica `13:40-16:30`, Palestra `16:40-18:40`, and Cena `20:00-20:45`.
+47. Confirm all events use the current Europe/Rome date, not the next UTC date.
 48. Confirm the explicit Pranzo/Matematica overlap is preserved and no `title is required` error appears.
 49. Ask: `plan today: wake up 9am, lunch 1pm, study from 2pm to 4pm, gym 5pm to 6pm, dinner 8pm`
 50. Confirm it creates Wake Up `09:00-09:15`, Lunch `13:00-13:30`, Study `14:00-16:00`, Gym `17:00-18:00`, and Dinner `20:00-20:45`.
-51. Confirm both mixed schedules log `create_calendar_events`, the created event count, and calendar record references in AI Action History.
+51. Confirm both mixed schedules log `create_calendar_events`, the created event count, source path, target date, and calendar record references in AI Action History.
 52. Re-run the existing range-only prompt and confirm it still uses the explicit multi-event path.
 53. Re-run `create event tomorrow dentist 2pm to 3pm` and confirm it remains a single event.
 54. Re-run `remind me to take the pill at 8:30pm` and confirm it creates a memo, not a calendar event.
 55. Re-run `25 euro expense for ChatGPT Plus` and confirm it creates an expense.
+
+## Workout Advice Write Boundary
+
+1. Ask: `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+2. Confirm the assistant reads workout history, gives advice, creates no actions, and says no events or activities were created.
+3. Ask: `Analizza i workout di petto precedente, dimmi prestazioni passate di panca piana e come provare a migliorare oggi`.
+4. Confirm analysis only and no calendar rows.
+5. Ask: `Analizza i workout degli ultimi giorni e dimmi cosa dovrei allenare oggi. Io pensavo di allenare petto ma ho paura di cedere con le spalle`.
+6. Confirm analysis only and no `Azioni create` section.
+7. Ask: `Programma petto oggi dalle 17 alle 18`.
+8. Confirm explicit scheduling can create a calendar event.
+9. Ask: `create chest workout in calendar today 5pm to 6pm`.
+10. Confirm explicit calendar wording remains write-capable.
 
 ## Action History
 
@@ -152,7 +165,7 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 
 ## Health Habit Context
 
-1. Create several Health logs with different Brush, Shower, Creatine, Skin, and Journal values.
+1. Create several Health logs with different Shower, Creatine, Skin, and Journal values.
 2. Ask: `Analyze my sleeping behaviour and daily habits in the last 7 days.`
 3. Confirm the assistant sees standalone habit stats rather than one generic hygiene total.
 4. Confirm Journal is treated as a yes/no daily stat.
@@ -215,9 +228,9 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 ## Mobile / iPhone
 
 1. Open Assistant on iPhone Safari.
-2. Confirm `Ask LifeOS` appears above Daily Review.
+2. Confirm Brain contains Ask LifeOS chat and Recent Actions.
 3. Confirm no range/scope dropdowns exist.
-4. Confirm prompt chips are tappable.
+4. Confirm Daily Review and canned prompt Suggestions are absent.
 5. Confirm the textarea uses 16px text and does not zoom.
 6. Confirm the send button is thumb-friendly and not covered by bottom nav.
-7. Confirm Daily Review remains usable below the AI chat area.
+7. Confirm Recent Actions remains compact and opens its detail view.

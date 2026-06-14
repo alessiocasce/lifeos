@@ -1,5 +1,4 @@
 import {
-  Activity,
   Ban,
   Bell,
   CalendarDays,
@@ -16,9 +15,9 @@ import { useEffect, useMemo } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { AiActionHistoryList } from '../components/AiActionHistory';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
+import { localDate } from '../utils/date';
 
 const habits = [
-  { id: 'brush', label: 'Brush', type: 'count' },
   { id: 'shower', label: 'Shower', type: 'count' },
   { id: 'creatine', label: 'Creatine', type: 'count' },
   { id: 'skin', label: 'Skin', type: 'count' },
@@ -153,7 +152,7 @@ export function HomeTab() {
           <OverviewMetric
             icon={CheckCircle2}
             label="Habits"
-            value={healthLoading ? '...' : `${completedHabitCount}/5`}
+            value={healthLoading ? '...' : `${completedHabitCount}/4`}
             detail={todaysHealthLog ? 'completed today' : 'no health log today'}
             tone={completedHabitCount >= 3 ? 'text-emerald-300' : 'text-amber-300'}
           />
@@ -267,21 +266,20 @@ export function HomeTab() {
       </Panel>
 
       <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Health" title="Daily Habits" right={<span className="data-text text-[11px] text-emerald-300">{completedHabitCount}/5</span>} />
+        <PanelHeader eyebrow="Health" title="Daily Habits" right={<span className="data-text text-[11px] text-emerald-300">{completedHabitCount}/4</span>} />
         <div className="grid gap-3 p-3">
           {healthLoading ? (
             <LoadingState label="Loading habits..." />
           ) : (
             <>
               {!todaysHealthLog ? <EmptyState title="No health log today." body="Habits start at zero until today is logged." /> : null}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:grid-cols-2 2xl:grid-cols-5">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
                 {habits.map((habit) => (
                   <HabitPill key={habit.id} habit={habit} value={normalizedHabits[habit.id]} />
                 ))}
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-3 gap-2">
                 <IconMetric icon={Moon} label="Sleep" value={formatWithUnit(todaysHealthLog?.sleep_hours, 'h')} tone="text-cyan-300" />
-                <IconMetric icon={Activity} label="Energy" value={formatNumber(todaysHealthLog?.energy)} tone="text-amber-300" />
                 <IconMetric icon={Coffee} label="Coffee" value={formatNumber(todaysHealthLog?.coffee)} tone="text-amber-300" />
                 <IconMetric icon={Ban} label="ADC" value={formatNumber(todaysHealthLog?.adc)} tone="text-red-300" />
               </div>
@@ -678,7 +676,7 @@ function statusTone(status) {
 }
 
 function getToday() {
-  return new Date().toISOString().slice(0, 10);
+  return localDate();
 }
 
 function addDays(dateValue, days) {

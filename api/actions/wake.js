@@ -8,7 +8,8 @@ import {
   requirePost,
   sendSuccess,
 } from '../_utils/http.js';
-import { localDate } from '../_utils/lifeosTools.js';
+import { localDate } from '../_utils/date.js';
+import { recalculateSleepHoursForDate } from '../_utils/health.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
 import { optionalDate, optionalText, optionalTime } from '../_utils/validation.js';
 
@@ -80,7 +81,14 @@ export default async function handler(req, res) {
       .single();
     if (error) throw error;
 
-    sendSuccess(res, 200, data, context);
+    await recalculateSleepHoursForDate(supabase, userId, loggedOn);
+    const { data: refreshed, error: refreshError } = await supabase
+      .from('health_logs')
+      .select(healthLogSelect)
+      .eq('id', data.id)
+      .single();
+    if (refreshError) throw refreshError;
+    sendSuccess(res, 200, refreshed, context);
   } catch (error) {
     handleApiError(res, error, context);
   }

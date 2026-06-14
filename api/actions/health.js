@@ -8,6 +8,7 @@ import {
   sendSuccess,
 } from '../_utils/http.js';
 import { getActionUserId, getSupabaseAdmin } from '../_utils/supabaseAdmin.js';
+import { recalculateSleepAfterHealthChange } from '../_utils/health.js';
 import {
   compactPayload,
   optionalDate,
@@ -49,6 +50,7 @@ export default async function handler(req, res) {
 
     const body = await readJsonBody(req);
     const userId = getActionUserId();
+    const client = getSupabaseAdmin();
     const payload = compactPayload({
       user_id: userId,
       logged_on: optionalDate(body, 'logged_on', today()),
@@ -62,14 +64,22 @@ export default async function handler(req, res) {
       notes: optionalText(body.notes, 'notes', { max: 2000 }),
     });
 
-    const { data, error } = await getSupabaseAdmin()
+    const changedFields = Object.keys(payload).filter((key) => !['user_id', 'logged_on'].includes(key));
+    const { data, error } = await client
       .from('health_logs')
       .upsert(payload, { onConflict: 'user_id,logged_on' })
       .select(healthLogSelect)
       .single();
 
     if (error) throw error;
-    sendSuccess(res, 200, data, context);
+    await recalculateSleepAfterHealthChange(client, userId, payload.logged_on, changedFields);
+    const { data: refreshed, error: refreshError } = await client
+      .from('health_logs')
+      .select(healthLogSelect)
+      .eq('id', data.id)
+      .single();
+    if (refreshError) throw refreshError;
+    sendSuccess(res, 200, refreshed, context);
   } catch (error) {
     handleApiError(res, error, context);
   }
