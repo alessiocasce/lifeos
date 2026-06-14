@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['lifeos-icon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'LifeOS',

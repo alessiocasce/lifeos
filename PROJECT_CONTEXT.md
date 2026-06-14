@@ -192,7 +192,7 @@ LifeOS supports installation as a Progressive Web App for iPhone Home Screen and
 Current behavior:
 
 - Uses `vite-plugin-pwa` with generated Workbox service worker support.
-- Registers the service worker with auto-update behavior in production builds.
+- Registers the service worker explicitly in production so app updates can be applied through the in-app safety guard.
 - Provides manifest metadata for `LifeOS`, standalone display, portrait orientation, dark theme/background colors, and productivity/health/finance categories.
 - Provides generated PNG icons for 192px, 512px, maskable 192px, maskable 512px, and Apple touch icon usage.
 - Adds iOS Home Screen metadata and `viewport-fit=cover` in `index.html`.
@@ -203,6 +203,13 @@ Current behavior:
 - Does not store Supabase tokens or server-only secrets in service worker code.
 - Supports opening the already-loaded app shell offline where the browser allows it.
 - Does not implement full offline data sync, offline write queues, or cached personal data.
+- Mobile/iPhone PWA supports pull-to-refresh from the top of the app content.
+- One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, and recent AI actions.
+- Pull-to-refresh also asks the service worker to check for a newly deployed app version.
+- A waiting app update activates and reloads automatically when there is no meaningful unsaved work.
+- A complete unsaved Workout set or meaningful Project session draft blocks only the app reload; persisted data still refreshes and the indicator asks the user to save first.
+- Incomplete half-written fields are intentionally not protected by the app-update guard.
+- Pull-to-refresh is touch/mobile focused, ignores form controls and open dialogs, and is disabled on desktop.
 
 ## Action API Current Status
 

@@ -12,6 +12,7 @@ import {
 import { useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { LifeOSLogo } from './LifeOSLogo';
+import { PullToRefresh } from './PullToRefresh';
 
 const icons = {
   home: Home,
@@ -130,7 +131,9 @@ export function Shell({ children }) {
           </div>
         </header>
 
-        <div className="p-2 pb-[calc(env(safe-area-inset-bottom)+80px)] md:p-4 md:pb-4">{children}</div>
+        <PullToRefresh>
+          <div className="p-2 pb-[calc(env(safe-area-inset-bottom)+80px)] md:p-4 md:pb-4">{children}</div>
+        </PullToRefresh>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">

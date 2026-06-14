@@ -509,6 +509,18 @@ export const expenseApi = {
 };
 
 export const calendarEventApi = {
+  async list(limit = 500) {
+    return throwIfError(
+      await requireSupabase()
+        .from('calendar_events')
+        .select(calendarEventSelect)
+        .order('event_date', { ascending: true })
+        .order('start_time', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(limit),
+    );
+  },
+
   async listByRange(startDate, endDate, limit = 250) {
     return throwIfError(
       await requireSupabase()

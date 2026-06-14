@@ -34,6 +34,7 @@ export function WorkoutTab() {
     endWorkoutSession,
     reorderWorkoutTemplateExercise,
     setActiveWorkoutId,
+    setUnsavedWork,
     updateWorkoutTemplate,
     updateWorkoutTemplateExercise,
     updateWorkoutSession,
@@ -102,6 +103,15 @@ export function WorkoutTab() {
       setEditForm(null);
     }
   }, [activeWorkoutSession]);
+
+  useEffect(() => {
+    setUnsavedWork(
+      'workout-set',
+      isMeaningfulSetDraft(setForm, activeWorkoutSession),
+      'save current workout set first',
+    );
+    return () => setUnsavedWork('workout-set', false);
+  }, [activeWorkoutSession, setForm, setUnsavedWork]);
 
   const startWorkout = async (event) => {
     event.preventDefault();
@@ -1875,6 +1885,18 @@ function validateSetForm(form, activeWorkoutSession) {
   if (!Number.isInteger(reps) || reps <= 0) return 'Reps must be a positive whole number.';
   if (rpe !== null && (!Number.isFinite(rpe) || rpe < 0 || rpe > 10)) return 'RPE must be between 0 and 10.';
   return '';
+}
+
+function isMeaningfulSetDraft(form, activeWorkoutSession) {
+  if (!activeWorkoutSession || activeWorkoutSession.ended_at || !form.exercise.trim()) return false;
+  const weight = parseDecimal(form.weight);
+  const reps = parseInteger(form.reps);
+  const rpe = parseOptionalDecimal(form.rpe);
+  return Number.isFinite(weight)
+    && weight >= 0
+    && Number.isInteger(reps)
+    && reps > 0
+    && (rpe === null || (Number.isFinite(rpe) && rpe >= 0 && rpe <= 10));
 }
 
 function isValidDate(value) {

@@ -86,8 +86,14 @@ export function LifeOSProvider({ children }) {
   const [aiActionLogs, setAiActionLogs] = useState([]);
   const [aiActionLogsStatus, setAiActionLogsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [aiActionLogsError, setAiActionLogsError] = useState('');
+  const [refreshState, setRefreshState] = useState('idle');
+  const [refreshError, setRefreshError] = useState('');
+  const [lastRefreshAt, setLastRefreshAt] = useState(null);
+  const [unsavedWorkBySource, setUnsavedWorkBySource] = useState({});
   const lastAuthUserId = useRef(null);
   const lastCalendarRangeRequest = useRef(0);
+  const lastExpenseMonthRange = useRef(null);
+  const refreshPromiseRef = useRef(null);
 
   const setActiveTab = useCallback((tabId) => {
     const nextTab = isValidTabId(tabId) ? tabId : 'home';
@@ -150,6 +156,11 @@ export function LifeOSProvider({ children }) {
     setAiActionLogs([]);
     setAiActionLogsError('');
     setAiActionLogsStatus(status);
+    setRefreshState('idle');
+    setRefreshError('');
+    setLastRefreshAt(null);
+    setUnsavedWorkBySource({});
+    lastExpenseMonthRange.current = null;
   }, []);
 
   useEffect(() => {
@@ -323,6 +334,7 @@ export function LifeOSProvider({ children }) {
   }, [loadExpenses]);
 
   const loadExpenseMonth = useCallback(async (startDate, endDate) => {
+    lastExpenseMonthRange.current = { startDate, endDate };
     if (!isSupabaseConfigured) {
       setMonthlyExpensesStatus('not-configured');
       return [];
@@ -384,6 +396,37 @@ export function LifeOSProvider({ children }) {
       setCalendarEventsError(calendarErrorMessage(error, 'Failed to load calendar events.'));
       setCalendarEventsStatus('error');
       return [];
+    }
+  }, [authUser]);
+
+  const loadAllCalendarEvents = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setCalendarEventsStatus('not-configured');
+      return [];
+    }
+    if (!authUser) {
+      lastCalendarRangeRequest.current += 1;
+      setCalendarEvents([]);
+      setCalendarEventsStatus('no-session');
+      return [];
+    }
+
+    const requestId = lastCalendarRangeRequest.current + 1;
+    lastCalendarRangeRequest.current = requestId;
+    setCalendarEventsStatus('loading');
+    setCalendarEventsError('');
+    try {
+      const rows = await calendarEventApi.list();
+      if (lastAuthUserId.current !== authUser.id || lastCalendarRangeRequest.current !== requestId) return [];
+      const sortedRows = sortCalendarEvents(rows ?? []);
+      setCalendarEvents(sortedRows);
+      setCalendarEventsStatus('ready');
+      return sortedRows;
+    } catch (error) {
+      if (lastAuthUserId.current !== authUser.id || lastCalendarRangeRequest.current !== requestId) return [];
+      setCalendarEventsError(calendarErrorMessage(error, 'Failed to load calendar events.'));
+      setCalendarEventsStatus('error');
+      throw error;
     }
   }, [authUser]);
 
@@ -554,6 +597,96 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadAiActionLogs(10);
   }, [loadAiActionLogs]);
+
+  const setUnsavedWork = useCallback((sourceId, meaningful, label = '') => {
+    if (!sourceId) return;
+    setUnsavedWorkBySource((current) => {
+      if (!meaningful) {
+        if (!current[sourceId]) return current;
+        const next = { ...current };
+        delete next[sourceId];
+        return next;
+      }
+      const nextEntry = { id: sourceId, label: label || 'save current work first' };
+      if (current[sourceId]?.label === nextEntry.label) return current;
+      return { ...current, [sourceId]: nextEntry };
+    });
+  }, []);
+
+  const meaningfulUnsavedWork = useMemo(
+    () => Object.values(unsavedWorkBySource),
+    [unsavedWorkBySource],
+  );
+
+  const refreshLifeOS = useCallback(({ reason = 'manual' } = {}) => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+    if (!authUser) {
+      return Promise.resolve({ ok: false, reason, refreshed: [], failed: ['auth'] });
+    }
+
+    setRefreshState('refreshing');
+    setRefreshError('');
+    const todayValue = today();
+    const expenseMonthRange = lastExpenseMonthRange.current ?? {
+      startDate: startOfMonth(todayValue),
+      endDate: startOfNextMonth(todayValue),
+    };
+    const tasks = [
+      ['health', loadHealthLogs()],
+      ['workouts', loadWorkoutSessions()],
+      ['workout_templates', loadWorkoutTemplates()],
+      ['expenses', loadExpenses()],
+      ['selected_month_expenses', loadExpenseMonth(expenseMonthRange.startDate, expenseMonthRange.endDate)],
+      ['calendar', loadAllCalendarEvents()],
+      ['memos', loadMemos()],
+      ['projects', loadProjects()],
+      ['project_money', loadProjectMoneyEntries()],
+      ['ai_actions', loadAiActionLogs(10)],
+    ];
+
+    const refreshPromise = Promise.allSettled(tasks.map(([, task]) => task))
+      .then((results) => {
+        const failed = results
+          .map((result, index) => ({ result, name: tasks[index][0] }))
+          .filter(({ result }) => result.status === 'rejected')
+          .map(({ name }) => name);
+        const ok = failed.length === 0;
+        const refreshedAt = new Date().toISOString();
+        setRefreshState(ok ? 'updated' : 'failed');
+        setRefreshError(ok ? '' : 'Some LifeOS data could not be refreshed.');
+        setLastRefreshAt(refreshedAt);
+        return {
+          ok,
+          reason,
+          refreshed: tasks.map(([name]) => name),
+          failed,
+          refreshedAt,
+        };
+      })
+      .catch((error) => {
+        setRefreshState('failed');
+        setRefreshError(error.message || 'Refresh failed.');
+        throw error;
+      })
+      .finally(() => {
+        refreshPromiseRef.current = null;
+      });
+
+    refreshPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, [
+    authUser,
+    loadAiActionLogs,
+    loadAllCalendarEvents,
+    loadExpenseMonth,
+    loadExpenses,
+    loadHealthLogs,
+    loadMemos,
+    loadProjectMoneyEntries,
+    loadProjects,
+    loadWorkoutSessions,
+    loadWorkoutTemplates,
+  ]);
 
   const activeWorkoutSession = useMemo(
     () => workoutSessions.find((session) => session.id === activeWorkoutId) ?? null,
@@ -1160,6 +1293,8 @@ export function LifeOSProvider({ children }) {
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,
+      refreshLifeOS,
+      setUnsavedWork,
       saveDailyReview: async (payload) => {
         if (!authUser) {
           throw new Error('Sign in before saving a daily review.');
@@ -1205,7 +1340,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, setActiveTab, workoutSessions, workoutTemplates],
+    [activeWorkoutId, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, refreshLifeOS, setActiveTab, setUnsavedWork, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -1244,6 +1379,10 @@ export function LifeOSProvider({ children }) {
     aiActionLogs,
     aiActionLogsError,
     aiActionLogsStatus,
+    refreshState,
+    refreshError,
+    lastRefreshAt,
+    meaningfulUnsavedWork,
     expandedWorkout,
     authError,
     authStatus,
@@ -1280,6 +1419,15 @@ function sortHealthLogs(rows = []) {
     if (a.logged_on !== b.logged_on) return new Date(b.logged_on) - new Date(a.logged_on);
     return new Date(b.updated_at ?? 0) - new Date(a.updated_at ?? 0);
   });
+}
+
+function startOfMonth(dateValue) {
+  return `${String(dateValue).slice(0, 7)}-01`;
+}
+
+function startOfNextMonth(dateValue) {
+  const [year, month] = String(dateValue).slice(0, 7).split('-').map(Number);
+  return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
 }
 
 function sortExpenses(rows = []) {

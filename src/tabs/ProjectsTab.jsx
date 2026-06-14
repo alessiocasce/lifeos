@@ -56,6 +56,7 @@ export function ProjectsTab() {
     projects,
     projectsError,
     projectsStatus,
+    setUnsavedWork,
     updateProject,
     updateProjectMoneyEntry,
     updateProjectSession,
@@ -100,6 +101,14 @@ export function ProjectsTab() {
   const hoursThisWeek = sessionsThisWeek.reduce((sum, session) => sum + getSessionMinutes(session) / 60, 0);
   const totalSessions = projectSessions.length;
   const projectsLoading = isInitialLoading(projectsStatus, projects);
+
+  useEffect(() => {
+    const hasMeaningfulDraft = activeSession
+      ? sessionProof.trim().length >= 3
+      : sessionTarget.trim().length >= 3;
+    setUnsavedWork('project-session-draft', hasMeaningfulDraft, 'save current project session draft first');
+    return () => setUnsavedWork('project-session-draft', false);
+  }, [activeSession, sessionProof, sessionTarget, setUnsavedWork]);
 
   useEffect(() => {
     if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {

@@ -92,6 +92,14 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 2. Confirm LifeOS can be added to the iPhone Home Screen.
 3. Confirm the installed app opens standalone and keeps API/Supabase/Gemini responses uncached.
 4. Confirm PWA start still opens normally after the tab-route rewrite deployment.
+5. Change data on desktop, pull down from the top of the installed PWA, and confirm one refresh synchronizes data across multiple modules.
+6. Deploy a new Vercel version, keep the installed PWA open, and pull to refresh.
+7. With no meaningful unsaved work, confirm the waiting service worker activates and LifeOS reloads once without closing the PWA.
+8. Repeat with a complete unsaved Workout set and confirm auto-reload is blocked with `Update ready - save current workout set first.`
+9. Confirm incomplete half-written fields do not block the update.
+10. Save the set, pull again, and confirm the update applies.
+11. Confirm there is no repeated or infinite reload loop.
+12. Confirm `/api/ai/chat`, `/api/ai/actions`, and `/api/actions/*` still return API behavior after the update.
 
 ## Known Non-Failing Build Warning
 
