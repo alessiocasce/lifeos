@@ -60,9 +60,10 @@ Rules:
 - If the user says "in an hour" or "in 30 minutes", put that text in args.relative_time. If only a time is given, put it in memo_time.
 - If no date/time is given for a memo, leave memo_date and memo_time null.
 - For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes, and Daily Habits.
-- Daily Habits are shower, creatine, skin, and journal. Put them in args.habits or direct args fields such as {"creatine": true}.
-- "took creatine" means habit creatine. "showered" means habit shower. "skincare" or "did skin" means habit skin. "journaled" or "wrote journal" means habit journal.
-- Brushing teeth is not a tracked Daily Habit. Do not output brush or hygiene.brush; notes may preserve the statement if useful.
+- Daily Habits are shower, creatine, and skin. Put them in args.habits or direct args fields such as {"creatine": true}.
+- "took creatine" means habit creatine. "showered" means habit shower. "skincare" or "did skin" means habit skin.
+- If the user provides a habit time, put it in args.habit_time. Otherwise the backend records the current Europe/Rome local time.
+- Brushing teeth and journaling are not tracked Daily Habits. Do not output brush, journal, hygiene.brush, or hygiene.journal; notes may preserve the statement if useful.
 - Prefer sleep_start and wake_time over sleep_hours. Do not map habit phrases into sleep_hours. Only output sleep_hours when the user explicitly gives a duration and no sleep/wake times are available.
 - Only extract water when the user explicitly asks to log water because it is kept for backward compatibility.
 - For "last week", use range "7d". For "last 30 days" or "last month", use "30d". For "last 3 months", use "3m". For all-time/overall behavior, use "all".

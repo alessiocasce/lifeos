@@ -25,15 +25,16 @@ Run this after signing in through the global auth gate. This pass does not requi
 
 ## Daily Habits
 
-1. Confirm the visible habit list is Shower, Creatine, Skin, and Journal.
-2. Increase Shower, Creatine, and Skin; confirm counters never go below zero.
-3. Toggle Journal and confirm it remains boolean rather than becoming a count.
-4. Save and refresh; confirm all four values reload.
-5. Test a legacy row containing Brush, Floss, or Stretch and confirm the UI ignores those entries without deleting or displaying them.
-6. Ask the assistant `Log that i took creatine today`; confirm Creatine updates and omitted habits remain unchanged.
-7. Ask `Log that I showered today`; confirm Shower updates.
-8. Ask `I journaled today`; confirm Journal becomes true.
-9. Ask to log brushing teeth and confirm no `hygiene.brush` habit update is created.
+1. Confirm the visible habit list is Shower, Creatine, and Skin.
+2. Confirm Brush and Journal are not shown.
+3. Increase each habit; confirm the count increments and the current Europe/Rome time is appended.
+4. Decrease a habit; confirm the count decrements safely and the latest timestamp is removed when present.
+5. Save and refresh; confirm counts and times reload.
+6. Test legacy numeric and boolean habit values and confirm they display as counts without crashing.
+7. Test a legacy row containing Brush, Journal, Floss, or Stretch and confirm those values remain stored but are not displayed.
+8. Ask the assistant `Log that i took creatine today`; confirm Creatine updates with a timestamp and omitted habits remain unchanged.
+9. Ask `Log that I showered today`; confirm Shower updates with a timestamp.
+10. Ask to log brushing teeth or journaling and confirm no visible habit update is created.
 
 ## API And AI Recalculation
 
@@ -46,10 +47,31 @@ Run this after signing in through the global auth gate. This pass does not requi
 7. Confirm omitted nullable health fields do not produce validation errors.
 8. Confirm direct `sleep_hours` writes remain backward-compatible when the same update does not change sleep/wake fields.
 
+## Sleep-Start Action API
+
+1. Call `POST /api/actions/sleep-start` with `{"time":"1.30"}`.
+2. Confirm the stored value is `01:30`.
+3. Confirm omitted `logged_on` uses the previous Europe/Rome date because the time is before noon.
+4. Call with an explicit `logged_on` and confirm the explicit date is respected.
+5. Ensure the following day has a wake time and confirm `sleep_hours` recalculates.
+6. Send an invalid time and confirm a clear `400`.
+7. Confirm missing or invalid auth returns `401`.
+
+## Habit Action API
+
+1. Call `POST /api/actions/habit` with `{"habit":"creatine","time":"9:37 AM"}`.
+2. Confirm today's Creatine count increments and `09:37` appears in Health and Home.
+3. Call with `{"habit":"skin","time":"10:45 PM"}` and confirm `22:45`.
+4. Call with `{"habit":"doccia"}` and confirm Shower increments using the current Europe/Rome time.
+5. Confirm duplicate times in the same minute are allowed.
+6. Confirm invalid habit and invalid time values return clear `400` errors.
+7. Confirm Brush and Journal are preserved in legacy JSON but are not updated or displayed.
+8. Confirm missing or invalid auth returns `401`.
+
 ## Persistence And Mobile
 
 1. Save today and yesterday, refresh, and confirm both logs reload.
 2. Switch dates and confirm the selected non-today date remains stable during refreshes.
 3. Confirm 7-day summaries and history use persisted rows and do not show Energy, Water, or Brush.
 4. On iPhone/PWA, confirm no horizontal overflow, no input zoom, and the bottom nav does not cover Save Check-In.
-5. Confirm the read-only sleep value, counters, and Journal toggle remain easy to scan and tap.
+5. Confirm the read-only sleep value and time-aware habit controls remain easy to scan and tap.

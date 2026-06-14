@@ -184,6 +184,68 @@ Success example:
 }
 ```
 
+### Log Sleep Start
+
+```bash
+curl -X POST https://your-lifeos.vercel.app/api/actions/sleep-start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "time": "01:30"
+  }'
+```
+
+`time` is required. The aliases `sleep_start` and `sleepStart` are also accepted. Supported formats include `HH:MM`, `H:MM`, `H.MM`, `HH.MM`, and AM/PM values such as `1:30 AM` or `11:45 PM`.
+
+If `logged_on` is omitted, sleep starts before `12:00` are assigned to the previous Europe/Rome date. Times from `12:00` onward are assigned to the current local date. An explicitly provided `logged_on` is always respected.
+
+The endpoint updates only `sleep_start`, preserves other health fields, and recalculates the following day's `sleep_hours` if that row already has a wake time.
+
+### Log Habit
+
+```bash
+curl -X POST https://your-lifeos.vercel.app/api/actions/habit \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "habit": "creatine",
+    "time": "9:37 AM"
+  }'
+```
+
+Supported habits and aliases:
+
+- Shower: `shower`, `doccia`
+- Creatine: `creatine`, `creatina`
+- Skin: `skin`, `skincare`, `skin care`
+
+`logged_on` is optional and defaults to the Europe/Rome current date. `time` is optional and defaults to the current Europe/Rome local time. Shortcut-friendly values such as `9:37 AM`, `10:45 PM`, `9.37`, and `22:45` are normalized to `HH:MM`.
+
+The default mode is `increment` with `amount: 1`. Optional `mode: "set"` sets the count instead. Habit data is stored in `health_logs.hygiene` as time-aware entries:
+
+```json
+{
+  "creatine": { "count": 1, "times": ["09:37"] },
+  "skin": { "count": 2, "times": ["09:20", "22:45"] }
+}
+```
+
+Legacy numeric, boolean, array, Brush, Journal, and unknown hygiene values are preserved when a tracked habit is updated. Brush and Journal are not part of the visible habit system.
+
+Quick bodies:
+
+```json
+{ "habit": "creatine", "time": "9:37 AM" }
+```
+
+```json
+{ "habit": "shower", "time": "10:45 PM" }
+```
+
+```json
+{ "habit": "skin", "time": "10:45 PM" }
+```
+
 ### Create Calendar Event
 
 ```bash
@@ -251,6 +313,38 @@ Keep the token private. Treat anyone with the token as able to create records fo
 }
 ```
 
+### iPhone Sleep-Start Automation
+
+1. Add `Get Current Date`.
+2. Format it as `HH:mm` or `h:mm a`.
+3. POST to `https://your-lifeos.vercel.app/api/actions/sleep-start`.
+4. Use the standard Authorization and Content-Type headers.
+5. Send:
+
+```json
+{
+  "time": "<formatted time>"
+}
+```
+
+The endpoint applies the before-noon previous-date rule automatically when `logged_on` is omitted.
+
+### iPhone Habit Shortcuts
+
+POST to `https://your-lifeos.vercel.app/api/actions/habit` with one of:
+
+```json
+{ "habit": "creatine", "time": "<formatted time>" }
+```
+
+```json
+{ "habit": "shower", "time": "<formatted time>" }
+```
+
+```json
+{ "habit": "skin", "time": "<formatted time>" }
+```
+
 ## Curl Smoke Tests
 
 Use these against the deployed Vercel URL after setting environment variables.
@@ -305,4 +399,10 @@ curl -i -X OPTIONS https://your-lifeos.vercel.app/api/actions/expense
 14. Repeat with `{"wake_time":"08:37"}` and `{"wakeTime":"8:37 AM"}`.
 15. Call it with `{"time":"banana"}` and confirm a clear `400` error.
 16. Confirm an existing health log keeps its other fields after the wake update.
-17. Sign in as another user and confirm the action-created records are not visible.
+17. Call `/api/actions/sleep-start` with `{"time":"1.30"}` and confirm `01:30` is stored on the previous local date.
+18. Repeat with an explicit `logged_on` and confirm that date is respected.
+19. Confirm a following-day wake row has `sleep_hours` recalculated.
+20. Call `/api/actions/habit` for Creatine at `9:37 AM` and Skin at `10:45 PM`; confirm `09:37` and `22:45` are stored.
+21. Confirm `doccia` increments Shower.
+22. Confirm invalid habit/time values return clear `400` errors.
+23. Sign in as another user and confirm the action-created records are not visible.

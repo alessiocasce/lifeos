@@ -3,6 +3,12 @@ import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { addDays, localDate, localDateTime, localTime } from './date.js';
 import { recalculateSleepAfterHealthChange } from './health.js';
 import {
+  HEALTH_HABITS,
+  applyHabitUpdate,
+  getHabitEntry,
+  normalizeHabitId,
+} from './habits.js';
+import {
   assertTimeOrder,
   compactPayload,
   optionalDate,
@@ -59,12 +65,6 @@ const CALENDAR_CATEGORY_ALIASES = new Map([
   ['bedtime', 'Sleep'],
   ['sleeping', 'Sleep'],
 ]);
-const HEALTH_HABITS = [
-  { id: 'shower', label: 'Shower', type: 'count' },
-  { id: 'creatine', label: 'Creatine', type: 'count' },
-  { id: 'skin', label: 'Skin', type: 'count' },
-  { id: 'journal', label: 'Journal', type: 'boolean' },
-];
 const HEALTH_HABIT_IDS = new Set(HEALTH_HABITS.map((habit) => habit.id));
 
 export { addDays, localDate, localDateTime, localTime };
@@ -553,8 +553,6 @@ function summarizeHealthHabits(logs) {
     showerTotal: sumHabit(normalizedLogs, 'shower'),
     creatineTotal: sumHabit(normalizedLogs, 'creatine'),
     skinTotal: sumHabit(normalizedLogs, 'skin'),
-    journalDays: normalizedLogs.filter((habits) => habits.journal).length,
-    journalCoverage: `${normalizedLogs.filter((habits) => habits.journal).length}/${logs.length}`,
     recent: normalizedLogs.slice(0, 10),
   };
 }
@@ -572,16 +570,17 @@ async function readHealthLogForDate(userId, loggedOn) {
 
 function extractHealthHabitUpdates(args = {}) {
   const updates = {};
-  collectHabitUpdates(updates, args.habits, 'explicit');
-  collectHabitUpdates(updates, args.hygiene, 'explicit');
+  const fallbackTime = readHabitUpdateTime(args.habit_time ?? args.time) ?? localTime();
+  collectHabitUpdates(updates, args.habits, 'explicit', fallbackTime);
+  collectHabitUpdates(updates, args.hygiene, 'explicit', fallbackTime);
 
   for (const habit of HEALTH_HABITS) {
     if (Object.prototype.hasOwnProperty.call(args, habit.id)) {
-      setHabitUpdate(updates, habit.id, args[habit.id], 'explicit');
+      setHabitUpdate(updates, habit.id, args[habit.id], 'explicit', fallbackTime);
     }
   }
 
-  collectHabitUpdatesFromNotes(updates, args.notes);
+  collectHabitUpdatesFromNotes(updates, args.notes, fallbackTime);
 
   return {
     updates,
@@ -589,57 +588,54 @@ function extractHealthHabitUpdates(args = {}) {
   };
 }
 
-function collectHabitUpdates(updates, value, source) {
+function collectHabitUpdates(updates, value, source, fallbackTime) {
   if (!value) return;
   if (Array.isArray(value)) {
     for (const item of value) {
       if (!item || typeof item !== 'object') continue;
       const id = normalizeHabitId(item.id ?? item.name ?? item.label);
       if (!id) continue;
-      const rawValue = item.type === 'boolean' ? item.done ?? item.count : item.count ?? item.done ?? item.value;
-      setHabitUpdate(updates, id, rawValue, source);
+      const rawValue = item.count ?? item.done ?? item.value ?? true;
+      const time = readHabitUpdateTime(item.time ?? item.times?.at?.(-1)) ?? fallbackTime;
+      setHabitUpdate(updates, id, rawValue, source, time);
     }
     return;
   }
   if (typeof value === 'object') {
     for (const [key, rawValue] of Object.entries(value)) {
       const id = normalizeHabitId(key);
-      if (id) setHabitUpdate(updates, id, rawValue, source);
+      if (!id) continue;
+      const valueObject = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : null;
+      const countValue = valueObject ? valueObject.count ?? valueObject.done ?? valueObject.value ?? true : rawValue;
+      const time = readHabitUpdateTime(valueObject?.time ?? valueObject?.times?.at?.(-1)) ?? fallbackTime;
+      setHabitUpdate(updates, id, countValue, source, time);
     }
   }
 }
 
-function collectHabitUpdatesFromNotes(updates, notes) {
+function collectHabitUpdatesFromNotes(updates, notes, time) {
   const text = String(notes ?? '').toLowerCase();
   if (!text) return;
   if (/\b(creatine|took creatine|taken creatine|had creatine)\b/.test(text)) {
-    setHabitUpdate(updates, 'creatine', true, 'phrase');
+    setHabitUpdate(updates, 'creatine', true, 'phrase', time);
   }
   if (/\b(showered|shower|took a shower|had a shower)\b/.test(text)) {
-    setHabitUpdate(updates, 'shower', true, 'phrase');
+    setHabitUpdate(updates, 'shower', true, 'phrase', time);
   }
   if (/\b(skincare|skin care|did skin|skin routine)\b/.test(text)) {
-    setHabitUpdate(updates, 'skin', true, 'phrase');
-  }
-  if (/\b(journaled|wrote journal|wrote in my journal|did journal|journal)\b/.test(text)) {
-    setHabitUpdate(updates, 'journal', true, 'phrase');
+    setHabitUpdate(updates, 'skin', true, 'phrase', time);
   }
 }
 
-function setHabitUpdate(updates, id, value, source) {
+function setHabitUpdate(updates, id, value, source, time) {
   if (!HEALTH_HABIT_IDS.has(id) || value === undefined || value === null || value === '') return;
-  const habit = HEALTH_HABITS.find((item) => item.id === id);
-  if (habit.type === 'boolean') {
-    updates[id] = { mode: 'set', value: normalizeBooleanHabitValue(value) };
-    return;
-  }
 
   if (source === 'phrase' || value === true || String(value).toLowerCase() === 'true') {
-    updates[id] = { mode: 'increment', value: 1 };
+    updates[id] = { mode: 'increment', value: 1, time };
     return;
   }
   if (value === false || String(value).toLowerCase() === 'false') {
-    updates[id] = { mode: 'set', value: 0 };
+    updates[id] = { mode: 'set', value: 0, time: null };
     return;
   }
 
@@ -647,71 +643,35 @@ function setHabitUpdate(updates, id, value, source) {
   if (!Number.isInteger(count) || count < 0) {
     throw new HttpError(400, `${id} habit count must be a non-negative integer.`);
   }
-  updates[id] = { mode: 'set', value: count };
+  updates[id] = { mode: 'set', value: count, time };
 }
 
 function mergeHealthHabitUpdates(existingItems, updates) {
-  const current = normalizeHealthHabits(existingItems);
-  const tracked = HEALTH_HABITS.map((habit) => {
-    const update = updates[habit.id];
-    if (habit.type === 'boolean') {
-      const done = update ? Boolean(update.value) : Boolean(current[habit.id]);
-      return {
-        id: habit.id,
-        label: habit.label,
-        type: habit.type,
-        done,
-      };
-    }
-
-    const currentCount = Math.max(0, Math.trunc(Number(current[habit.id] ?? 0) || 0));
-    const nextCount = update?.mode === 'increment'
-      ? currentCount + 1
-      : update
-        ? Math.max(0, Math.trunc(Number(update.value) || 0))
-        : currentCount;
-    return {
-      id: habit.id,
-      label: habit.label,
-      type: habit.type,
-      count: nextCount,
-    };
-  });
-  const trackedIds = new Set(HEALTH_HABITS.map((habit) => habit.id));
-  const legacyItems = (Array.isArray(existingItems) ? existingItems : [])
-    .filter((item) => item?.id && !trackedIds.has(item.id));
-  return [...tracked, ...legacyItems];
+  return Object.entries(updates).reduce(
+    (hygiene, [habit, update]) => applyHabitUpdate(hygiene, {
+      habit,
+      amount: update.value,
+      mode: update.mode,
+      time: update.time,
+    }),
+    existingItems,
+  );
 }
 
 function normalizeHealthHabits(items = []) {
-  const safeItems = Array.isArray(items) ? items : [];
-  const byId = new Map(safeItems.map((item) => [item.id, item]));
   return HEALTH_HABITS.reduce((acc, habit) => {
-    const item = byId.get(habit.id) ?? {};
-    if (habit.type === 'boolean') {
-      acc[habit.id] = Boolean(item.done) || Number(item.count ?? 0) > 0;
-    } else {
-      acc[habit.id] = Math.max(0, Math.trunc(Number(item.count ?? (item.done ? 1 : 0)) || 0));
-    }
+    acc[habit.id] = getHabitEntry(items, habit.id).count;
     return acc;
   }, {});
 }
 
-function normalizeHabitId(value) {
-  const text = String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
-  if (['shower', 'showered'].includes(text)) return 'shower';
-  if (['creatine'].includes(text)) return 'creatine';
-  if (['skin', 'skincare', 'skin care'].includes(text)) return 'skin';
-  if (['journal', 'journaled', 'journaling'].includes(text)) return 'journal';
-  return HEALTH_HABIT_IDS.has(text) ? text : '';
-}
-
-function normalizeBooleanHabitValue(value) {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value > 0;
-  const text = String(value ?? '').trim().toLowerCase();
-  if (['false', 'no', 'not done', '0'].includes(text)) return false;
-  return Boolean(text);
+function readHabitUpdateTime(value) {
+  if (value === undefined || value === null || value === '') return null;
+  try {
+    return optionalTime({ time: value }, 'time');
+  } catch {
+    throw new HttpError(400, 'habit time must be a valid time such as 09:37.');
+  }
 }
 
 function sumHabit(logs, id) {

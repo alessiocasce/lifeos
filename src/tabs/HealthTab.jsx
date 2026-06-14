@@ -2,16 +2,18 @@ import { Ban, Coffee, Loader2, Minus, Moon, Plus, Save, ShieldCheck, Users } fro
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
-import { localDate } from '../utils/date';
+import { localDate, localTime } from '../utils/date';
+import {
+  HEALTH_HABITS,
+  buildHabitUpdate,
+  formatHabitTimes,
+  getHabitEntry,
+  normalizeHygieneObject,
+} from '../utils/habits';
 
 const today = localDate();
 
-const defaultHabits = [
-  { id: 'shower', label: 'Shower', type: 'count', count: 0 },
-  { id: 'creatine', label: 'Creatine', type: 'count', count: 0 },
-  { id: 'skin', label: 'Skin', type: 'count', count: 0 },
-  { id: 'journal', label: 'Journal', type: 'boolean', done: false },
-];
+const defaultHygiene = Object.fromEntries(HEALTH_HABITS.map((habit) => [habit.id, { count: 0, times: [] }]));
 
 const emptyForm = {
   logged_on: today,
@@ -21,7 +23,7 @@ const emptyForm = {
   coffee: '0',
   adc: '0',
   notes: '',
-  hygiene: defaultHabits,
+  hygiene: defaultHygiene,
 };
 
 export function HealthTab() {
@@ -72,22 +74,7 @@ export function HealthTab() {
   };
 
   const stepHabit = (id, delta) => {
-    setForm((prev) => {
-      const tracked = normalizeHygiene(prev.hygiene).map((item) =>
-        item.id === id && item.type === 'count' ? { ...item, count: Math.max(0, item.count + delta) } : item,
-      );
-      return { ...prev, hygiene: mergeTrackedHygiene(prev.hygiene, tracked) };
-    });
-    setSavedMessage('');
-  };
-
-  const toggleHabit = (id) => {
-    setForm((prev) => {
-      const tracked = normalizeHygiene(prev.hygiene).map((item) =>
-        item.id === id && item.type === 'boolean' ? { ...item, done: !item.done } : item,
-      );
-      return { ...prev, hygiene: mergeTrackedHygiene(prev.hygiene, tracked) };
-    });
+    setForm((prev) => ({ ...prev, hygiene: buildHabitUpdate(prev.hygiene, id, delta, localTime()) }));
     setSavedMessage('');
   };
 
@@ -145,9 +132,14 @@ export function HealthTab() {
               </div>
               <span className="data-text text-[10px] text-zinc-500">tracked separately</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {normalizeHygiene(form.hygiene).map((item) => (
-                <HabitTracker key={item.id} item={item} onStep={(delta) => stepHabit(item.id, delta)} onToggle={() => toggleHabit(item.id)} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {HEALTH_HABITS.map((habit) => (
+                <HabitTracker
+                  key={habit.id}
+                  habit={habit}
+                  entry={getHabitEntry(form.hygiene, habit.id)}
+                  onStep={(delta) => stepHabit(habit.id, delta)}
+                />
               ))}
             </div>
           </section>
@@ -176,17 +168,13 @@ export function HealthTab() {
           <MiniMetric label="ADC" value={`${summary.totalAdc}`} tone="text-red-300" sub="total" />
           <div className="col-span-2 rounded-md border border-white/5 bg-black/25 p-3">
             <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">Habits</p>
-            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
+            <div className="grid grid-cols-3 gap-2 text-xs xl:grid-cols-1 2xl:grid-cols-3">
               {summary.habits.counts.map((habit) => (
                 <div key={habit.id} className="min-w-0">
                   <p className="truncate text-zinc-500">{habit.label}</p>
                   <p className="data-text font-semibold text-emerald-300">{habit.total}</p>
                 </div>
               ))}
-              <div className="min-w-0">
-                <p className="truncate text-zinc-500">Journal</p>
-                <p className="data-text font-semibold text-emerald-300">{summary.habits.journalDays}/{visibleLogs.length || 0} days</p>
-              </div>
             </div>
           </div>
         </div>
@@ -282,37 +270,17 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
   );
 }
 
-function HabitTracker({ item, onStep, onToggle }) {
-  if (item.type === 'boolean') {
-    return (
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`min-h-[86px] rounded-md border p-2 text-left transition ${
-          item.done
-            ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
-            : 'border-white/10 bg-[#121212] text-zinc-300'
-        }`}
-      >
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="truncate text-xs">{item.label}</span>
-          <span className={`data-text rounded border px-2 py-0.5 text-[10px] ${item.done ? 'border-emerald-400/30 text-emerald-300' : 'border-white/10 text-zinc-500'}`}>
-            {item.done ? 'YES' : 'NO'}
-          </span>
-        </div>
-        <p className={`data-text text-sm font-semibold ${item.done ? 'text-emerald-300' : 'text-zinc-500'}`}>
-          {item.done ? 'Journaled' : 'Not journaled'}
-        </p>
-      </button>
-    );
-  }
-
+function HabitTracker({ habit, entry, onStep }) {
+  const times = formatHabitTimes(entry.times);
   return (
     <div className="rounded-md border border-white/10 bg-[#121212] p-2">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="truncate text-xs text-zinc-300">{item.label}</span>
-        <span className="data-text text-lg font-black text-emerald-300">{item.count}</span>
+        <span className="truncate text-xs text-zinc-300">{habit.label}</span>
+        <span className="data-text text-lg font-black text-emerald-300">{entry.count}</span>
       </div>
+      <p className={`data-text mb-2 min-h-4 text-[10px] ${entry.count ? 'text-emerald-300' : 'text-zinc-600'}`}>
+        {entry.count ? `${entry.count} logged${times ? ` · ${times}` : ''}` : 'Not logged'}
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onStep(-1)} className="grid h-9 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
           <Minus size={14} />
@@ -326,7 +294,7 @@ function HabitTracker({ item, onStep, onToggle }) {
 }
 
 function HistoryRow({ current, log }) {
-  const hygiene = normalizeHygiene(log.hygiene);
+  const hygiene = normalizeHygieneObject(log.hygiene);
   return (
     <div className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-3 sm:grid-cols-[120px_1fr] sm:items-center">
       <div>
@@ -391,7 +359,7 @@ function formFromLog(log) {
     coffee: stringValue(log.coffee ?? 0),
     adc: stringValue(log.adc ?? 0),
     notes: log.notes ?? '',
-    hygiene: Array.isArray(log.hygiene) && log.hygiene.length ? log.hygiene : normalizeHygiene(defaultHabits),
+    hygiene: normalizeHygieneObject(log.hygiene),
   };
 }
 
@@ -399,7 +367,7 @@ function emptyFormForDate(loggedOn) {
   return {
     ...emptyForm,
     logged_on: loggedOn || today,
-    hygiene: normalizeHygiene(defaultHabits),
+    hygiene: normalizeHygieneObject(defaultHygiene),
   };
 }
 
@@ -411,7 +379,7 @@ function toPayload(form) {
     coffee: parseOptionalInteger(form.coffee) ?? 0,
     adc: parseOptionalInteger(form.adc) ?? 0,
     notes: form.notes.trim(),
-    hygiene: mergeTrackedHygiene(form.hygiene, normalizeHygiene(form.hygiene)),
+    hygiene: normalizeHygieneObject(form.hygiene),
   };
 }
 
@@ -432,7 +400,7 @@ function validateHealthForm(form) {
 }
 
 function summarizeLogs(logs) {
-  const normalized = logs.map((log) => ({ ...log, hygiene: normalizeHygiene(log.hygiene) }));
+  const normalized = logs.map((log) => ({ ...log, hygiene: normalizeHygieneObject(log.hygiene) }));
   return {
     avgSleep: average(normalized.map((log) => optionalLogNumber(log.sleep_hours)).filter(Number.isFinite)),
     totalCoffee: normalized.reduce((total, log) => total + (parseOptionalInteger(log.coffee) ?? 0), 0),
@@ -441,64 +409,29 @@ function summarizeLogs(logs) {
   };
 }
 
-function normalizeHygiene(items = []) {
-  const safeItems = Array.isArray(items) ? items : [];
-  const byId = new Map(safeItems.map((item) => [item.id, item]));
-  return defaultHabits.map((base) => {
-    const item = byId.get(base.id) ?? base;
-    if (base.type === 'boolean') {
-      const count = item.count ?? 0;
-      return {
-        id: base.id,
-        label: base.label,
-        type: base.type,
-        done: Boolean(item.done) || parseInteger(count) > 0,
-      };
-    }
-    const count = item.count ?? (item.done ? 1 : 0);
-    return {
-      id: base.id,
-      label: base.label,
-      type: base.type,
-      count: Math.max(0, parseInteger(count)),
-    };
-  });
-}
-
-function mergeTrackedHygiene(existingItems, trackedItems) {
-  const trackedIds = new Set(defaultHabits.map((habit) => habit.id));
-  const legacyItems = (Array.isArray(existingItems) ? existingItems : [])
-    .filter((item) => item?.id && !trackedIds.has(item.id));
-  return [...trackedItems, ...legacyItems];
-}
-
 function hasValidHabitValues(items = []) {
-  return normalizeHygiene(items).every((item) => {
-    if (item.type === 'boolean') return typeof item.done === 'boolean';
-    const count = item.count ?? (item.done ? 1 : 0);
-    const parsed = parseOptionalInteger(count);
+  return HEALTH_HABITS.every((habit) => {
+    const parsed = parseOptionalInteger(getHabitEntry(items, habit.id).count);
     return parsed !== null && Number.isInteger(parsed) && parsed >= 0;
   });
 }
 
 function summarizeHabits(logs) {
-  const countHabits = defaultHabits.filter((habit) => habit.type === 'count');
   return {
-    counts: countHabits.map((habit) => ({
+    counts: HEALTH_HABITS.map((habit) => ({
       id: habit.id,
       label: habit.label,
-      total: logs.reduce((sum, log) => sum + (normalizeHygiene(log.hygiene).find((item) => item.id === habit.id)?.count ?? 0), 0),
+      total: logs.reduce((sum, log) => sum + getHabitEntry(log.hygiene, habit.id).count, 0),
     })),
-    journalDays: logs.reduce((sum, log) => sum + (normalizeHygiene(log.hygiene).find((item) => item.id === 'journal')?.done ? 1 : 0), 0),
   };
 }
 
 function formatHabitBreakdown(items = []) {
-  const habits = normalizeHygiene(items);
-  return habits
-    .map((item) => {
-      if (item.type === 'boolean') return `${item.label} ${item.done ? 'Yes' : 'No'}`;
-      return `${item.label} ${item.count}`;
+  return HEALTH_HABITS
+    .map((habit) => {
+      const entry = getHabitEntry(items, habit.id);
+      const times = formatHabitTimes(entry.times);
+      return `${habit.label} ${entry.count}${times ? ` (${times})` : ''}`;
     })
     .join(' / ');
 }

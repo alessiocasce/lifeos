@@ -164,6 +164,8 @@ Real/persisted today:
   - `POST /api/actions/expense`
   - `POST /api/actions/health`
   - `POST /api/actions/wake`
+  - `POST /api/actions/sleep-start`
+  - `POST /api/actions/habit`
   - `POST /api/actions/calendar`
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
@@ -218,8 +220,13 @@ Current behavior:
 - Uses `SUPABASE_SERVICE_ROLE_KEY` only inside `/api` serverless functions.
 - Validates server-only config and requires `LIFEOS_ACTION_USER_ID` to be a UUID.
 - Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
-- Supports creating expenses, upserting partial daily health logs, logging wake time through `POST /api/actions/wake`, and creating calendar events.
+- Supports creating expenses, upserting partial daily health logs, logging wake/sleep-start times, logging time-aware habits, and creating calendar events.
 - The dedicated wake endpoint accepts `time`, `wake_time`, or `wakeTime`, defaults `logged_on` to the Europe/Rome local date, preserves other health fields, and recalculates persisted `sleep_hours` when the previous day's sleep start exists.
+- `POST /api/actions/sleep-start` accepts `time`, `sleep_start`, or `sleepStart`. When no date is supplied, before-noon times are assigned to the previous Europe/Rome date so the following wake log can calculate sleep correctly.
+- The sleep-start endpoint recalculates the following day's `sleep_hours` when a wake time already exists.
+- `POST /api/actions/habit` updates Shower, Creatine, or Skin without Gemini. It accepts Italian aliases such as `doccia` and `creatina`, defaults to Europe/Rome date/time, and increments by one unless set mode is requested.
+- Time-aware habits use `health_logs.hygiene` entries such as `{ "count": 1, "times": ["09:37"] }`.
+- Legacy numeric, boolean, array, Brush, Journal, and unknown hygiene data remains readable and is preserved during tracked-habit updates.
 - Expense categories created through the Action API normalize to canonical display casing when possible.
 - Enforces endpoint field limits and numeric caps before writing to Supabase.
 - Does not implement AI, chat behavior, external model calls, or frontend UI changes.
@@ -259,8 +266,8 @@ Architecture:
 - Supported finite recurrence patterns include daily, weekdays, weekends, weekly days, every other day, every N days, next week, next month, named months, next N weeks/months, and explicit start date plus duration.
 - Recurrence expansion is capped at 60 created events per request. Ambiguous recurrence requests ask one clarification instead of writing.
 - Workout analysis and advice prompts are read-only unless the user explicitly asks to create or schedule a calendar item. A deterministic post-planner guard prevents accidental calendar writes for exercise-performance questions.
-- AI health logging supports Daily Habits stored in `health_logs.hygiene`: Shower, Creatine, Skin, and Journal.
-- AI habit updates merge with existing daily habit values. Shower, Creatine, and Skin are counts; Journal is boolean. Legacy Brush data is preserved but no longer shown or updated.
+- AI health logging supports time-aware Daily Habits stored in `health_logs.hygiene`: Shower, Creatine, and Skin.
+- AI habit updates merge with existing daily values and attach an explicit or current Europe/Rome time. Brush and Journal remain legacy-only and are no longer shown or updated.
 - AI prefers `sleep_start` and `wake_time`; when both required times exist, automatic sleep calculation overrides a manual duration.
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
@@ -466,7 +473,7 @@ Current behavior:
 - Shows Today Agenda as a read-only list of today's events. Calendar editing, deletion, and status controls remain in the Calendar tab.
 - Shows a compact Memos panel with overdue/today reminders or the next open memo. Memo editing remains in the Memos tab.
 - Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
-- Shows Daily Habits from today's health log: Shower, Creatine, Skin, and Journal. Journal is shown as yes/no; Brush and Water are not shown.
+- Shows time-aware Daily Habits from today's health log: Shower, Creatine, and Skin. Cards show count and latest time; Brush, Journal, and Water are not shown.
 - Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
 - Shows Ops Status focused on live project sessions, today's logged project work, active project count, and latest project.
@@ -540,10 +547,10 @@ Current behavior:
 - `energy` remains in the database for backward compatibility but is hidden from Health and Home.
 - Coffee, ADC, and numeric habit counts must be non-negative numbers.
 - Visible Health no longer includes a Water counter. The `water` column remains in the schema and Action API for backward compatibility, but visible UI and AI summaries do not emphasize it.
-- Daily habit trackers are Shower, Creatine, Skin, and Journal.
-- Shower, Creatine, and Skin are numeric counts. Journal is boolean: journaled or not journaled.
-- Legacy `hygiene.brush` data remains untouched but is no longer visible or updated.
-- Habits are stored in the existing `hygiene` JSON field. Older boolean rows and older numeric Journal rows are normalized safely; old Floss/Stretch rows are ignored by the new visible UI.
+- Daily habit trackers are Shower, Creatine, and Skin.
+- Each visible habit stores a count plus canonical `HH:MM` timestamps in the existing `hygiene` JSON field.
+- Health increments append the current Europe/Rome time; decrements remove the latest timestamp when present.
+- Legacy numeric/boolean/array hygiene values normalize safely. Brush, Journal, Floss, Stretch, and unknown keys remain untouched but are not visible or updated.
 - AI health habit logging writes to the same `hygiene` JSON field and merges habit-only updates with existing daily values.
 - Missing optional nullable health fields such as `sleep_hours`, `sleep_start`, and `wake_time` are ignored by backend validation unless explicitly provided.
 - Health UI saves, AI health writes, `/api/actions/health`, and `/api/actions/wake` recalculate affected sleep hours when sleep start or wake time changes.
@@ -690,7 +697,7 @@ Workout mobile direction:
   - Wrong methods return `405`.
   - Oversized JSON payloads return `413`.
   - Invalid payloads return clear `400` errors.
-  - Expense, Health, Wake, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
+  - Expense, Health, Wake, Sleep Start, Habit, and Calendar action-created rows appear only for `LIFEOS_ACTION_USER_ID`.
 - Run `docs/QA_AI_ASSISTANT.md` after deploying `GEMINI_API_KEY`:
   - Natural-language analysis uses persisted context only.
   - Low-risk additive actions execute directly.

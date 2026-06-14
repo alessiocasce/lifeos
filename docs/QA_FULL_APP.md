@@ -37,7 +37,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 2. Confirm Today Overview shows the next event, agenda counts, habit completion, memo count, workout status, Ops status, and today's spend.
 3. Confirm Today Agenda shows today's calendar events and handles a no-event day with `No events planned today.`
 4. Confirm the Home Memos panel shows overdue/today memos or the next open memo.
-5. Confirm Daily Habits shows Shower, Creatine, Skin, and Journal, with Journal as yes/no.
+5. Confirm Daily Habits shows Shower, Creatine, and Skin with compact count/time details; Brush and Journal are absent.
 6. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
 7. Confirm Ops Status shows an active project session if one exists, today's project work time, active project count, and latest project.
 8. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
@@ -227,6 +227,21 @@ Run the focused checklists after the full flow:
 7. Confirm the existing `/api/actions/health` endpoint still accepts `wake_time`.
 8. Set yesterday's sleep start to `01:30`, log today's wake time as `09:00`, and confirm today's persisted `sleep_hours` becomes `7.5`.
 
+## Sleep-Start And Habit Action APIs
+
+1. Call `/api/actions/sleep-start` with `{"time":"1.30"}` and confirm `01:30` is stored.
+2. Confirm omitted `logged_on` assigns a before-noon sleep start to the previous Europe/Rome date.
+3. Repeat with explicit `logged_on` and confirm the explicit date is respected.
+4. Confirm next-day `sleep_hours` recalculates when a wake time exists.
+5. Confirm invalid sleep-start time returns a clear `400`.
+6. Call `/api/actions/habit` with `{"habit":"creatine","time":"9:37 AM"}` and confirm `09:37`.
+7. Call it with `{"habit":"skin","time":"10:45 PM"}` and confirm `22:45`.
+8. Use `doccia` and confirm Shower increments.
+9. Confirm invalid habit/time requests return clear `400` responses.
+10. Confirm both endpoints return `401` for missing and invalid tokens.
+11. Confirm legacy numeric/boolean hygiene values still render safely.
+12. Confirm Home displays compact habit count/time information.
+
 ## Health Sleep And Cleanup
 
 1. Confirm Sleep Hours is display-only in Health.
@@ -235,7 +250,7 @@ Run the focused checklists after the full flow:
 4. Change yesterday's Sleep Start to `00:30`; confirm today recalculates to `7.5`.
 5. Confirm Energy is not shown in Health or Home.
 6. Confirm Brush is not shown in Health or Home.
-7. Confirm Shower, Creatine, Skin, and Journal still save and reload.
+7. Confirm Shower, Creatine, and Skin counts/times save and reload.
 8. Confirm `/api/actions/health` defaults `logged_on` to the Europe/Rome date.
 
 ## iPhone Safari Basics

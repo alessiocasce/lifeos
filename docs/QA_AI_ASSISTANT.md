@@ -70,8 +70,8 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 36. Confirm no `sleep_hours` validation error appears and today's Creatine habit increments or logs.
 37. Ask: `Log that I showered today`
 38. Confirm today's Shower habit increments or logs.
-39. Ask: `I journaled today`
-40. Confirm today's Journal habit is true/journaled, not a numeric count above 1.
+39. Ask: `I journaled today`.
+40. Confirm Journal is not written as a visible Daily Habit; preserving the statement in notes is acceptable.
 41. Ask: `Log 8 hours of sleep today`.
 42. Confirm direct duration logging remains backward-compatible when no complete sleep/wake pair exists.
 43. Set a previous-day sleep start and ask the AI to update today's wake time; confirm calculated `sleep_hours` is refreshed.
@@ -165,10 +165,10 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 
 ## Health Habit Context
 
-1. Create several Health logs with different Shower, Creatine, Skin, and Journal values.
+1. Create several Health logs with different Shower, Creatine, and Skin counts/times.
 2. Ask: `Analyze my sleeping behaviour and daily habits in the last 7 days.`
 3. Confirm the assistant sees standalone habit stats rather than one generic hygiene total.
-4. Confirm Journal is treated as a yes/no daily stat.
+4. Confirm Brush and Journal are not presented as tracked Daily Habits.
 5. Confirm Water is not emphasized in the assistant health analysis, while old Action API compatibility remains available if explicitly used.
 
 ## Analyze And Plan

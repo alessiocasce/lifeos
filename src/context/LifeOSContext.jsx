@@ -12,7 +12,8 @@ import {
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
-import { localDate } from '../utils/date';
+import { localDate, localTime } from '../utils/date';
+import { buildHabitUpdate, getHabitEntry, normalizeHygieneObject } from '../utils/habits';
 import {
   authApi,
   aiActionLogApi,
@@ -611,11 +612,12 @@ export function LifeOSProvider({ children }) {
       toggleHygiene: (id) =>
         setHealth((prev) => ({
           ...prev,
-          hygiene: normalizeHygieneCounts(prev.hygiene).map((item) => (
-            item.id === id && item.type === 'boolean'
-              ? { ...item, done: !item.done }
-              : item
-          )),
+          hygiene: buildHabitUpdate(
+            prev.hygiene,
+            id,
+            getHabitEntry(prev.hygiene, id).count > 0 ? -getHabitEntry(prev.hygiene, id).count : 1,
+            localTime(),
+          ),
         })),
       setExpandedWorkout,
       setActiveWorkoutId,
@@ -1470,7 +1472,7 @@ function normalizeHealthLogPayload(payload) {
   if ('main_time_waster' in payload) normalized.main_time_waster = payload.main_time_waster?.trim() || null;
   if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
   if ('hygiene' in payload) {
-    normalized.hygiene = Array.isArray(payload.hygiene) ? normalizeHygieneCounts(payload.hygiene) : normalizeHygieneCounts(initialHealth.hygiene);
+    normalized.hygiene = normalizeHygieneObject(payload.hygiene);
   }
   return normalized;
 }
@@ -1588,40 +1590,9 @@ function healthSnapshotFromLog(log) {
     adc: Number(log.adc ?? initialHealth.adc ?? 0),
     energy: Number(log.energy ?? initialHealth.energy ?? 0),
     mood: Number(log.mood ?? initialHealth.mood),
-    hygiene: Array.isArray(log.hygiene) ? normalizeHygieneCounts(log.hygiene) : normalizeHygieneCounts(initialHealth.hygiene),
+    hygiene: normalizeHygieneObject(log.hygiene),
   };
 }
-
-function normalizeHygieneCounts(items = []) {
-  const safeItems = Array.isArray(items) ? items : [];
-  const byId = new Map(safeItems.map((item) => [item.id, item]));
-  const tracked = HEALTH_HABITS.map((base) => {
-    const item = byId.get(base.id) ?? base;
-    if (base.type === 'boolean') {
-      return {
-        id: base.id,
-        label: base.label,
-        type: base.type,
-        done: Boolean(item.done) || integerOrZero(item.count) > 0,
-      };
-    }
-    return {
-      id: base.id,
-      label: base.label,
-      type: base.type,
-      count: Math.max(0, integerOrZero(item.count ?? (item.done ? 1 : 0))),
-    };
-  });
-  const trackedIds = new Set(HEALTH_HABITS.map((habit) => habit.id));
-  return [...tracked, ...safeItems.filter((item) => item?.id && !trackedIds.has(item.id))];
-}
-
-const HEALTH_HABITS = [
-  { id: 'shower', label: 'Shower', type: 'count', count: 0 },
-  { id: 'creatine', label: 'Creatine', type: 'count', count: 0 },
-  { id: 'skin', label: 'Skin', type: 'count', count: 0 },
-  { id: 'journal', label: 'Journal', type: 'boolean', done: false },
-];
 
 function numberOrNull(value) {
   if (value === '' || value === null || value === undefined) return null;

@@ -16,13 +16,7 @@ import { useLifeOS } from '../context/LifeOSContext';
 import { AiActionHistoryList } from '../components/AiActionHistory';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import { localDate } from '../utils/date';
-
-const habits = [
-  { id: 'shower', label: 'Shower', type: 'count' },
-  { id: 'creatine', label: 'Creatine', type: 'count' },
-  { id: 'skin', label: 'Skin', type: 'count' },
-  { id: 'journal', label: 'Journal', type: 'boolean' },
-];
+import { HEALTH_HABITS, getHabitEntry } from '../utils/habits';
 
 export function HomeTab() {
   const {
@@ -85,8 +79,10 @@ export function HomeTab() {
     () => healthLogs.find((log) => log.logged_on === today) ?? null,
     [healthLogs, today],
   );
-  const normalizedHabits = normalizeHabits(todaysHealthLog?.hygiene);
-  const completedHabitCount = habits.filter((habit) => isHabitComplete(normalizedHabits[habit.id], habit)).length;
+  const normalizedHabits = Object.fromEntries(
+    HEALTH_HABITS.map((habit) => [habit.id, getHabitEntry(todaysHealthLog?.hygiene, habit.id)]),
+  );
+  const completedHabitCount = HEALTH_HABITS.filter((habit) => normalizedHabits[habit.id].count > 0).length;
 
   const todaysWorkoutSessions = useMemo(
     () => workoutSessions.filter((session) => session.performed_on === today),
@@ -152,7 +148,7 @@ export function HomeTab() {
           <OverviewMetric
             icon={CheckCircle2}
             label="Habits"
-            value={healthLoading ? '...' : `${completedHabitCount}/4`}
+            value={healthLoading ? '...' : `${completedHabitCount}/3`}
             detail={todaysHealthLog ? 'completed today' : 'no health log today'}
             tone={completedHabitCount >= 3 ? 'text-emerald-300' : 'text-amber-300'}
           />
@@ -266,16 +262,16 @@ export function HomeTab() {
       </Panel>
 
       <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Health" title="Daily Habits" right={<span className="data-text text-[11px] text-emerald-300">{completedHabitCount}/4</span>} />
+        <PanelHeader eyebrow="Health" title="Daily Habits" right={<span className="data-text text-[11px] text-emerald-300">{completedHabitCount}/3</span>} />
         <div className="grid gap-3 p-3">
           {healthLoading ? (
             <LoadingState label="Loading habits..." />
           ) : (
             <>
               {!todaysHealthLog ? <EmptyState title="No health log today." body="Habits start at zero until today is logged." /> : null}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
-                {habits.map((habit) => (
-                  <HabitPill key={habit.id} habit={habit} value={normalizedHabits[habit.id]} />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                {HEALTH_HABITS.map((habit) => (
+                  <HabitPill key={habit.id} habit={habit} entry={normalizedHabits[habit.id]} />
                 ))}
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -414,14 +410,18 @@ function MemoRow({ memo, today }) {
   );
 }
 
-function HabitPill({ habit, value }) {
-  const complete = isHabitComplete(value, habit);
+function HabitPill({ habit, entry }) {
+  const complete = entry.count > 0;
+  const latestTime = entry.times.at(-1);
+  const detail = !complete
+    ? 'Not logged'
+    : latestTime
+      ? entry.count > 1 ? `${entry.count}x · last ${latestTime}` : latestTime
+      : `${entry.count}x`;
   return (
     <div className={`min-w-0 rounded-md border p-2 ${complete ? 'border-emerald-400/15 bg-emerald-400/[0.06]' : 'border-white/5 bg-black/25'}`}>
       <p className="truncate text-[10px] uppercase tracking-wider text-zinc-500">{habit.label}</p>
-      <p className={`data-text mt-1 text-lg font-bold ${complete ? 'text-emerald-300' : 'text-zinc-300'}`}>
-        {habit.type === 'boolean' ? (value ? 'Yes' : 'No') : Number(value ?? 0)}
-      </p>
+      <p className={`data-text mt-1 truncate text-sm font-bold ${complete ? 'text-emerald-300' : 'text-zinc-500'}`}>{detail}</p>
     </div>
   );
 }
@@ -549,24 +549,6 @@ function isSameLocalDate(value, dateValue) {
     String(date.getDate()).padStart(2, '0'),
   ].join('-');
   return local === dateValue;
-}
-
-function normalizeHabits(items = []) {
-  const safeItems = Array.isArray(items) ? items : [];
-  const byId = new Map(safeItems.map((item) => [item.id, item]));
-  return habits.reduce((acc, habit) => {
-    const item = byId.get(habit.id) ?? {};
-    if (habit.type === 'boolean') {
-      acc[habit.id] = Boolean(item.done) || Number(item.count ?? 0) > 0;
-    } else {
-      acc[habit.id] = Math.max(0, Math.trunc(Number(item.count ?? (item.done ? 1 : 0)) || 0));
-    }
-    return acc;
-  }, {});
-}
-
-function isHabitComplete(value, habit) {
-  return habit.type === 'boolean' ? Boolean(value) : Number(value ?? 0) > 0;
 }
 
 function buildCategorySpend(expenses) {
