@@ -84,6 +84,34 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 14. Confirm read-only workout advice does not use action-implying wording such as `Ho pianificato`, `Programmo`, or `Vuoi che imposti`.
 15. Confirm Brain Recent Actions shows successful actions by default and hides old failed `create_memo` errors until the Errors toggle is enabled.
 
+## Brain Skill Routing
+
+1. Send `hello`.
+2. Confirm the response is short, no write is created, and the assistant message shows or returns selected skill `general_chat`.
+3. Send `remember my name, Ale`.
+4. Confirm selected skill is `memory_manager`, an `ai_memories` identity memory is created or updated, and no Memo row is created.
+5. Send `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+6. Confirm selected skill is `workout_coach`, Brain reads workout context as needed, stays read-only, and creates no calendar event.
+7. Send `I slept badly and took creatine at 9:37 AM`.
+8. Confirm selected skill is `health_coach`; if phrased as a log it can update Health, but casual context does not force a write and Brush, Journal, and Energy are not reintroduced.
+9. Send `schedule study today from 15:00 to 17:00`.
+10. Confirm selected skill is `calendar_planner` and a calendar event can be created.
+11. Send `remind me to take pill at 8:30pm`.
+12. Confirm selected skill is `memo_assistant` and a memo can be created.
+13. Send `Analyze my AI OFM project sessions and tell me if I'm doing fake productivity`.
+14. Confirm selected skill is `project_ops_coach`, Brain analyzes project/session context, and no write is created.
+15. Send `Analyze my expenses this month`.
+16. Confirm selected skill is `finance_analyst` and the answer is read-only unless the user explicitly logs an expense.
+17. Send `How am I doing in the last 30 days?`.
+18. Confirm selected skill is `life_review`, Brain can connect domains, and no records are created.
+19. Send `What should we build next in LifeOS?`.
+20. Confirm selected skill is `product_builder` and the answer gives product/architecture advice without LifeOS CRUD writes.
+21. After a previous assistant answer, send `mettile in ordine cronologico`.
+22. Confirm Brain uses the follow-up transform path, remains read-only, and creates no action.
+23. Send `I might need a nap tomorrow afternoon, don't schedule a memo`.
+24. Confirm negative write intent blocks writes regardless of planner output or selected skill.
+25. Inspect the `/api/ai/chat` response or persisted `ai_chat_messages.metadata` in a test database and confirm `selected_skill` includes `id`, `label`, `confidence`, and `reason`.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.

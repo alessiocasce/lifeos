@@ -181,7 +181,11 @@ Run the focused checklists after the full flow:
 21. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
 22. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
 23. Open a Recent Action and confirm its detail view still works.
-24. On mobile, confirm thread controls, chat messages, the memory panel, and Recent Actions do not overflow horizontally.
+24. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
+25. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
+26. Confirm `hello` shows General behavior, `remember my name, Ale` shows Memory behavior, and `What should we build next in LifeOS?` shows Product behavior.
+27. Confirm selected skill routing does not bypass existing negative write, workout-advice read-only, memory command, or follow-up transform guards.
+28. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
 
 ## Workout Advice Write Boundary
 

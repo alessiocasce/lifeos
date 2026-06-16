@@ -260,6 +260,12 @@ Architecture:
 - Brain uses deterministic conversation classification before planner writes. Casual messages such as `Hello`, `ok`, `I'm tired`, or `I haven't trained today` stay conversational and do not trigger a full LifeOS status dump.
 - Brain supports read-only follow-up transformations such as `mettile in ordine cronologico`, `fammi una tabella`, `riassumi`, `make it shorter`, and `sort them chronologically` by using the latest persisted assistant answer as source material.
 - Follow-up transformations never create actions or run write tools. If there is no previous assistant answer, Brain asks what content to transform.
+- Brain uses Skill Architecture v1: deterministic backend skill routing, not separate autonomous agents or visible tabs.
+- Current Brain skills are `general_chat`, `memory_manager`, `workout_coach`, `health_coach`, `calendar_planner`, `memo_assistant`, `project_ops_coach`, `finance_analyst`, `life_review`, and `product_builder`.
+- Skill selection is a cheap deterministic rules layer, not a Gemini call.
+- The selected skill is injected into planner, calendar-plan, and answer prompts to guide allowed data, allowed actions, forbidden actions, and response style.
+- Skill write permission is an additional guard. Skill rules never override global safety guards, negative write intent, tentative-language protection, workout-advice read-only behavior, follow-up transform read-only behavior, memory direct handling, or destructive-action blocks.
+- Selected skill metadata is stored in existing `ai_chat_messages.metadata.selected_skill`, included in `/api/ai/chat` responses, and shown as a subtle badge on assistant messages.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication uses normalized title/category/key-term overlap; no vector database is used in v1.
 - Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.
@@ -302,6 +308,7 @@ Architecture:
 - AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
 - Brain UI is chat-first. Thread controls are more prominent, the composer stays central, `What LifeOS Knows` and Recent Actions are secondary/collapsible, and Brain keeps Daily Review and canned Suggestions hidden.
 - Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
+- Future proactive features such as Morning Briefing and Weekly Review should build on Brain skills, but proactive automation is not implemented yet.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
 - AI Action History detail views show the full saved request, full saved response, action metadata, request id, record references, and sanitized action payloads. Saved assistant responses render with the same safe Markdown and LifeOS callout renderer used by chat messages.
 - AI Action History titles are deterministic frontend formatting and do not trigger an extra AI call.

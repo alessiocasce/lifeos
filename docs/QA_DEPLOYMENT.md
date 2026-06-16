@@ -49,6 +49,10 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 5. Archive the memory and confirm it is no longer active AI context.
 6. Verify RLS with a second user: threads, messages, memories, and insights must remain user-scoped.
 7. Confirm `/api/ai/chat` persists app messages without changing Shortcut/API action behavior.
+8. Send `hello` and confirm `/api/ai/chat` returns selected skill `general_chat` and the assistant message shows a subtle skill badge.
+9. Send `What should we build next in LifeOS?` and confirm selected skill `product_builder` is returned/persisted without any LifeOS CRUD write.
+10. Send a workout-advice prompt and confirm selected skill `workout_coach` is returned while no calendar event is created.
+11. Inspect the persisted assistant row in `ai_chat_messages` and confirm `metadata.selected_skill` is present for new assistant messages.
 
 ## Home
 
@@ -115,6 +119,7 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 3. Confirm authenticated users can only read/write their own rows.
 4. Confirm the composite thread/message ownership foreign key rejects cross-user message insertion.
 5. Confirm deploying Brain changes does not break `/api/actions/health`, `/api/actions/wake`, `/api/actions/sleep-start`, `/api/actions/habit`, `/api/actions/calendar`, or `/api/actions/expense`.
+6. Confirm Brain Skill Architecture uses existing JSON metadata and does not require a new schema migration beyond the Brain v1 tables.
 
 ## Known Non-Failing Build Warning
 

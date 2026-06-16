@@ -112,6 +112,7 @@ export function AIAssistantTab() {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: result.answer,
+        metadata: result.selected_skill ? { selected_skill: result.selected_skill } : {},
         created_at: new Date().toISOString(),
       }]);
       await refreshAfterAiActions(result.actions ?? []);
@@ -496,11 +497,20 @@ function AssistantError({ error }) {
 
 function AssistantMessage({ message }) {
   const isUser = message.role === 'user';
+  const skill = !isUser ? normalizeMessageSkill(message.metadata?.selected_skill) : null;
   return (
     <article className={`min-w-0 rounded-md border px-3 py-2 ${isUser ? 'ml-auto max-w-[92%] border-cyan-400/20 bg-cyan-400/10 sm:max-w-[78%]' : 'mr-auto max-w-full border-white/5 bg-black/25 sm:max-w-[92%]'}`}>
       <div className="mb-2 flex items-center gap-2">
         {isUser ? <Sparkles size={15} className="text-cyan-300" /> : <Bot size={15} className="text-emerald-300" />}
         <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{isUser ? 'You' : 'LifeOS'}</span>
+        {skill ? (
+          <span
+            className="data-text max-w-28 truncate rounded border border-cyan-400/15 bg-cyan-400/[0.06] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-300"
+            title={skill.label}
+          >
+            {skill.badge}
+          </span>
+        ) : null}
         {message.created_at ? <span className="data-text ml-auto text-[10px] text-zinc-600">{formatMessageTime(message.created_at)}</span> : null}
       </div>
       {isUser
@@ -508,6 +518,16 @@ function AssistantMessage({ message }) {
         : <AssistantMarkdown content={message.content} />}
     </article>
   );
+}
+
+function normalizeMessageSkill(value) {
+  if (!value || typeof value !== 'object') return null;
+  const label = String(value.label || value.id || '').trim();
+  if (!label) return null;
+  return {
+    label,
+    badge: String(value.badge || label).replaceAll('_', ' ').slice(0, 16),
+  };
 }
 
 function formatMessageTime(value) {

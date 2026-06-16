@@ -169,7 +169,7 @@ export async function beginBrainChat({ threadId, source, message, requestId }) {
   };
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, actionType, actions, plan, recordRefs }) {
+export async function persistBrainAssistantMessage({ chat, answer, requestId, actionType, actions, plan, recordRefs, selectedSkill }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -188,6 +188,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, ac
         action_count: countActions(actions),
         record_refs: Array.isArray(recordRefs) ? recordRefs.slice(0, 80) : [],
         source_path: findActionSourcePath(actions),
+        selected_skill: selectedSkill && typeof selectedSkill === 'object' ? selectedSkill : null,
       },
     })
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
@@ -204,7 +205,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, ac
   return result.data;
 }
 
-export async function persistBrainErrorMessage({ chat, error, requestId }) {
+export async function persistBrainErrorMessage({ chat, error, requestId, selectedSkill }) {
   if (!chat?.thread?.id || chat.assistantPersisted) return null;
   const status = Number(error?.status ?? 500);
   const content = status >= 500
@@ -218,6 +219,7 @@ export async function persistBrainErrorMessage({ chat, error, requestId }) {
     actions: [],
     plan: null,
     recordRefs: [],
+    selectedSkill,
   });
 }
 
@@ -580,6 +582,10 @@ function cleanName(value) {
   if (!words.length || words.length > 4) return null;
   const normalized = normalizeText(text);
   const nonNames = new Set([
+    'a',
+    'an',
+    'the',
+    'doing',
     'tired',
     'fine',
     'ok',
@@ -595,8 +601,14 @@ function cleanName(value) {
     'stressed',
     'not sure',
     'going',
+    'trying',
+    'thinking',
+    'feeling',
+    'working',
+    'building',
   ]);
   if (nonNames.has(normalized)) return null;
+  if (nonNames.has(normalizeText(words[0]))) return null;
   if (!/^[\p{L}\p{M}' -]+$/u.test(text)) return null;
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
