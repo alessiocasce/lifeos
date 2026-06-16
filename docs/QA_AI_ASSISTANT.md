@@ -163,6 +163,39 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 37. Inspect persisted `ai_chat_messages.metadata.brain_route` and confirm it includes `mode`, `primary_skill`, `confidence`, `needs_data`, `write_intent`, and `risk_level`.
 38. Confirm route metadata is included in sanitized AI action log payloads when actions are created.
 
+## Brain Pending Actions
+
+1. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
+2. Confirm Brain asks whether to save the nap with the known date/time, such as `Pisolino 19:40-22:00`, and does not ask again for date/time.
+3. Reply `si`.
+4. Confirm Brain saves the nap in today's Health notes and answers that it was saved.
+5. Repeat the nap prompt and reply `si, fai oggi e il tempo te l'ho gia dato`.
+6. Confirm Brain uses the original pending action data and does not repeat the same clarification.
+7. Repeat the nap prompt and reply `si ma non segnarlo`.
+8. Confirm negative intent wins, no Health write occurs, and the pending action is cancelled.
+9. Send `blocca domani un'ora per sistemare il Vault dopo pranzo`.
+10. Confirm Brain stores a pending calendar action with known title/date/duration, asks for an exact time, and creates no event.
+11. Reply `14:30-15:30`.
+12. Confirm Brain creates the calendar event using the stored title/date and the supplied time range.
+13. Repeat the vague calendar prompt and reply `non bloccarlo, come non detto`.
+14. Confirm Brain cancels the pending action and creates no event.
+15. Send `palestra sabato sera`.
+16. Confirm Brain asks for exact time/duration and does not create an event yet.
+17. Reply `18-19:30`.
+18. Confirm Brain creates the calendar event or asks one final confirmation only if needed; it must not restart generic conversation.
+19. Send `antibiotico dopo cena`.
+20. Confirm Brain asks for exact reminder date/time and creates no memo yet.
+21. Reply `stasera alle 21:30`.
+22. Confirm Brain creates the memo using the stored title and supplied date/time.
+23. Send `ricordami sta cosa domani`.
+24. Confirm Brain asks what reminder content to use, preserving the known `tomorrow` date.
+25. Reply `di caricare le AirPods`.
+26. Confirm Brain creates a date-only memo if supported or asks only for the missing time; it must not lose the `tomorrow` date.
+27. After a pending calendar clarification, send `comunque come sto andando con i workout?`.
+28. Confirm Brain does not execute the pending calendar action and answers the workout question or asks whether to ignore the pending action.
+29. Retry a pending action confirmation after a timeout if possible.
+30. Confirm no duplicate records are created; completed/cancelled pending action metadata prevents reusing the same pending id.
+
 ## Brain Vault
 
 1. Ask a useful workout analysis question, such as `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.

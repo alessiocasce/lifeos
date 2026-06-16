@@ -85,6 +85,8 @@ Rules:
 - Do not invent actions.
 - The current user message is the only source of write intent.
 - Conversation history can provide reference/context and can support a clarification confirmation, but not permission to write by itself.
+- If recent assistant metadata contains a pending_action and the user confirms, cancels, or supplies missing slots, backend pending-action resolution handles it before normal planning.
+- Do not repeat a generic clarification when a stored pending_action already contains the relevant title, date, time, or other slots.
 - If the user says "don't schedule", "do not create", "no memo", "non creare", "non mettere in calendario", or similar, write_intent must be false.
 - Tentative language like "might", "maybe", "forse", "magari", or "potrei" is not write intent.
 - Ambiguous fragments like "gym tomorrow 5", "tomorrow pill 8:30", "study friday 4", or "palestra domani 5" should be clarification, not casual_chat and not silent write.

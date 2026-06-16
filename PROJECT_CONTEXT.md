@@ -285,6 +285,11 @@ Architecture:
 - Skill write permission and route write intent are additional guards. Skill rules never override global safety guards, negative write intent, tentative-language protection, workout-advice read-only behavior, follow-up transform read-only behavior, memory direct handling, or destructive-action blocks.
 - Selected skill metadata is stored in existing `ai_chat_messages.metadata.selected_skill`, included in `/api/ai/chat` responses, and shown as a subtle badge on assistant messages.
 - Brain route metadata is stored in existing `ai_chat_messages.metadata.brain_route`, included in `/api/ai/chat` responses, and included in sanitized AI action logs when actions are created.
+- Brain has a pending-action / slot-filling layer for multi-turn writes. Candidate actions are AI-extracted into `ai_chat_messages.metadata.pending_action`, then deterministic backend validation handles confirmation, cancellation, missing fields, expiration, and execution.
+- Pending actions are thread-local, expire after a short window, and never bypass negative-write guards, destructive blocks, user ownership checks, skill/action permissions, or schema/date/time validation.
+- Health nap/pisolino pending actions save to Health notes as context, not to `sleep_start`, `wake_time`, or calculated `sleep_hours`.
+- Vague calendar or memo requests can store known slots such as title/date/duration while asking only for the missing exact time/title/date; follow-up replies like `si`, `14:30-15:30`, or `non bloccarlo` resolve the stored action instead of restarting generic clarification.
+- Completed or cancelled pending actions are recorded as later assistant message metadata; the latest status for the pending id is treated as source of truth and helps avoid retry duplicates.
 - Brain Vault v1 stores long-form markdown-like Brain reports and saved assistant answers in Supabase.
 - Brain Vault documents are manually saved from assistant messages through the Brain UI or explicit follow-up commands such as `save this to vault`.
 - Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.
@@ -365,7 +370,7 @@ Current limitations:
 
 - No arbitrary SQL.
 - No destructive writes.
-- No multi-turn pending confirmation system yet.
+- Pending actions support low-risk multi-turn confirmation and slot filling for supported Health, Calendar, Memo, Expense, and related action flows.
 - No external API integrations beyond Gemini.
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.

@@ -12,6 +12,16 @@ import {
   persistExplicitBrainMemory,
 } from '../_utils/brain.js';
 import {
+  buildPendingActionFromCandidate,
+  extractLatestPendingAction,
+  extractPendingActionCandidateWithAI,
+  formatPendingActionCompletedAnswer,
+  formatPendingActionQuestion,
+  markPendingActionCompleted,
+  resolvePendingActionTurn,
+  validatePendingActionCandidate,
+} from '../_utils/brainPendingActions.js';
+import {
   formatBrainSkillForPrompt,
   getBrainSkill,
   selectBrainSkill,
@@ -42,7 +52,7 @@ import {
   requirePost,
   sendSuccess,
 } from '../_utils/http.js';
-import { getActionUserId, requireConfiguredUserAccess } from '../_utils/supabaseAdmin.js';
+import { getActionUserId, getSupabaseAdmin, requireConfiguredUserAccess } from '../_utils/supabaseAdmin.js';
 import {
   addDays,
   createAiActionLog,
@@ -84,6 +94,8 @@ Rules:
 - If brainRoute.write_intent is false, return no write action.
 - If brainRoute.needs_clarification is true, return intent "clarify" with the route clarification question.
 - Conversation history can clarify references, but the current user message or an active clarification confirmation must provide write intent.
+- Pending actions are resolved before this planner. If one is active, do not repeat generic clarification; use the stored slots and ask only for missing fields.
+- A confirmation of an active pending action can provide write intent only for that same stored action and only after backend validation.
 - Extract dates as YYYY-MM-DD when possible. Today is provided in the prompt.
 - If the user gives DD/MM/YY or DD/MM/YYYY, copy that date into args; the backend can normalize it.
 - Natural "tomorrow" may be represented as "tomorrow" or the provided date.
@@ -334,6 +346,20 @@ export default async function handler(req, res) {
       clientRequestId,
     });
     context.brainContext = await safeLoadBrainContext(context);
+    const activePendingAction = extractLatestPendingAction(context.brainChat);
+    if (activePendingAction) {
+      const pendingResolution = await resolvePendingActionTurn({ message, pendingAction: activePendingAction, context });
+      if (pendingResolution.handled) {
+        const result = await handlePendingActionResolution({
+          resolution: pendingResolution,
+          context,
+          message,
+          source,
+        });
+        return sendAiSuccess(res, 200, result, context, { message, source });
+      }
+    }
+
     const classification = classifyBrainMessage(message, context.brainChat);
     context.brainClassification = classification;
     context.brainRoute = await safeRouteBrainMessage({
@@ -357,6 +383,11 @@ export default async function handler(req, res) {
       brainSkill: context.brainSkill,
       context,
     });
+
+    const pendingCandidateResult = await maybeCreatePendingActionCandidate({ message, context, classification });
+    if (pendingCandidateResult) {
+      return sendAiSuccess(res, 200, pendingCandidateResult, context, { message, source });
+    }
 
     if (context.brainRoute.mode === 'memory_write') {
       const command = routeMemoryCommand(context.brainRoute) ?? extractExplicitMemoryCommand(message);
@@ -632,6 +663,211 @@ export default async function handler(req, res) {
   }
 }
 
+async function handlePendingActionResolution({ resolution, context, message, source }) {
+  const pendingAction = resolution.pending_action;
+  if (resolution.type === 'cancelled') {
+    context.pendingActionForResponse = pendingAction;
+    return {
+      answer: resolution.answer,
+      plan: createPendingActionPlan(pendingAction, { clarify: true, reason: 'Pending action cancelled by user.' }),
+      actions: [],
+      contextSummary: null,
+      pending_action: pendingAction,
+      skipMemoryExtraction: true,
+    };
+  }
+
+  if (resolution.type === 'ask') {
+    context.pendingActionForResponse = pendingAction;
+    return {
+      answer: resolution.answer || formatPendingActionQuestion(pendingAction),
+      plan: createPendingActionPlan(pendingAction, { clarify: true, reason: 'Pending action needs confirmation or missing fields.' }),
+      actions: [],
+      contextSummary: null,
+      pending_action: pendingAction,
+      skipMemoryExtraction: true,
+    };
+  }
+
+  if (resolution.type === 'execute') {
+    const writeResult = await executePendingAction(pendingAction, { message, context, source });
+    const completed = markPendingActionCompleted(pendingAction);
+    context.pendingActionForResponse = completed;
+    return {
+      answer: writeResult.answer || formatPendingActionCompletedAnswer(writeResult.actions?.[0], pendingAction),
+      plan: createPendingActionPlan(pendingAction, { reason: 'Confirmed pending action executed.' }),
+      actions: writeResult.actions ?? [],
+      contextSummary: null,
+      pending_action: completed,
+      skipMemoryExtraction: true,
+    };
+  }
+
+  return {
+    answer: 'What exact details should I use?',
+    plan: createPendingActionPlan(pendingAction, { clarify: true, reason: 'Pending action could not be resolved.' }),
+    actions: [],
+    contextSummary: null,
+    skipMemoryExtraction: true,
+  };
+}
+
+async function maybeCreatePendingActionCandidate({ message, context, classification }) {
+  if (!shouldAttemptPendingActionCandidate({ message, context, classification })) return null;
+  let validation;
+  try {
+    validation = await extractPendingActionCandidateWithAI({
+      message,
+      context,
+      brainSkill: context.brainSkill,
+      brainRoute: context.brainRoute,
+    });
+  } catch (error) {
+    console.error('[LifeOS Brain pending action warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'pending_action_extraction',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return null;
+  }
+  if (!validation?.ok || !validation.candidate) return null;
+  const candidate = validation.candidate;
+  if (validation.executable && !candidate.confirmation_required) return null;
+  const pendingAction = buildPendingActionFromCandidate({
+    candidate,
+    message,
+    context,
+  });
+  if (!pendingAction) return null;
+  context.pendingActionForResponse = pendingAction;
+  return {
+    answer: formatPendingActionQuestion(pendingAction),
+    plan: createPendingActionPlan(pendingAction, { clarify: true, reason: 'Stored pending action candidate.' }),
+    actions: [],
+    contextSummary: null,
+    pending_action: pendingAction,
+    skipMemoryExtraction: true,
+  };
+}
+
+function shouldAttemptPendingActionCandidate({ message, context, classification }) {
+  if (!message || hasNegativeWriteIntent(message)) return false;
+  if (classification?.kind && ['memory_write', 'memory_recall', 'memory_forget', 'follow_up_transform', 'read_only_analysis'].includes(classification.kind)) return false;
+  const mode = context?.brainRoute?.mode;
+  if (['memory_write', 'memory_recall', 'memory_forget', 'follow_up_transform', 'read_only_analysis'].includes(mode)) return false;
+  const skillId = context?.brainSkill?.skill?.id || context?.brainRoute?.primary_skill;
+  if (['health_coach', 'calendar_planner', 'memo_assistant', 'finance_analyst', 'project_ops_coach'].includes(skillId)) return true;
+  return mode === 'clarification' || mode === 'explicit_action';
+}
+
+async function executePendingAction(pendingAction, { message, context }) {
+  const validation = validatePendingActionCandidate(pendingAction, context);
+  if (!validation?.ok || !validation.executable) {
+    throw new HttpError(400, validation?.question || 'Pending action is missing required details.');
+  }
+  const action = validation.candidate;
+  const plan = createPendingActionPlan(action);
+  const skill = getBrainSkill(action.skill || skillIdForPendingAction(action.action_type));
+  const route = {
+    mode: 'explicit_action',
+    primary_skill: skill.id,
+    write_intent: true,
+    proposed_action_types: [action.action_type],
+    risk_level: action.risk_level || 'low',
+  };
+  const permission = canExecuteBrainAction({ route, skill, plan, message });
+  if (!permission.allowed) {
+    throw new HttpError(400, permission.reason || 'Pending action was not allowed.');
+  }
+
+  if (action.action_type === 'update_health_log') {
+    const updated = await executePendingHealthUpdate(action);
+    return {
+      actions: [{
+        type: 'update_health_log',
+        data: {
+          ...updated,
+          pending_action_id: action.id,
+          sourcePath: 'pending_action',
+        },
+      }],
+      answer: formatPendingActionCompletedAnswer({ data: updated }, action),
+    };
+  }
+
+  const writeResult = await executeWriteIntent(plan, message, null, context.brainContext, context.brainChat, { skill }, route);
+  return {
+    ...writeResult,
+    actions: (writeResult.actions ?? []).map((item) => ({
+      ...item,
+      data: {
+        ...(item.data && typeof item.data === 'object' ? item.data : {}),
+        pending_action_id: action.id,
+        sourcePath: item.data?.sourcePath || 'pending_action',
+      },
+    })),
+    answer: writeResult.answer || formatPendingActionCompletedAnswer(writeResult.actions?.[0], action),
+  };
+}
+
+async function executePendingHealthUpdate(pendingAction) {
+  const args = pendingAction.args ?? {};
+  if (!args.health_note_append) return updateHealthLog(args);
+  const loggedOn = resolveDate(args.logged_on ?? args.date, localDate());
+  const existing = await readHealthLogForPendingDate(loggedOn);
+  const existingNotes = String(existing?.notes ?? '').trim();
+  const note = String(args.health_note_append ?? '').trim();
+  const notes = existingNotes.includes(note)
+    ? existingNotes
+    : [existingNotes, note].filter(Boolean).join('\n');
+  return updateHealthLog({
+    logged_on: loggedOn,
+    notes,
+  });
+}
+
+async function readHealthLogForPendingDate(loggedOn) {
+  const result = await getSupabaseAdmin()
+    .from('health_logs')
+    .select('id, notes')
+    .eq('user_id', getActionUserId())
+    .eq('logged_on', loggedOn)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return result.data ?? null;
+}
+
+function createPendingActionPlan(pendingAction, { clarify = false, reason = '' } = {}) {
+  const intent = pendingAction?.action_type || 'clarify';
+  return {
+    intent: clarify ? 'clarify' : intent,
+    needsRead: false,
+    needsWrite: !clarify,
+    range: null,
+    tables: tableForPendingAction(intent),
+    args: pendingAction?.args ?? {},
+    clarifyingQuestion: clarify ? formatPendingActionQuestion(pendingAction) : null,
+    riskLevel: pendingAction?.risk_level || 'low',
+    reason: reason || 'Pending action resolution.',
+  };
+}
+
+function tableForPendingAction(actionType) {
+  if (actionType === 'update_health_log') return ['health_logs'];
+  if (actionType === 'create_calendar_event') return ['calendar_events'];
+  if (actionType === 'create_memo') return ['memos'];
+  if (actionType === 'create_expense') return ['expenses'];
+  return [];
+}
+
+function skillIdForPendingAction(actionType) {
+  if (actionType === 'update_health_log') return 'health_coach';
+  if (actionType === 'create_calendar_event') return 'calendar_planner';
+  if (actionType === 'create_memo') return 'memo_assistant';
+  if (actionType === 'create_expense') return 'finance_analyst';
+  return 'general_chat';
+}
+
 async function safeBeginBrainChat(options) {
   try {
     return await beginBrainChat(options);
@@ -734,6 +970,7 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
       selectedSkill,
       brainRoute,
       vaultContext,
+      pendingAction: context?.pendingActionForResponse ?? null,
     });
   } catch (error) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -755,6 +992,7 @@ async function safePersistBrainError(context, error) {
       selectedSkill: serializeSkillSelection(context?.brainSkill),
       brainRoute: serializeBrainRoute(context?.brainRoute),
       vaultContext: serializeVaultContextForMetadata(context?.brainVault?.results),
+      pendingAction: context?.pendingActionForResponse ?? null,
     });
   } catch (persistenceError) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
