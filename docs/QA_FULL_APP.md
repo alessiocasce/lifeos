@@ -176,10 +176,12 @@ Run the focused checklists after the full flow:
 16. Edit and archive a memory and confirm both operations persist.
 17. Confirm simple habit/expense/calendar commands do not flood memory.
 18. Send `I might need a nap tomorrow afternoon, don't schedule a memo` and confirm no memo/event/error action is created.
-19. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
-20. Confirm Recent Actions shows a compact preview by default and can expand to more entries.
-21. Open a Recent Action and confirm its detail view still works.
-22. On mobile, confirm thread controls, chat messages, the memory panel, and Recent Actions do not overflow horizontally.
+19. After a workout analysis answer, send `mettile in ordine cronologico` and confirm Brain transforms the previous answer instead of treating it as casual chat.
+20. Refresh `/assistant`, send `fammi una tabella`, and confirm the persistent conversation history still allows the follow-up transform.
+21. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
+22. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
+23. Open a Recent Action and confirm its detail view still works.
+24. On mobile, confirm thread controls, chat messages, the memory panel, and Recent Actions do not overflow horizontally.
 
 ## Workout Advice Write Boundary
 

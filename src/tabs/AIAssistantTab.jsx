@@ -56,6 +56,7 @@ export function AIAssistantTab() {
   const [editingMemoryId, setEditingMemoryId] = useState(null);
   const [memoryDraft, setMemoryDraft] = useState({ title: '', content: '' });
   const [recentActionsExpanded, setRecentActionsExpanded] = useState(false);
+  const [showActionErrors, setShowActionErrors] = useState(false);
   const [renamingThread, setRenamingThread] = useState(false);
   const [threadTitleDraft, setThreadTitleDraft] = useState('');
 
@@ -66,6 +67,12 @@ export function AIAssistantTab() {
   const activeThread = activeThreads.find((thread) => thread.id === activeAiThreadId) ?? null;
   const messages = [...activeAiChatMessages, ...pendingMessages];
   const actionLimit = recentActionsExpanded ? 10 : 3;
+  const successfulActionLogs = useMemo(
+    () => aiActionLogs.filter((log) => log.status !== 'error'),
+    [aiActionLogs],
+  );
+  const failedActionCount = aiActionLogs.length - successfulActionLogs.length;
+  const brainActionLogs = showActionErrors ? aiActionLogs : successfulActionLogs;
 
   useEffect(() => {
     setThreadTitleDraft(activeThread?.title || '');
@@ -395,16 +402,27 @@ export function AIAssistantTab() {
         <Panel>
           <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
-            <AiActionHistoryList logs={aiActionLogs.slice(0, actionLimit)} status={aiActionLogsStatus} limit={actionLimit} />
-            {aiActionLogs.length > 3 ? (
-              <button
-                type="button"
-                onClick={() => setRecentActionsExpanded((expanded) => !expanded)}
-                className="h-9 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-400 hover:border-violet-400/25 hover:text-violet-200"
-              >
-                {recentActionsExpanded ? 'Show less' : 'View all recent actions'}
-              </button>
-            ) : null}
+            <AiActionHistoryList logs={brainActionLogs} status={aiActionLogsStatus} limit={actionLimit} quietErrors />
+            <div className="flex flex-wrap gap-2">
+              {brainActionLogs.length > 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setRecentActionsExpanded((expanded) => !expanded)}
+                  className="h-9 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-400 hover:border-violet-400/25 hover:text-violet-200"
+                >
+                  {recentActionsExpanded ? 'Show less' : 'View more'}
+                </button>
+              ) : null}
+              {failedActionCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowActionErrors((shown) => !shown)}
+                  className="h-9 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-500 hover:border-red-400/20 hover:text-red-200"
+                >
+                  {showActionErrors ? 'Hide errors' : `Errors (${failedActionCount})`}
+                </button>
+              ) : null}
+            </div>
           </div>
         </Panel>
       </div>

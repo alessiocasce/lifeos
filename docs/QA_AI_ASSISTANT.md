@@ -66,6 +66,24 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 23. Confirm workout advice remains read-only with no calendar event.
 24. Re-run the Italian mixed day schedule prompt and confirm the day-schedule write path still works.
 
+## Brain Follow-Up Transforms
+
+1. Ask: `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+2. Then ask: `mettile in ordine cronologico`.
+3. Confirm Brain reorders the previous performance list chronologically, creates no calendar/memo/action, and does not answer with `Got it. Do you want advice...`.
+4. Ask: `fammi una tabella`.
+5. Confirm Brain formats the latest relevant answer as a table and creates no write action.
+6. Ask: `riscrivilo più breve`.
+7. Confirm Brain rewrites the previous assistant answer shorter and creates no write action.
+8. In a new empty conversation, ask `fammi una tabella`.
+9. Confirm Brain asks what content to transform.
+10. Send `nah, just logging context`.
+11. Confirm Brain gives a short acknowledgment and does not ask another generic follow-up question.
+12. Send `not sure though`.
+13. Confirm Brain gives a concise acknowledgment such as keeping it open.
+14. Confirm read-only workout advice does not use action-implying wording such as `Ho pianificato`, `Programmo`, or `Vuoi che imposti`.
+15. Confirm Brain Recent Actions shows successful actions by default and hides old failed `create_memo` errors until the Errors toggle is enabled.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.

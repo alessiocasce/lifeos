@@ -258,6 +258,8 @@ Architecture:
 - The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
 - Brain uses deterministic conversation classification before planner writes. Casual messages such as `Hello`, `ok`, `I'm tired`, or `I haven't trained today` stay conversational and do not trigger a full LifeOS status dump.
+- Brain supports read-only follow-up transformations such as `mettile in ordine cronologico`, `fammi una tabella`, `riassumi`, `make it shorter`, and `sort them chronologically` by using the latest persisted assistant answer as source material.
+- Follow-up transformations never create actions or run write tools. If there is no previous assistant answer, Brain asks what content to transform.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication uses normalized title/category/key-term overlap; no vector database is used in v1.
 - Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.
@@ -291,6 +293,7 @@ Architecture:
 - Negative write intent such as `don't schedule`, `no memo`, `non creare`, or `non mettere in calendario` blocks writes even if the planner proposes one.
 - Tentative language such as `I might need`, `maybe`, `forse dovrei`, or `potrei` does not create memos/events unless paired with an explicit action phrase like `remind me` or `schedule`.
 - Vague memo timing such as `tomorrow afternoon` asks for clarification instead of surfacing raw validation errors.
+- Casual acknowledgments such as `nah, just logging context`, `not sure though`, and `actually, nevermind` receive concise acknowledgments instead of repeated follow-up questions.
 - AI health logging supports time-aware Daily Habits stored in `health_logs.hygiene`: Shower, Creatine, and Skin.
 - AI habit updates merge with existing daily values and attach an explicit or current Europe/Rome time. Brush and Journal remain legacy-only and are no longer shown or updated.
 - AI prefers `sleep_start` and `wake_time`; when both required times exist, automatic sleep calculation overrides a manual duration.
@@ -298,6 +301,7 @@ Architecture:
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
 - AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
 - Brain UI is chat-first. Thread controls are more prominent, the composer stays central, `What LifeOS Knows` and Recent Actions are secondary/collapsible, and Brain keeps Daily Review and canned Suggestions hidden.
+- Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
 - AI Action History detail views show the full saved request, full saved response, action metadata, request id, record references, and sanitized action payloads. Saved assistant responses render with the same safe Markdown and LifeOS callout renderer used by chat messages.
 - AI Action History titles are deterministic frontend formatting and do not trigger an extra AI call.

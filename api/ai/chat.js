@@ -134,6 +134,21 @@ For workout, give training observations, not medical advice.
 If data is sparse, say that clearly.
 If actions were created, state exactly what was created.
 For workout advice-only requests, give analysis/recommendations and do not claim that an event or action was created.
+For read-only advice, do not use wording that implies an action was created or will be created. Avoid phrases like "Ho pianificato", "Programmo", "Vuoi che imposti", or "Vuoi che scheduli" unless the user explicitly asks for a write.
+`;
+
+const FOLLOW_UP_TRANSFORM_SYSTEM = `
+You transform the latest relevant assistant answer in a persistent LifeOS Brain conversation.
+
+Rules:
+- Use the provided latest assistant answer as the source material.
+- Apply only the current user's requested transformation, such as sorting, rewriting, summarizing, translating, or formatting as a table.
+- Do not create actions, calendar events, memos, health logs, expenses, or project records.
+- Do not add new claims unless clearly supported by the latest assistant answer.
+- Preserve the source language unless the user asks to translate.
+- If the user asks to sort chronologically and dates are present, order from oldest to newest.
+- Be concise.
+- Do not say "I updated it" or "I saved it".
 `;
 
 const PLAN_SYSTEM = `
@@ -282,7 +297,7 @@ export default async function handler(req, res) {
       requestId: context.requestId,
     });
     context.brainContext = await safeLoadBrainContext(context);
-    const classification = classifyBrainMessage(message);
+    const classification = classifyBrainMessage(message, context.brainChat);
     context.brainClassification = classification;
     const negativeWriteIntent = hasNegativeWriteIntent(message);
 
@@ -320,9 +335,15 @@ export default async function handler(req, res) {
       return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
     }
 
+    if (classification.kind === 'follow_up_transform') {
+      const plan = createReadOnlyBrainPlan(classification.reason);
+      const answer = await answerFollowUpTransform(message, context.brainChat);
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
+    }
+
     if (classification.kind === 'casual' || classification.kind === 'clarify') {
       const plan = createReadOnlyBrainPlan(classification.reason);
-      const answer = formatCasualBrainAnswer(message, context.brainContext, { negativeWriteIntent });
+      const answer = formatCasualBrainAnswer(message, context.brainContext, { negativeWriteIntent, classification });
       return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
     }
 
@@ -556,13 +577,17 @@ async function safeExtractBrainKnowledge({ context, message, answer, actionType 
   }
 }
 
-export function classifyBrainMessage(message) {
+export function classifyBrainMessage(message, brainChat = null) {
   const text = String(message ?? '').trim();
   const normalized = normalizeBrainText(text);
   if (!normalized) return { kind: 'clarify', reason: 'Empty message.' };
   if (extractExplicitMemoryCommand(text)) return { kind: 'memory_write', reason: 'Explicit durable memory command.' };
   if (isMemoryRecallRequest(text)) return { kind: 'memory_recall', reason: 'Memory recall request.' };
   if (isMemoryForgetRequest(text)) return { kind: 'memory_forget', reason: 'Memory forget request.' };
+  if (isFollowUpTransformRequest(text)) {
+    if (getLatestAssistantMessage(brainChat)) return { kind: 'follow_up_transform', reason: 'Transform the previous assistant answer.' };
+    return { kind: 'clarify', reason: 'Follow-up transform requested without previous assistant answer.' };
+  }
   if (hasExplicitActionRequest(text)) return { kind: 'explicit_action', reason: 'Current message contains explicit supported write/action language.' };
   if (isReadOnlyAnalysisRequest(text)) return { kind: 'read_only_analysis', reason: 'Current message asks for analysis/advice/status without explicit write intent.' };
   if (hasTentativeWriteLanguage(text)) return { kind: 'casual', reason: 'Tentative language without explicit write intent.' };
@@ -678,11 +703,14 @@ function formatMemoryRecallAnswer(brainContext) {
   return lines.join('\n');
 }
 
-function formatCasualBrainAnswer(message, brainContext, { negativeWriteIntent = false } = {}) {
+function formatCasualBrainAnswer(message, brainContext, { negativeWriteIntent = false, classification = null } = {}) {
   const text = String(message ?? '').trim();
   const normalized = normalizeBrainText(text);
   const name = preferredNameFromMemory(brainContext);
   const greetingName = name ? ` ${name}` : '';
+  if (classification?.reason === 'Follow-up transform requested without previous assistant answer.') {
+    return 'Send me the text you want me to transform, then tell me how to change it.';
+  }
   if (negativeWriteIntent) {
     return "Understood - I won't create anything. We can just talk it through.";
   }
@@ -691,6 +719,15 @@ function formatCasualBrainAnswer(message, brainContext, { negativeWriteIntent = 
   }
   if (/^(?:thanks|thank you|ty|grazie)\b/i.test(normalized)) return 'No problem.';
   if (/^(?:ok|okay|lol|yes|no|nah|yep|nope|sure|alright)\b[!. ]*$/i.test(normalized)) return 'Got it.';
+  if (/\b(?:nah|nope|no),?\s+just\s+logging\s+context\b|\bsolo\s+contesto\b|\bsolo\s+per\s+contesto\b/.test(normalized)) {
+    return "Got it - I'll keep it as context.";
+  }
+  if (/\bnot sure though\b|\bnot sure\b|\bnon\s+sono\s+sicuro\b/.test(normalized)) {
+    return 'Fair. We can keep it open.';
+  }
+  if (/\bactually,?\s+nevermind\b|\bnever\s+mind\b|\blascia\s+stare\b/.test(normalized)) {
+    return 'Got it.';
+  }
   if (/\bi haven'?t trained today\b|\bnon mi sono allenato oggi\b/.test(normalized)) {
     return 'Got it. Are you trying to decide whether to train today, or just logging context?';
   }
@@ -704,6 +741,19 @@ function formatCasualBrainAnswer(message, brainContext, { negativeWriteIntent = 
     'Got it.',
     'Do you want advice, analysis, or should I just keep this as conversation context?',
   ].join(' ');
+}
+
+function isFollowUpTransformRequest(message) {
+  const text = normalizeBrainText(message);
+  if (!text || text.length > 180) return false;
+  if (hasNegativeWriteIntent(text) || hasExplicitActionRequest(text) || extractExplicitMemoryCommand(message)) return false;
+
+  const transformLanguage = /\b(?:metti(?:le|li|lo)?\s+in\s+ordine\s+cronologico|ordina(?:le|li|lo)?\s+cronologicamente|cronologico|fammi\s+una\s+tabella|metti(?:lo|li|le)?\s+in\s+tabella|tabella|riscrivilo|riscrivi(?:lo|la|li|le)?|piu\s+breve|piu\s+diretto|piu\s+concreto|riassumi|spiegalo\s+meglio|traduci\s+in\s+inglese|dammi\s+solo\s+i\s+numeri|senza\s+callout|put\s+(?:it|them|this|that)\s+in\s+(?:a\s+)?table|make\s+(?:a\s+)?table|sort\s+(?:it|them|this|that)?\s*chronologically|put\s+(?:it|them|this|that)\s+in\s+chronological\s+order|chronological\s+order|make\s+it\s+shorter|summari[sz]e|rewrite\s+(?:it|this|that)?\s*(?:cleaner|better|shorter)?|translate\s+(?:it|this|that)?\s*to\s+english|only\s+give\s+me\s+the\s+numbers|more\s+direct|more\s+concrete)\b/.test(text);
+  if (!transformLanguage) return false;
+
+  const contextReference = /\b(?:it|them|this|that|answer|response|list|table|lo|la|li|le|questo|questa|questi|queste|risposta|lista|mettile|mettili|mettilo|ordinale|ordinarle|riassumi|cronologico|tabella)\b/.test(text);
+  const shortImplicitTransform = text.split(/\s+/).length <= 8;
+  return contextReference || shortImplicitTransform;
 }
 
 function preferredNameFromMemory(brainContext) {
@@ -761,6 +811,8 @@ function normalizeBrainText(value) {
   return String(value ?? '')
     .replace(/['\u2019]/g, "'")
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -2081,6 +2133,39 @@ async function answerWithGemini(message, plan, lifeosContext, actions, brainCont
     recentConversation: formatBrainConversationForPrompt(brainChat),
   });
   return generateGeminiText({ system: ANSWER_SYSTEM, prompt, temperature: 0.25 });
+}
+
+async function answerFollowUpTransform(message, brainChat) {
+  const latestAssistant = getLatestAssistantMessage(brainChat);
+  if (!latestAssistant) return 'Send me the text you want me to transform, then tell me how to change it.';
+  const latestUser = getLatestUserMessageBefore(brainChat, latestAssistant.created_at);
+  const prompt = JSON.stringify({
+    userMessage: message,
+    latestUserMessage: latestUser?.content ?? null,
+    latestAssistantAnswer: latestAssistant.content,
+    recentConversation: formatBrainConversationForPrompt(brainChat),
+  });
+  return generateGeminiText({ system: FOLLOW_UP_TRANSFORM_SYSTEM, prompt, temperature: 0.15 });
+}
+
+function getLatestAssistantMessage(brainChat) {
+  const history = Array.isArray(brainChat?.conversationHistory) ? brainChat.conversationHistory : [];
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    if (message?.role === 'assistant' && String(message.content ?? '').trim()) return message;
+  }
+  return null;
+}
+
+function getLatestUserMessageBefore(brainChat, beforeCreatedAt) {
+  const history = Array.isArray(brainChat?.conversationHistory) ? brainChat.conversationHistory : [];
+  const beforeTime = beforeCreatedAt ? new Date(beforeCreatedAt).getTime() : Number.POSITIVE_INFINITY;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    const createdAt = message?.created_at ? new Date(message.created_at).getTime() : 0;
+    if (message?.role === 'user' && createdAt <= beforeTime && String(message.content ?? '').trim()) return message;
+  }
+  return null;
 }
 
 async function safeLogAiSuccess({ context, message, source, answer, actions }) {

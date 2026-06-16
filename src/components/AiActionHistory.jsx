@@ -91,7 +91,7 @@ export function AssistantMarkdown({ content }) {
   );
 }
 
-export function AiActionHistoryList({ logs = [], status, limit = 10 }) {
+export function AiActionHistoryList({ logs = [], status, limit = 10, quietErrors = false }) {
   const [selectedLog, setSelectedLog] = useState(null);
   const shownLogs = logs.slice(0, limit);
 
@@ -110,7 +110,7 @@ export function AiActionHistoryList({ logs = [], status, limit = 10 }) {
   return (
     <>
       {shownLogs.map((log) => (
-        <ActionLogCard key={log.id} log={log} onClick={() => setSelectedLog(log)} />
+        <ActionLogCard key={log.id} log={log} quietErrors={quietErrors} onClick={() => setSelectedLog(log)} />
       ))}
       {selectedLog ? (
         <ActionLogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
@@ -119,25 +119,30 @@ export function AiActionHistoryList({ logs = [], status, limit = 10 }) {
   );
 }
 
-function ActionLogCard({ log, onClick }) {
+function ActionLogCard({ log, onClick, quietErrors = false }) {
   const title = getActionLogTitle(log);
   const count = Number(log.action_count ?? 0);
+  const isError = log.status === 'error';
   return (
     <button
       type="button"
       onClick={onClick}
-      className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3 text-left transition hover:border-cyan-400/25 focus:outline-none focus:ring-2 focus:ring-cyan-400/30"
+      className={`min-w-0 rounded-md border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-400/30 ${
+        isError && quietErrors
+          ? 'border-white/5 bg-black/15 opacity-80 hover:border-red-400/15'
+          : 'border-white/5 bg-black/25 hover:border-cyan-400/25'
+      }`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <Chip tone="cyan">{log.source || 'app'}</Chip>
-        <Chip tone={log.status === 'error' ? 'red' : 'emerald'}>{log.status || 'success'}</Chip>
+        <Chip tone={isError ? (quietErrors ? 'zinc' : 'red') : 'emerald'}>{log.status || 'success'}</Chip>
         <span className="data-text text-[10px] text-zinc-500">{formatLogTime(log.created_at)}</span>
       </div>
       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
         <p className="data-text truncate text-sm font-semibold text-zinc-100" title={title}>{title}</p>
         {count ? <span className="data-text rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-zinc-300">/ {count}</span> : null}
       </div>
-      {log.status === 'error' ? <p className="mt-1 text-xs text-red-300">Error recorded</p> : null}
+      {isError && !quietErrors ? <p className="mt-1 text-xs text-red-300">Error recorded</p> : null}
     </button>
   );
 }
