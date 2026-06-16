@@ -1,4 +1,5 @@
 create extension if not exists pgcrypto;
+create extension if not exists vector with schema extensions;
 
 create table if not exists public.workouts (
   id uuid primary key default gen_random_uuid(),
@@ -200,6 +201,43 @@ create table if not exists public.ai_insights (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.ai_vault_documents (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title text not null,
+  document_type text not null default 'note' check (document_type in ('note', 'daily_report', 'weekly_report', 'workout_report', 'project_report', 'finance_report', 'life_review', 'product_report', 'brain_answer')),
+  source_type text not null default 'brain' check (source_type in ('brain', 'manual', 'system', 'workout', 'project', 'health', 'finance', 'calendar')),
+  source_ref jsonb not null default '{}'::jsonb,
+  content_md text not null,
+  summary text,
+  tags text[] not null default '{}',
+  entities text[] not null default '{}',
+  links text[] not null default '{}',
+  status text not null default 'active' check (status in ('active', 'archived')),
+  visibility text not null default 'private' check (visibility in ('private')),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (id, user_id)
+);
+
+create table if not exists public.ai_vault_chunks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  document_id uuid not null,
+  chunk_index integer not null,
+  content text not null,
+  token_estimate integer,
+  embedding extensions.vector(1536),
+  embedding_model text,
+  embedding_status text not null default 'pending' check (embedding_status in ('pending', 'ready', 'failed', 'skipped')),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, document_id, chunk_index),
+  foreign key (document_id, user_id) references public.ai_vault_documents(id, user_id) on delete cascade
+);
+
 create table if not exists public.memos (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -382,6 +420,36 @@ alter table public.ai_insights add column if not exists confidence numeric(3,2) 
 alter table public.ai_insights add column if not exists status text not null default 'active';
 alter table public.ai_insights add column if not exists created_at timestamptz not null default now();
 alter table public.ai_insights add column if not exists updated_at timestamptz not null default now();
+
+alter table public.ai_vault_documents add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.ai_vault_documents alter column user_id set default auth.uid();
+alter table public.ai_vault_documents add column if not exists title text;
+alter table public.ai_vault_documents add column if not exists document_type text not null default 'note';
+alter table public.ai_vault_documents add column if not exists source_type text not null default 'brain';
+alter table public.ai_vault_documents add column if not exists source_ref jsonb not null default '{}'::jsonb;
+alter table public.ai_vault_documents add column if not exists content_md text;
+alter table public.ai_vault_documents add column if not exists summary text;
+alter table public.ai_vault_documents add column if not exists tags text[] not null default '{}';
+alter table public.ai_vault_documents add column if not exists entities text[] not null default '{}';
+alter table public.ai_vault_documents add column if not exists links text[] not null default '{}';
+alter table public.ai_vault_documents add column if not exists status text not null default 'active';
+alter table public.ai_vault_documents add column if not exists visibility text not null default 'private';
+alter table public.ai_vault_documents add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.ai_vault_documents add column if not exists created_at timestamptz not null default now();
+alter table public.ai_vault_documents add column if not exists updated_at timestamptz not null default now();
+
+alter table public.ai_vault_chunks add column if not exists user_id uuid references auth.users(id) on delete cascade;
+alter table public.ai_vault_chunks alter column user_id set default auth.uid();
+alter table public.ai_vault_chunks add column if not exists document_id uuid;
+alter table public.ai_vault_chunks add column if not exists chunk_index integer;
+alter table public.ai_vault_chunks add column if not exists content text;
+alter table public.ai_vault_chunks add column if not exists token_estimate integer;
+alter table public.ai_vault_chunks add column if not exists embedding extensions.vector(1536);
+alter table public.ai_vault_chunks add column if not exists embedding_model text;
+alter table public.ai_vault_chunks add column if not exists embedding_status text not null default 'pending';
+alter table public.ai_vault_chunks add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table public.ai_vault_chunks add column if not exists created_at timestamptz not null default now();
+alter table public.ai_vault_chunks add column if not exists updated_at timestamptz not null default now();
 
 alter table public.memos add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.memos alter column user_id set default auth.uid();
@@ -567,6 +635,100 @@ begin
     alter table public.ai_insights
     add constraint ai_insights_status_check
     check (status in ('active', 'archived'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_documents_id_user_id_key'
+  ) then
+    alter table public.ai_vault_documents
+    add constraint ai_vault_documents_id_user_id_key unique (id, user_id);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_documents_document_type_check'
+  ) then
+    alter table public.ai_vault_documents
+    add constraint ai_vault_documents_document_type_check
+    check (document_type in ('note', 'daily_report', 'weekly_report', 'workout_report', 'project_report', 'finance_report', 'life_review', 'product_report', 'brain_answer'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_documents_source_type_check'
+  ) then
+    alter table public.ai_vault_documents
+    add constraint ai_vault_documents_source_type_check
+    check (source_type in ('brain', 'manual', 'system', 'workout', 'project', 'health', 'finance', 'calendar'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_documents_status_check'
+  ) then
+    alter table public.ai_vault_documents
+    add constraint ai_vault_documents_status_check
+    check (status in ('active', 'archived'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_documents_visibility_check'
+  ) then
+    alter table public.ai_vault_documents
+    add constraint ai_vault_documents_visibility_check
+    check (visibility in ('private'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_chunks_user_document_chunk_key'
+  ) then
+    alter table public.ai_vault_chunks
+    add constraint ai_vault_chunks_user_document_chunk_key unique (user_id, document_id, chunk_index);
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_chunks_embedding_status_check'
+  ) then
+    alter table public.ai_vault_chunks
+    add constraint ai_vault_chunks_embedding_status_check
+    check (embedding_status in ('pending', 'ready', 'failed', 'skipped'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'ai_vault_chunks_document_id_user_id_fkey'
+  ) then
+    alter table public.ai_vault_chunks
+    add constraint ai_vault_chunks_document_id_user_id_fkey
+    foreign key (document_id, user_id) references public.ai_vault_documents(id, user_id) on delete cascade;
   end if;
 end $$;
 
@@ -869,6 +1031,16 @@ create trigger set_ai_insights_updated_at
 before update on public.ai_insights
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_ai_vault_documents_updated_at on public.ai_vault_documents;
+create trigger set_ai_vault_documents_updated_at
+before update on public.ai_vault_documents
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_ai_vault_chunks_updated_at on public.ai_vault_chunks;
+create trigger set_ai_vault_chunks_updated_at
+before update on public.ai_vault_chunks
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_memos_updated_at on public.memos;
 create trigger set_memos_updated_at
 before update on public.memos
@@ -913,6 +1085,126 @@ create index if not exists ai_memories_user_category_idx on public.ai_memories (
 create index if not exists ai_memories_user_last_seen_at_idx on public.ai_memories (user_id, last_seen_at desc);
 create index if not exists ai_insights_user_status_created_at_idx on public.ai_insights (user_id, status, created_at desc);
 create index if not exists ai_insights_user_type_created_at_idx on public.ai_insights (user_id, insight_type, created_at desc);
+create index if not exists ai_vault_documents_user_created_at_idx on public.ai_vault_documents (user_id, created_at desc);
+create index if not exists ai_vault_documents_user_type_created_at_idx on public.ai_vault_documents (user_id, document_type, created_at desc);
+create index if not exists ai_vault_documents_user_status_created_at_idx on public.ai_vault_documents (user_id, status, created_at desc);
+create index if not exists ai_vault_documents_tags_gin_idx on public.ai_vault_documents using gin (tags);
+create index if not exists ai_vault_documents_entities_gin_idx on public.ai_vault_documents using gin (entities);
+create index if not exists ai_vault_documents_links_gin_idx on public.ai_vault_documents using gin (links);
+create index if not exists ai_vault_chunks_user_document_idx on public.ai_vault_chunks (user_id, document_id);
+create index if not exists ai_vault_chunks_user_status_idx on public.ai_vault_chunks (user_id, embedding_status);
+create index if not exists ai_vault_chunks_user_created_at_idx on public.ai_vault_chunks (user_id, created_at desc);
+
+do $$
+begin
+  begin
+    create index if not exists ai_vault_chunks_embedding_hnsw_idx
+    on public.ai_vault_chunks
+    using hnsw (embedding extensions.vector_cosine_ops)
+    where embedding is not null;
+  exception
+    when undefined_object or feature_not_supported or invalid_parameter_value then
+      raise notice 'Skipping ai_vault_chunks_embedding_hnsw_idx; pgvector HNSW is not available in this environment.';
+  end;
+end $$;
+
+create or replace function public.match_ai_vault_chunks(
+  query_embedding extensions.vector(1536),
+  match_count int default 8,
+  match_threshold float default 0.2,
+  filter_document_types text[] default null
+)
+returns table (
+  chunk_id uuid,
+  document_id uuid,
+  title text,
+  document_type text,
+  content text,
+  summary text,
+  tags text[],
+  entities text[],
+  links text[],
+  similarity float,
+  created_at timestamptz
+)
+language sql
+stable
+as $$
+  select
+    c.id as chunk_id,
+    d.id as document_id,
+    d.title,
+    d.document_type,
+    c.content,
+    d.summary,
+    d.tags,
+    d.entities,
+    d.links,
+    greatest(0, 1 - (c.embedding <=> query_embedding)) as similarity,
+    d.created_at
+  from public.ai_vault_chunks c
+  join public.ai_vault_documents d
+    on d.id = c.document_id
+   and d.user_id = c.user_id
+  where d.user_id = auth.uid()
+    and d.status = 'active'
+    and c.embedding_status = 'ready'
+    and c.embedding is not null
+    and (filter_document_types is null or d.document_type = any(filter_document_types))
+    and greatest(0, 1 - (c.embedding <=> query_embedding)) >= match_threshold
+  order by c.embedding <=> query_embedding
+  limit greatest(1, least(coalesce(match_count, 8), 20));
+$$;
+
+create or replace function public.match_ai_vault_chunks_for_user(
+  target_user_id uuid,
+  query_embedding extensions.vector(1536),
+  match_count int default 8,
+  match_threshold float default 0.2,
+  filter_document_types text[] default null
+)
+returns table (
+  chunk_id uuid,
+  document_id uuid,
+  title text,
+  document_type text,
+  content text,
+  summary text,
+  tags text[],
+  entities text[],
+  links text[],
+  similarity float,
+  created_at timestamptz
+)
+language sql
+stable
+as $$
+  select
+    c.id as chunk_id,
+    d.id as document_id,
+    d.title,
+    d.document_type,
+    c.content,
+    d.summary,
+    d.tags,
+    d.entities,
+    d.links,
+    greatest(0, 1 - (c.embedding <=> query_embedding)) as similarity,
+    d.created_at
+  from public.ai_vault_chunks c
+  join public.ai_vault_documents d
+    on d.id = c.document_id
+   and d.user_id = c.user_id
+  where d.user_id = target_user_id
+    and (auth.uid() = target_user_id or auth.role() = 'service_role')
+    and d.status = 'active'
+    and c.embedding_status = 'ready'
+    and c.embedding is not null
+    and (filter_document_types is null or d.document_type = any(filter_document_types))
+    and greatest(0, 1 - (c.embedding <=> query_embedding)) >= match_threshold
+  order by c.embedding <=> query_embedding
+  limit greatest(1, least(coalesce(match_count, 8), 20));
+$$;
 create index if not exists memos_user_status_due_idx on public.memos (user_id, status, memo_date, memo_time);
 create index if not exists memos_user_created_at_idx on public.memos (user_id, created_at desc);
 create index if not exists projects_user_status_created_at_idx on public.projects (user_id, status, created_at desc);
@@ -935,6 +1227,8 @@ alter table public.ai_chat_threads enable row level security;
 alter table public.ai_chat_messages enable row level security;
 alter table public.ai_memories enable row level security;
 alter table public.ai_insights enable row level security;
+alter table public.ai_vault_documents enable row level security;
+alter table public.ai_vault_chunks enable row level security;
 alter table public.memos enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_sessions enable row level security;
@@ -1085,6 +1379,32 @@ create policy "ai_insights are user scoped" on public.ai_insights
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+drop policy if exists "ai_vault_documents are user scoped" on public.ai_vault_documents;
+create policy "ai_vault_documents are user scoped" on public.ai_vault_documents
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_vault_chunks are user scoped" on public.ai_vault_chunks;
+create policy "ai_vault_chunks are user scoped" on public.ai_vault_chunks
+for all to authenticated
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.ai_vault_documents
+    where ai_vault_documents.id = ai_vault_chunks.document_id
+      and ai_vault_documents.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.ai_vault_documents
+    where ai_vault_documents.id = ai_vault_chunks.document_id
+      and ai_vault_documents.user_id = auth.uid()
+  )
+);
 
 drop policy if exists "lifeos local read memos" on public.memos;
 drop policy if exists "lifeos local write memos" on public.memos;

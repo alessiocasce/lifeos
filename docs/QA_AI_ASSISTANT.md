@@ -8,10 +8,12 @@ Run this after deploying to Vercel with:
 - `LIFEOS_ACTION_TOKEN`
 - `GEMINI_API_KEY`
 - optional `GEMINI_MODEL`
+- optional `OPENAI_API_KEY` for Brain Vault semantic embeddings
+- optional `EMBEDDING_MODEL` defaults to `text-embedding-3-small`
 
 The in-app Assistant sends the signed-in user's Supabase access token to `/api/ai/chat`. The backend verifies that user against `LIFEOS_ACTION_USER_ID`. The endpoint also accepts the action token for trusted server/tool callers.
 
-Run the latest `supabase/schema.sql` before this checklist so Brain thread, message, memory, and insight tables exist.
+Run the latest `supabase/schema.sql` before this checklist so Brain thread, message, memory, insight, and Vault tables/functions exist.
 
 ## Persistent Brain Chat
 
@@ -146,6 +148,24 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 30. Confirm the second message can route `explicit_action` with `calendar_planner` and create the event only if all required fields are clear.
 31. Inspect persisted `ai_chat_messages.metadata.brain_route` and confirm it includes `mode`, `primary_skill`, `confidence`, `needs_data`, `write_intent`, and `risk_level`.
 32. Confirm route metadata is included in sanitized AI action log payloads when actions are created.
+
+## Brain Vault
+
+1. Ask a useful workout analysis question, such as `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+2. Click Save on the assistant response.
+3. Confirm the Save modal opens with a title, document type, tags field, and a visible X/Cancel path.
+4. Save as `workout_report` and confirm the document appears in the collapsed/expanded Vault panel.
+5. Open the Vault document and confirm the full Markdown-like content renders safely.
+6. Archive the document and confirm it disappears from active Vault documents.
+7. Ask a new related workout question and, if `OPENAI_API_KEY` is configured and schema was rerun, confirm Brain can reuse/reference the saved report as context when relevant.
+8. If `OPENAI_API_KEY` is not configured, confirm saving still works, chunks are skipped, and Brain answers without crashing.
+9. After an assistant answer, send `save this as a workout report`.
+10. Confirm Brain saves the latest assistant answer to Vault and does not create a memo/calendar event.
+11. Confirm the created action log, if shown, uses `create_vault_document` and does not expose raw secrets.
+12. Confirm Vault context is advisory only: a saved report that mentions a schedule or reminder must not create new calendar/memo rows unless the current user message explicitly asks for that write.
+13. Confirm `[[Back Day]]`-style links in saved content appear in document detail metadata if present.
+14. Pull to refresh and confirm Vault documents reload.
+15. Confirm Vault panel and detail modal have no horizontal overflow on mobile.
 
 ## API Security
 

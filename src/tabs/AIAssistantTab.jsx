@@ -31,8 +31,12 @@ export function AIAssistantTab() {
     aiInsights,
     aiMemories,
     aiMemoriesStatus,
+    aiVaultDocuments,
+    aiVaultError,
+    aiVaultStatus,
     archiveAiChatThread,
     archiveAiMemory,
+    archiveAiVaultDocument,
     createAiChatThread,
     loadAiChatMessages,
     loadAiChatThreads,
@@ -41,10 +45,12 @@ export function AIAssistantTab() {
     reloadAiActionLogs,
     reloadAiInsights,
     reloadAiMemories,
+    reloadAiVaultDocuments,
     reloadExpenses,
     reloadHealthLogs,
     reloadMemos,
     renameAiChatThread,
+    saveBrainMessageToVault,
     selectAiChatThread,
     updateAiMemory,
   } = useLifeOS();
@@ -59,6 +65,12 @@ export function AIAssistantTab() {
   const [showActionErrors, setShowActionErrors] = useState(false);
   const [renamingThread, setRenamingThread] = useState(false);
   const [threadTitleDraft, setThreadTitleDraft] = useState('');
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultDetail, setVaultDetail] = useState(null);
+  const [vaultSaveMessage, setVaultSaveMessage] = useState(null);
+  const [vaultSaveDraft, setVaultSaveDraft] = useState({ title: '', documentType: 'brain_answer', tags: '' });
+  const [vaultSaveStatus, setVaultSaveStatus] = useState('idle');
+  const [vaultSaveError, setVaultSaveError] = useState('');
 
   const activeThreads = useMemo(
     () => aiChatThreads.filter((thread) => thread.status === 'active'),
@@ -108,15 +120,18 @@ export function AIAssistantTab() {
 
     try {
       const result = await sendLifeOSAiMessage(message, threadId);
+      const persistedMessage = result.persisted_message;
       setPendingMessages((prev) => [...prev, {
-        id: `assistant-${Date.now()}`,
+        id: persistedMessage?.id || `assistant-${Date.now()}`,
         role: 'assistant',
         content: result.answer,
         metadata: {
+          ...(persistedMessage?.metadata ?? {}),
           ...(result.selected_skill ? { selected_skill: result.selected_skill } : {}),
           ...(result.brain_route ? { brain_route: result.brain_route } : {}),
+          ...(result.vault_context ? { vault_context: result.vault_context } : {}),
         },
-        created_at: new Date().toISOString(),
+        created_at: persistedMessage?.created_at || new Date().toISOString(),
       }]);
       await refreshAfterAiActions(result.actions ?? []);
       await Promise.allSettled([
@@ -124,6 +139,7 @@ export function AIAssistantTab() {
         loadAiChatMessages?.(result.thread_id || threadId),
         reloadAiMemories?.(),
         reloadAiInsights?.(),
+        reloadAiVaultDocuments?.(),
         reloadAiActionLogs?.(10),
       ].filter(Boolean));
       setPendingMessages([]);
@@ -153,10 +169,49 @@ export function AIAssistantTab() {
     }
     if (types.has('update_health_log')) tasks.push(reloadHealthLogs?.());
     if (types.has('create_memo')) tasks.push(reloadMemos?.());
+    if (types.has('create_vault_document')) tasks.push(reloadAiVaultDocuments?.());
     if (types.has('create_calendar_event') || types.has('create_calendar_events') || types.has('analyze_and_plan')) {
       tasks.push(loadCalendarRange?.(today, addDays(today, 45)));
     }
     await Promise.allSettled(tasks.filter(Boolean));
+  };
+
+  const openVaultSave = (message) => {
+    const defaultType = defaultVaultTypeForMessage(message);
+    setVaultSaveMessage(message);
+    setVaultSaveDraft({
+      title: defaultVaultTitle(message),
+      documentType: defaultType,
+      tags: defaultVaultTags(message, defaultType),
+    });
+    setVaultSaveStatus('idle');
+    setVaultSaveError('');
+  };
+
+  const saveVaultDraft = async () => {
+    if (!vaultSaveMessage) return;
+    setVaultSaveStatus('saving');
+    setVaultSaveError('');
+    try {
+      await saveBrainMessageToVault({
+        source_message_id: isUuid(vaultSaveMessage.id) ? vaultSaveMessage.id : undefined,
+        content_md: vaultSaveMessage.content,
+        title: vaultSaveDraft.title,
+        document_type: vaultSaveDraft.documentType,
+        tags: parseTags(vaultSaveDraft.tags),
+        metadata: {
+          selected_skill: vaultSaveMessage.metadata?.selected_skill ?? null,
+          saved_from_ui: true,
+        },
+      });
+      await reloadAiVaultDocuments?.();
+      setVaultSaveStatus('idle');
+      setVaultSaveMessage(null);
+      setVaultOpen(true);
+    } catch (error) {
+      setVaultSaveError(error.message || 'Could not save to Vault.');
+      setVaultSaveStatus('error');
+    }
   };
 
   const handleNewChat = async () => {
@@ -273,7 +328,7 @@ export function AIAssistantTab() {
               <Loader2 size={20} className="animate-spin" aria-label="Loading Brain messages" />
             </div>
           ) : messages.length ? (
-            messages.map((message) => <AssistantMessage key={message.id} message={message} />)
+            messages.map((message) => <AssistantMessage key={message.id} message={message} onSaveToVault={openVaultSave} />)
           ) : (
             <div className="grid min-h-48 place-items-center rounded-md border border-dashed border-white/10 bg-black/20 p-4 text-center">
               <div>
@@ -327,6 +382,58 @@ export function AIAssistantTab() {
       </Panel>
 
       <div className="col-span-12 grid min-w-0 content-start gap-3 xl:col-span-4">
+        <Panel>
+          <button
+            type="button"
+            onClick={() => setVaultOpen((open) => !open)}
+            className="flex w-full min-w-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 text-left"
+            aria-expanded={vaultOpen}
+          >
+            <div className="min-w-0">
+              <p className="data-text text-[10px] uppercase tracking-wider text-emerald-300">Vault</p>
+              <h2 className="truncate text-sm font-semibold text-zinc-100">Saved Reports</h2>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Tag tone="emerald">{aiVaultDocuments.length}</Tag>
+              <ChevronDown size={16} className={`text-zinc-500 transition ${vaultOpen ? 'rotate-180' : ''}`} />
+            </div>
+          </button>
+
+          {vaultOpen ? (
+            <div className="grid gap-2 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-zinc-500">Long-form Brain answers saved as searchable reports.</p>
+                <button
+                  type="button"
+                  onClick={() => reloadAiVaultDocuments?.()}
+                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-emerald-400/25"
+                >
+                  <RefreshCw size={14} />
+                  Refresh
+                </button>
+              </div>
+              {aiVaultStatus === 'loading' && !aiVaultDocuments.length ? (
+                <p className="py-3 text-center text-sm text-zinc-500">Loading Vault...</p>
+              ) : aiVaultDocuments.length ? (
+                aiVaultDocuments.slice(0, 5).map((document) => (
+                  <VaultDocumentCard
+                    key={document.id}
+                    document={document}
+                    onOpen={() => setVaultDetail(document)}
+                    onArchive={() => archiveAiVaultDocument(document.id)}
+                  />
+                ))
+              ) : (
+                <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
+                  <p className="text-sm font-medium text-zinc-100">No saved reports yet.</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">Use Save on a useful Brain answer to store it here.</p>
+                </div>
+              )}
+              {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
+            </div>
+          ) : null}
+        </Panel>
+
         <Panel>
           <button
             type="button"
@@ -430,6 +537,28 @@ export function AIAssistantTab() {
           </div>
         </Panel>
       </div>
+
+      {vaultSaveMessage ? (
+        <VaultSaveModal
+          draft={vaultSaveDraft}
+          status={vaultSaveStatus}
+          error={vaultSaveError}
+          onDraftChange={setVaultSaveDraft}
+          onClose={() => setVaultSaveMessage(null)}
+          onSave={saveVaultDraft}
+        />
+      ) : null}
+
+      {vaultDetail ? (
+        <VaultDetailModal
+          document={vaultDetail}
+          onClose={() => setVaultDetail(null)}
+          onArchive={async () => {
+            await archiveAiVaultDocument(vaultDetail.id);
+            setVaultDetail(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -485,6 +614,126 @@ function MemoryCard({ memory, editing, draft, onDraftChange, onEdit, onCancel, o
   );
 }
 
+function VaultDocumentCard({ document, onOpen, onArchive }) {
+  return (
+    <article className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <Tag tone="emerald">{formatDocumentType(document.document_type)}</Tag>
+          <h3 className="mt-2 truncate text-sm font-semibold text-zinc-100">{document.title}</h3>
+          {document.summary ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{document.summary}</p> : null}
+        </button>
+        <button type="button" onClick={onArchive} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 text-zinc-500 hover:border-red-400/25 hover:text-red-200" aria-label={`Archive ${document.title}`}>
+          <Archive size={14} />
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1">
+        {(document.tags ?? []).slice(0, 4).map((tag) => <Tag key={tag}>{tag}</Tag>)}
+        <span className="data-text ml-auto text-[10px] text-zinc-600">{formatShortDate(document.created_at)}</span>
+      </div>
+    </article>
+  );
+}
+
+function VaultSaveModal({ draft, status, error, onDraftChange, onClose, onSave }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4" role="dialog" aria-modal="true">
+      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-md border border-white/10 bg-[#111] p-4 shadow-2xl sm:max-w-lg sm:rounded-md">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="data-text text-[10px] uppercase tracking-wider text-emerald-300">Vault</p>
+            <h2 className="text-base font-semibold text-zinc-100">Save Brain Answer</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-400" aria-label="Close Vault save">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="grid gap-3">
+          <label className="grid gap-1 text-sm text-zinc-300">
+            Title
+            <input
+              value={draft.title}
+              onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
+              className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none focus:border-emerald-400/40"
+            />
+          </label>
+          <label className="grid gap-1 text-sm text-zinc-300">
+            Type
+            <select
+              value={draft.documentType}
+              onChange={(event) => onDraftChange((current) => ({ ...current, documentType: event.target.value }))}
+              className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none focus:border-emerald-400/40"
+            >
+              <option value="brain_answer">Brain Answer</option>
+              <option value="workout_report">Workout Report</option>
+              <option value="project_report">Project Report</option>
+              <option value="finance_report">Finance Report</option>
+              <option value="life_review">Life Review</option>
+              <option value="product_report">Product Report</option>
+              <option value="note">Note</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm text-zinc-300">
+            Tags
+            <input
+              value={draft.tags}
+              onChange={(event) => onDraftChange((current) => ({ ...current, tags: event.target.value }))}
+              placeholder="workout, back_day"
+              className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-emerald-400/40"
+            />
+          </label>
+          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="h-10 rounded-md border border-white/10 px-3 text-sm text-zinc-400">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={status === 'saving' || !draft.title.trim()}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-200 disabled:opacity-50"
+            >
+              {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VaultDetailModal({ document, onClose, onArchive }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4" role="dialog" aria-modal="true">
+      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-md border border-white/10 bg-[#111] p-4 shadow-2xl sm:max-w-3xl sm:rounded-md">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Tag tone="emerald">{formatDocumentType(document.document_type)}</Tag>
+            <h2 className="mt-2 truncate text-lg font-semibold text-zinc-100">{document.title}</h2>
+            <p className="data-text mt-1 text-[10px] text-zinc-600">{formatShortDate(document.created_at)}</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={onArchive} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-500 hover:border-red-400/25 hover:text-red-200" aria-label="Archive Vault document">
+              <Archive size={16} />
+            </button>
+            <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-400" aria-label="Close Vault document">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="mb-3 flex flex-wrap gap-1">
+          {(document.tags ?? []).map((tag) => <Tag key={tag}>{tag}</Tag>)}
+          {(document.links ?? []).slice(0, 8).map((link) => <Tag key={link} tone="cyan">[[{link}]]</Tag>)}
+        </div>
+        <div className="rounded-md border border-white/5 bg-black/25 p-3">
+          <AssistantMarkdown content={document.content_md || ''} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AssistantError({ error }) {
   return (
     <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3">
@@ -498,7 +747,7 @@ function AssistantError({ error }) {
   );
 }
 
-function AssistantMessage({ message }) {
+function AssistantMessage({ message, onSaveToVault }) {
   const isUser = message.role === 'user';
   const skill = !isUser ? normalizeMessageSkill(message.metadata?.selected_skill) : null;
   return (
@@ -514,7 +763,20 @@ function AssistantMessage({ message }) {
             {skill.badge}
           </span>
         ) : null}
-        {message.created_at ? <span className="data-text ml-auto text-[10px] text-zinc-600">{formatMessageTime(message.created_at)}</span> : null}
+        <span className="ml-auto flex items-center gap-1">
+          {!isUser ? (
+            <button
+              type="button"
+              onClick={() => onSaveToVault?.(message)}
+              className="grid h-7 w-7 place-items-center rounded border border-white/10 bg-white/[0.03] text-zinc-500 hover:border-emerald-400/25 hover:text-emerald-200"
+              aria-label="Save assistant answer to Vault"
+              title="Save to Vault"
+            >
+              <Save size={13} />
+            </button>
+          ) : null}
+          {message.created_at ? <span className="data-text text-[10px] text-zinc-600">{formatMessageTime(message.created_at)}</span> : null}
+        </span>
       </div>
       {isUser
         ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100">{message.content}</p>
@@ -531,6 +793,60 @@ function normalizeMessageSkill(value) {
     label,
     badge: String(value.badge || label).replaceAll('_', ' ').slice(0, 16),
   };
+}
+
+function defaultVaultTypeForMessage(message) {
+  const skillId = message.metadata?.selected_skill?.id;
+  if (skillId === 'workout_coach') return 'workout_report';
+  if (skillId === 'project_ops_coach') return 'project_report';
+  if (skillId === 'finance_analyst') return 'finance_report';
+  if (skillId === 'product_builder') return 'product_report';
+  if (skillId === 'life_review') return 'life_review';
+  return 'brain_answer';
+}
+
+function defaultVaultTags(message, documentType) {
+  const skillId = message.metadata?.selected_skill?.id;
+  if (skillId === 'workout_coach') return 'workout';
+  if (skillId === 'project_ops_coach') return 'projects, ops';
+  if (skillId === 'finance_analyst') return 'finance';
+  if (skillId === 'product_builder') return 'product, lifeos';
+  if (documentType === 'life_review') return 'life_review';
+  return 'brain';
+}
+
+function defaultVaultTitle(message) {
+  const content = String(message.content ?? '')
+    .replace(/[#>*_`[\]()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = content.split(' ').filter(Boolean).slice(0, 8);
+  return words.length ? words.join(' ') : 'Brain Vault Report';
+}
+
+function parseTags(value) {
+  return String(value ?? '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function formatDocumentType(value) {
+  return String(value || 'note').replaceAll('_', ' ');
+}
+
+function formatShortDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('it-IT', {
+    timeZone: 'Europe/Rome',
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ?? ''));
 }
 
 function formatMessageTime(value) {

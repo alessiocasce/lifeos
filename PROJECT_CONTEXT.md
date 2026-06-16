@@ -93,6 +93,7 @@ GEMINI_API_KEY=...
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
 `GEMINI_API_KEY` is also server-only and must never be exposed through frontend code.
+`OPENAI_API_KEY` is optional and server-only. It enables Brain Vault semantic embeddings; without it, Vault reports still save and retrieval is skipped gracefully.
 
 The schema is in `supabase/schema.sql`.
 
@@ -116,6 +117,8 @@ Current tables:
 - `ai_chat_messages`
 - `ai_memories`
 - `ai_insights`
+- `ai_vault_documents`
+- `ai_vault_chunks`
 
 All tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`.
 
@@ -126,6 +129,7 @@ RLS is enabled on all user tables. Current policies are user-scoped for authenti
 - `workout_template_exercises` also checks that the referenced `workout_templates` row belongs to the same authenticated user.
 - `project_sessions` and `project_money_entries` also check that the referenced `projects` row belongs to the same authenticated user.
 - `ai_chat_messages` also checks that the referenced `ai_chat_threads` row belongs to the same authenticated user.
+- `ai_vault_chunks` also checks that the referenced `ai_vault_documents` row belongs to the same authenticated user.
 
 The frontend currently uses Supabase Auth as a global app gate:
 
@@ -183,6 +187,10 @@ Real/persisted today:
 - AI Action History persisted in `ai_action_logs` for recent assistant/Shortcut writes and write failures.
 - Durable Brain memory persisted in `ai_memories`; saved observations are kept separately in `ai_insights`.
 - Meaningful conversations can extract a small number of durable memory/insight candidates. Simple logs and one-off writes skip extraction.
+- Brain Vault persists markdown-like AI reports in `ai_vault_documents` and chunk records in `ai_vault_chunks`.
+- Brain Vault is a synthesized knowledge/report layer above structured LifeOS tables; it does not replace `health_logs`, workouts, projects, memos, expenses, memories, or insights as source-of-truth data.
+- Vault chunks can be embedded with Supabase pgvector when `OPENAI_API_KEY` is configured. If embeddings are not configured or fail, documents still save and chunks are marked skipped/failed.
+- Obsidian-style links such as `[[Back Day]]` are extracted into document `links` for future graph/backlink features; no graph UI exists yet.
 
 Still mostly mock/local:
 
@@ -208,7 +216,7 @@ Current behavior:
 - Does not implement full offline data sync, offline write queues, or cached personal data.
 - Mobile/iPhone PWA supports pull-to-refresh from the top of the app content.
 - Pull-to-refresh physically translates the tab content downward with resisted, Safari-like feedback, holds it slightly lowered while refreshing, then smoothly snaps it back.
-- One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, Brain threads/current messages/memories/insights, and recent AI actions.
+- One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, Brain threads/current messages/memories/insights/Vault documents, and recent AI actions.
 - Pull-to-refresh also asks the service worker to check for a newly deployed app version.
 - A waiting app update activates and reloads automatically when there is no meaningful unsaved work.
 - A complete unsaved Workout set or meaningful Project session draft blocks only the app reload; persisted data still refreshes and the indicator asks the user to save first.
@@ -271,8 +279,15 @@ Architecture:
 - Skill write permission and route write intent are additional guards. Skill rules never override global safety guards, negative write intent, tentative-language protection, workout-advice read-only behavior, follow-up transform read-only behavior, memory direct handling, or destructive-action blocks.
 - Selected skill metadata is stored in existing `ai_chat_messages.metadata.selected_skill`, included in `/api/ai/chat` responses, and shown as a subtle badge on assistant messages.
 - Brain route metadata is stored in existing `ai_chat_messages.metadata.brain_route`, included in `/api/ai/chat` responses, and included in sanitized AI action logs when actions are created.
+- Brain Vault v1 stores long-form markdown-like Brain reports and saved assistant answers in Supabase.
+- Brain Vault documents are manually saved from assistant messages through the Brain UI or explicit follow-up commands such as `save this to vault`.
+- Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.
+- Vault context is stored in `ai_chat_messages.metadata.vault_context` for debugging and never creates write permission.
+- Vault context does not replace structured LifeOS tables and cannot authorize calendar, memo, health, expense, project, or workout writes.
+- Embeddings use optional server-side `OPENAI_API_KEY` with `text-embedding-3-small` by default and 1536 dimensions. Missing embedding config marks chunks skipped and keeps the rest of Brain working.
+- Future Morning Briefing, Weekly Review, post-workout reviews, and product reports should save synthesized outputs into Brain Vault, but proactive automation is not implemented yet.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
-- Memory deduplication uses normalized title/category/key-term overlap; no vector database is used in v1.
+- Memory deduplication itself uses normalized title/category/key-term overlap; Brain Vault is the pgvector-backed long-form retrieval layer.
 - Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.
 - Memory recall requests summarize active memories, and ambiguous forget requests direct the user to the memory panel.
 - Gemini receives no database credentials and cannot run SQL.

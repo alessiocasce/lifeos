@@ -47,12 +47,15 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 3. Create a second thread and confirm both active threads remain available.
 4. Add an explicit durable memory and confirm it appears in `What LifeOS Knows`.
 5. Archive the memory and confirm it is no longer active AI context.
-6. Verify RLS with a second user: threads, messages, memories, and insights must remain user-scoped.
+6. Verify RLS with a second user: threads, messages, memories, insights, Vault documents, and Vault chunks must remain user-scoped.
 7. Confirm `/api/ai/chat` persists app messages without changing Shortcut/API action behavior.
 8. Send `hello` and confirm `/api/ai/chat` returns selected skill `general_chat` and the assistant message shows a subtle skill badge.
 9. Send `What should we build next in LifeOS?` and confirm selected skill `product_builder` is returned/persisted without any LifeOS CRUD write.
 10. Send a workout-advice prompt and confirm selected skill `workout_coach` is returned while no calendar event is created.
 11. Inspect the persisted assistant row in `ai_chat_messages` and confirm `metadata.selected_skill` is present for new assistant messages.
+12. Save an assistant response to Brain Vault and confirm the document appears in the Vault panel.
+13. If `OPENAI_API_KEY` is configured, confirm chunks are embedded and a related future Brain question can retrieve the saved report.
+14. If `OPENAI_API_KEY` is not configured, confirm the Vault document still saves and chunks are marked skipped without breaking Brain.
 
 ## Home
 
@@ -110,16 +113,21 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 12. Confirm `/api/ai/chat`, `/api/ai/actions`, and `/api/actions/*` still return API behavior after the update.
 13. Confirm the installed iPhone PWA moves the main tab content with the pull gesture, holds it lowered during refresh, and smoothly returns it afterward.
 14. Confirm the shell header and bottom navigation remain stable and no content remains stuck translated after success, failure, or an update-ready guard.
-15. Pull to refresh on Brain and confirm threads, current messages, memories, insights, and Recent Actions update without wiping typed composer text.
+15. Pull to refresh on Brain and confirm threads, current messages, memories, insights, Vault documents, and Recent Actions update without wiping typed composer text.
 
 ## Brain Schema Deployment
 
 1. Run the latest `supabase/schema.sql` before testing Brain persistence.
-2. Confirm `ai_chat_threads`, `ai_chat_messages`, `ai_memories`, and `ai_insights` exist.
+2. Confirm `ai_chat_threads`, `ai_chat_messages`, `ai_memories`, `ai_insights`, `ai_vault_documents`, and `ai_vault_chunks` exist.
 3. Confirm authenticated users can only read/write their own rows.
 4. Confirm the composite thread/message ownership foreign key rejects cross-user message insertion.
 5. Confirm deploying Brain changes does not break `/api/actions/health`, `/api/actions/wake`, `/api/actions/sleep-start`, `/api/actions/habit`, `/api/actions/calendar`, or `/api/actions/expense`.
-6. Confirm Brain Skill Architecture uses existing JSON metadata and does not require a new schema migration beyond the Brain v1 tables.
+6. Confirm the `vector` extension is enabled in the `extensions` schema.
+7. Confirm `match_ai_vault_chunks` does not return another user's chunks.
+8. Confirm `match_ai_vault_chunks_for_user` is usable by service-role calls and still filters to the configured target user.
+9. Add server-only `OPENAI_API_KEY` if semantic Vault retrieval is desired.
+10. Optionally set `EMBEDDING_MODEL`; default is `text-embedding-3-small`.
+11. Confirm Brain Skill Architecture still stores skill/route/Vault metadata in existing JSON metadata fields.
 
 ## Known Non-Failing Build Warning
 

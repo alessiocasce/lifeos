@@ -987,6 +987,47 @@ export const aiInsightApi = {
   },
 };
 
+export const aiReportApi = {
+  async list({ limit = 20, type = '', status = 'active' } = {}) {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (type) params.set('type', type);
+    if (status) params.set('status', status);
+    const payload = await fetchAiReports(`/api/ai/reports?${params.toString()}`);
+    return payload.documents ?? [];
+  },
+
+  async create(payload) {
+    const result = await fetchAiReports('/api/ai/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'create',
+        ...prepareAiReportPayload(payload),
+      }),
+    });
+    return result.document;
+  },
+
+  async archive(id) {
+    const result = await fetchAiReports('/api/ai/reports', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'archive', id }),
+    });
+    return result.document;
+  },
+
+  async saveMessage(payload) {
+    const result = await fetchAiReports('/api/ai/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'save_message',
+        ...prepareAiReportPayload(payload),
+      }),
+    });
+    return result.document;
+  },
+};
+
 export const lifeosApi = {
   workouts: workoutApi,
   workoutSets: workoutSetApi,
@@ -1005,6 +1046,7 @@ export const lifeosApi = {
   aiChatMessages: aiChatMessageApi,
   aiMemories: aiMemoryApi,
   aiInsights: aiInsightApi,
+  aiReports: aiReportApi,
   chatMessages: {
     list: async () => throwIfError(await requireSupabase().from('chat_messages').select('*').order('created_at', { ascending: true })),
     create: async (payload) => throwIfError(await requireSupabase().from('chat_messages').insert(payload).select('*').single()),
@@ -1017,6 +1059,42 @@ function prepareHealthLogPayload(payload) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   );
+}
+
+async function fetchAiReports(url, options = {}) {
+  const { data, error } = await requireSupabase().auth.getSession();
+  if (error) throw error;
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Sign in before using Brain Vault.');
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || 'Brain Vault request failed.');
+  }
+  return payload.data ?? {};
+}
+
+function prepareAiReportPayload(payload = {}) {
+  return {
+    ...(payload.source_message_id || payload.sourceMessageId ? { source_message_id: payload.source_message_id ?? payload.sourceMessageId } : {}),
+    ...(payload.content_md || payload.contentMd ? { content_md: payload.content_md ?? payload.contentMd } : {}),
+    ...(payload.title !== undefined ? { title: payload.title } : {}),
+    ...(payload.document_type || payload.documentType ? { document_type: payload.document_type ?? payload.documentType } : {}),
+    ...(payload.source_type || payload.sourceType ? { source_type: payload.source_type ?? payload.sourceType } : {}),
+    ...(payload.source_ref || payload.sourceRef ? { source_ref: payload.source_ref ?? payload.sourceRef } : {}),
+    ...(payload.summary !== undefined ? { summary: payload.summary } : {}),
+    ...(payload.tags !== undefined ? { tags: payload.tags } : {}),
+    ...(payload.entities !== undefined ? { entities: payload.entities } : {}),
+    ...(payload.metadata !== undefined ? { metadata: payload.metadata } : {}),
+  };
 }
 
 async function recalculateHealthSleepAfterChange(client, loggedOn, changedFields) {

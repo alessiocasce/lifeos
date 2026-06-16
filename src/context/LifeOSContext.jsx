@@ -21,6 +21,7 @@ import {
   aiChatThreadApi,
   aiInsightApi,
   aiMemoryApi,
+  aiReportApi,
   calendarEventApi,
   dailyReviewApi,
   expenseApi,
@@ -103,6 +104,9 @@ export function LifeOSProvider({ children }) {
   const [aiInsights, setAiInsights] = useState([]);
   const [aiInsightsStatus, setAiInsightsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [aiInsightsError, setAiInsightsError] = useState('');
+  const [aiVaultDocuments, setAiVaultDocuments] = useState([]);
+  const [aiVaultStatus, setAiVaultStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
+  const [aiVaultError, setAiVaultError] = useState('');
   const [refreshState, setRefreshState] = useState('idle');
   const [refreshError, setRefreshError] = useState('');
   const [lastRefreshAt, setLastRefreshAt] = useState(null);
@@ -188,6 +192,9 @@ export function LifeOSProvider({ children }) {
     setAiInsights([]);
     setAiInsightsError('');
     setAiInsightsStatus(status);
+    setAiVaultDocuments([]);
+    setAiVaultError('');
+    setAiVaultStatus(status);
     setRefreshState('idle');
     setRefreshError('');
     setLastRefreshAt(null);
@@ -765,6 +772,36 @@ export function LifeOSProvider({ children }) {
     loadAiInsights();
   }, [loadAiInsights]);
 
+  const loadAiVaultDocuments = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setAiVaultStatus('not-configured');
+      return [];
+    }
+    if (!authUser) {
+      setAiVaultDocuments([]);
+      setAiVaultStatus('no-session');
+      return [];
+    }
+
+    setAiVaultStatus('loading');
+    setAiVaultError('');
+    try {
+      const rows = await aiReportApi.list({ limit: 20 });
+      if (lastAuthUserId.current !== authUser.id) return [];
+      setAiVaultDocuments(rows ?? []);
+      setAiVaultStatus('ready');
+      return rows ?? [];
+    } catch (error) {
+      setAiVaultError(brainErrorMessage(error, 'Failed to load Brain Vault.'));
+      setAiVaultStatus('error');
+      return [];
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    loadAiVaultDocuments();
+  }, [loadAiVaultDocuments]);
+
   const setUnsavedWork = useCallback((sourceId, meaningful, label = '') => {
     if (!sourceId) return;
     setUnsavedWorkBySource((current) => {
@@ -812,6 +849,7 @@ export function LifeOSProvider({ children }) {
       ['ai_chat_messages', loadAiChatMessages(activeAiThreadId)],
       ['ai_memories', loadAiMemories()],
       ['ai_insights', loadAiInsights()],
+      ['ai_vault', loadAiVaultDocuments()],
       ['ai_actions', loadAiActionLogs(10)],
     ];
 
@@ -853,6 +891,7 @@ export function LifeOSProvider({ children }) {
     loadAiChatThreads,
     loadAiInsights,
     loadAiMemories,
+    loadAiVaultDocuments,
     loadAllCalendarEvents,
     loadExpenseMonth,
     loadExpenses,
@@ -1520,6 +1559,26 @@ export function LifeOSProvider({ children }) {
         setAiInsights((prev) => prev.filter((insight) => insight.id !== insightId));
         return archived;
       },
+      reloadAiVaultDocuments: loadAiVaultDocuments,
+      createAiVaultDocument: async (payload) => {
+        if (!authUser) throw new Error('Sign in before saving to Brain Vault.');
+        const created = await aiReportApi.create(payload);
+        setAiVaultDocuments((prev) => sortAiVaultDocuments([created, ...prev]));
+        setAiVaultStatus('ready');
+        return created;
+      },
+      archiveAiVaultDocument: async (documentId) => {
+        const archived = await aiReportApi.archive(documentId);
+        setAiVaultDocuments((prev) => prev.filter((document) => document.id !== documentId));
+        return archived;
+      },
+      saveBrainMessageToVault: async (payload) => {
+        if (!authUser) throw new Error('Sign in before saving to Brain Vault.');
+        const created = await aiReportApi.saveMessage(payload);
+        setAiVaultDocuments((prev) => sortAiVaultDocuments([created, ...prev]));
+        setAiVaultStatus('ready');
+        return created;
+      },
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,
@@ -1570,7 +1629,7 @@ export function LifeOSProvider({ children }) {
           };
         }),
     }),
-    [activeAiThreadId, activeWorkoutId, aiChatThreads, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadAiChatMessages, loadAiChatThreads, loadAiInsights, loadAiMemories, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, refreshLifeOS, setActiveTab, setUnsavedWork, workoutSessions, workoutTemplates],
+    [activeAiThreadId, activeWorkoutId, aiChatThreads, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadAiChatMessages, loadAiChatThreads, loadAiInsights, loadAiMemories, loadAiVaultDocuments, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, refreshLifeOS, setActiveTab, setUnsavedWork, workoutSessions, workoutTemplates],
   );
 
   const value = {
@@ -1622,6 +1681,9 @@ export function LifeOSProvider({ children }) {
     aiInsights,
     aiInsightsError,
     aiInsightsStatus,
+    aiVaultDocuments,
+    aiVaultError,
+    aiVaultStatus,
     refreshState,
     refreshError,
     lastRefreshAt,
@@ -1716,6 +1778,10 @@ function sortMemos(rows = []) {
 
     return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
   });
+}
+
+function sortAiVaultDocuments(rows = []) {
+  return rows.slice().sort((a, b) => new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0));
 }
 
 function sortProjects(rows = []) {
@@ -2051,7 +2117,7 @@ function projectErrorMessage(error, fallback) {
 function brainErrorMessage(error, fallback) {
   const message = String(error?.message ?? '');
   const isMissingTable = error?.code === '42P01'
-    || /ai_chat_threads|ai_chat_messages|ai_memories|ai_insights/i.test(message)
+    || /ai_chat_threads|ai_chat_messages|ai_memories|ai_insights|ai_vault_documents|ai_vault_chunks/i.test(message)
       && /does not exist|not found|schema cache/i.test(message);
   if (isMissingTable) {
     return 'Brain persistence tables are missing. Apply supabase/schema.sql, then reload.';

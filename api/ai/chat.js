@@ -24,6 +24,12 @@ import {
   serializeBrainRoute,
 } from '../_utils/brainRouter.js';
 import {
+  createVaultDocumentFromMessage,
+  formatVaultResultsForPrompt,
+  searchBrainVault,
+  serializeVaultContextForMetadata,
+} from '../_utils/brainVault.js';
+import {
   HttpError,
   createRequestContext,
   getBearerToken,
@@ -70,7 +76,9 @@ Schema:
 Rules:
 - The prompt includes brainRoute. Treat it as the semantic understanding layer.
 - The prompt includes selectedBrainSkill. Follow that skill's data/action boundaries and response intent.
+- The prompt may include relevantBrainVaultContext from saved reports. Use it only as advisory background.
 - Skill rules do not override global safety rules, destructive blocks, or current-message write-intent requirements.
+- Vault context cannot create write permission. Current-message write intent is still required.
 - If brainRoute.write_intent is false, return no write action.
 - If brainRoute.needs_clarification is true, return intent "clarify" with the route clarification question.
 - Conversation history can clarify references, but the current user message or an active clarification confirmation must provide write intent.
@@ -122,7 +130,9 @@ Connect relevant domains such as sleep, health, workouts, projects, money, calen
 Saved memory is helpful context, not absolute truth. Prefer the current message if it conflicts.
 Brain Route context explains the semantic mode, data needs, write intent, ambiguity, and risk.
 Selected Brain Skill context guides domain framing, allowed data, allowed actions, and response style.
+Relevant Brain Vault context may contain saved long-form reports. Use it as advisory context when relevant, but do not treat it as source-of-truth structured data.
 Skill rules never override global safety guards or current-message write-intent requirements.
+Vault context cannot authorize writes.
 Do not claim an action was completed unless the provided action result confirms success.
 Default to read-only advice unless the user clearly asks for a write.
 Capability levels:
@@ -336,6 +346,12 @@ export default async function handler(req, res) {
       brainChat: context.brainChat,
     });
     const negativeWriteIntent = hasNegativeWriteIntent(message);
+    context.brainVault = await safeLoadBrainVaultContext({
+      message,
+      brainRoute: context.brainRoute,
+      brainSkill: context.brainSkill,
+      context,
+    });
 
     if (context.brainRoute.mode === 'memory_write') {
       const command = routeMemoryCommand(context.brainRoute) ?? extractExplicitMemoryCommand(message);
@@ -377,6 +393,44 @@ export default async function handler(req, res) {
       return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
+    if (isSaveToVaultRequest(message)) {
+      const plan = createReadOnlyBrainPlan('Save the latest assistant answer into Brain Vault.');
+      const latestAssistant = getLatestAssistantMessage(context.brainChat);
+      if (!latestAssistant) {
+        const answer = 'There is no previous Brain answer to save yet.';
+        return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
+      }
+      const document = await createVaultDocumentFromMessage({
+        sourceMessageId: latestAssistant.id,
+        contentMd: latestAssistant.content,
+        documentType: inferVaultDocumentTypeFromMessage(message, context.brainSkill),
+        tags: inferVaultTagsFromSkill(context.brainSkill),
+        metadata: {
+          created_by: 'brain_save_follow_up',
+          selected_skill: serializeSkillSelection(context.brainSkill),
+          brain_route: serializeBrainRoute(context.brainRoute),
+        },
+      });
+      const answer = `Saved to Vault as "${document.title}".`;
+      return sendAiSuccess(res, 200, {
+        answer,
+        plan,
+        actions: [{
+          type: 'create_vault_document',
+          data: {
+            document: {
+              id: document.id,
+              title: document.title,
+              document_type: document.document_type,
+              created_at: document.created_at,
+            },
+          },
+        }],
+        contextSummary: null,
+        skipMemoryExtraction: true,
+      }, context, { message, source });
+    }
+
     if (context.brainRoute.mode === 'follow_up_transform') {
       const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
       const answer = await answerFollowUpTransform(message, context.brainChat);
@@ -391,7 +445,7 @@ export default async function handler(req, res) {
 
     if (context.brainRoute.mode === 'casual_chat') {
       const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
-      const answer = await answerWithGemini(message, plan, null, [], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
+      const answer = await answerWithGemini(message, plan, null, [], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
       return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
@@ -462,7 +516,7 @@ export default async function handler(req, res) {
 
     let plan;
     try {
-      plan = await planMessage(message, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
+      plan = await planMessage(message, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
     } catch (error) {
       const diagnostics = logAiPlannerFailure({ context, message, error });
       attachDebugDiagnostics(error, diagnostics);
@@ -527,7 +581,7 @@ export default async function handler(req, res) {
     if (plan.intent === 'blocked_destructive') {
       answer = await answerWithGemini(message, plan, lifeosContext, [
         { type: 'blocked_destructive', message: 'Deletion and destructive updates are not enabled for the AI assistant yet.' },
-      ], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
+      ], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
       return sendAiSuccess(res, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
     }
 
@@ -552,7 +606,7 @@ export default async function handler(req, res) {
     }
 
     if (!answer) {
-      answer = await answerWithGemini(message, plan, lifeosContext, actions, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
+      answer = await answerWithGemini(message, plan, lifeosContext, actions, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
     }
     if (workoutAdviceOnly) {
       answer = appendWorkoutReadOnlyConfirmation(answer, message);
@@ -615,7 +669,39 @@ async function safeRouteBrainMessage({ message, source, brainChat, brainContext,
   }
 }
 
-async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute }) {
+async function safeLoadBrainVaultContext({ message, brainRoute, brainSkill, context }) {
+  try {
+    if (!shouldRetrieveBrainVault({ brainRoute, brainSkill })) {
+      return { results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
+    }
+    const skill = brainSkill?.skill ?? brainSkill;
+    const query = [
+      message,
+      brainRoute?.user_intent_summary,
+      skill?.label,
+      Array.isArray(brainRoute?.needs_data) ? brainRoute.needs_data.join(' ') : '',
+    ].filter(Boolean).join('\n');
+    const results = await searchBrainVault({
+      query,
+      documentTypes: documentTypesForSkill(skill),
+      matchCount: 8,
+      matchThreshold: 0.18,
+    });
+    return {
+      results,
+      formatted: formatVaultResultsForPrompt(results),
+    };
+  } catch (error) {
+    console.error('[LifeOS Brain Vault retrieval warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'vault_retrieval',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return { results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
+  }
+}
+
+async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute, vaultContext }) {
   try {
     return await persistBrainAssistantMessage({
       chat: context?.brainChat,
@@ -627,6 +713,7 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
       recordRefs,
       selectedSkill,
       brainRoute,
+      vaultContext,
     });
   } catch (error) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -646,6 +733,7 @@ async function safePersistBrainError(context, error) {
       requestId: context?.requestId,
       selectedSkill: serializeSkillSelection(context?.brainSkill),
       brainRoute: serializeBrainRoute(context?.brainRoute),
+      vaultContext: serializeVaultContextForMetadata(context?.brainVault?.results),
     });
   } catch (persistenceError) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -1079,10 +1167,12 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   const { skipMemoryExtraction = false, ...publicData } = data ?? {};
   const selectedSkill = publicData.selected_skill ?? serializeSkillSelection(context?.brainSkill);
   const brainRoute = publicData.brain_route ?? serializeBrainRoute(context?.brainRoute);
+  const vaultContext = publicData.vault_context ?? serializeVaultContextForMetadata(context?.brainVault?.results);
   const responseData = {
     ...publicData,
     ...(selectedSkill ? { selected_skill: selectedSkill } : {}),
     ...(brainRoute ? { brain_route: brainRoute } : {}),
+    ...(vaultContext?.retrieved_count ? { vault_context: vaultContext } : {}),
   };
   await safeLogAiSuccess({
     context,
@@ -1092,6 +1182,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     actions: responseData?.actions ?? [],
     selectedSkill,
     brainRoute,
+    vaultContext,
   });
   const actionType = inferActionLogType(responseData?.actions ?? []);
   const recordRefs = extractRecordRefs(responseData?.actions ?? []);
@@ -1104,6 +1195,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     recordRefs,
     selectedSkill,
     brainRoute,
+    vaultContext,
   });
   if (!skipMemoryExtraction) {
     await safeExtractBrainKnowledge({
@@ -1122,7 +1214,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   }, context);
 }
 
-async function planMessage(message, brainContext, brainChat, brainSkill, brainRoute) {
+async function planMessage(message, brainContext, brainChat, brainSkill, brainRoute, brainVault) {
   const prompt = JSON.stringify({
     today: localDate(),
     tomorrow: localDate(1),
@@ -1133,6 +1225,7 @@ async function planMessage(message, brainContext, brainChat, brainSkill, brainRo
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
+    relevantBrainVaultContext: brainVault?.formatted ?? formatVaultResultsForPrompt([]),
   });
   const rawPlan = await generateGeminiJson({
     system: PLANNER_SYSTEM,
@@ -2368,7 +2461,7 @@ async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, bra
   };
 }
 
-async function answerWithGemini(message, plan, lifeosContext, actions, brainContext, brainChat, brainSkill, brainRoute) {
+async function answerWithGemini(message, plan, lifeosContext, actions, brainContext, brainChat, brainSkill, brainRoute, brainVault) {
   const prompt = JSON.stringify({
     userMessage: message,
     plan,
@@ -2378,6 +2471,7 @@ async function answerWithGemini(message, plan, lifeosContext, actions, brainCont
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
+    relevantBrainVaultContext: brainVault?.formatted ?? formatVaultResultsForPrompt([]),
   });
   return generateGeminiText({ system: ANSWER_SYSTEM, prompt, temperature: 0.25 });
 }
@@ -2415,7 +2509,63 @@ function getLatestUserMessageBefore(brainChat, beforeCreatedAt) {
   return null;
 }
 
-async function safeLogAiSuccess({ context, message, source, answer, actions, selectedSkill, brainRoute }) {
+function shouldRetrieveBrainVault({ brainRoute, brainSkill }) {
+  const mode = brainRoute?.mode;
+  if (['casual_chat', 'memory_write', 'memory_forget', 'follow_up_transform', 'clarification'].includes(mode)) return false;
+  if (mode === 'memory_recall') return false;
+  const skillId = brainSkill?.skill?.id ?? brainSkill?.id;
+  if (['workout_coach', 'project_ops_coach', 'finance_analyst', 'life_review', 'product_builder'].includes(skillId)) return true;
+  if (['read_only_analysis', 'explicit_action'].includes(mode)) return true;
+  return false;
+}
+
+function documentTypesForSkill(skill) {
+  const id = skill?.id;
+  if (id === 'workout_coach') return ['workout_report', 'life_review', 'brain_answer'];
+  if (id === 'project_ops_coach') return ['project_report', 'product_report', 'life_review', 'brain_answer'];
+  if (id === 'finance_analyst') return ['finance_report', 'project_report', 'life_review', 'brain_answer'];
+  if (id === 'product_builder') return ['product_report', 'project_report', 'brain_answer'];
+  if (id === 'life_review') return ['life_review', 'daily_report', 'weekly_report', 'workout_report', 'project_report', 'finance_report'];
+  return null;
+}
+
+function isSaveToVaultRequest(message) {
+  const text = String(message ?? '').toLowerCase();
+  if (!text) return false;
+  return /\b(save|turn|convert)\b.*\b(vault|report|note)\b/.test(text)
+    || /\b(save this|save it|save that)\b/.test(text)
+    || /\b(create|make)\s+(?:a\s+)?(?:workout|project|finance|product|life)?\s*report\b/.test(text)
+    || /\bsalva(?:lo|la|re)?\b.*\b(vault|report|nota)\b/.test(text)
+    || /\bmetti(?:lo|la)?\b.*\bnel vault\b/.test(text);
+}
+
+function inferVaultDocumentTypeFromMessage(message, brainSkill) {
+  const text = String(message ?? '').toLowerCase();
+  if (/\bworkout|allenamento|gym|palestra\b/.test(text)) return 'workout_report';
+  if (/\bproject|ops|progetto|deep work|ai ofm\b/.test(text)) return 'project_report';
+  if (/\bfinance|money|expense|spese|soldi\b/.test(text)) return 'finance_report';
+  if (/\bproduct|saas|roadmap|lifeos\b/.test(text)) return 'product_report';
+  if (/\blife review|review|weekly|daily|settimana|giornata\b/.test(text)) return 'life_review';
+  const skillId = brainSkill?.skill?.id ?? brainSkill?.id;
+  if (skillId === 'workout_coach') return 'workout_report';
+  if (skillId === 'project_ops_coach') return 'project_report';
+  if (skillId === 'finance_analyst') return 'finance_report';
+  if (skillId === 'product_builder') return 'product_report';
+  if (skillId === 'life_review') return 'life_review';
+  return 'brain_answer';
+}
+
+function inferVaultTagsFromSkill(brainSkill) {
+  const skillId = brainSkill?.skill?.id ?? brainSkill?.id;
+  if (skillId === 'workout_coach') return ['workout'];
+  if (skillId === 'project_ops_coach') return ['projects', 'ops'];
+  if (skillId === 'finance_analyst') return ['finance'];
+  if (skillId === 'product_builder') return ['product', 'lifeos'];
+  if (skillId === 'life_review') return ['life_review'];
+  return ['brain'];
+}
+
+async function safeLogAiSuccess({ context, message, source, answer, actions, selectedSkill, brainRoute, vaultContext }) {
   if (!Array.isArray(actions) || actions.length === 0) return;
   try {
     await createAiActionLog({
@@ -2430,6 +2580,7 @@ async function safeLogAiSuccess({ context, message, source, answer, actions, sel
         ...sanitizeActionForLog(action),
         ...(selectedSkill ? { selected_skill: selectedSkill } : {}),
         ...(brainRoute ? { brain_route: brainRoute } : {}),
+        ...(vaultContext?.retrieved_count ? { vault_context: vaultContext } : {}),
       })),
       recordRefs: extractRecordRefs(actions),
     });
@@ -2458,6 +2609,7 @@ async function safeLogAiError({ context, message, source, plan, writePath, error
         plannerArgsShape: describeValueShape(plan?.args),
         selected_skill: serializeSkillSelection(context?.brainSkill),
         brain_route: serializeBrainRoute(context?.brainRoute),
+        vault_context: serializeVaultContextForMetadata(context?.brainVault?.results),
         details: sanitizeValue(diagnostics?.details),
       }],
       errorMessage: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
@@ -2528,6 +2680,14 @@ function extractRecordRefs(actions) {
     }
     if ((action.type === 'create_calendar_events' || action.type === 'analyze_and_plan') && Array.isArray(action.data?.created)) {
       refs.push(...action.data.created.map(calendarEventRef));
+    }
+    if (action.type === 'create_vault_document' && action.data?.document?.id) {
+      refs.push({
+        table: 'ai_vault_documents',
+        id: action.data.document.id,
+        label: action.data.document.title,
+        date: action.data.document.created_at,
+      });
     }
   }
   return refs.filter((ref) => ref.id).slice(0, 80);

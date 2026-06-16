@@ -103,7 +103,7 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Sign out.
 2. Confirm the app returns to the auth screen.
 3. Sign in as a different user.
-4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, project money entries, daily reviews, AI action logs, Brain threads/messages, memories, and insights do not appear.
+4. Confirm the previous user's health logs, workouts, expenses, calendar events, memos, projects, project sessions, project money entries, daily reviews, AI action logs, Brain threads/messages, memories, insights, and Vault documents do not appear.
 5. Create one record and one Brain conversation as the second user.
 6. Sign out and sign back in as the first user.
 7. Confirm the first user's records are still present and the second user's records and Brain context are hidden.
@@ -178,7 +178,7 @@ Run the focused checklists after the full flow:
 18. Send `I might need a nap tomorrow afternoon, don't schedule a memo` and confirm no memo/event/error action is created.
 19. After a workout analysis answer, send `mettile in ordine cronologico` and confirm Brain transforms the previous answer instead of treating it as casual chat.
 20. Refresh `/assistant`, send `fammi una tabella`, and confirm the persistent conversation history still allows the follow-up transform.
-21. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
+21. Pull to refresh and confirm threads, active messages, memories, insights, Vault documents, and Recent Actions reload without wiping typed Brain input.
 22. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
 23. Open a Recent Action and confirm its detail view still works.
 24. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
@@ -190,6 +190,13 @@ Run the focused checklists after the full flow:
 30. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
 31. Confirm Recent Actions remains clean when a route blocks writes or asks clarification.
 32. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
+33. Save an assistant workout/product/project answer to Vault and confirm it appears in the Vault panel.
+34. Open the saved Vault document and confirm the full content renders safely with tags and metadata.
+35. Archive the Vault document and confirm it is removed from the active panel.
+36. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
+37. If embeddings are not configured, confirm saving still works and Brain does not crash.
+38. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
+39. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
 
 ## Workout Advice Write Boundary
 
