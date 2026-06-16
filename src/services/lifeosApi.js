@@ -1026,6 +1026,19 @@ export const aiReportApi = {
     });
     return result.document;
   },
+
+  async reembed(payload = {}) {
+    const result = await fetchAiReports('/api/ai/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'reembed',
+        limit: payload.limit ?? 25,
+        statuses: payload.statuses,
+        includeWrongModel: payload.includeWrongModel ?? true,
+      }),
+    });
+    return result.result;
+  },
 };
 
 export const lifeosApi = {

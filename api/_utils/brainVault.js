@@ -1,4 +1,4 @@
-import { EMBEDDING_MODEL, generateEmbedding, isEmbeddingConfigured } from './embeddings.js';
+import { EMBEDDING_DIMENSIONS, EMBEDDING_MODEL, EMBEDDING_PROVIDER, generateEmbedding, isEmbeddingConfigured } from './embeddings.js';
 import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 
@@ -265,9 +265,19 @@ export function chunkVaultContent(contentMd) {
 export async function embedVaultDocument(documentId, { userId = getActionUserId() } = {}) {
   if (!isUuid(documentId)) throw new HttpError(400, 'documentId must be a valid vault document id.');
   const client = getSupabaseAdmin();
+  const documentResult = await client
+    .from('ai_vault_documents')
+    .select('id, title')
+    .eq('id', documentId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (documentResult.error) throw documentResult.error;
+  const document = documentResult.data;
+  if (!document) throw new HttpError(404, 'Vault document not found.');
+
   const chunkResult = await client
     .from('ai_vault_chunks')
-    .select('id, content, embedding_status')
+    .select('id, content, embedding_status, metadata')
     .eq('document_id', documentId)
     .eq('user_id', userId)
     .order('chunk_index', { ascending: true });
@@ -278,7 +288,16 @@ export async function embedVaultDocument(documentId, { userId = getActionUserId(
   if (!isEmbeddingConfigured()) {
     const updateResult = await client
       .from('ai_vault_chunks')
-      .update({ embedding_status: 'skipped', embedding_model: null })
+      .update({
+        embedding_status: 'skipped',
+        embedding_model: EMBEDDING_MODEL,
+        metadata: {
+          embedding_provider: EMBEDDING_PROVIDER,
+          embedding_dimensions: EMBEDDING_DIMENSIONS,
+          embedding_input_format: 'title_text_document',
+          reason: 'missing_gemini_api_key',
+        },
+      })
       .eq('document_id', documentId)
       .eq('user_id', userId);
     if (updateResult.error) throw updateResult.error;
@@ -289,11 +308,23 @@ export async function embedVaultDocument(documentId, { userId = getActionUserId(
   let failed = 0;
   for (const chunk of chunks) {
     try {
-      const embedding = await generateEmbedding(chunk.content);
+      const embedding = await generateEmbedding(chunk.content, {
+        inputType: 'document',
+        title: document.title,
+      });
       if (!embedding) {
         const updateResult = await client
           .from('ai_vault_chunks')
-          .update({ embedding_status: 'skipped', embedding_model: null })
+          .update({
+            embedding_status: 'skipped',
+            embedding_model: EMBEDDING_MODEL,
+            metadata: mergeChunkMetadata(chunk.metadata, {
+              embedding_provider: EMBEDDING_PROVIDER,
+              embedding_dimensions: EMBEDDING_DIMENSIONS,
+              embedding_input_format: 'title_text_document',
+              reason: 'missing_gemini_api_key',
+            }),
+          })
           .eq('id', chunk.id)
           .eq('user_id', userId);
         if (updateResult.error) throw updateResult.error;
@@ -305,6 +336,11 @@ export async function embedVaultDocument(documentId, { userId = getActionUserId(
           embedding,
           embedding_model: EMBEDDING_MODEL,
           embedding_status: 'ready',
+          metadata: mergeChunkMetadata(chunk.metadata, {
+            embedding_provider: EMBEDDING_PROVIDER,
+            embedding_dimensions: EMBEDDING_DIMENSIONS,
+            embedding_input_format: 'title_text_document',
+          }),
         })
         .eq('id', chunk.id)
         .eq('user_id', userId);
@@ -317,7 +353,12 @@ export async function embedVaultDocument(documentId, { userId = getActionUserId(
         .update({
           embedding_status: 'failed',
           embedding_model: EMBEDDING_MODEL,
-          metadata: { embedding_error: sanitizeError(error) },
+          metadata: mergeChunkMetadata(chunk.metadata, {
+            embedding_provider: EMBEDDING_PROVIDER,
+            embedding_dimensions: EMBEDDING_DIMENSIONS,
+            embedding_input_format: 'title_text_document',
+            embedding_error: sanitizeError(error),
+          }),
         })
         .eq('id', chunk.id)
         .eq('user_id', userId);
@@ -339,7 +380,7 @@ export async function searchBrainVault({
 
   let embedding;
   try {
-    embedding = await generateEmbedding(text);
+    embedding = await generateEmbedding(text, { inputType: 'query' });
   } catch (error) {
     console.error('[LifeOS Brain Vault embedding search warning]', JSON.stringify({
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
@@ -360,6 +401,132 @@ export async function searchBrainVault({
     return [];
   }
   return result.data ?? [];
+}
+
+export async function reembedVaultChunks({
+  userId = getActionUserId(),
+  limit = 25,
+  statuses = ['skipped', 'failed', 'pending'],
+  includeWrongModel = true,
+} = {}) {
+  const maxRows = clampInt(limit, 1, 100, 25);
+  const candidates = await loadReembedCandidates({
+    userId,
+    limit: maxRows,
+    statuses: normalizeEmbeddingStatuses(statuses),
+    includeWrongModel: includeWrongModel !== false,
+  });
+
+  if (!candidates.length) {
+    return {
+      configured: isEmbeddingConfigured(),
+      processed_count: 0,
+      ready_count: 0,
+      failed_count: 0,
+      skipped_count: 0,
+    };
+  }
+
+  const client = getSupabaseAdmin();
+  if (!isEmbeddingConfigured()) {
+    for (const chunk of candidates) {
+      const updateResult = await client
+        .from('ai_vault_chunks')
+        .update({
+          embedding_status: 'skipped',
+          embedding_model: EMBEDDING_MODEL,
+          metadata: mergeChunkMetadata(chunk.metadata, {
+            embedding_provider: EMBEDDING_PROVIDER,
+            embedding_dimensions: EMBEDDING_DIMENSIONS,
+            embedding_input_format: 'title_text_document',
+            reason: 'missing_gemini_api_key',
+          }),
+        })
+        .eq('id', chunk.id)
+        .eq('user_id', userId);
+      if (updateResult.error) throw updateResult.error;
+    }
+    return {
+      configured: false,
+      processed_count: candidates.length,
+      ready_count: 0,
+      failed_count: 0,
+      skipped_count: candidates.length,
+    };
+  }
+
+  let ready = 0;
+  let failed = 0;
+  for (const chunk of candidates) {
+    const title = chunk.ai_vault_documents?.title || 'none';
+    try {
+      const embedding = await generateEmbedding(chunk.content, {
+        inputType: 'document',
+        title,
+      });
+      if (!embedding) {
+        const updateResult = await client
+          .from('ai_vault_chunks')
+          .update({
+            embedding_status: 'skipped',
+            embedding_model: EMBEDDING_MODEL,
+            metadata: mergeChunkMetadata(chunk.metadata, {
+              embedding_provider: EMBEDDING_PROVIDER,
+              embedding_dimensions: EMBEDDING_DIMENSIONS,
+              embedding_input_format: 'title_text_document',
+              reason: 'missing_gemini_api_key',
+            }),
+          })
+          .eq('id', chunk.id)
+          .eq('user_id', userId);
+        if (updateResult.error) throw updateResult.error;
+        continue;
+      }
+
+      const updateResult = await client
+        .from('ai_vault_chunks')
+        .update({
+          embedding,
+          embedding_model: EMBEDDING_MODEL,
+          embedding_status: 'ready',
+          metadata: mergeChunkMetadata(chunk.metadata, {
+            embedding_provider: EMBEDDING_PROVIDER,
+            embedding_dimensions: EMBEDDING_DIMENSIONS,
+            embedding_input_format: 'title_text_document',
+            reembedded_at: new Date().toISOString(),
+          }),
+        })
+        .eq('id', chunk.id)
+        .eq('user_id', userId);
+      if (updateResult.error) throw updateResult.error;
+      ready += 1;
+    } catch (error) {
+      failed += 1;
+      const updateResult = await client
+        .from('ai_vault_chunks')
+        .update({
+          embedding_status: 'failed',
+          embedding_model: EMBEDDING_MODEL,
+          metadata: mergeChunkMetadata(chunk.metadata, {
+            embedding_provider: EMBEDDING_PROVIDER,
+            embedding_dimensions: EMBEDDING_DIMENSIONS,
+            embedding_input_format: 'title_text_document',
+            embedding_error: sanitizeError(error),
+          }),
+        })
+        .eq('id', chunk.id)
+        .eq('user_id', userId);
+      if (updateResult.error) throw updateResult.error;
+    }
+  }
+
+  return {
+    configured: true,
+    processed_count: candidates.length,
+    ready_count: ready,
+    failed_count: failed,
+    skipped_count: candidates.length - ready - failed,
+  };
 }
 
 export function extractVaultLinks(contentMd) {
@@ -481,6 +648,54 @@ function normalizeDocumentTypeFilter(value) {
   const items = Array.isArray(value) ? value : String(value).split(',');
   const filtered = items.map((item) => String(item).trim()).filter((item) => DOCUMENT_TYPES.has(item));
   return filtered.length ? filtered : null;
+}
+
+async function loadReembedCandidates({ userId, limit, statuses, includeWrongModel }) {
+  const client = getSupabaseAdmin();
+  const candidates = new Map();
+
+  if (statuses.length) {
+    const statusResult = await client
+      .from('ai_vault_chunks')
+      .select('id, document_id, content, embedding_status, embedding_model, metadata, created_at, ai_vault_documents!inner(id, title, status)')
+      .eq('user_id', userId)
+      .eq('ai_vault_documents.status', 'active')
+      .in('embedding_status', statuses)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    if (statusResult.error) throw statusResult.error;
+    for (const row of statusResult.data ?? []) candidates.set(row.id, row);
+  }
+
+  if (includeWrongModel && candidates.size < limit) {
+    const remaining = limit - candidates.size;
+    const modelResult = await client
+      .from('ai_vault_chunks')
+      .select('id, document_id, content, embedding_status, embedding_model, metadata, created_at, ai_vault_documents!inner(id, title, status)')
+      .eq('user_id', userId)
+      .eq('ai_vault_documents.status', 'active')
+      .or(`embedding_model.is.null,embedding_model.neq.${EMBEDDING_MODEL}`)
+      .order('created_at', { ascending: true })
+      .limit(remaining);
+    if (modelResult.error) throw modelResult.error;
+    for (const row of modelResult.data ?? []) candidates.set(row.id, row);
+  }
+
+  return Array.from(candidates.values()).slice(0, limit);
+}
+
+function normalizeEmbeddingStatuses(value) {
+  const allowed = new Set(['pending', 'ready', 'failed', 'skipped']);
+  const raw = Array.isArray(value) ? value : String(value ?? '').split(',');
+  const statuses = raw.map((item) => String(item).trim()).filter((item) => allowed.has(item));
+  return statuses.length ? Array.from(new Set(statuses)) : ['skipped', 'failed', 'pending'];
+}
+
+function mergeChunkMetadata(current, patch) {
+  return {
+    ...safeObject(current),
+    ...safeObject(patch),
+  };
 }
 
 function safeObject(value) {

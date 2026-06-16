@@ -15,6 +15,7 @@ import {
   createVaultDocumentFromMessage,
   getVaultDocument,
   listVaultDocuments,
+  reembedVaultChunks,
   updateVaultDocument,
 } from '../_utils/brainVault.js';
 
@@ -65,6 +66,15 @@ export default async function handler(req, res) {
     if (action === 'update') {
       const document = await updateVaultDocument({ id: body.id, patch: body.patch ?? body });
       return sendSuccess(res, 200, { document }, context);
+    }
+
+    if (action === 'reembed') {
+      const result = await reembedVaultChunks({
+        limit: body.limit,
+        statuses: body.statuses,
+        includeWrongModel: body.includeWrongModel,
+      });
+      return sendSuccess(res, 200, { result }, context);
     }
 
     if (action !== 'create') throw new HttpError(400, 'Unsupported reports action.');

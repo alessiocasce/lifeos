@@ -196,7 +196,8 @@ Run the focused checklists after the full flow:
 36. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
 37. If embeddings are not configured, confirm saving still works and Brain does not crash.
 38. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
-39. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
+39. Click Vault `Re-embed` and confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
+40. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
 
 ## Workout Advice Write Boundary
 

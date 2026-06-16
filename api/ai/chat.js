@@ -411,7 +411,7 @@ export default async function handler(req, res) {
           brain_route: serializeBrainRoute(context.brainRoute),
         },
       });
-      const answer = `Saved to Vault as "${document.title}".`;
+      const answer = formatVaultSaveAnswer(document);
       return sendAiSuccess(res, 200, {
         answer,
         plan,
@@ -2563,6 +2563,18 @@ function inferVaultTagsFromSkill(brainSkill) {
   if (skillId === 'product_builder') return ['product', 'lifeos'];
   if (skillId === 'life_review') return ['life_review'];
   return ['brain'];
+}
+
+function formatVaultSaveAnswer(document) {
+  const base = `Saved to Vault as "${document.title}".`;
+  const result = document.embedding_result;
+  if (result?.configured === false && Number(result.skipped ?? 0) > 0) {
+    return `${base} Semantic embedding was skipped because GEMINI_API_KEY is missing.`;
+  }
+  if (Number(result?.failed ?? 0) > 0) {
+    return `${base} Embeddings failed for ${result.failed} chunk${Number(result.failed) === 1 ? '' : 's'}; use Re-embed later.`;
+  }
+  return base;
 }
 
 async function safeLogAiSuccess({ context, message, source, answer, actions, selectedSkill, brainRoute, vaultContext }) {

@@ -1579,6 +1579,12 @@ export function LifeOSProvider({ children }) {
         setAiVaultStatus('ready');
         return created;
       },
+      reembedAiVaultDocuments: async (payload = {}) => {
+        if (!authUser) throw new Error('Sign in before repairing Brain Vault embeddings.');
+        const result = await aiReportApi.reembed(payload);
+        await loadAiVaultDocuments();
+        return result;
+      },
       reloadDailyReviews: loadDailyReviews,
       reloadAiActionLogs: loadAiActionLogs,
       loadAiActionLogs,

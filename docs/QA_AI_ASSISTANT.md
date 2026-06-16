@@ -8,8 +8,7 @@ Run this after deploying to Vercel with:
 - `LIFEOS_ACTION_TOKEN`
 - `GEMINI_API_KEY`
 - optional `GEMINI_MODEL`
-- optional `OPENAI_API_KEY` for Brain Vault semantic embeddings
-- optional `EMBEDDING_MODEL` defaults to `text-embedding-3-small`
+- optional `GEMINI_EMBEDDING_MODEL=gemini-embedding-2`
 
 The in-app Assistant sends the signed-in user's Supabase access token to `/api/ai/chat`. The backend verifies that user against `LIFEOS_ACTION_USER_ID`. The endpoint also accepts the action token for trusted server/tool callers.
 
@@ -157,15 +156,18 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 4. Save as `workout_report` and confirm the document appears in the collapsed/expanded Vault panel.
 5. Open the Vault document and confirm the full Markdown-like content renders safely.
 6. Archive the document and confirm it disappears from active Vault documents.
-7. Ask a new related workout question and, if `OPENAI_API_KEY` is configured and schema was rerun, confirm Brain can reuse/reference the saved report as context when relevant.
-8. If `OPENAI_API_KEY` is not configured, confirm saving still works, chunks are skipped, and Brain answers without crashing.
-9. After an assistant answer, send `save this as a workout report`.
-10. Confirm Brain saves the latest assistant answer to Vault and does not create a memo/calendar event.
-11. Confirm the created action log, if shown, uses `create_vault_document` and does not expose raw secrets.
-12. Confirm Vault context is advisory only: a saved report that mentions a schedule or reminder must not create new calendar/memo rows unless the current user message explicitly asks for that write.
-13. Confirm `[[Back Day]]`-style links in saved content appear in document detail metadata if present.
-14. Pull to refresh and confirm Vault documents reload.
-15. Confirm Vault panel and detail modal have no horizontal overflow on mobile.
+7. Confirm saved chunks use Gemini Embedding 2 with `embedding_model = 'gemini-embedding-2'` and 1536 dimensions.
+8. Ask a new related workout question and confirm Brain can reuse/reference the saved report as context when relevant.
+9. Confirm the assistant message metadata includes Vault context when relevant chunks are retrieved.
+10. Temporarily remove or invalidate Gemini embedding access in a test deployment and confirm saving still works, chunks are skipped/failed, and Brain answers without crashing.
+11. Run the Vault Re-embed action and confirm old skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
+12. After an assistant answer, send `save this as a workout report`.
+13. Confirm Brain saves the latest assistant answer to Vault and does not create a memo/calendar event.
+14. Confirm the created action log, if shown, uses `create_vault_document` and does not expose raw secrets.
+15. Confirm Vault context is advisory only: a saved report that mentions a schedule or reminder must not create new calendar/memo rows unless the current user message explicitly asks for that write.
+16. Confirm `[[Back Day]]`-style links in saved content appear in document detail metadata if present.
+17. Pull to refresh and confirm Vault documents reload.
+18. Confirm Vault panel and detail modal have no horizontal overflow on mobile.
 
 ## API Security
 

@@ -93,7 +93,7 @@ GEMINI_API_KEY=...
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
 `GEMINI_API_KEY` is also server-only and must never be exposed through frontend code.
-`OPENAI_API_KEY` is optional and server-only. It enables Brain Vault semantic embeddings; without it, Vault reports still save and retrieval is skipped gracefully.
+Brain Vault semantic embeddings use the same server-only `GEMINI_API_KEY` with Gemini Embedding 2. No OpenAI key is required.
 
 The schema is in `supabase/schema.sql`.
 
@@ -189,7 +189,7 @@ Real/persisted today:
 - Meaningful conversations can extract a small number of durable memory/insight candidates. Simple logs and one-off writes skip extraction.
 - Brain Vault persists markdown-like AI reports in `ai_vault_documents` and chunk records in `ai_vault_chunks`.
 - Brain Vault is a synthesized knowledge/report layer above structured LifeOS tables; it does not replace `health_logs`, workouts, projects, memos, expenses, memories, or insights as source-of-truth data.
-- Vault chunks can be embedded with Supabase pgvector when `OPENAI_API_KEY` is configured. If embeddings are not configured or fail, documents still save and chunks are marked skipped/failed.
+- Vault chunks are embedded with Gemini Embedding 2 through the server-only `GEMINI_API_KEY` and Supabase pgvector. If Gemini embedding is missing, rate-limited, or fails, documents still save and chunks are marked skipped/failed.
 - Obsidian-style links such as `[[Back Day]]` are extracted into document `links` for future graph/backlink features; no graph UI exists yet.
 
 Still mostly mock/local:
@@ -284,7 +284,11 @@ Architecture:
 - Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.
 - Vault context is stored in `ai_chat_messages.metadata.vault_context` for debugging and never creates write permission.
 - Vault context does not replace structured LifeOS tables and cannot authorize calendar, memo, health, expense, project, or workout writes.
-- Embeddings use optional server-side `OPENAI_API_KEY` with `text-embedding-3-small` by default and 1536 dimensions. Missing embedding config marks chunks skipped and keeps the rest of Brain working.
+- Brain Vault embeddings are Gemini-native. The core model is `gemini-embedding-2`, configurable only through optional `GEMINI_EMBEDDING_MODEL`, with fixed 1536-dimension vectors stored in `ai_vault_chunks.embedding`.
+- Gemini Embedding 2 retrieval inputs are formatted in text rather than `task_type`: document chunks use `title: {title} | text: {chunk}` and search queries use `task: search result | query: {query}`.
+- Existing skipped, failed, pending, null-model, or non-`gemini-embedding-2` Vault chunks are excluded from semantic retrieval until repaired through the Vault Re-embed flow.
+- Missing or rate-limited Gemini embeddings do not break Vault document saving; semantic retrieval is unavailable until chunks are ready.
+- Future Vault work can embed screenshots, workout images, PDFs, audio logs, and other multimodal artifacts because Gemini Embedding 2 supports multimodal inputs, but this pass is text-only.
 - Future Morning Briefing, Weekly Review, post-workout reviews, and product reports should save synthesized outputs into Brain Vault, but proactive automation is not implemented yet.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication itself uses normalized title/category/key-term overlap; Brain Vault is the pgvector-backed long-form retrieval layer.

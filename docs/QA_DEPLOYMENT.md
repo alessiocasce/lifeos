@@ -54,8 +54,8 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 10. Send a workout-advice prompt and confirm selected skill `workout_coach` is returned while no calendar event is created.
 11. Inspect the persisted assistant row in `ai_chat_messages` and confirm `metadata.selected_skill` is present for new assistant messages.
 12. Save an assistant response to Brain Vault and confirm the document appears in the Vault panel.
-13. If `OPENAI_API_KEY` is configured, confirm chunks are embedded and a related future Brain question can retrieve the saved report.
-14. If `OPENAI_API_KEY` is not configured, confirm the Vault document still saves and chunks are marked skipped without breaking Brain.
+13. With `GEMINI_API_KEY` configured, confirm chunks are embedded with `embedding_model = 'gemini-embedding-2'` and a related future Brain question can retrieve the saved report.
+14. If Gemini embedding fails or is rate-limited, confirm the Vault document still saves, chunks are marked failed/skipped, and Brain keeps working.
 
 ## Home
 
@@ -125,9 +125,11 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 6. Confirm the `vector` extension is enabled in the `extensions` schema.
 7. Confirm `match_ai_vault_chunks` does not return another user's chunks.
 8. Confirm `match_ai_vault_chunks_for_user` is usable by service-role calls and still filters to the configured target user.
-9. Add server-only `OPENAI_API_KEY` if semantic Vault retrieval is desired.
-10. Optionally set `EMBEDDING_MODEL`; default is `text-embedding-3-small`.
-11. Confirm Brain Skill Architecture still stores skill/route/Vault metadata in existing JSON metadata fields.
+9. Confirm server-only `GEMINI_API_KEY` is deployed for Brain and Brain Vault semantic retrieval.
+10. Optionally set `GEMINI_EMBEDDING_MODEL=gemini-embedding-2`; do not add `OPENAI_API_KEY` for Vault embeddings.
+11. Save a Vault report and confirm chunks are `ready` with `embedding_model = 'gemini-embedding-2'`.
+12. Run the Vault `Re-embed` repair action for old skipped, failed, pending, null-model, or non-Gemini chunks.
+13. Confirm Brain Skill Architecture still stores skill/route/Vault metadata in existing JSON metadata fields.
 
 ## Known Non-Failing Build Warning
 

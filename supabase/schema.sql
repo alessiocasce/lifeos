@@ -1149,6 +1149,7 @@ as $$
   where d.user_id = auth.uid()
     and d.status = 'active'
     and c.embedding_status = 'ready'
+    and c.embedding_model = 'gemini-embedding-2'
     and c.embedding is not null
     and (filter_document_types is null or d.document_type = any(filter_document_types))
     and greatest(0, 1 - (c.embedding <=> query_embedding)) >= match_threshold
@@ -1199,6 +1200,7 @@ as $$
     and (auth.uid() = target_user_id or auth.role() = 'service_role')
     and d.status = 'active'
     and c.embedding_status = 'ready'
+    and c.embedding_model = 'gemini-embedding-2'
     and c.embedding is not null
     and (filter_document_types is null or d.document_type = any(filter_document_types))
     and greatest(0, 1 - (c.embedding <=> query_embedding)) >= match_threshold

@@ -50,6 +50,7 @@ export function AIAssistantTab() {
     reloadHealthLogs,
     reloadMemos,
     renameAiChatThread,
+    reembedAiVaultDocuments,
     saveBrainMessageToVault,
     selectAiChatThread,
     updateAiMemory,
@@ -71,6 +72,8 @@ export function AIAssistantTab() {
   const [vaultSaveDraft, setVaultSaveDraft] = useState({ title: '', documentType: 'brain_answer', tags: '' });
   const [vaultSaveStatus, setVaultSaveStatus] = useState('idle');
   const [vaultSaveError, setVaultSaveError] = useState('');
+  const [vaultRepairStatus, setVaultRepairStatus] = useState('idle');
+  const [vaultRepairMessage, setVaultRepairMessage] = useState('');
 
   const activeThreads = useMemo(
     () => aiChatThreads.filter((thread) => thread.status === 'active'),
@@ -193,7 +196,7 @@ export function AIAssistantTab() {
     setVaultSaveStatus('saving');
     setVaultSaveError('');
     try {
-      await saveBrainMessageToVault({
+      const created = await saveBrainMessageToVault({
         source_message_id: isUuid(vaultSaveMessage.id) ? vaultSaveMessage.id : undefined,
         content_md: vaultSaveMessage.content,
         title: vaultSaveDraft.title,
@@ -208,9 +211,45 @@ export function AIAssistantTab() {
       setVaultSaveStatus('idle');
       setVaultSaveMessage(null);
       setVaultOpen(true);
+      const embeddingResult = created?.embedding_result;
+      if (embeddingResult && embeddingResult.configured === false && Number(embeddingResult.skipped ?? 0) > 0) {
+        setVaultRepairMessage('Saved; Gemini key missing - embeddings skipped.');
+        setVaultRepairStatus('ready');
+      } else if (embeddingResult && Number(embeddingResult.failed ?? 0) > 0) {
+        setVaultRepairMessage('Saved; embeddings failed. Try Re-embed later.');
+        setVaultRepairStatus('error');
+      } else {
+        setVaultRepairMessage('');
+        setVaultRepairStatus('idle');
+      }
     } catch (error) {
       setVaultSaveError(error.message || 'Could not save to Vault.');
       setVaultSaveStatus('error');
+    }
+  };
+
+  const repairVaultEmbeddings = async () => {
+    setVaultRepairStatus('loading');
+    setVaultRepairMessage('');
+    try {
+      const result = await reembedAiVaultDocuments?.({ limit: 25, includeWrongModel: true });
+      const processed = Number(result?.processed_count ?? 0);
+      const ready = Number(result?.ready_count ?? 0);
+      const failed = Number(result?.failed_count ?? 0);
+      const skipped = Number(result?.skipped_count ?? 0);
+      if (!processed) {
+        setVaultRepairMessage('No chunks need repair.');
+      } else if (ready > 0) {
+        setVaultRepairMessage(`Re-embedded ${ready} chunk${ready === 1 ? '' : 's'}.`);
+      } else if (skipped > 0 && !result?.configured) {
+        setVaultRepairMessage('Gemini key missing - embeddings skipped.');
+      } else {
+        setVaultRepairMessage(`Processed ${processed}; ${failed} failed.`);
+      }
+      setVaultRepairStatus('ready');
+    } catch (error) {
+      setVaultRepairStatus('error');
+      setVaultRepairMessage(error.message || 'Embedding repair failed.');
     }
   };
 
@@ -401,17 +440,31 @@ export function AIAssistantTab() {
 
           {vaultOpen ? (
             <div className="grid gap-2 p-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-zinc-500">Long-form Brain answers saved as searchable reports.</p>
-                <button
-                  type="button"
-                  onClick={() => reloadAiVaultDocuments?.()}
-                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-emerald-400/25"
-                >
-                  <RefreshCw size={14} />
-                  Refresh
-                </button>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={repairVaultEmbeddings}
+                    disabled={vaultRepairStatus === 'loading'}
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-emerald-400/25 disabled:opacity-50"
+                  >
+                    {vaultRepairStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Re-embed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => reloadAiVaultDocuments?.()}
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-emerald-400/25"
+                  >
+                    <RefreshCw size={14} />
+                    Refresh
+                  </button>
+                </div>
               </div>
+              {vaultRepairMessage ? (
+                <p className={`text-xs ${vaultRepairStatus === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>{vaultRepairMessage}</p>
+              ) : null}
               {aiVaultStatus === 'loading' && !aiVaultDocuments.length ? (
                 <p className="py-3 text-center text-sm text-zinc-500">Loading Vault...</p>
               ) : aiVaultDocuments.length ? (
