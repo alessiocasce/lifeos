@@ -39,6 +39,33 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 11. Confirm memory extraction failure does not prevent the main assistant response.
 12. Confirm no passwords, tokens, API keys, or secrets are saved as memories.
 
+## Brain Conversation Mode And Write Guards
+
+1. Send `Hello`.
+2. Confirm Brain gives a short greeting, does not dump full LifeOS status, and creates no action.
+3. Send `I haven't trained today`.
+4. Confirm Brain answers conversationally or asks one follow-up and creates no calendar, memo, or health write.
+5. Send `remember my name, Ale`.
+6. Confirm it stores an `identity` memory titled `Name`, does not create a memo, and answers that it will remember the name.
+7. Refresh Brain and confirm the memory panel still shows the name memory.
+8. Send `my name is Ale`.
+9. Confirm it updates/deduplicates the name memory instead of creating duplicate identity rows.
+10. Send `what do you remember about me?`.
+11. Confirm Brain summarizes active memories by category and mentions the memory panel can edit or forget them.
+12. Send `I might need a nap tomorrow afternoon, don't schedule a memo`.
+13. Confirm no memo is created, no raw validation error appears, and Recent Actions is not polluted by a create_memo failure.
+14. Send `don't put this in calendar, but I might train chest tomorrow`.
+15. Confirm no calendar event is created.
+16. Send `remind me to nap tomorrow afternoon`.
+17. Confirm Brain asks for a specific time or otherwise avoids a raw `memo_time` validation error.
+18. Send `remind me to take pill at 8:30pm`.
+19. Confirm a memo is created normally.
+20. Send `schedule chest tomorrow 5pm to 6pm`.
+21. Confirm a calendar event is created normally.
+22. Re-run `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+23. Confirm workout advice remains read-only with no calendar event.
+24. Re-run the Italian mixed day schedule prompt and confirm the day-schedule write path still works.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.

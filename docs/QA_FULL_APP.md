@@ -159,19 +159,27 @@ Run the focused checklists after the full flow:
 ## Brain
 
 1. Run the latest `supabase/schema.sql`, then open Assistant/Brain.
-2. Confirm persistent chat, thread selector, New Chat, `What LifeOS Knows`, and Recent Actions are present.
+2. Confirm persistent chat, expressive thread selector, New Chat, `What LifeOS Knows`, and Recent Actions are present.
 3. Confirm Daily Review is not rendered.
 4. Confirm canned Suggestions or prompt chips are not rendered.
-5. Send a normal analysis prompt and confirm Markdown/callouts still render.
-6. Refresh and confirm persisted user/assistant messages remain.
-7. Create a New Chat and confirm the old thread remains accessible.
-8. Confirm deterministic thread title generation works after the first message.
-9. Add a durable preference with `Remember that...` and confirm it appears in the memory panel.
-10. Edit and archive a memory and confirm both operations persist.
-11. Confirm simple habit/expense/calendar commands do not flood memory.
-12. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
-13. Open a Recent Action and confirm its detail view still works.
-14. On mobile, confirm thread controls and the collapsed memory panel do not overflow.
+5. Confirm the main chat is visually dominant and Memory/Recent Actions are secondary or collapsed on mobile.
+6. Send `Hello` and confirm Brain gives a short greeting, not a full LifeOS status report.
+7. Send `I haven't trained today` and confirm Brain stays conversational with no write action.
+8. Send a normal analysis prompt and confirm Markdown/callouts still render.
+9. Refresh and confirm persisted user/assistant messages remain.
+10. Create a New Chat and confirm the old thread remains accessible.
+11. Rename a thread if the control is visible and confirm the new title persists.
+12. Confirm deterministic thread title generation works after the first message.
+13. Add a durable preference with `Remember that...` and confirm it appears in the memory panel.
+14. Send `remember my name, Ale` and confirm it creates a name memory, not a memo.
+15. Confirm the memory empty state gives compact examples such as `Remember my name is Ale`.
+16. Edit and archive a memory and confirm both operations persist.
+17. Confirm simple habit/expense/calendar commands do not flood memory.
+18. Send `I might need a nap tomorrow afternoon, don't schedule a memo` and confirm no memo/event/error action is created.
+19. Pull to refresh and confirm threads, active messages, memories, insights, and Recent Actions reload without wiping typed Brain input.
+20. Confirm Recent Actions shows a compact preview by default and can expand to more entries.
+21. Open a Recent Action and confirm its detail view still works.
+22. On mobile, confirm thread controls, chat messages, the memory panel, and Recent Actions do not overflow horizontally.
 
 ## Workout Advice Write Boundary
 

@@ -2,11 +2,13 @@ import { generateGeminiJson, generateGeminiText } from '../_utils/gemini.js';
 import {
   beginBrainChat,
   extractAndPersistBrainKnowledge,
+  extractExplicitMemoryCommand,
   formatBrainConversationForPrompt,
   formatBrainContextForPrompt,
   loadBrainContext,
   persistBrainAssistantMessage,
   persistBrainErrorMessage,
+  persistExplicitBrainMemory,
 } from '../_utils/brain.js';
 import {
   HttpError,
@@ -84,6 +86,8 @@ Rules:
 - If the user appears to be inside or about to start a workout, give advice without scheduling another workout unless explicitly requested.
 - Saved memory and earlier conversation can clarify context, but they never supply write intent. Set needsWrite true only when the current user message clearly asks for a supported write.
 - Do not repeat or continue an earlier write merely because it appears in conversation history.
+- Tentative language such as "might need", "maybe", "I could", "forse dovrei", "magari", or "potrei" is not a write request unless paired with explicit words such as "remind me", "schedule", "create", "log", "put it in calendar", "ricordami", or "programmamelo".
+- Negative write intent such as "don't schedule", "no memo", "do not log", or "non mettere in calendario" must result in needsWrite false.
 - Destructive delete/remove/wipe requests must use "blocked_destructive".
 - If required details are missing, use "clarify" with one concise clarifyingQuestion.
 - Low-risk additive writes are create_expense, create_calendar_event, create_memo, update_health_log, and small calendar plans.
@@ -110,6 +114,10 @@ Format responses with concise Markdown:
 - Use bullet lists when helpful.
 - Use bold for compact labels.
 - Do not use giant headings.
+- For casual/simple messages, reply in 1-3 short sentences.
+- Do not dump LifeOS status, Health, Schedule, Risk, or Action sections unless the user asks for status, analysis, or a plan.
+- Do not use callouts for casual chat.
+- Ask at most one useful follow-up when needed.
 - Never output raw HTML.
 You may use LifeOS callouts only when useful:
 - [good]...[/good] for positive signals.
@@ -118,6 +126,7 @@ You may use LifeOS callouts only when useful:
 - [info]...[/info] for neutral facts.
 - [action]...[/action] for recommended next steps.
 Do not overuse callouts.
+Use [action] only when there is a specific next step, not as a default section.
 Never invent other callout tags.
 For finance, give personal tracking insights, not professional financial advice.
 For health, give lifestyle-pattern insights, not medical diagnosis.
@@ -273,26 +282,51 @@ export default async function handler(req, res) {
       requestId: context.requestId,
     });
     context.brainContext = await safeLoadBrainContext(context);
+    const classification = classifyBrainMessage(message);
+    context.brainClassification = classification;
+    const negativeWriteIntent = hasNegativeWriteIntent(message);
 
-    if (isExplicitRememberRequest(message)) {
+    if (classification.kind === 'memory_write') {
+      const command = extractExplicitMemoryCommand(message);
       const plan = createReadOnlyBrainPlan('Remember an explicit durable user memory.');
-      const answer = 'Remembered. You can review or remove it in **What LifeOS Knows**.';
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null }, context, { message, source });
+      if (!command) {
+        const answer = 'Tell me exactly what to remember, like: "remember my name is Ale."';
+        return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
+      }
+      const savedMemory = await persistExplicitBrainMemory({
+        memory: command.memory,
+        existingMemories: context.brainContext?.memories ?? [],
+      });
+      const answer = command.response || "Got it - I'll remember that.";
+      return sendAiSuccess(res, 200, {
+        answer,
+        plan,
+        actions: [],
+        contextSummary: null,
+        memory: savedMemory,
+        skipMemoryExtraction: true,
+      }, context, { message, source });
     }
 
-    if (isMemoryRecallRequest(message)) {
+    if (classification.kind === 'memory_recall') {
       const plan = createReadOnlyBrainPlan('Summarize active long-term memory.');
       const answer = formatMemoryRecallAnswer(context.brainContext);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null }, context, { message, source });
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (isMemoryForgetRequest(message)) {
+    if (classification.kind === 'memory_forget') {
       const plan = createReadOnlyBrainPlan('Direct the user to the explicit memory controls.');
       const answer = 'Use **What LifeOS Knows** to remove the exact memory. I will not guess which memory to forget.';
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null }, context, { message, source });
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (isFiniteRecurringCalendarRequest(message)) {
+    if (classification.kind === 'casual' || classification.kind === 'clarify') {
+      const plan = createReadOnlyBrainPlan(classification.reason);
+      const answer = formatCasualBrainAnswer(message, context.brainContext, { negativeWriteIntent });
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
+    }
+
+    if (!negativeWriteIntent && classification.kind === 'explicit_action' && isFiniteRecurringCalendarRequest(message)) {
       const plan = createFiniteRecurringCalendarSyntheticPlan();
       const actions = [];
       let answer = '';
@@ -309,7 +343,7 @@ export default async function handler(req, res) {
       }
     }
 
-    if (isObviousDayScheduleRequest(message)) {
+    if (!negativeWriteIntent && classification.kind === 'explicit_action' && isObviousDayScheduleRequest(message)) {
       const plan = createDayScheduleSyntheticPlan(message);
       try {
         const writeResult = await executeDaySchedulePlan(message, plan);
@@ -328,7 +362,7 @@ export default async function handler(req, res) {
       }
     }
 
-    if (isObviousExplicitMultiEventCalendarRequest(message)) {
+    if (!negativeWriteIntent && classification.kind === 'explicit_action' && isObviousExplicitMultiEventCalendarRequest(message)) {
       const plan = createExplicitCalendarSyntheticPlan(message);
       const actions = [];
       let answer = '';
@@ -354,12 +388,18 @@ export default async function handler(req, res) {
       throw error;
     }
     plan = enforceWorkoutAdviceReadOnly(message, plan);
+    plan = enforceBrainWriteRestraint(message, plan, classification);
     const actions = [];
     let lifeosContext = null;
     let answer = '';
     const workoutAdviceOnly = isWorkoutAdviceOnlyRequest(message);
-    const dayScheduleRequest = !workoutAdviceOnly && isDaySchedulePlannerGuard(message, plan);
-    const explicitMultiEventRequest = !workoutAdviceOnly && isExplicitMultiEventCalendarRequest(message, plan);
+    const dayScheduleRequest = !negativeWriteIntent && !workoutAdviceOnly && classification.kind === 'explicit_action' && isDaySchedulePlannerGuard(message, plan);
+    const explicitMultiEventRequest = !negativeWriteIntent && !workoutAdviceOnly && classification.kind === 'explicit_action' && isExplicitMultiEventCalendarRequest(message, plan);
+
+    if (plan.intent === 'clarify') {
+      answer = plan.clarifyingQuestion || 'What details should I use?';
+      return sendAiSuccess(res, 200, { answer, plan, actions }, context, { message, source });
+    }
 
     if (dayScheduleRequest) {
       try {
@@ -388,11 +428,6 @@ export default async function handler(req, res) {
         attachDebugDiagnostics(error, diagnostics);
         throw error;
       }
-    }
-
-    if (plan.intent === 'clarify') {
-      answer = plan.clarifyingQuestion || 'What details should I use?';
-      return sendAiSuccess(res, 200, { answer, plan, actions }, context, { message, source });
     }
 
     if (plan.needsRead || ['analyze', 'analyze_and_plan', 'blocked_destructive'].includes(plan.intent)) {
@@ -521,6 +556,81 @@ async function safeExtractBrainKnowledge({ context, message, answer, actionType 
   }
 }
 
+export function classifyBrainMessage(message) {
+  const text = String(message ?? '').trim();
+  const normalized = normalizeBrainText(text);
+  if (!normalized) return { kind: 'clarify', reason: 'Empty message.' };
+  if (extractExplicitMemoryCommand(text)) return { kind: 'memory_write', reason: 'Explicit durable memory command.' };
+  if (isMemoryRecallRequest(text)) return { kind: 'memory_recall', reason: 'Memory recall request.' };
+  if (isMemoryForgetRequest(text)) return { kind: 'memory_forget', reason: 'Memory forget request.' };
+  if (hasExplicitActionRequest(text)) return { kind: 'explicit_action', reason: 'Current message contains explicit supported write/action language.' };
+  if (isReadOnlyAnalysisRequest(text)) return { kind: 'read_only_analysis', reason: 'Current message asks for analysis/advice/status without explicit write intent.' };
+  if (hasTentativeWriteLanguage(text)) return { kind: 'casual', reason: 'Tentative language without explicit write intent.' };
+  if (isCasualBrainMessage(text)) return { kind: 'casual', reason: 'Casual conversation without explicit read/write request.' };
+  return { kind: 'casual', reason: 'Default chat-first behavior; no explicit read/write request.' };
+}
+
+export function hasNegativeWriteIntent(message) {
+  const text = normalizeBrainText(message);
+  return /\b(?:don'?t|do\s+not|dont)\s+(?:schedule|create|log|add|make|put|set)\b/.test(text)
+    || /\bno\s+(?:memo|event|calendar|reminder)\b/.test(text)
+    || /\bdon'?t\s+(?:make|schedule|create)\s+a\s+memo\b/.test(text)
+    || /\bdon'?t\s+put\s+(?:this|it)?\s*(?:in|on)\s+(?:the\s+)?calendar\b/.test(text)
+    || /\bdon'?t\s+add\s+(?:this|it)\b/.test(text)
+    || /\bnon\s+(?:programmare|segnare|creare|loggare|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
+}
+
+function enforceBrainWriteRestraint(message, plan = {}, classification) {
+  const negative = hasNegativeWriteIntent(message);
+  const tentative = hasTentativeWriteLanguage(message) && !hasExplicitActionRequest(message);
+  const casualWrite = classification.kind === 'casual' && plan.needsWrite;
+  if (negative || tentative || casualWrite) {
+    const readOnly = classification.kind === 'read_only_analysis' || plan.needsRead || plan.intent === 'analyze';
+    return {
+      ...plan,
+      intent: readOnly ? 'analyze' : 'clarify',
+      needsRead: Boolean(readOnly),
+      needsWrite: false,
+      args: {},
+      clarifyingQuestion: negative
+        ? "Understood - I won't create anything. Do you want to just talk it through?"
+        : 'Do you want advice, or do you want me to create something?',
+      riskLevel: 'low',
+      reason: negative
+        ? 'Negative write intent in current message blocked all writes.'
+        : 'Tentative/casual language without explicit current write request blocked planner write.',
+    };
+  }
+
+  if (plan.needsWrite && plan.intent === 'create_memo' && memoNeedsTimeClarification(message, plan.args)) {
+    return {
+      ...plan,
+      intent: 'clarify',
+      needsRead: false,
+      needsWrite: false,
+      args: {},
+      clarifyingQuestion: 'What time should I remind you? For example 15:00 or 3pm.',
+      riskLevel: 'low',
+      reason: 'Memo request used a vague part-of-day time, so Brain asked for clarification instead of attempting a write.',
+    };
+  }
+
+  if (plan.needsWrite && !hasExplicitActionRequest(message)) {
+    return {
+      ...plan,
+      intent: 'clarify',
+      needsRead: false,
+      needsWrite: false,
+      args: {},
+      clarifyingQuestion: 'Do you want me to create something, or just talk it through?',
+      riskLevel: 'low',
+      reason: 'Planner requested a write without explicit current-message action language.',
+    };
+  }
+
+  return plan;
+}
+
 function createReadOnlyBrainPlan(reason) {
   return {
     intent: 'analyze',
@@ -540,7 +650,7 @@ function isExplicitRememberRequest(message) {
 }
 
 function isMemoryRecallRequest(message) {
-  return /\b(?:what do you remember about me|what does lifeos know about me|cosa ricordi di me|cosa sai di me)\b/i.test(String(message ?? ''));
+  return /\b(?:what do you remember about me|what do you know about me|what does lifeos know about me|what'?s in memory|show memory|cosa ricordi di me|cosa sai di me)\b/i.test(String(message ?? ''));
 }
 
 function isMemoryForgetRequest(message) {
@@ -550,15 +660,117 @@ function isMemoryForgetRequest(message) {
 function formatMemoryRecallAnswer(brainContext) {
   const memories = Array.isArray(brainContext?.memories) ? brainContext.memories : [];
   if (!memories.length) {
-    return 'I do not have any active long-term memories yet. Memory will build from meaningful Brain conversations.';
+    return 'Memory is still empty. You can say things like: "remember my name is Ale" or "remember that I prefer direct answers."';
   }
-  const shown = memories.slice(0, 12);
+  const groups = memories.slice(0, 12).reduce((map, memory) => {
+    const key = String(memory.category || 'other').replaceAll('_', ' ');
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(memory);
+    return map;
+  }, new Map());
+  const lines = ["Here's what I remember:"];
+  for (const [category, items] of groups) {
+    lines.push('', `**${titleCase(category)}**`);
+    lines.push(...items.map((memory) => `- ${memory.content}`));
+  }
+  if (memories.length > 12) lines.push('', `There are ${memories.length - 12} more active memories in **What LifeOS Knows**.`);
+  lines.push('', 'You can edit or forget memories in **What LifeOS Knows**.');
+  return lines.join('\n');
+}
+
+function formatCasualBrainAnswer(message, brainContext, { negativeWriteIntent = false } = {}) {
+  const text = String(message ?? '').trim();
+  const normalized = normalizeBrainText(text);
+  const name = preferredNameFromMemory(brainContext);
+  const greetingName = name ? ` ${name}` : '';
+  if (negativeWriteIntent) {
+    return "Understood - I won't create anything. We can just talk it through.";
+  }
+  if (/^(?:hello|hi|hey|yo|ciao|buongiorno|buonasera|what'?s up)\b[!. ]*$/i.test(text)) {
+    return `Hey${greetingName}. What do you want to work on?`;
+  }
+  if (/^(?:thanks|thank you|ty|grazie)\b/i.test(normalized)) return 'No problem.';
+  if (/^(?:ok|okay|lol|yes|no|nah|yep|nope|sure|alright)\b[!. ]*$/i.test(normalized)) return 'Got it.';
+  if (/\bi haven'?t trained today\b|\bnon mi sono allenato oggi\b/.test(normalized)) {
+    return 'Got it. Are you trying to decide whether to train today, or just logging context?';
+  }
+  if (/\bi'?m tired\b|\bi am tired\b|\bsono stanco\b/.test(normalized)) {
+    return 'Got it. Do you want help deciding what to do next, or are you just noting context?';
+  }
+  if (hasTentativeWriteLanguage(text)) {
+    return "Got it. I won't create anything from that unless you explicitly ask me to.";
+  }
   return [
-    'Here is what I currently remember:',
-    '',
-    ...shown.map((memory) => `- **${memory.title}**: ${memory.content}`),
-    ...(memories.length > shown.length ? ['', `There are ${memories.length - shown.length} more active memories in **What LifeOS Knows**.`] : []),
-  ].join('\n');
+    'Got it.',
+    'Do you want advice, analysis, or should I just keep this as conversation context?',
+  ].join(' ');
+}
+
+function preferredNameFromMemory(brainContext) {
+  const memory = (Array.isArray(brainContext?.memories) ? brainContext.memories : []).find((item) => {
+    const title = normalizeBrainText(item.title);
+    const content = normalizeBrainText(item.content);
+    return item.category === 'identity' && (title.includes('name') || content.includes('preferred name') || content.includes('name is'));
+  });
+  const match = String(memory?.content ?? '').match(/\b(?:is|name is)\s+([\p{L}\p{M}' -]{1,40})\./u);
+  return match?.[1]?.trim() || '';
+}
+
+function hasExplicitActionRequest(message) {
+  const text = normalizeBrainText(message);
+  if (!text || hasNegativeWriteIntent(text)) return false;
+  if (/\b(?:create|add|log|schedule|remind me|set a memo|put .*calendar|put it in calendar|put this in calendar|block)\b/.test(text)) return true;
+  if (/\b(?:segna|aggiungi|crea|programma|programmamelo|logga|ricordami|segnalo|segnala|metti .*calendario)\b/.test(text)) return true;
+  if (/\bremember to\b/.test(text)) return true;
+  if (/\b(?:expense|spesa|euro|euros|eur|dollar|dollars|usd|\$)\b/.test(text) && /\d/.test(text)) return true;
+  if (isObviousDayScheduleRequest(message) || isObviousExplicitMultiEventCalendarRequest(message) || isFiniteRecurringCalendarRequest(message)) return true;
+  return false;
+}
+
+function isReadOnlyAnalysisRequest(message) {
+  const text = normalizeBrainText(message);
+  return /\b(?:analyze|analyse|analysis|review|status|how am i doing|how should you answer me|how should you respond|what should i do|what should i train|look at my workouts|review my week|dimmi cosa dovrei allenare|analizza|come sto andando|cosa dovrei fare|consigli|advice)\b/.test(text)
+    || isWorkoutAdviceOnlyRequest(message);
+}
+
+function isCasualBrainMessage(message) {
+  const text = normalizeBrainText(message);
+  if (/^(?:hello|hi|hey|yo|ciao|ok|okay|thanks|thank you|grazie|lol|no|yes|yep|nope|nah|sure|not sure|actually)\b/.test(text)) return true;
+  if (text.length <= 80 && !hasExplicitActionRequest(message) && !isReadOnlyAnalysisRequest(message)) return true;
+  return false;
+}
+
+function hasTentativeWriteLanguage(message) {
+  const text = normalizeBrainText(message);
+  return /\b(?:might need|maybe i need|i think i might|i could|maybe|forse dovrei|magari|potrei aver bisogno|potrei)\b/.test(text);
+}
+
+function memoNeedsTimeClarification(message, args = {}) {
+  if (!hasExplicitActionRequest(message)) return false;
+  const text = normalizeBrainText(message);
+  const rawTime = args?.memo_time ?? args?.time ?? args?.due_time;
+  const rawDate = args?.memo_date ?? args?.date ?? args?.due_date;
+  const partOfDay = /\b(?:afternoon|evening|morning|tonight|pomeriggio|sera|mattina|stanotte)\b/.test(text);
+  const hasExactTime = /\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?\b/.test(text);
+  if (partOfDay && !hasExactTime) return true;
+  if (rawTime && /[a-z]/i.test(String(rawTime)) && !/\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?/i.test(String(rawTime))) return true;
+  return Boolean(rawDate && partOfDay && !hasExactTime);
+}
+
+function normalizeBrainText(value) {
+  return String(value ?? '')
+    .replace(/['\u2019]/g, "'")
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function titleCase(value) {
+  return String(value ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 async function requireAssistantAuth(req) {
@@ -582,31 +794,34 @@ function resolveAssistantSource(authInfo, body = {}) {
 }
 
 async function sendAiSuccess(res, status, data, context, logInfo) {
+  const { skipMemoryExtraction = false, ...publicData } = data ?? {};
   await safeLogAiSuccess({
     context,
     message: logInfo?.message,
     source: logInfo?.source,
-    answer: data?.answer,
-    actions: data?.actions ?? [],
+    answer: publicData?.answer,
+    actions: publicData?.actions ?? [],
   });
-  const actionType = inferActionLogType(data?.actions ?? []);
-  const recordRefs = extractRecordRefs(data?.actions ?? []);
+  const actionType = inferActionLogType(publicData?.actions ?? []);
+  const recordRefs = extractRecordRefs(publicData?.actions ?? []);
   const assistantMessage = await safePersistBrainSuccess({
     context,
-    answer: data?.answer,
-    plan: data?.plan,
-    actions: data?.actions ?? [],
+    answer: publicData?.answer,
+    plan: publicData?.plan,
+    actions: publicData?.actions ?? [],
     actionType,
     recordRefs,
   });
-  await safeExtractBrainKnowledge({
-    context,
-    message: logInfo?.message,
-    answer: data?.answer,
-    actionType,
-  });
+  if (!skipMemoryExtraction) {
+    await safeExtractBrainKnowledge({
+      context,
+      message: logInfo?.message,
+      answer: publicData?.answer,
+      actionType,
+    });
+  }
   return sendSuccess(res, status, {
-    ...data,
+    ...publicData,
     ...(context?.brainChat?.thread?.id ? {
       thread_id: context.brainChat.thread.id,
       persisted_message: assistantMessage,

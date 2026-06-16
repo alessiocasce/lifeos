@@ -280,6 +280,7 @@ export function shouldExtractMemory(userMessage, assistantAnswer, actionType) {
   const message = String(userMessage ?? '').trim();
   const answer = String(assistantAnswer ?? '').trim();
   if (message.length < 12 || containsSecretLikeText(message)) return false;
+  if (extractExplicitMemoryCommand(message)) return true;
   if (/\bremember that\b|\bremember this\b|\bricorda che\b|\bprefer\b|\bpreferisco\b|\bi (?:like|love|hate|dislike)\b|\bmy goal\b|\bil mio obiettivo\b/i.test(message)) {
     return true;
   }
@@ -291,7 +292,8 @@ export function shouldExtractMemory(userMessage, assistantAnswer, actionType) {
 
 export async function extractAndPersistBrainKnowledge({ userMessage, assistantAnswer, actionType, existingMemories = [] }) {
   if (!shouldExtractMemory(userMessage, assistantAnswer, actionType)) return { memories: [], insights: [] };
-  const explicit = explicitMemoryFallback(userMessage);
+  const explicitCommand = extractExplicitMemoryCommand(userMessage);
+  const explicit = explicitCommand?.memory ?? explicitMemoryFallback(userMessage);
   let extracted;
   if (explicit) {
     extracted = { memories: [explicit], insights: [] };
@@ -386,6 +388,89 @@ export async function extractAndPersistBrainKnowledge({ userMessage, assistantAn
   return { memories: savedMemories, insights: savedInsights };
 }
 
+export async function persistExplicitBrainMemory({ memory, existingMemories = [] }) {
+  const candidate = normalizeMemoryCandidate(memory);
+  if (!candidate) return null;
+
+  const client = getSupabaseAdmin();
+  const userId = getActionUserId();
+  const currentMemories = existingMemories.length
+    ? existingMemories
+    : (await loadBrainContext({ memoryLimit: 100, insightLimit: 1 })).memories;
+  const existing = findSimilarMemory(currentMemories, candidate);
+  if (existing) {
+    const result = await client
+      .from('ai_memories')
+      .update({
+        category: candidate.category,
+        title: candidate.title,
+        content: candidate.content,
+        source: candidate.source,
+        confidence: Math.max(Number(existing.confidence ?? 0), candidate.confidence),
+        importance: Math.max(Number(existing.importance ?? 1), candidate.importance),
+        status: 'active',
+        last_seen_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+      .eq('user_id', userId)
+      .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  const result = await client
+    .from('ai_memories')
+    .insert({
+      user_id: userId,
+      ...candidate,
+      status: 'active',
+      last_seen_at: new Date().toISOString(),
+      metadata: { source_command: 'brain_memory_command' },
+    })
+    .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
+    .single();
+  if (result.error) throw result.error;
+  return result.data;
+}
+
+export function extractExplicitMemoryCommand(message) {
+  const text = String(message ?? '').trim();
+  if (!text || containsSecretLikeText(text)) return null;
+
+  const name = extractPreferredName(text);
+  if (name) {
+    return {
+      memory: {
+        category: 'identity',
+        title: 'Name',
+        content: `User's preferred name is ${name}.`,
+        source: 'user_explicit',
+        confidence: 0.98,
+        importance: 5,
+      },
+      response: `Got it - I'll remember your name is ${name}.`,
+    };
+  }
+
+  const explicitFact = text.match(/\b(?:remember that|remember this|ricorda che|ricordati che)\s+(.+)/i)?.[1]
+    ?? text.match(/\bremember\s+(?!to\b)(.+)/i)?.[1];
+  if (!explicitFact) return null;
+  const content = formatExplicitFactMemory(explicitFact);
+  if (!content) return null;
+  return {
+    memory: {
+      category: inferMemoryCategory(content),
+      title: generateThreadTitle(content),
+      content,
+      source: 'user_explicit',
+      confidence: 0.95,
+      importance: inferMemoryImportance(content),
+    },
+    response: "Got it - I'll remember that.",
+  };
+}
+
 export function generateThreadTitle(message) {
   const cleaned = String(message ?? '')
     .replace(/^\s*(?:please|can you|could you|would you|i want you to|remember that)\s+/i, '')
@@ -426,7 +511,9 @@ function normalizeInsightCandidate(candidate) {
 }
 
 function explicitMemoryFallback(message) {
-  const match = String(message ?? '').match(/\b(?:remember that|remember this|ricorda che)\s+(.+)/i);
+  const command = extractExplicitMemoryCommand(message);
+  if (command?.memory) return command.memory;
+  const match = String(message ?? '').match(/\b(?:remember that|remember this|ricorda che|ricordati che)\s+(.+)/i);
   if (!match?.[1]) return null;
   const content = cleanText(match[1], 400);
   if (!content || containsSecretLikeText(content)) return null;
@@ -445,11 +532,104 @@ function findSimilarMemory(existingMemories, candidate) {
   const candidateTerms = keyTerms(`${candidate.title} ${candidate.content}`);
   return existingMemories.find((memory) => {
     if (normalizeText(memory.title) === normalizedTitle) return true;
+    if (candidate.category === 'identity' && /name/i.test(candidate.title)) {
+      const title = normalizeText(memory.title);
+      const content = normalizeText(memory.content);
+      if (memory.category === 'identity' && (title.includes('name') || content.includes('name is') || content.includes('preferred name'))) return true;
+    }
     if (memory.category !== candidate.category) return false;
     const existingTerms = keyTerms(`${memory.title} ${memory.content}`);
     const shared = candidateTerms.filter((term) => existingTerms.includes(term)).length;
     return shared >= 3 && shared / Math.max(1, Math.min(candidateTerms.length, existingTerms.length)) >= 0.5;
   });
+}
+
+function extractPreferredName(text) {
+  const normalized = text
+    .replace(/['\u2019]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+  const patterns = [
+    /\bremember\s+my\s+name(?:\s+is|,)?\s+(.+)$/i,
+    /\bremember\s+(?:that\s+)?my\s+name\s+is\s+(.+)$/i,
+    /\bremember\s+(?:i'm|i am)\s+(.+)$/i,
+    /\bremember\s+me\s+as\s+(.+)$/i,
+    /\bcall\s+me\s+(.+)$/i,
+    /\bmy\s+name\s+is\s+(.+)$/i,
+    /\b(?:i'm|i am)\s+(.+)$/i,
+    /\bricordati\s+il\s+mio\s+nome,?\s+(.+)$/i,
+    /\bricordati\s+che\s+mi\s+chiamo\s+(.+)$/i,
+    /\bchiamami\s+(.+)$/i,
+    /\bmi\s+chiamo\s+(.+)$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    const candidate = cleanName(match?.[1]);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function cleanName(value) {
+  const text = String(value ?? '')
+    .replace(/[.!?]+$/g, '')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
+  if (!text || text.length > 40) return null;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 4) return null;
+  const normalized = normalizeText(text);
+  const nonNames = new Set([
+    'tired',
+    'fine',
+    'ok',
+    'okay',
+    'sad',
+    'happy',
+    'angry',
+    'hungry',
+    'late',
+    'busy',
+    'bored',
+    'sick',
+    'stressed',
+    'not sure',
+    'going',
+  ]);
+  if (nonNames.has(normalized)) return null;
+  if (!/^[\p{L}\p{M}' -]+$/u.test(text)) return null;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
+function formatExplicitFactMemory(value) {
+  const fact = cleanText(value, 400);
+  if (!fact || containsSecretLikeText(fact)) return null;
+  return fact
+    .replace(/^i\s+prefer\b/i, 'User prefers')
+    .replace(/^i\s+(?:like|love)\b/i, 'User likes')
+    .replace(/^i\s+(?:hate|dislike)\b/i, 'User dislikes')
+    .replace(/^my\s+goal\s+is\b/i, "User's goal is")
+    .replace(/^i\s+am\s+building\b/i, 'User is building')
+    .replace(/^lifeos\s+is\b/i, 'LifeOS is')
+    .replace(/\s+$/, '')
+    .replace(/([^.!?])$/, '$1.');
+}
+
+function inferMemoryCategory(content) {
+  const text = normalizeText(content);
+  if (/\bprefer|like|dislike|hates?\b/.test(text)) return 'preference';
+  if (/\bgoal|objective|target\b/.test(text)) return 'goal';
+  if (/\bbusiness|saas|brand|revenue|client\b/.test(text)) return 'business';
+  if (/\blifeos|project|building|feature\b/.test(text)) return 'project';
+  if (/\bworkout|training|gym|progressive overload\b/.test(text)) return 'workout';
+  if (/\bsleep|health|energy|diet\b/.test(text)) return 'health';
+  return 'other';
+}
+
+function inferMemoryImportance(content) {
+  const text = normalizeText(content);
+  if (/\bname|goal|business|lifeos|prefer|dislike|constraint\b/.test(text)) return 4;
+  return 3;
 }
 
 function countActions(actions) {

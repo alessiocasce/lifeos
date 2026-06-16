@@ -3,6 +3,7 @@ import {
   Bot,
   BrainCircuit,
   ChevronDown,
+  Edit3,
   History,
   Loader2,
   MessageSquarePlus,
@@ -12,7 +13,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AiActionHistoryList, AssistantMarkdown } from '../components/AiActionHistory';
 import { Panel, PanelHeader, Tag } from '../components/ui';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -43,6 +44,7 @@ export function AIAssistantTab() {
     reloadExpenses,
     reloadHealthLogs,
     reloadMemos,
+    renameAiChatThread,
     selectAiChatThread,
     updateAiMemory,
   } = useLifeOS();
@@ -53,6 +55,9 @@ export function AIAssistantTab() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [editingMemoryId, setEditingMemoryId] = useState(null);
   const [memoryDraft, setMemoryDraft] = useState({ title: '', content: '' });
+  const [recentActionsExpanded, setRecentActionsExpanded] = useState(false);
+  const [renamingThread, setRenamingThread] = useState(false);
+  const [threadTitleDraft, setThreadTitleDraft] = useState('');
 
   const activeThreads = useMemo(
     () => aiChatThreads.filter((thread) => thread.status === 'active'),
@@ -60,6 +65,12 @@ export function AIAssistantTab() {
   );
   const activeThread = activeThreads.find((thread) => thread.id === activeAiThreadId) ?? null;
   const messages = [...activeAiChatMessages, ...pendingMessages];
+  const actionLimit = recentActionsExpanded ? 10 : 3;
+
+  useEffect(() => {
+    setThreadTitleDraft(activeThread?.title || '');
+    setRenamingThread(false);
+  }, [activeThread?.id, activeThread?.title]);
 
   const submitAiMessage = async (event) => {
     event.preventDefault();
@@ -148,6 +159,16 @@ export function AIAssistantTab() {
     await archiveAiChatThread(activeThread.id);
   };
 
+  const saveThreadTitle = async () => {
+    const title = threadTitleDraft.trim();
+    if (!activeThread || !title || title === activeThread.title) {
+      setRenamingThread(false);
+      return;
+    }
+    await renameAiChatThread(activeThread.id, title);
+    setRenamingThread(false);
+  };
+
   const beginMemoryEdit = (memory) => {
     setEditingMemoryId(memory.id);
     setMemoryDraft({ title: memory.title, content: memory.content });
@@ -164,12 +185,43 @@ export function AIAssistantTab() {
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-3">
       <Panel className="col-span-12 xl:col-span-8">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-white/5 px-3 py-2">
-          <div className="mr-auto min-w-0">
+        <div className="grid min-w-0 gap-2 border-b border-white/5 px-3 py-2 sm:flex sm:items-center">
+          <div className="min-w-0 sm:mr-auto">
             <p className="data-text text-[10px] uppercase tracking-wider text-cyan-400">Brain</p>
-            <h1 className="truncate text-sm font-semibold text-zinc-100">{activeThread?.title || 'New Chat'}</h1>
+            {renamingThread ? (
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                <input
+                  value={threadTitleDraft}
+                  onChange={(event) => setThreadTitleDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') saveThreadTitle();
+                    if (event.key === 'Escape') setRenamingThread(false);
+                  }}
+                  className="h-9 min-w-0 flex-1 rounded-md border border-cyan-400/25 bg-black/50 px-3 text-base text-zinc-100 outline-none"
+                  aria-label="Brain thread title"
+                />
+                <button type="button" onClick={saveThreadTitle} className="grid h-9 w-9 place-items-center rounded-md border border-cyan-400/25 bg-cyan-400/10 text-cyan-200" aria-label="Save thread title">
+                  <Save size={15} />
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                <h1 className="truncate text-base font-semibold text-zinc-100">{activeThread?.title || 'New Chat'}</h1>
+                <button
+                  type="button"
+                  onClick={() => setRenamingThread(true)}
+                  disabled={!activeThread}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-500 hover:text-zinc-200 disabled:opacity-40"
+                  aria-label="Rename Brain chat"
+                  title="Rename chat"
+                >
+                  <Edit3 size={14} />
+                </button>
+              </div>
+            )}
           </div>
-          <label className="relative min-w-0 max-w-56 flex-1 sm:flex-none" aria-label="Select Brain conversation">
+          <div className="flex min-w-0 items-center gap-2">
+          <label className="relative min-w-0 flex-1 sm:w-56 sm:flex-none" aria-label="Select Brain conversation">
             <select
               value={activeAiThreadId || ''}
               onChange={(event) => selectAiChatThread(event.target.value)}
@@ -184,25 +236,27 @@ export function AIAssistantTab() {
           <button
             type="button"
             onClick={handleNewChat}
-            className="grid h-10 w-10 place-items-center rounded-md border border-cyan-400/25 bg-cyan-400/10 text-cyan-200 hover:border-cyan-300/50"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200 hover:border-cyan-300/50"
             aria-label="New Brain chat"
             title="New chat"
           >
             <MessageSquarePlus size={17} />
+            <span className="hidden sm:inline">New Chat</span>
           </button>
           <button
             type="button"
             onClick={handleArchiveThread}
             disabled={!activeThread}
-            className="grid h-10 w-10 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-400 hover:border-amber-400/30 hover:text-amber-200 disabled:opacity-40"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-500 hover:border-amber-400/30 hover:text-amber-200 disabled:opacity-40"
             aria-label="Archive current Brain chat"
             title="Archive chat"
           >
             <Archive size={17} />
           </button>
+          </div>
         </div>
 
-        <div className="grid min-h-[52dvh] content-start gap-2 p-3 md:min-h-[60dvh]">
+        <div className="grid min-h-[58dvh] content-start gap-2 p-2 md:min-h-[64dvh] md:p-3">
           {aiChatMessagesStatus === 'loading' && !messages.length ? (
             <div className="grid min-h-48 place-items-center text-zinc-500">
               <Loader2 size={20} className="animate-spin" aria-label="Loading Brain messages" />
@@ -226,6 +280,12 @@ export function AIAssistantTab() {
           onSubmit={submitAiMessage}
           className="sticky bottom-[calc(env(safe-area-inset-bottom)+68px)] z-10 border-t border-white/10 bg-[#111]/95 p-3 backdrop-blur md:bottom-3"
         >
+          {aiStatus === 'loading' ? (
+            <p className="mb-2 inline-flex items-center gap-2 text-xs text-cyan-300">
+              <Loader2 size={13} className="animate-spin" />
+              Brain is thinking...
+            </p>
+          ) : null}
           <div className="flex min-w-0 items-end gap-2">
             <textarea
               rows={2}
@@ -304,6 +364,12 @@ export function AIAssistantTab() {
               ) : (
                 <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
                   <p className="text-sm font-medium text-zinc-100">Memory will build as you use Brain.</p>
+                  <div className="mt-3 grid gap-1 text-xs leading-5 text-zinc-500">
+                    <p>Try:</p>
+                    <p>"Remember my name is Ale"</p>
+                    <p>"Remember I prefer direct practical advice"</p>
+                    <p>"Remember LifeOS is a business idea"</p>
+                  </div>
                 </div>
               )}
 
@@ -329,7 +395,16 @@ export function AIAssistantTab() {
         <Panel>
           <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
-            <AiActionHistoryList logs={aiActionLogs.slice(0, 6)} status={aiActionLogsStatus} limit={6} />
+            <AiActionHistoryList logs={aiActionLogs.slice(0, actionLimit)} status={aiActionLogsStatus} limit={actionLimit} />
+            {aiActionLogs.length > 3 ? (
+              <button
+                type="button"
+                onClick={() => setRecentActionsExpanded((expanded) => !expanded)}
+                className="h-9 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-400 hover:border-violet-400/25 hover:text-violet-200"
+              >
+                {recentActionsExpanded ? 'Show less' : 'View all recent actions'}
+              </button>
+            ) : null}
           </div>
         </Panel>
       </div>
@@ -404,7 +479,7 @@ function AssistantError({ error }) {
 function AssistantMessage({ message }) {
   const isUser = message.role === 'user';
   return (
-    <article className={`min-w-0 rounded-md border p-3 ${isUser ? 'ml-auto max-w-[92%] border-cyan-400/20 bg-cyan-400/10 sm:max-w-[78%]' : 'mr-auto max-w-full border-white/5 bg-black/25 sm:max-w-[92%]'}`}>
+    <article className={`min-w-0 rounded-md border px-3 py-2 ${isUser ? 'ml-auto max-w-[92%] border-cyan-400/20 bg-cyan-400/10 sm:max-w-[78%]' : 'mr-auto max-w-full border-white/5 bg-black/25 sm:max-w-[92%]'}`}>
       <div className="mb-2 flex items-center gap-2">
         {isUser ? <Sparkles size={15} className="text-cyan-300" /> : <Bot size={15} className="text-emerald-300" />}
         <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{isUser ? 'You' : 'LifeOS'}</span>

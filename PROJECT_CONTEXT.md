@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-06-14
+Last updated: 2026-06-16
 Current branch: `main`
 Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
 
@@ -257,9 +257,11 @@ Architecture:
 - Threads are titled deterministically from the first meaningful user message without an extra Gemini title call.
 - The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
+- Brain uses deterministic conversation classification before planner writes. Casual messages such as `Hello`, `ok`, `I'm tired`, or `I haven't trained today` stay conversational and do not trigger a full LifeOS status dump.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication uses normalized title/category/key-term overlap; no vector database is used in v1.
-- Explicit `remember that ...` requests confirm memory capture, memory recall requests summarize active memories, and ambiguous forget requests direct the user to the memory panel.
+- Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.
+- Memory recall requests summarize active memories, and ambiguous forget requests direct the user to the memory panel.
 - Gemini receives no database credentials and cannot run SQL.
 - Gemini first returns a strict JSON planner object.
 - Backend tools perform controlled reads/writes through Supabase service-role access and always filter/write `user_id = LIFEOS_ACTION_USER_ID`.
@@ -285,13 +287,17 @@ Architecture:
 - Supported finite recurrence patterns include daily, weekdays, weekends, weekly days, every other day, every N days, next week, next month, named months, next N weeks/months, and explicit start date plus duration.
 - Recurrence expansion is capped at 60 created events per request. Ambiguous recurrence requests ask one clarification instead of writing.
 - Workout analysis and advice prompts are read-only unless the user explicitly asks to create or schedule a calendar item. A deterministic post-planner guard prevents accidental calendar writes for exercise-performance questions.
-- Brain memory and conversation history do not override deterministic write guards. Calendar/memo/health/expense/recurrence writes still require the same explicit supported intent.
+- Brain memory and conversation history do not override deterministic write guards. Calendar/memo/health/expense/recurrence writes still require explicit supported intent in the current user message.
+- Negative write intent such as `don't schedule`, `no memo`, `non creare`, or `non mettere in calendario` blocks writes even if the planner proposes one.
+- Tentative language such as `I might need`, `maybe`, `forse dovrei`, or `potrei` does not create memos/events unless paired with an explicit action phrase like `remind me` or `schedule`.
+- Vague memo timing such as `tomorrow afternoon` asks for clarification instead of surfacing raw validation errors.
 - AI health logging supports time-aware Daily Habits stored in `health_logs.hygiene`: Shower, Creatine, and Skin.
 - AI habit updates merge with existing daily values and attach an explicit or current Europe/Rome time. Brush and Journal remain legacy-only and are no longer shown or updated.
 - AI prefers `sleep_start` and `wake_time`; when both required times exist, automatic sleep calculation overrides a manual duration.
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
 - AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
+- Brain UI is chat-first. Thread controls are more prominent, the composer stays central, `What LifeOS Knows` and Recent Actions are secondary/collapsible, and Brain keeps Daily Review and canned Suggestions hidden.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
 - AI Action History detail views show the full saved request, full saved response, action metadata, request id, record references, and sanitized action payloads. Saved assistant responses render with the same safe Markdown and LifeOS callout renderer used by chat messages.
 - AI Action History titles are deterministic frontend formatting and do not trigger an extra AI call.
