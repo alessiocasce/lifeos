@@ -257,15 +257,20 @@ Architecture:
 - Threads are titled deterministically from the first meaningful user message without an extra Gemini title call.
 - The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
-- Brain uses deterministic conversation classification before planner writes. Casual messages such as `Hello`, `ok`, `I'm tired`, or `I haven't trained today` stay conversational and do not trigger a full LifeOS status dump.
+- Brain uses AI-first semantic routing before planner writes. The router classifies mode, selected skill, needed data, write intent, ambiguity, and risk from the current message plus bounded conversation/memory context.
+- Deterministic keyword routing is now fallback/sanity behavior, not the primary understanding layer.
+- Brain's operating principle is: AI understands; backend code protects, validates, and executes.
+- The AI semantic router cannot execute writes. It can only propose route metadata, skill, data needs, and action types.
+- Backend code remains responsible for auth, user ownership, schema validation, date/time validation, destructive blocks, allowed actions, and final tool execution.
 - Brain supports read-only follow-up transformations such as `mettile in ordine cronologico`, `fammi una tabella`, `riassumi`, `make it shorter`, and `sort them chronologically` by using the latest persisted assistant answer as source material.
 - Follow-up transformations never create actions or run write tools. If there is no previous assistant answer, Brain asks what content to transform.
-- Brain uses Skill Architecture v1: deterministic backend skill routing, not separate autonomous agents or visible tabs.
+- Brain uses Skill Architecture v1: internal skills are backend modules, not separate autonomous agents or visible tabs.
 - Current Brain skills are `general_chat`, `memory_manager`, `workout_coach`, `health_coach`, `calendar_planner`, `memo_assistant`, `project_ops_coach`, `finance_analyst`, `life_review`, and `product_builder`.
-- Skill selection is a cheap deterministic rules layer, not a Gemini call.
-- The selected skill is injected into planner, calendar-plan, and answer prompts to guide allowed data, allowed actions, forbidden actions, and response style.
-- Skill write permission is an additional guard. Skill rules never override global safety guards, negative write intent, tentative-language protection, workout-advice read-only behavior, follow-up transform read-only behavior, memory direct handling, or destructive-action blocks.
+- Skill selection is primarily AI semantic routing with deterministic fallback.
+- The selected skill and Brain route are injected into planner, calendar-plan, and answer prompts to guide mode, data needs, allowed actions, forbidden actions, and response style.
+- Skill write permission and route write intent are additional guards. Skill rules never override global safety guards, negative write intent, tentative-language protection, workout-advice read-only behavior, follow-up transform read-only behavior, memory direct handling, or destructive-action blocks.
 - Selected skill metadata is stored in existing `ai_chat_messages.metadata.selected_skill`, included in `/api/ai/chat` responses, and shown as a subtle badge on assistant messages.
+- Brain route metadata is stored in existing `ai_chat_messages.metadata.brain_route`, included in `/api/ai/chat` responses, and included in sanitized AI action logs when actions are created.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication uses normalized title/category/key-term overlap; no vector database is used in v1.
 - Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.

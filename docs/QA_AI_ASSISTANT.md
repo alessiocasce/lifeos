@@ -112,6 +112,41 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 24. Confirm negative write intent blocks writes regardless of planner output or selected skill.
 25. Inspect the `/api/ai/chat` response or persisted `ai_chat_messages.metadata` in a test database and confirm `selected_skill` includes `id`, `label`, `confidence`, and `reason`.
 
+## Brain AI-First Semantic Router
+
+1. Send `yo, I just opened LifeOS`.
+2. Confirm `brain_route.mode` is `casual_chat`, selected skill is `general_chat`, the answer is conversational, and no data dump or write occurs.
+3. Send `I'm kinda tired but I don't know why`.
+4. Confirm the route is `casual_chat` or `read_only_analysis`, selected skill is `health_coach` or `general_chat`, the answer gives light reasoning or asks whether to check logs, and no write occurs.
+5. Send `remember my name, Ale`.
+6. Confirm route `memory_write`, skill `memory_manager`, `ai_memories` is updated, and no Memo row is created.
+7. Send `what do you currently know about me?`.
+8. Confirm route `memory_recall`, skill `memory_manager`, and active memories are summarized.
+9. With a memory about noisy dashboards present, send `forget the memory about noisy dashboards`.
+10. Confirm route `memory_forget`; the matching memory is archived or Brain asks which matching memory to forget.
+11. Send `Look at my last push workouts and tell me if chest today makes sense`.
+12. Confirm route `read_only_analysis`, skill `workout_coach`, workout data is read, and no calendar event is created.
+13. Re-run `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+14. Confirm route `read_only_analysis`, skill `workout_coach`, and no calendar event.
+15. Send `Be brutally honest: is LifeOS becoming too complicated?`.
+16. Confirm route `read_only_analysis`, skill `product_builder`, real product critique, and no LifeOS CRUD write.
+17. Send `gym tomorrow 5`.
+18. Confirm route `clarification`, skill `calendar_planner`, and Brain asks whether to schedule gym, AM/PM, and/or end time. No write occurs.
+19. Send `tomorrow pill 8:30`.
+20. Confirm route `clarification` or a clearly safe memo route only if enough information is present. Brain must not silently write the wrong reminder.
+21. Send `I might need a nap tomorrow afternoon, don't schedule a memo`.
+22. Confirm route write intent is false, no memo/event is created, and no scary action error is logged.
+23. Send `remind me to take pill at 8:30pm`.
+24. Confirm route `explicit_action`, skill `memo_assistant`, and a memo is created.
+25. Send `schedule study tomorrow from 15:00 to 17:00`.
+26. Confirm route `explicit_action`, skill `calendar_planner`, and a calendar event is created.
+27. After a long answer, send `fammi una tabella`.
+28. Confirm route `follow_up_transform`, no LifeOS data write, and the previous answer is transformed.
+29. Multi-turn check: send `gym tomorrow 5`, then answer `yes, 5pm to 6:30`.
+30. Confirm the second message can route `explicit_action` with `calendar_planner` and create the event only if all required fields are clear.
+31. Inspect persisted `ai_chat_messages.metadata.brain_route` and confirm it includes `mode`, `primary_skill`, `confidence`, `needs_data`, `write_intent`, and `risk_level`.
+32. Confirm route metadata is included in sanitized AI action log payloads when actions are created.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.

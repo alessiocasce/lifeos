@@ -169,7 +169,7 @@ export async function beginBrainChat({ threadId, source, message, requestId }) {
   };
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, actionType, actions, plan, recordRefs, selectedSkill }) {
+export async function persistBrainAssistantMessage({ chat, answer, requestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -189,6 +189,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, ac
         record_refs: Array.isArray(recordRefs) ? recordRefs.slice(0, 80) : [],
         source_path: findActionSourcePath(actions),
         selected_skill: selectedSkill && typeof selectedSkill === 'object' ? selectedSkill : null,
+        brain_route: brainRoute && typeof brainRoute === 'object' ? brainRoute : null,
       },
     })
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
@@ -205,7 +206,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, ac
   return result.data;
 }
 
-export async function persistBrainErrorMessage({ chat, error, requestId, selectedSkill }) {
+export async function persistBrainErrorMessage({ chat, error, requestId, selectedSkill, brainRoute }) {
   if (!chat?.thread?.id || chat.assistantPersisted) return null;
   const status = Number(error?.status ?? 500);
   const content = status >= 500
@@ -220,6 +221,7 @@ export async function persistBrainErrorMessage({ chat, error, requestId, selecte
     plan: null,
     recordRefs: [],
     selectedSkill,
+    brainRoute,
   });
 }
 
@@ -434,6 +436,46 @@ export async function persistExplicitBrainMemory({ memory, existingMemories = []
     .single();
   if (result.error) throw result.error;
   return result.data;
+}
+
+export async function archiveMatchingBrainMemory({ target, existingMemories = [] } = {}) {
+  const query = normalizeText(target);
+  const memories = Array.isArray(existingMemories) ? existingMemories.filter(Boolean) : [];
+  if (!query || !memories.length) return { status: 'not_found', matches: [] };
+
+  const queryTerms = keyTerms(query);
+  const scored = memories
+    .map((memory) => {
+      const text = normalizeText(`${memory.category ?? ''} ${memory.title ?? ''} ${memory.content ?? ''}`);
+      const title = normalizeText(memory.title);
+      const shared = queryTerms.filter((term) => text.includes(term));
+      const exactTitle = title && query.includes(title);
+      return {
+        memory,
+        score: shared.length + (exactTitle ? 3 : 0),
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return { status: 'not_found', matches: [] };
+  const best = scored[0];
+  const close = scored.filter((item) => item.score >= Math.max(2, best.score - 1));
+  if (close.length > 1 && best.score < 4) {
+    return { status: 'multiple', matches: close.map((item) => item.memory).slice(0, 5) };
+  }
+
+  const client = getSupabaseAdmin();
+  const userId = getActionUserId();
+  const result = await client
+    .from('ai_memories')
+    .update({ status: 'archived' })
+    .eq('id', best.memory.id)
+    .eq('user_id', userId)
+    .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
+    .single();
+  if (result.error) throw result.error;
+  return { status: 'archived', memory: result.data, matches: [result.data] };
 }
 
 export function extractExplicitMemoryCommand(message) {

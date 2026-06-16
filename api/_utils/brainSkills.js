@@ -337,7 +337,9 @@ export function selectBrainSkill({ message, classification, plan = null } = {}) 
     ['roadmap', '\\broadmap\\b|what should we build|build next'],
     ['architecture', '\\barchitecture\\b|\\barchitettura\\b|\\bcoding\\b|\\bcode\\b|\\bui\\b|\\bux\\b'],
   ]);
-  if (productSignals.length) return pick('product_builder', 0.78, 'LifeOS product, business, UI, architecture, or roadmap request.', productSignals);
+  if (productSignals.length && !/\b(?:just opened|opened|open)\s+lifeos\b/.test(text)) {
+    return pick('product_builder', 0.78, 'LifeOS product, business, UI, architecture, or roadmap request.', productSignals);
+  }
 
   return pick('general_chat', classification?.kind === 'casual' ? 0.8 : 0.55, 'Fallback chat skill.');
 }

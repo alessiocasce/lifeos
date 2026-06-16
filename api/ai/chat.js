@@ -1,5 +1,6 @@
 import { generateGeminiJson, generateGeminiText } from '../_utils/gemini.js';
 import {
+  archiveMatchingBrainMemory,
   beginBrainChat,
   extractAndPersistBrainKnowledge,
   extractExplicitMemoryCommand,
@@ -11,10 +12,17 @@ import {
   persistExplicitBrainMemory,
 } from '../_utils/brain.js';
 import {
-  canSkillPerformIntent,
   formatBrainSkillForPrompt,
+  getBrainSkill,
   selectBrainSkill,
 } from '../_utils/brainSkills.js';
+import {
+  canExecuteBrainAction,
+  fallbackBrainRoute,
+  formatBrainRouteForPrompt,
+  routeBrainMessageWithAI,
+  serializeBrainRoute,
+} from '../_utils/brainRouter.js';
 import {
   HttpError,
   createRequestContext,
@@ -53,15 +61,19 @@ Schema:
   "needsRead": boolean,
   "needsWrite": boolean,
   "range": "today" | "tomorrow" | "7d" | "30d" | "3m" | "6m" | "12m" | "all" | null,
-  "tables": ["expenses", "health_logs", "workouts", "workout_sets", "calendar_events", "daily_reviews", "memos"],
+  "tables": ["expenses", "health_logs", "workouts", "workout_sets", "calendar_events", "daily_reviews", "memos", "projects", "project_sessions", "project_money_entries"],
   "args": {},
   "clarifyingQuestion": string | null,
   "riskLevel": "low" | "medium" | "high",
   "reason": string
 }
 Rules:
+- The prompt includes brainRoute. Treat it as the semantic understanding layer.
 - The prompt includes selectedBrainSkill. Follow that skill's data/action boundaries and response intent.
 - Skill rules do not override global safety rules, destructive blocks, or current-message write-intent requirements.
+- If brainRoute.write_intent is false, return no write action.
+- If brainRoute.needs_clarification is true, return intent "clarify" with the route clarification question.
+- Conversation history can clarify references, but the current user message or an active clarification confirmation must provide write intent.
 - Extract dates as YYYY-MM-DD when possible. Today is provided in the prompt.
 - If the user gives DD/MM/YY or DD/MM/YYYY, copy that date into args; the backend can normalize it.
 - Natural "tomorrow" may be represented as "tomorrow" or the provided date.
@@ -108,6 +120,7 @@ Distinguish facts from suggestions.
 Be direct, practical, and concise.
 Connect relevant domains such as sleep, health, workouts, projects, money, calendar, and memos.
 Saved memory is helpful context, not absolute truth. Prefer the current message if it conflicts.
+Brain Route context explains the semantic mode, data needs, write intent, ambiguity, and risk.
 Selected Brain Skill context guides domain framing, allowed data, allowed actions, and response style.
 Skill rules never override global safety guards or current-message write-intent requirements.
 Do not claim an action was completed unless the provided action result confirms success.
@@ -308,7 +321,15 @@ export default async function handler(req, res) {
     context.brainContext = await safeLoadBrainContext(context);
     const classification = classifyBrainMessage(message, context.brainChat);
     context.brainClassification = classification;
-    context.brainSkill = selectBrainSkill({
+    context.brainRoute = await safeRouteBrainMessage({
+      message,
+      source,
+      brainChat: context.brainChat,
+      brainContext: context.brainContext,
+      classification,
+      context,
+    });
+    context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
       message,
       classification,
       brainContext: context.brainContext,
@@ -316,12 +337,12 @@ export default async function handler(req, res) {
     });
     const negativeWriteIntent = hasNegativeWriteIntent(message);
 
-    if (classification.kind === 'memory_write') {
-      const command = extractExplicitMemoryCommand(message);
+    if (context.brainRoute.mode === 'memory_write') {
+      const command = routeMemoryCommand(context.brainRoute) ?? extractExplicitMemoryCommand(message);
       const plan = createReadOnlyBrainPlan('Remember an explicit durable user memory.');
       if (!command) {
         const answer = 'Tell me exactly what to remember, like: "remember my name is Ale."';
-        return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), skipMemoryExtraction: true }, context, { message, source });
+        return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
       }
       const savedMemory = await persistExplicitBrainMemory({
         memory: command.memory,
@@ -335,36 +356,51 @@ export default async function handler(req, res) {
         contextSummary: null,
         memory: savedMemory,
         selected_skill: serializeSkillSelection(context.brainSkill),
+        brain_route: serializeBrainRoute(context.brainRoute),
         skipMemoryExtraction: true,
       }, context, { message, source });
     }
 
-    if (classification.kind === 'memory_recall') {
+    if (context.brainRoute.mode === 'memory_recall') {
       const plan = createReadOnlyBrainPlan('Summarize active long-term memory.');
       const answer = formatMemoryRecallAnswer(context.brainContext);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (classification.kind === 'memory_forget') {
+    if (context.brainRoute.mode === 'memory_forget') {
       const plan = createReadOnlyBrainPlan('Direct the user to the explicit memory controls.');
-      const answer = 'Use **What LifeOS Knows** to remove the exact memory. I will not guess which memory to forget.';
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), skipMemoryExtraction: true }, context, { message, source });
+      const result = await archiveMatchingBrainMemory({
+        target: context.brainRoute.user_intent_summary || message,
+        existingMemories: context.brainContext?.memories ?? [],
+      });
+      const answer = formatMemoryForgetAnswer(result);
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (classification.kind === 'follow_up_transform') {
-      const plan = createReadOnlyBrainPlan(classification.reason);
+    if (context.brainRoute.mode === 'follow_up_transform') {
+      const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
       const answer = await answerFollowUpTransform(message, context.brainChat);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (classification.kind === 'casual' || classification.kind === 'clarify') {
-      const plan = createReadOnlyBrainPlan(classification.reason);
-      const answer = formatCasualBrainAnswer(message, context.brainContext, { negativeWriteIntent, classification });
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), skipMemoryExtraction: true }, context, { message, source });
+    if (context.brainRoute.mode === 'clarification' || context.brainRoute.needs_clarification) {
+      const plan = createClarificationBrainPlan(context.brainRoute);
+      const answer = plan.clarifyingQuestion || 'What details should I use?';
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (!negativeWriteIntent && classification.kind === 'explicit_action' && isFiniteRecurringCalendarRequest(message)) {
+    if (context.brainRoute.mode === 'casual_chat') {
+      const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
+      const answer = await answerWithGemini(message, plan, null, [], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
+      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+    }
+
+    if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isFiniteRecurringCalendarRequest(message)) {
       const plan = createFiniteRecurringCalendarSyntheticPlan();
+      if (!isBrainActionAllowedForPlan(message, plan, context)) {
+        const answer = context.brainRoute.clarification_question || 'Do you want me to create calendar events for this?';
+        return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
+      }
       const actions = [];
       let answer = '';
       try {
@@ -380,8 +416,12 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!negativeWriteIntent && classification.kind === 'explicit_action' && isObviousDayScheduleRequest(message)) {
+    if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isObviousDayScheduleRequest(message)) {
       const plan = createDayScheduleSyntheticPlan(message);
+      if (!isBrainActionAllowedForPlan(message, plan, context)) {
+        const answer = context.brainRoute.clarification_question || 'Do you want me to create calendar events for this schedule?';
+        return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
+      }
       try {
         const writeResult = await executeDaySchedulePlan(message, plan);
         return sendAiSuccess(res, 200, {
@@ -399,8 +439,12 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!negativeWriteIntent && classification.kind === 'explicit_action' && isObviousExplicitMultiEventCalendarRequest(message)) {
+    if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isObviousExplicitMultiEventCalendarRequest(message)) {
       const plan = createExplicitCalendarSyntheticPlan(message);
+      if (!isBrainActionAllowedForPlan(message, plan, context)) {
+        const answer = context.brainRoute.clarification_question || 'Do you want me to create these calendar events?';
+        return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
+      }
       const actions = [];
       let answer = '';
       try {
@@ -418,28 +462,29 @@ export default async function handler(req, res) {
 
     let plan;
     try {
-      plan = await planMessage(message, context.brainContext, context.brainChat, context.brainSkill);
+      plan = await planMessage(message, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
     } catch (error) {
       const diagnostics = logAiPlannerFailure({ context, message, error });
       attachDebugDiagnostics(error, diagnostics);
       throw error;
     }
     plan = enforceWorkoutAdviceReadOnly(message, plan);
-    plan = enforceBrainWriteRestraint(message, plan, classification);
-    context.brainSkill = selectBrainSkill({
+    plan = enforceBrainWriteRestraint(message, plan, classification, context.brainRoute);
+    plan = mergeBrainRouteIntoPlan(plan, context.brainRoute, context.brainSkill);
+    context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
       message,
       classification,
       plan,
       brainContext: context.brainContext,
       brainChat: context.brainChat,
     });
-    plan = enforceBrainSkillWritePermission(message, plan, context.brainSkill);
+    plan = enforceBrainSkillWritePermission(message, plan, context.brainSkill, context.brainRoute);
     const actions = [];
     let lifeosContext = null;
     let answer = '';
     const workoutAdviceOnly = isWorkoutAdviceOnlyRequest(message);
-    const dayScheduleRequest = !negativeWriteIntent && !workoutAdviceOnly && classification.kind === 'explicit_action' && isDaySchedulePlannerGuard(message, plan);
-    const explicitMultiEventRequest = !negativeWriteIntent && !workoutAdviceOnly && classification.kind === 'explicit_action' && isExplicitMultiEventCalendarRequest(message, plan);
+    const dayScheduleRequest = !negativeWriteIntent && !workoutAdviceOnly && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isDaySchedulePlannerGuard(message, plan);
+    const explicitMultiEventRequest = !negativeWriteIntent && !workoutAdviceOnly && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isExplicitMultiEventCalendarRequest(message, plan);
 
     if (plan.intent === 'clarify') {
       answer = plan.clarifyingQuestion || 'What details should I use?';
@@ -482,7 +527,7 @@ export default async function handler(req, res) {
     if (plan.intent === 'blocked_destructive') {
       answer = await answerWithGemini(message, plan, lifeosContext, [
         { type: 'blocked_destructive', message: 'Deletion and destructive updates are not enabled for the AI assistant yet.' },
-      ], context.brainContext, context.brainChat, context.brainSkill);
+      ], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
       return sendAiSuccess(res, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
     }
 
@@ -494,7 +539,7 @@ export default async function handler(req, res) {
     if (plan.needsWrite) {
       let writeResult;
       try {
-        writeResult = await executeWriteIntent(plan, message, lifeosContext, context.brainContext, context.brainChat, context.brainSkill);
+        writeResult = await executeWriteIntent(plan, message, lifeosContext, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: plan.intent, error });
         await safeLogAiError({ context, message, source, plan, writePath: plan.intent, error, diagnostics });
@@ -507,7 +552,7 @@ export default async function handler(req, res) {
     }
 
     if (!answer) {
-      answer = await answerWithGemini(message, plan, lifeosContext, actions, context.brainContext, context.brainChat, context.brainSkill);
+      answer = await answerWithGemini(message, plan, lifeosContext, actions, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
     }
     if (workoutAdviceOnly) {
       answer = appendWorkoutReadOnlyConfirmation(answer, message);
@@ -546,7 +591,31 @@ async function safeLoadBrainContext(context) {
   }
 }
 
-async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill }) {
+async function safeRouteBrainMessage({ message, source, brainChat, brainContext, classification, context }) {
+  try {
+    return await routeBrainMessageWithAI({
+      message,
+      source,
+      brainChat,
+      brainContext,
+      classification,
+    });
+  } catch (error) {
+    console.error('[LifeOS Brain router warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'semantic_router',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return fallbackBrainRoute({
+      message,
+      classification,
+      brainChat,
+      reason: 'AI semantic router failed; deterministic fallback route used.',
+    });
+  }
+}
+
+async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute }) {
   try {
     return await persistBrainAssistantMessage({
       chat: context?.brainChat,
@@ -557,6 +626,7 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
       plan,
       recordRefs,
       selectedSkill,
+      brainRoute,
     });
   } catch (error) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -575,6 +645,7 @@ async function safePersistBrainError(context, error) {
       error,
       requestId: context?.requestId,
       selectedSkill: serializeSkillSelection(context?.brainSkill),
+      brainRoute: serializeBrainRoute(context?.brainRoute),
     });
   } catch (persistenceError) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -631,12 +702,13 @@ export function hasNegativeWriteIntent(message) {
     || /\bnon\s+(?:programmare|segnare|creare|loggare|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
 }
 
-function enforceBrainWriteRestraint(message, plan = {}, classification) {
+function enforceBrainWriteRestraint(message, plan = {}, classification, brainRoute = null) {
   const negative = hasNegativeWriteIntent(message);
-  const tentative = hasTentativeWriteLanguage(message) && !hasExplicitActionRequest(message);
-  const casualWrite = classification.kind === 'casual' && plan.needsWrite;
+  const routeWriteIntent = Boolean(brainRoute?.write_intent && brainRoute?.mode === 'explicit_action');
+  const tentative = hasTentativeWriteLanguage(message) && !hasExplicitActionRequest(message) && !routeWriteIntent;
+  const casualWrite = (classification.kind === 'casual' || brainRoute?.mode === 'casual_chat') && plan.needsWrite;
   if (negative || tentative || casualWrite) {
-    const readOnly = classification.kind === 'read_only_analysis' || plan.needsRead || plan.intent === 'analyze';
+    const readOnly = classification.kind === 'read_only_analysis' || brainRoute?.mode === 'read_only_analysis' || plan.needsRead || plan.intent === 'analyze';
     return {
       ...plan,
       intent: readOnly ? 'analyze' : 'clarify',
@@ -666,7 +738,7 @@ function enforceBrainWriteRestraint(message, plan = {}, classification) {
     };
   }
 
-  if (plan.needsWrite && !hasExplicitActionRequest(message)) {
+  if (plan.needsWrite && !hasExplicitActionRequest(message) && !routeWriteIntent) {
     return {
       ...plan,
       intent: 'clarify',
@@ -682,8 +754,13 @@ function enforceBrainWriteRestraint(message, plan = {}, classification) {
   return plan;
 }
 
-function enforceBrainSkillWritePermission(message, plan = {}, skillSelection) {
-  const permission = canSkillPerformIntent(skillSelection?.skill, plan, message);
+function enforceBrainSkillWritePermission(message, plan = {}, skillSelection, brainRoute = null) {
+  const permission = canExecuteBrainAction({
+    route: brainRoute,
+    skill: skillSelection?.skill,
+    plan,
+    message,
+  });
   if (permission.allowed) return plan;
   const readOnly = plan.needsRead || plan.intent === 'analyze_and_plan';
   return {
@@ -700,6 +777,44 @@ function enforceBrainSkillWritePermission(message, plan = {}, skillSelection) {
   };
 }
 
+function isBrainActionAllowedForPlan(message, plan, context) {
+  return canExecuteBrainAction({
+    route: context?.brainRoute,
+    skill: context?.brainSkill?.skill,
+    plan,
+    message,
+  }).allowed;
+}
+
+function mergeBrainRouteIntoPlan(plan = {}, brainRoute, skillSelection) {
+  if (!brainRoute) return plan;
+  const routeTables = routeDataToPlanTables(brainRoute.needs_data);
+  const skillTables = routeDataToPlanTables(skillSelection?.skill?.dataTables ?? []);
+  const mergedTables = Array.from(new Set([
+    ...(Array.isArray(plan.tables) ? plan.tables : []),
+    ...routeTables,
+    ...(brainRoute.mode === 'read_only_analysis' ? skillTables : []),
+  ]));
+  const needsRouteRead = brainRoute.mode === 'read_only_analysis' || routeTables.length > 0;
+  const routeBlocksWrite = !brainRoute.write_intent && plan.needsWrite;
+  return {
+    ...plan,
+    needsRead: Boolean(plan.needsRead || needsRouteRead),
+    needsWrite: routeBlocksWrite ? false : plan.needsWrite,
+    intent: routeBlocksWrite ? (needsRouteRead ? 'analyze' : 'clarify') : plan.intent,
+    tables: mergedTables,
+    clarifyingQuestion: brainRoute.needs_clarification
+      ? (brainRoute.clarification_question || plan.clarifyingQuestion)
+      : plan.clarifyingQuestion,
+    reason: [plan.reason, brainRoute.reason ? `Brain route: ${brainRoute.reason}` : null].filter(Boolean).join(' '),
+  };
+}
+
+function routeDataToPlanTables(items = []) {
+  const supported = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews', 'memos', 'projects', 'project_sessions', 'project_money_entries']);
+  return (Array.isArray(items) ? items : []).filter((item) => supported.has(item));
+}
+
 function serializeSkillSelection(selection) {
   if (!selection?.skill?.id) return null;
   return {
@@ -709,6 +824,51 @@ function serializeSkillSelection(selection) {
     confidence: Number(selection.confidence ?? 0),
     reason: selection.reason || '',
     matchedSignals: Array.isArray(selection.matchedSignals) ? selection.matchedSignals.slice(0, 12) : [],
+  };
+}
+
+function selectBrainSkillFromRoute(brainRoute, fallbackInput) {
+  if (brainRoute?.primary_skill) {
+    const skill = getBrainSkill(brainRoute.primary_skill);
+    if (skill?.id === brainRoute.primary_skill) {
+      return {
+        skill,
+        confidence: Number(brainRoute.confidence ?? 0),
+        reason: brainRoute.reason || 'AI semantic router selected this skill.',
+        matchedSignals: [brainRoute.mode, ...(Array.isArray(brainRoute.proposed_action_types) ? brainRoute.proposed_action_types : [])].filter(Boolean),
+      };
+    }
+  }
+  return selectBrainSkill(fallbackInput);
+}
+
+function routeMemoryCommand(brainRoute) {
+  const candidate = brainRoute?.memory_candidate;
+  if (!candidate) return null;
+  return {
+    memory: {
+      category: candidate.category,
+      title: candidate.title,
+      content: candidate.content,
+      source: candidate.source ?? 'user_explicit',
+      confidence: candidate.confidence,
+      importance: candidate.importance,
+    },
+    response: `Got it - I'll remember: ${candidate.content}`,
+  };
+}
+
+function createClarificationBrainPlan(brainRoute) {
+  return {
+    intent: 'clarify',
+    needsRead: false,
+    needsWrite: false,
+    range: null,
+    tables: [],
+    args: {},
+    clarifyingQuestion: brainRoute?.clarification_question || 'What details should I use?',
+    riskLevel: 'low',
+    reason: brainRoute?.reason || 'Brain route requested clarification.',
   };
 }
 
@@ -724,6 +884,17 @@ function createReadOnlyBrainPlan(reason) {
     riskLevel: 'low',
     reason,
   };
+}
+
+function formatMemoryForgetAnswer(result) {
+  if (result?.status === 'archived' && result.memory) {
+    return `Forgot this memory: ${result.memory.content}`;
+  }
+  if (result?.status === 'multiple' && Array.isArray(result.matches) && result.matches.length) {
+    const options = result.matches.map((memory) => `- ${memory.title}: ${memory.content}`).join('\n');
+    return `I found multiple possible memories. Which one should I forget?\n\n${options}`;
+  }
+  return 'I could not find a matching active memory. You can remove the exact item in **What LifeOS Knows**.';
 }
 
 function isExplicitRememberRequest(message) {
@@ -836,6 +1007,7 @@ function hasExplicitActionRequest(message) {
 function isReadOnlyAnalysisRequest(message) {
   const text = normalizeBrainText(message);
   return /\b(?:analyze|analyse|analysis|review|status|how am i doing|how should you answer me|how should you respond|what should i do|what should i train|look at my workouts|review my week|dimmi cosa dovrei allenare|analizza|come sto andando|cosa dovrei fare|consigli|advice)\b/.test(text)
+    || /\b(?:be brutally honest|be honest|too complicated|becoming too complicated)\b/.test(text)
     || /\b(?:what should we build|build next|what should i build|product strategy|roadmap|saas|architecture|architettura|feature roadmap)\b/.test(text)
     || (/\blifeos\b/.test(text) && /\b(?:build|ship|feature|roadmap|product|business|architecture|ui|ux)\b/.test(text))
     || isWorkoutAdviceOnlyRequest(message);
@@ -906,9 +1078,11 @@ function resolveAssistantSource(authInfo, body = {}) {
 async function sendAiSuccess(res, status, data, context, logInfo) {
   const { skipMemoryExtraction = false, ...publicData } = data ?? {};
   const selectedSkill = publicData.selected_skill ?? serializeSkillSelection(context?.brainSkill);
+  const brainRoute = publicData.brain_route ?? serializeBrainRoute(context?.brainRoute);
   const responseData = {
     ...publicData,
     ...(selectedSkill ? { selected_skill: selectedSkill } : {}),
+    ...(brainRoute ? { brain_route: brainRoute } : {}),
   };
   await safeLogAiSuccess({
     context,
@@ -917,6 +1091,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     answer: responseData?.answer,
     actions: responseData?.actions ?? [],
     selectedSkill,
+    brainRoute,
   });
   const actionType = inferActionLogType(responseData?.actions ?? []);
   const recordRefs = extractRecordRefs(responseData?.actions ?? []);
@@ -928,6 +1103,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     actionType,
     recordRefs,
     selectedSkill,
+    brainRoute,
   });
   if (!skipMemoryExtraction) {
     await safeExtractBrainKnowledge({
@@ -946,13 +1122,14 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   }, context);
 }
 
-async function planMessage(message, brainContext, brainChat, brainSkill) {
+async function planMessage(message, brainContext, brainChat, brainSkill, brainRoute) {
   const prompt = JSON.stringify({
     today: localDate(),
     tomorrow: localDate(1),
     localTime: localTime(),
     timeZone: 'Europe/Rome',
     userMessage: message,
+    brainRoute: formatBrainRouteForPrompt(brainRoute),
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
@@ -1501,7 +1678,7 @@ export function extractExplicitCalendarEventsLocally(message, fallbackDate = loc
   };
 }
 
-async function executeWriteIntent(plan, message, lifeosContext, brainContext, brainChat, brainSkill) {
+async function executeWriteIntent(plan, message, lifeosContext, brainContext, brainChat, brainSkill, brainRoute) {
   if (plan.riskLevel === 'high') {
     return { actions: [{ type: 'blocked_high_risk', message: 'High-risk actions are blocked in v1.' }] };
   }
@@ -1548,7 +1725,7 @@ async function executeWriteIntent(plan, message, lifeosContext, brainContext, br
 
   if (plan.intent === 'analyze_and_plan') {
     const targetDate = resolveDate(plan.args?.target_date || plan.args?.event_date || plan.args?.date, localDate(1));
-    const proposal = await proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat, brainSkill);
+    const proposal = await proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat, brainSkill, brainRoute);
     if (!proposal.events.length) {
       throw new HttpError(400, 'Gemini did not return any calendar events to create.');
     }
@@ -2171,13 +2348,14 @@ function formatMoney(value) {
   });
 }
 
-async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat, brainSkill) {
+async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat, brainSkill, brainRoute) {
   const prompt = JSON.stringify({
     userMessage: message,
     targetDate,
     range: getRangeWindow(plan.range),
     plan,
     lifeosContext,
+    brainRoute: formatBrainRouteForPrompt(brainRoute),
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
@@ -2190,12 +2368,13 @@ async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, bra
   };
 }
 
-async function answerWithGemini(message, plan, lifeosContext, actions, brainContext, brainChat, brainSkill) {
+async function answerWithGemini(message, plan, lifeosContext, actions, brainContext, brainChat, brainSkill, brainRoute) {
   const prompt = JSON.stringify({
     userMessage: message,
     plan,
     lifeosContext,
     actions,
+    brainRoute: formatBrainRouteForPrompt(brainRoute),
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
@@ -2236,7 +2415,7 @@ function getLatestUserMessageBefore(brainChat, beforeCreatedAt) {
   return null;
 }
 
-async function safeLogAiSuccess({ context, message, source, answer, actions, selectedSkill }) {
+async function safeLogAiSuccess({ context, message, source, answer, actions, selectedSkill, brainRoute }) {
   if (!Array.isArray(actions) || actions.length === 0) return;
   try {
     await createAiActionLog({
@@ -2250,6 +2429,7 @@ async function safeLogAiSuccess({ context, message, source, answer, actions, sel
       actions: actions.map((action) => ({
         ...sanitizeActionForLog(action),
         ...(selectedSkill ? { selected_skill: selectedSkill } : {}),
+        ...(brainRoute ? { brain_route: brainRoute } : {}),
       })),
       recordRefs: extractRecordRefs(actions),
     });
@@ -2277,6 +2457,7 @@ async function safeLogAiError({ context, message, source, plan, writePath, error
         plannerIntent: plan?.intent,
         plannerArgsShape: describeValueShape(plan?.args),
         selected_skill: serializeSkillSelection(context?.brainSkill),
+        brain_route: serializeBrainRoute(context?.brainRoute),
         details: sanitizeValue(diagnostics?.details),
       }],
       errorMessage: error instanceof Error ? error.message : String(error ?? 'Unknown error'),

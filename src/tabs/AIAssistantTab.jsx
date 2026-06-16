@@ -112,7 +112,10 @@ export function AIAssistantTab() {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: result.answer,
-        metadata: result.selected_skill ? { selected_skill: result.selected_skill } : {},
+        metadata: {
+          ...(result.selected_skill ? { selected_skill: result.selected_skill } : {}),
+          ...(result.brain_route ? { brain_route: result.brain_route } : {}),
+        },
         created_at: new Date().toISOString(),
       }]);
       await refreshAfterAiActions(result.actions ?? []);

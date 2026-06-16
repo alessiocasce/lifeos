@@ -185,7 +185,11 @@ Run the focused checklists after the full flow:
 25. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
 26. Confirm `hello` shows General behavior, `remember my name, Ale` shows Memory behavior, and `What should we build next in LifeOS?` shows Product behavior.
 27. Confirm selected skill routing does not bypass existing negative write, workout-advice read-only, memory command, or follow-up transform guards.
-28. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
+28. Confirm AI-first `brain_route` metadata is present on new assistant messages but old messages without route metadata still render normally.
+29. Confirm `yo, I just opened LifeOS` stays casual/general and `Be brutally honest: is LifeOS becoming too complicated?` routes Product/read-only.
+30. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
+31. Confirm Recent Actions remains clean when a route blocks writes or asks clarification.
+32. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
 
 ## Workout Advice Write Boundary
 

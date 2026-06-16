@@ -25,7 +25,18 @@ import {
   requiredText,
 } from './validation.js';
 
-const VALID_TABLES = new Set(['expenses', 'health_logs', 'workouts', 'workout_sets', 'calendar_events', 'daily_reviews', 'memos']);
+const VALID_TABLES = new Set([
+  'expenses',
+  'health_logs',
+  'workouts',
+  'workout_sets',
+  'calendar_events',
+  'daily_reviews',
+  'memos',
+  'projects',
+  'project_sessions',
+  'project_money_entries',
+]);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
 const VALID_AI_LOG_SOURCES = new Set(['app', 'shortcut', 'api']);
 const VALID_AI_LOG_STATUSES = new Set(['success', 'error']);
@@ -197,6 +208,51 @@ export async function readLifeOSContext(plan) {
     context.coverage.daily_reviews = reviews.length;
     context.summaries.daily_reviews = summarizeReviews(reviews);
     context.examples.daily_reviews = reviews.slice(0, exampleLimit(plan.range));
+  }
+
+  if (tables.includes('memos')) {
+    const rows = await queryDateRange(client.from('memos').select('title, memo_date, memo_time, notes, status, created_at').eq('user_id', userId), 'memo_date', window)
+      .order('memo_date', { ascending: false, nullsFirst: false })
+      .order('memo_time', { ascending: true })
+      .limit(limitForRange(plan.range, 300));
+    if (rows.error) throw rows.error;
+    const memos = rows.data ?? [];
+    context.coverage.memos = memos.length;
+    context.summaries.memos = summarizeMemos(memos);
+    context.examples.memos = memos.slice(0, exampleLimit(plan.range));
+  }
+
+  if (tables.includes('projects')) {
+    const rows = await queryDateRange(client.from('projects').select('id, name, status, goal_type, goal_label, target_value, current_value, unit_label, started_on, notes').eq('user_id', userId), 'started_on', window)
+      .order('created_at', { ascending: false })
+      .limit(limitForRange(plan.range, 200));
+    if (rows.error) throw rows.error;
+    const projects = rows.data ?? [];
+    context.coverage.projects = projects.length;
+    context.summaries.projects = summarizeProjects(projects);
+    context.examples.projects = projects.slice(0, exampleLimit(plan.range));
+  }
+
+  if (tables.includes('project_sessions')) {
+    const rows = await queryDateRange(client.from('project_sessions').select('project_id, started_at, ended_at, duration_minutes, target_output, proof_of_work, progress_delta').eq('user_id', userId), 'started_at', window)
+      .order('started_at', { ascending: false })
+      .limit(limitForRange(plan.range, 300));
+    if (rows.error) throw rows.error;
+    const sessions = rows.data ?? [];
+    context.coverage.project_sessions = sessions.length;
+    context.summaries.project_sessions = summarizeProjectSessions(sessions);
+    context.examples.project_sessions = sessions.slice(0, exampleLimit(plan.range));
+  }
+
+  if (tables.includes('project_money_entries')) {
+    const rows = await queryDateRange(client.from('project_money_entries').select('project_id, type, amount, description, entry_date').eq('user_id', userId), 'entry_date', window)
+      .order('entry_date', { ascending: false })
+      .limit(limitForRange(plan.range, 300));
+    if (rows.error) throw rows.error;
+    const entries = rows.data ?? [];
+    context.coverage.project_money_entries = entries.length;
+    context.summaries.project_money_entries = summarizeProjectMoneyEntries(entries);
+    context.examples.project_money_entries = entries.slice(0, exampleLimit(plan.range));
   }
 
   return context;
@@ -728,6 +784,64 @@ function summarizeReviews(reviews) {
   };
 }
 
+function summarizeMemos(memos) {
+  return {
+    count: memos.length,
+    byStatus: Object.entries(memos.reduce((acc, memo) => {
+      acc[memo.status ?? 'open'] = (acc[memo.status ?? 'open'] ?? 0) + 1;
+      return acc;
+    }, {})),
+    openTimed: memos.filter((memo) => memo.status === 'open' && memo.memo_date).slice(0, 10),
+    noDate: memos.filter((memo) => memo.status === 'open' && !memo.memo_date).slice(0, 10),
+  };
+}
+
+function summarizeProjects(projects) {
+  return {
+    count: projects.length,
+    active: projects.filter((project) => project.status === 'active').length,
+    byGoalType: Object.entries(projects.reduce((acc, project) => {
+      acc[project.goal_type ?? 'custom'] = (acc[project.goal_type ?? 'custom'] ?? 0) + 1;
+      return acc;
+    }, {})),
+    recent: projects.slice(0, 8).map((project) => ({
+      name: project.name,
+      status: project.status,
+      goal_type: project.goal_type,
+      current_value: project.current_value,
+      target_value: project.target_value,
+      unit_label: project.unit_label,
+    })),
+  };
+}
+
+function summarizeProjectSessions(sessions) {
+  const completed = sessions.filter((session) => session.ended_at);
+  const active = sessions.filter((session) => !session.ended_at);
+  return {
+    count: sessions.length,
+    active: active.length,
+    completed: completed.length,
+    totalHours: round(sumRaw(completed, 'duration_minutes') / 60),
+    proofExamples: completed.map((session) => session.proof_of_work).filter(Boolean).slice(0, 8),
+    recent: sessions.slice(0, 8),
+  };
+}
+
+function summarizeProjectMoneyEntries(entries) {
+  const expenses = entries.filter((entry) => entry.type === 'expense');
+  const revenue = entries.filter((entry) => entry.type === 'revenue');
+  const spent = sum(expenses, 'amount');
+  const earned = sum(revenue, 'amount');
+  return {
+    count: entries.length,
+    spent,
+    revenue: earned,
+    net: round(earned - spent),
+    recent: entries.slice(0, 8),
+  };
+}
+
 function validatePlanEventDoesNotOverlap(event, accepted) {
   const start = event.start_time;
   const end = event.end_time;
@@ -771,6 +885,10 @@ function topEntries(object, count) {
 
 function sum(rows, key) {
   return round(rows.reduce((total, row) => total + Number(row[key] ?? 0), 0));
+}
+
+function sumRaw(rows, key) {
+  return rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
 }
 
 function average(rows, key) {
