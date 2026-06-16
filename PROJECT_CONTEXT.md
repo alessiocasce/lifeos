@@ -259,6 +259,10 @@ Current behavior:
 Architecture:
 
 - Frontend sends the raw message and active `thread_id` to `POST /api/ai/chat`.
+- Brain chat requests carry a client request id. Optimistic user/assistant messages are deduped against persisted `ai_chat_messages.metadata.client_request_id` to avoid visible flicker or duplicate bubbles.
+- Brain chat requests have a frontend timeout and retry path, so a hung `/api/ai/chat` call exits loading instead of leaving an infinite spinner.
+- Brain auto-scrolls to the latest message/loading/error when the user submits, while avoiding aggressive jumps during background reloads.
+- Brain input, send button, message list, loading indicator, and error card expose stable test ids for browser automation.
 - The frontend sends the current Supabase access token; the backend verifies it and ensures it matches `LIFEOS_ACTION_USER_ID`.
 - The endpoint can also accept `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` for trusted server/tool callers.
 - App chat requests append user/assistant messages to `ai_chat_messages`; Shortcut/API calls do not create personal chat history by default.
@@ -266,6 +270,8 @@ Architecture:
 - The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
 - Brain uses AI-first semantic routing before planner writes. The router classifies mode, selected skill, needed data, write intent, ambiguity, and risk from the current message plus bounded conversation/memory context.
+- Brain asks specific domain clarifications for vague calendar/time-block commands such as `blocca domani un'ora dopo pranzo`; vague time phrases never authorize writes by themselves.
+- Brain/Home redesign, automatic Vault report saving, and changing Brain to always open a new empty chat are intentionally out of scope for this stability pass.
 - Deterministic keyword routing is now fallback/sanity behavior, not the primary understanding layer.
 - Brain's operating principle is: AI understands; backend code protects, validates, and executes.
 - The AI semantic router cannot execute writes. It can only propose route metadata, skill, data needs, and action types.

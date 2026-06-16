@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
-export async function sendLifeOSAiMessage(message, threadId) {
+export async function sendLifeOSAiMessage(message, threadId, options = {}) {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured.');
   }
@@ -10,17 +10,45 @@ export async function sendLifeOSAiMessage(message, threadId) {
   const token = data.session?.access_token;
   if (!token) throw new Error('Sign in before using the LifeOS assistant.');
 
-  const response = await fetch('/api/ai/chat', {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      message,
-      ...(threadId ? { thread_id: threadId } : {}),
-    }),
-  });
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 90_000;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const abortFromCaller = () => controller.abort();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener('abort', abortFromCaller, { once: true });
+  }
+
+  let response;
+  try {
+    response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        message,
+        ...(threadId ? { thread_id: threadId } : {}),
+        ...(options.clientRequestId ? { client_request_id: options.clientRequestId } : {}),
+      }),
+    });
+  } catch (error) {
+    if (timedOut || error?.name === 'AbortError') {
+      const timeoutError = new Error(timedOut ? 'Brain took too long to respond. Try again.' : 'Brain request was cancelled.');
+      timeoutError.code = timedOut ? 'BRAIN_TIMEOUT' : 'BRAIN_ABORTED';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
+  }
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {

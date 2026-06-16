@@ -178,26 +178,31 @@ Run the focused checklists after the full flow:
 18. Send `I might need a nap tomorrow afternoon, don't schedule a memo` and confirm no memo/event/error action is created.
 19. After a workout analysis answer, send `mettile in ordine cronologico` and confirm Brain transforms the previous answer instead of treating it as casual chat.
 20. Refresh `/assistant`, send `fammi una tabella`, and confirm the persistent conversation history still allows the follow-up transform.
-21. Pull to refresh and confirm threads, active messages, memories, insights, Vault documents, and Recent Actions reload without wiping typed Brain input.
-22. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
-23. Open a Recent Action and confirm its detail view still works.
-24. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
-25. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
-26. Confirm `hello` shows General behavior, `remember my name, Ale` shows Memory behavior, and `What should we build next in LifeOS?` shows Product behavior.
-27. Confirm selected skill routing does not bypass existing negative write, workout-advice read-only, memory command, or follow-up transform guards.
-28. Confirm AI-first `brain_route` metadata is present on new assistant messages but old messages without route metadata still render normally.
-29. Confirm `yo, I just opened LifeOS` stays casual/general and `Be brutally honest: is LifeOS becoming too complicated?` routes Product/read-only.
-30. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
-31. Confirm Recent Actions remains clean when a route blocks writes or asks clarification.
-32. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
-33. Save an assistant workout/product/project answer to Vault and confirm it appears in the Vault panel.
-34. Open the saved Vault document and confirm the full content renders safely with tags and metadata.
-35. Archive the Vault document and confirm it is removed from the active panel.
-36. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
-37. If embeddings are not configured, confirm saving still works and Brain does not crash.
-38. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
-39. Click Vault `Re-embed` and confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
-40. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
+21. Send a Brain message in a long thread and confirm there is no duplicated optimistic/server message flicker.
+22. Confirm Brain auto-scrolls to the newest message, loading indicator, response, or error after sending.
+23. Confirm a timed-out Brain request exits loading, restores the input, shows Retry, and does not leave an infinite spinner.
+24. Confirm browser automation can target `brain-message-input`, `brain-send-button`, `brain-message-list`, `brain-loading-indicator`, and `brain-error`.
+25. Pull to refresh and confirm threads, active messages, memories, insights, Vault documents, and Recent Actions reload without wiping typed Brain input.
+26. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
+27. Open a Recent Action and confirm its detail view still works.
+28. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
+29. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
+30. Confirm `hello` shows General behavior, `remember my name, Ale` shows Memory behavior, and `What should we build next in LifeOS?` shows Product behavior.
+31. Confirm selected skill routing does not bypass existing negative write, workout-advice read-only, memory command, or follow-up transform guards.
+32. Confirm AI-first `brain_route` metadata is present on new assistant messages but old messages without route metadata still render normally.
+33. Confirm `yo, I just opened LifeOS` stays casual/general and `Be brutally honest: is LifeOS becoming too complicated?` routes Product/read-only.
+34. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
+35. Confirm `blocca domani un'ora per sistemare il Vault dopo pranzo` asks for exact time and creates no event.
+36. Confirm Recent Actions remains clean when a route blocks writes or asks clarification.
+37. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
+38. Save an assistant workout/product/project answer to Vault and confirm it appears in the Vault panel.
+39. Open the saved Vault document and confirm the full content renders safely with tags and metadata.
+40. Archive the Vault document and confirm it is removed from the active panel.
+41. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
+42. If embeddings are not configured, confirm saving still works and Brain does not crash.
+43. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
+44. Click Vault `Re-embed` and confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
+45. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
 
 ## Workout Advice Write Boundary
 

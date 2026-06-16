@@ -88,6 +88,9 @@ Rules:
 - If the user says "don't schedule", "do not create", "no memo", "non creare", "non mettere in calendario", or similar, write_intent must be false.
 - Tentative language like "might", "maybe", "forse", "magari", or "potrei" is not write intent.
 - Ambiguous fragments like "gym tomorrow 5", "tomorrow pill 8:30", "study friday 4", or "palestra domani 5" should be clarification, not casual_chat and not silent write.
+- Phrases such as "blocca", "fissa", "pianifica", "programma", "metti in calendario", "segnami in calendario", "block", "schedule", and "put in calendar" can indicate calendar/time-block intent.
+- Vague timing phrases such as "dopo pranzo", "dopo cena", "in mattinata", "mattina", "pomeriggio", "sera", "stasera", "piu tardi", "after lunch", "after dinner", "morning", "afternoon", "evening", and "later" are not exact start/end times.
+- If calendar intent is clear but timing is vague, return mode "clarification", primary_skill "calendar_planner", write_intent false, and ask for the exact start/end time. Do not classify it as casual_chat.
 - "remember my name is Ale", "call me Ale", and "remember I hate noisy dashboards" are memory_write.
 - "remember to buy toothpaste" is explicit_action with memo_assistant, not long-term memory.
 - "what do you remember about me?" is memory_recall.
@@ -142,18 +145,18 @@ export function validateBrainRoute(route, {
   if (!route || typeof route !== 'object' || Array.isArray(route)) return fallback;
 
   const mode = ROUTE_MODES.has(route.mode) ? route.mode : fallback.mode;
-  const primarySkill = getBrainSkill(route.primary_skill)?.id === route.primary_skill
+  let primarySkill = getBrainSkill(route.primary_skill)?.id === route.primary_skill
     ? route.primary_skill
     : fallback.primary_skill;
   const secondarySkills = Array.isArray(route.secondary_skills)
     ? route.secondary_skills.filter((id) => getBrainSkill(id)?.id === id && id !== primarySkill).slice(0, 3)
     : [];
   const confidence = clampNumber(route.confidence, 0, 1, fallback.confidence ?? 0.45);
-  const needsData = normalizeNeedsData(route.needs_data, primarySkill, mode);
   const proposedActionTypes = normalizeActionTypes(route.proposed_action_types);
   const riskLevel = RISK_LEVELS.has(route.risk_level) ? route.risk_level : 'low';
   const negative = hasNegativeWriteIntent(message);
   const destructive = hasDestructiveActionRequest(message) || proposedActionTypes.some((type) => type.startsWith('delete') || type.startsWith('archive'));
+  const vagueCalendarBlock = looksLikeVagueCalendarBlockRequest(message);
   let writeIntent = Boolean(route.write_intent);
   let finalMode = mode;
   let finalRisk = destructive ? 'high' : riskLevel;
@@ -171,9 +174,18 @@ export function validateBrainRoute(route, {
   if (finalRisk === 'high') {
     writeIntent = false;
   }
+  if (vagueCalendarBlock) {
+    finalMode = 'clarification';
+    primarySkill = 'calendar_planner';
+    writeIntent = false;
+    finalRisk = destructive ? 'high' : 'low';
+  }
 
   const needsClarification = Boolean(route.needs_clarification) || finalMode === 'clarification';
-  const clarificationQuestion = cleanText(route.clarification_question, 300)
+  const needsData = normalizeNeedsData(route.needs_data, primarySkill, finalMode);
+  const clarificationQuestion = vagueCalendarBlock
+    ? specificCalendarClarification(message)
+    : cleanText(route.clarification_question, 300)
     ?? fallback.clarification_question
     ?? null;
   const memoryCandidate = finalMode === 'memory_write' ? normalizeMemoryCandidate(route.memory_candidate) : null;
@@ -212,7 +224,15 @@ export function fallbackBrainRoute({ message = '', classification = null, brainC
   let needsClarification = mode === 'clarification';
   let clarificationQuestion = null;
 
-  if (looksLikeAmbiguousFragment(message)) {
+  if (looksLikeVagueCalendarBlockRequest(message)) {
+    mode = 'clarification';
+    primarySkill = 'calendar_planner';
+    writeIntent = false;
+    needsClarification = true;
+    clarificationQuestion = specificCalendarClarification(message);
+  }
+
+  if (!needsClarification && looksLikeAmbiguousFragment(message)) {
     mode = 'clarification';
     primarySkill = looksLikeReminderFragment(message) ? 'memo_assistant' : 'calendar_planner';
     writeIntent = false;
@@ -387,6 +407,75 @@ function inferFallbackActions(message, primarySkill) {
   if (/\b(?:remind me|remember to|ricordami)\b/.test(text)) return ['create_memo'];
   if (/\b(?:schedule|calendar|programma|calendario)\b/.test(text)) return ['create_calendar_event'];
   return [];
+}
+
+export function looksLikeVagueCalendarBlockRequest(message) {
+  const text = normalizeText(message);
+  if (!text || hasNegativeWriteIntent(text)) return false;
+  const hasVagueTime = hasVagueCalendarTimePhrase(text);
+  if (!hasVagueTime) return false;
+  const hasDateish = /\b(?:today|tomorrow|tonight|friday|monday|tuesday|wednesday|thursday|saturday|sunday|next week|oggi|domani|stasera|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|settimana prossima)\b/.test(text);
+  const hasActionVerb = /\b(?:block|schedule|plan|add|create|put|blocca|fissa|pianifica|programma|metti|mettimelo|mettilo|segnami|segnamelo)\b/.test(text);
+  const hasCalendarDomain = /\b(?:calendar|calendario|event|evento|time block|blocco|palestra|gym|studio|study|dentist|dentista|doctor|vault|progetto|project|work|lavoro|call|chiamata)\b/.test(text);
+  const hasRelativeLater = /\b(?:later|piu tardi|stasera)\b/.test(text);
+  return hasVagueTime && (hasDateish || hasRelativeLater) && (hasActionVerb || hasCalendarDomain);
+}
+
+export function specificCalendarClarification(message) {
+  const text = normalizeText(message);
+  const italian = isProbablyItalianCalendarText(text);
+  const phrase = extractVagueCalendarTimePhrase(text);
+  const phraseText = phrase ? `"${phrase}"` : (italian ? 'quel momento' : 'that time');
+  if (italian) {
+    if (/\bdopo pranzo\b/.test(text)) {
+      return `Certo - posso bloccarlo, ma ${phraseText} e' vago. Che orario esatto vuoi usare? Per esempio 14:30-15:30.`;
+    }
+    if (/\bpalestra\b/.test(text)) {
+      return 'Vuoi che la metta in calendario? Se si, che orario esatto e durata devo usare?';
+    }
+    if (/\bstudio\b/.test(text)) {
+      return `Vuoi bloccare lo studio? ${phraseText} e' vago: che orario esatto vuoi usare?`;
+    }
+    if (/\bdentista\b/.test(text)) {
+      return 'Vuoi creare un evento per il dentista? Che orario esatto devo usare?';
+    }
+    return `Posso metterlo in calendario, ma ${phraseText} e' vago. Che orario esatto e durata devo usare?`;
+  }
+  if (/\bafter lunch\b/.test(text)) {
+    return `I can block it, but ${phraseText} is vague. What exact time should I use? For example 14:30-15:30.`;
+  }
+  return `Do you want me to put this on the calendar? If yes, what exact start time, end time, and duration should I use?`;
+}
+
+function hasVagueCalendarTimePhrase(text) {
+  return /\b(?:dopo pranzo|dopo cena|in mattinata|mattina|pomeriggio|sera|stasera|piu tardi|presto|after lunch|after dinner|morning|afternoon|evening|tonight|later|early)\b/.test(text);
+}
+
+function extractVagueCalendarTimePhrase(text) {
+  const phrases = [
+    'dopo pranzo',
+    'dopo cena',
+    'in mattinata',
+    'mattina',
+    'pomeriggio',
+    'stasera',
+    'sera',
+    'piu tardi',
+    'presto',
+    'after lunch',
+    'after dinner',
+    'morning',
+    'afternoon',
+    'evening',
+    'tonight',
+    'later',
+    'early',
+  ];
+  return phrases.find((phrase) => text.includes(phrase)) ?? null;
+}
+
+function isProbablyItalianCalendarText(text) {
+  return /\b(?:blocca|fissa|pianifica|programma|metti|mettimelo|mettilo|segnami|segnamelo|domani|oggi|stasera|dopo|pranzo|cena|mattina|pomeriggio|sera|palestra|studio|dentista|calendario|un'ora|ore)\b/.test(text);
 }
 
 function looksLikeAmbiguousFragment(message) {

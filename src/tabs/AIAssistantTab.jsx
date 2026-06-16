@@ -13,7 +13,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AiActionHistoryList, AssistantMarkdown } from '../components/AiActionHistory';
 import { Panel, PanelHeader, Tag } from '../components/ui';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -74,13 +74,26 @@ export function AIAssistantTab() {
   const [vaultSaveError, setVaultSaveError] = useState('');
   const [vaultRepairStatus, setVaultRepairStatus] = useState('idle');
   const [vaultRepairMessage, setVaultRepairMessage] = useState('');
+  const [lastFailedMessage, setLastFailedMessage] = useState(null);
+  const messagesContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const userPinnedToBottomRef = useRef(true);
+  const forceScrollRef = useRef(false);
+  const sendingRef = useRef(false);
 
   const activeThreads = useMemo(
     () => aiChatThreads.filter((thread) => thread.status === 'active'),
     [aiChatThreads],
   );
   const activeThread = activeThreads.find((thread) => thread.id === activeAiThreadId) ?? null;
-  const messages = [...activeAiChatMessages, ...pendingMessages];
+  const messages = useMemo(
+    () => mergeBrainMessages(activeAiChatMessages, pendingMessages),
+    [activeAiChatMessages, pendingMessages],
+  );
+  const messageScrollKey = useMemo(() => {
+    const latest = messages[messages.length - 1];
+    return [messages.length, latest?.id, latest?.created_at, latest?.content?.length, aiStatus, aiError?.message].join('|');
+  }, [messages, aiStatus, aiError?.message]);
   const actionLimit = recentActionsExpanded ? 10 : 3;
   const successfulActionLogs = useMemo(
     () => aiActionLogs.filter((log) => log.status !== 'error'),
@@ -94,12 +107,40 @@ export function AIAssistantTab() {
     setRenamingThread(false);
   }, [activeThread?.id, activeThread?.title]);
 
-  const submitAiMessage = async (event) => {
-    event.preventDefault();
-    const message = aiInput.trim();
-    if (!message || aiStatus === 'loading') return;
+  useEffect(() => {
+    const updatePinnedState = () => {
+      userPinnedToBottomRef.current = isNearPageBottom();
+    };
+    updatePinnedState();
+    window.addEventListener('scroll', updatePinnedState, { passive: true });
+    window.addEventListener('resize', updatePinnedState);
+    return () => {
+      window.removeEventListener('scroll', updatePinnedState);
+      window.removeEventListener('resize', updatePinnedState);
+    };
+  }, []);
 
-    let threadId = activeAiThreadId;
+  useEffect(() => {
+    const shouldScroll = forceScrollRef.current || userPinnedToBottomRef.current || aiStatus === 'loading' || Boolean(aiError);
+    if (!shouldScroll) return;
+    const behavior = forceScrollRef.current ? 'smooth' : 'auto';
+    forceScrollRef.current = false;
+    window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ block: 'end', behavior });
+    });
+  }, [messageScrollKey, aiStatus, aiError]);
+
+  const submitAiMessage = (event) => {
+    event.preventDefault();
+    void sendBrainMessage(aiInput);
+  };
+
+  const sendBrainMessage = async (rawMessage, options = {}) => {
+    const message = String(rawMessage ?? '').trim();
+    if (!message || aiStatus === 'loading' || sendingRef.current) return;
+    sendingRef.current = true;
+
+    let threadId = options.threadId || activeAiThreadId;
     try {
       if (!threadId) {
         const created = await createAiChatThread();
@@ -107,29 +148,39 @@ export function AIAssistantTab() {
       }
     } catch (error) {
       setAiError({ message: error.message || 'Could not create a Brain conversation.' });
+      sendingRef.current = false;
       return;
     }
 
-    const optimisticId = `user-${Date.now()}`;
+    const clientRequestId = options.clientRequestId || createClientRequestId();
+    const optimisticId = `pending-user-${clientRequestId}`;
     setPendingMessages((prev) => [...prev, {
       id: optimisticId,
+      client_request_id: clientRequestId,
       role: 'user',
       content: message,
       created_at: new Date().toISOString(),
+      pending: true,
+      metadata: { client_request_id: clientRequestId },
     }]);
+    forceScrollRef.current = true;
     setAiInput('');
     setAiError(null);
+    setLastFailedMessage(null);
     setAiStatus('loading');
 
     try {
-      const result = await sendLifeOSAiMessage(message, threadId);
+      const result = await sendLifeOSAiMessage(message, threadId, { clientRequestId });
       const persistedMessage = result.persisted_message;
       setPendingMessages((prev) => [...prev, {
-        id: persistedMessage?.id || `assistant-${Date.now()}`,
+        id: `pending-assistant-${clientRequestId}`,
+        client_request_id: clientRequestId,
         role: 'assistant',
         content: result.answer,
+        pending: true,
         metadata: {
           ...(persistedMessage?.metadata ?? {}),
+          client_request_id: clientRequestId,
           ...(result.selected_skill ? { selected_skill: result.selected_skill } : {}),
           ...(result.brain_route ? { brain_route: result.brain_route } : {}),
           ...(result.vault_context ? { vault_context: result.vault_context } : {}),
@@ -145,12 +196,14 @@ export function AIAssistantTab() {
         reloadAiVaultDocuments?.(),
         reloadAiActionLogs?.(10),
       ].filter(Boolean));
-      setPendingMessages([]);
+      setPendingMessages((prev) => prev.filter((item) => item.client_request_id !== clientRequestId));
     } catch (error) {
-      setPendingMessages((prev) => prev.filter((item) => item.id !== optimisticId));
+      setPendingMessages((prev) => prev.filter((item) => item.client_request_id !== clientRequestId));
       setAiInput(message);
+      setLastFailedMessage({ message, threadId, clientRequestId });
       setAiError({
         message: error.message || 'LifeOS Brain failed.',
+        code: error.code,
         requestId: error.requestId,
         providerStatus: error.providerStatus,
         providerMessage: error.providerMessage,
@@ -158,7 +211,17 @@ export function AIAssistantTab() {
       await Promise.allSettled([reloadAiActionLogs?.(10)].filter(Boolean));
     } finally {
       setAiStatus('idle');
+      sendingRef.current = false;
+      forceScrollRef.current = true;
     }
+  };
+
+  const retryLastFailedMessage = () => {
+    if (!lastFailedMessage || aiStatus === 'loading') return;
+    void sendBrainMessage(lastFailedMessage.message, {
+      threadId: lastFailedMessage.threadId,
+      clientRequestId: lastFailedMessage.clientRequestId,
+    });
   };
 
   const refreshAfterAiActions = async (actions) => {
@@ -361,7 +424,12 @@ export function AIAssistantTab() {
           </div>
         </div>
 
-        <div className="grid min-h-[58dvh] content-start gap-2 p-2 md:min-h-[64dvh] md:p-3">
+        <div
+          ref={messagesContainerRef}
+          className="grid min-h-[58dvh] content-start gap-2 p-2 md:min-h-[64dvh] md:p-3"
+          aria-label="Brain conversation messages"
+          data-testid="brain-message-list"
+        >
           {aiChatMessagesStatus === 'loading' && !messages.length ? (
             <div className="grid min-h-48 place-items-center text-zinc-500">
               <Loader2 size={20} className="animate-spin" aria-label="Loading Brain messages" />
@@ -378,7 +446,18 @@ export function AIAssistantTab() {
             </div>
           )}
 
-          {aiError ? <AssistantError error={aiError} /> : null}
+          {aiStatus === 'loading' ? (
+            <div
+              className="mr-auto inline-flex items-center gap-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] px-3 py-2 text-xs text-cyan-200"
+              data-testid="brain-loading-indicator"
+            >
+              <Loader2 size={13} className="animate-spin" />
+              Brain is thinking...
+            </div>
+          ) : null}
+
+          {aiError ? <AssistantError error={aiError} onRetry={lastFailedMessage ? retryLastFailedMessage : null} /> : null}
+          <div ref={messagesEndRef} aria-hidden="true" />
         </div>
 
         <form
@@ -402,17 +481,24 @@ export function AIAssistantTab() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
+                  if (aiStatus !== 'loading' && !sendingRef.current) {
+                    event.currentTarget.form?.requestSubmit();
+                  }
                 }
               }}
               placeholder="Message LifeOS Brain..."
+              aria-label="Brain message input"
+              data-testid="brain-message-input"
               className="max-h-40 min-h-12 min-w-0 flex-1 resize-y rounded-md border border-white/10 bg-black/50 px-3 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/40"
             />
             <button
               type="submit"
               disabled={aiStatus === 'loading' || !aiInput.trim()}
               className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-              aria-label={aiStatus === 'loading' ? 'Brain is thinking' : 'Send message'}
+              aria-label="Send Brain message"
+              title={aiStatus === 'loading' ? 'Brain is thinking' : 'Send message'}
+              aria-busy={aiStatus === 'loading'}
+              data-testid="brain-send-button"
             >
               {aiStatus === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             </button>
@@ -787,15 +873,25 @@ function VaultDetailModal({ document, onClose, onArchive }) {
   );
 }
 
-function AssistantError({ error }) {
+function AssistantError({ error, onRetry }) {
   return (
-    <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3">
+    <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3" data-testid="brain-error">
       <p className="text-sm font-medium text-red-200">{error.message}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {error.providerStatus ? <Tag tone="amber">Provider: {error.providerStatus}</Tag> : null}
         {error.requestId ? <Tag tone="zinc">Request: {error.requestId}</Tag> : null}
+        {error.code ? <Tag tone="amber">{error.code}</Tag> : null}
       </div>
       {error.providerMessage ? <p className="mt-2 text-xs leading-5 text-zinc-400">{error.providerMessage}</p> : null}
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 h-9 rounded-md border border-red-300/20 bg-red-300/10 px-3 text-xs font-semibold text-red-100 hover:border-red-200/40"
+        >
+          Retry
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -836,6 +932,74 @@ function AssistantMessage({ message, onSaveToVault }) {
         : <AssistantMarkdown content={message.content} />}
     </article>
   );
+}
+
+function mergeBrainMessages(persistedMessages = [], pendingMessages = []) {
+  const persisted = dedupePersistedBrainMessages(Array.isArray(persistedMessages) ? persistedMessages : []);
+  const pending = Array.isArray(pendingMessages) ? pendingMessages : [];
+  const visiblePending = pending.filter((pendingMessage) => !hasMatchingPersistedMessage(pendingMessage, persisted));
+  return [...persisted, ...visiblePending].sort((left, right) => {
+    const leftTime = Date.parse(left.created_at ?? '') || 0;
+    const rightTime = Date.parse(right.created_at ?? '') || 0;
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    if (left.pending && !right.pending) return 1;
+    if (!left.pending && right.pending) return -1;
+    return String(left.id ?? '').localeCompare(String(right.id ?? ''));
+  });
+}
+
+function dedupePersistedBrainMessages(messages) {
+  const seenClientMessages = new Set();
+  return [...messages]
+    .sort((left, right) => (Date.parse(left.created_at ?? '') || 0) - (Date.parse(right.created_at ?? '') || 0))
+    .filter((message) => {
+      const clientRequestId = getMessageClientRequestId(message);
+      if (!clientRequestId) return true;
+      const key = `${message.role}:${clientRequestId}`;
+      if (seenClientMessages.has(key)) return false;
+      seenClientMessages.add(key);
+      return true;
+    });
+}
+
+function hasMatchingPersistedMessage(pendingMessage, persistedMessages) {
+  const clientRequestId = getMessageClientRequestId(pendingMessage);
+  if (clientRequestId) {
+    return persistedMessages.some((message) => (
+      message.role === pendingMessage.role
+      && getMessageClientRequestId(message) === clientRequestId
+    ));
+  }
+
+  const pendingContent = normalizeMessageContent(pendingMessage.content);
+  const pendingTime = Date.parse(pendingMessage.created_at ?? '');
+  if (!pendingContent || !Number.isFinite(pendingTime)) return false;
+  return persistedMessages.some((message) => {
+    if (message.role !== pendingMessage.role) return false;
+    if (normalizeMessageContent(message.content) !== pendingContent) return false;
+    const persistedTime = Date.parse(message.created_at ?? '');
+    return Number.isFinite(persistedTime) && Math.abs(persistedTime - pendingTime) <= 120_000;
+  });
+}
+
+function getMessageClientRequestId(message) {
+  return String(message?.client_request_id || message?.metadata?.client_request_id || '').trim();
+}
+
+function normalizeMessageContent(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function createClientRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isNearPageBottom(threshold = 160) {
+  const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const scrollHeight = Math.max(document.documentElement.scrollHeight || 0, document.body?.scrollHeight || 0);
+  return scrollHeight - (scrollTop + viewportHeight) <= threshold;
 }
 
 function normalizeMessageSkill(value) {

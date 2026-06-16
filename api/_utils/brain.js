@@ -72,7 +72,7 @@ Rules:
 - If nothing durable is present, return empty arrays.
 `;
 
-export async function beginBrainChat({ threadId, source, message, requestId }) {
+export async function beginBrainChat({ threadId, source, message, requestId, clientRequestId }) {
   if (source !== 'app') return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -148,7 +148,10 @@ export async function beginBrainChat({ threadId, source, message, requestId }) {
       role: 'user',
       content: String(message).trim(),
       request_id: uuidOrNull(requestId),
-      metadata: { source: 'app' },
+      metadata: {
+        source: 'app',
+        ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
+      },
     })
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
     .single();
@@ -169,7 +172,7 @@ export async function beginBrainChat({ threadId, source, message, requestId }) {
   };
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext }) {
+export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -191,6 +194,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, ac
         selected_skill: selectedSkill && typeof selectedSkill === 'object' ? selectedSkill : null,
         brain_route: brainRoute && typeof brainRoute === 'object' ? brainRoute : null,
         vault_context: vaultContext && typeof vaultContext === 'object' ? vaultContext : null,
+        ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
       },
     })
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
@@ -207,7 +211,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, ac
   return result.data;
 }
 
-export async function persistBrainErrorMessage({ chat, error, requestId, selectedSkill, brainRoute, vaultContext }) {
+export async function persistBrainErrorMessage({ chat, error, requestId, clientRequestId, selectedSkill, brainRoute, vaultContext }) {
   if (!chat?.thread?.id || chat.assistantPersisted) return null;
   const status = Number(error?.status ?? 500);
   const content = status >= 500
@@ -217,6 +221,7 @@ export async function persistBrainErrorMessage({ chat, error, requestId, selecte
     chat,
     answer: content,
     requestId,
+    clientRequestId,
     actionType: 'error',
     actions: [],
     plan: null,

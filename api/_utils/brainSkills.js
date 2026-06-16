@@ -285,7 +285,7 @@ export function selectBrainSkill({ message, classification, plan = null } = {}) 
   }
 
   const calendarSignals = matchSignals(text, [
-    ['schedule', '\\bschedule\\b|\\bcalendar\\b|\\bcalendario\\b|\\bprogramma\\b|\\bpianifica\\b'],
+    ['schedule', '\\bschedule\\b|\\bcalendar\\b|\\bcalendario\\b|\\bprogramma\\b|\\bpianifica\\b|\\bblocca\\b|\\bfissa\\b|\\bmetti\\b|\\bsegnami\\b'],
     ['time block', '\\bfrom\\b|\\bdalle\\b|\\balle\\b'],
     ['recurrence', '\\bevery\\b|\\beveryday\\b|\\bweekly\\b|\\bweekdays\\b|\\bweekends\\b|\\bogni\\b|\\btutti\\b'],
     ['day agenda', 'plan my day|schedule my day|segna la giornata|programma la giornata'],

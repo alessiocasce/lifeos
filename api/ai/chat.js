@@ -22,6 +22,8 @@ import {
   formatBrainRouteForPrompt,
   routeBrainMessageWithAI,
   serializeBrainRoute,
+  looksLikeVagueCalendarBlockRequest,
+  specificCalendarClarification,
 } from '../_utils/brainRouter.js';
 import {
   createVaultDocumentFromMessage,
@@ -321,12 +323,15 @@ export default async function handler(req, res) {
     const message = String(body.message ?? '').trim();
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
+    const clientRequestId = normalizeClientRequestId(body.client_request_id ?? body.clientRequestId);
+    context.clientRequestId = clientRequestId;
     const source = resolveAssistantSource(authInfo, body);
     context.brainChat = await safeBeginBrainChat({
       threadId: body.thread_id,
       source,
       message,
       requestId: context.requestId,
+      clientRequestId,
     });
     context.brainContext = await safeLoadBrainContext(context);
     const classification = classifyBrainMessage(message, context.brainChat);
@@ -439,8 +444,16 @@ export default async function handler(req, res) {
 
     if (context.brainRoute.mode === 'clarification' || context.brainRoute.needs_clarification) {
       const plan = createClarificationBrainPlan(context.brainRoute);
-      const answer = plan.clarifyingQuestion || 'What details should I use?';
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+      const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
+      return sendAiSuccess(res, 200, {
+        answer,
+        plan: { ...plan, clarifyingQuestion: answer },
+        actions: [],
+        contextSummary: null,
+        selected_skill: serializeSkillSelection(context.brainSkill),
+        brain_route: serializeBrainRoute(context.brainRoute),
+        skipMemoryExtraction: true,
+      }, context, { message, source });
     }
 
     if (context.brainRoute.mode === 'casual_chat') {
@@ -452,7 +465,7 @@ export default async function handler(req, res) {
     if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isFiniteRecurringCalendarRequest(message)) {
       const plan = createFiniteRecurringCalendarSyntheticPlan();
       if (!isBrainActionAllowedForPlan(message, plan, context)) {
-        const answer = context.brainRoute.clarification_question || 'Do you want me to create calendar events for this?';
+        const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
         return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
       }
       const actions = [];
@@ -473,7 +486,7 @@ export default async function handler(req, res) {
     if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isObviousDayScheduleRequest(message)) {
       const plan = createDayScheduleSyntheticPlan(message);
       if (!isBrainActionAllowedForPlan(message, plan, context)) {
-        const answer = context.brainRoute.clarification_question || 'Do you want me to create calendar events for this schedule?';
+        const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
         return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
       }
       try {
@@ -496,7 +509,7 @@ export default async function handler(req, res) {
     if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isObviousExplicitMultiEventCalendarRequest(message)) {
       const plan = createExplicitCalendarSyntheticPlan(message);
       if (!isBrainActionAllowedForPlan(message, plan, context)) {
-        const answer = context.brainRoute.clarification_question || 'Do you want me to create these calendar events?';
+        const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
         return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
       }
       const actions = [];
@@ -523,7 +536,7 @@ export default async function handler(req, res) {
       throw error;
     }
     plan = enforceWorkoutAdviceReadOnly(message, plan);
-    plan = enforceBrainWriteRestraint(message, plan, classification, context.brainRoute);
+    plan = enforceBrainWriteRestraint(message, plan, classification, context.brainRoute, context.brainSkill);
     plan = mergeBrainRouteIntoPlan(plan, context.brainRoute, context.brainSkill);
     context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
       message,
@@ -541,7 +554,7 @@ export default async function handler(req, res) {
     const explicitMultiEventRequest = !negativeWriteIntent && !workoutAdviceOnly && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isExplicitMultiEventCalendarRequest(message, plan);
 
     if (plan.intent === 'clarify') {
-      answer = plan.clarifyingQuestion || 'What details should I use?';
+      answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
       return sendAiSuccess(res, 200, { answer, plan, actions }, context, { message, source });
     }
 
@@ -632,6 +645,12 @@ async function safeBeginBrainChat(options) {
   }
 }
 
+function normalizeClientRequestId(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  return text.replace(/[^\w:.-]/g, '').slice(0, 120) || null;
+}
+
 async function safeLoadBrainContext(context) {
   try {
     return await loadBrainContext();
@@ -707,6 +726,7 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
       chat: context?.brainChat,
       answer,
       requestId: context?.requestId,
+      clientRequestId: context?.clientRequestId,
       actionType,
       actions,
       plan,
@@ -731,6 +751,7 @@ async function safePersistBrainError(context, error) {
       chat: context?.brainChat,
       error,
       requestId: context?.requestId,
+      clientRequestId: context?.clientRequestId,
       selectedSkill: serializeSkillSelection(context?.brainSkill),
       brainRoute: serializeBrainRoute(context?.brainRoute),
       vaultContext: serializeVaultContextForMetadata(context?.brainVault?.results),
@@ -790,7 +811,7 @@ export function hasNegativeWriteIntent(message) {
     || /\bnon\s+(?:programmare|segnare|creare|loggare|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
 }
 
-function enforceBrainWriteRestraint(message, plan = {}, classification, brainRoute = null) {
+function enforceBrainWriteRestraint(message, plan = {}, classification, brainRoute = null, brainSkill = null) {
   const negative = hasNegativeWriteIntent(message);
   const routeWriteIntent = Boolean(brainRoute?.write_intent && brainRoute?.mode === 'explicit_action');
   const tentative = hasTentativeWriteLanguage(message) && !hasExplicitActionRequest(message) && !routeWriteIntent;
@@ -803,9 +824,7 @@ function enforceBrainWriteRestraint(message, plan = {}, classification, brainRou
       needsRead: Boolean(readOnly),
       needsWrite: false,
       args: {},
-      clarifyingQuestion: negative
-        ? "Understood - I won't create anything. Do you want to just talk it through?"
-        : 'Do you want advice, or do you want me to create something?',
+      clarifyingQuestion: getSafeClarificationQuestion({ message, plan, brainRoute, brainSkill, negative }),
       riskLevel: 'low',
       reason: negative
         ? 'Negative write intent in current message blocked all writes.'
@@ -833,7 +852,7 @@ function enforceBrainWriteRestraint(message, plan = {}, classification, brainRou
       needsRead: false,
       needsWrite: false,
       args: {},
-      clarifyingQuestion: 'Do you want me to create something, or just talk it through?',
+      clarifyingQuestion: getSafeClarificationQuestion({ message, plan, brainRoute, brainSkill }),
       riskLevel: 'low',
       reason: 'Planner requested a write without explicit current-message action language.',
     };
@@ -859,10 +878,38 @@ function enforceBrainSkillWritePermission(message, plan = {}, skillSelection, br
     args: {},
     clarifyingQuestion: readOnly
       ? null
-      : 'Do you want me to create something, or just talk it through?',
+      : getSafeClarificationQuestion({ message, plan, brainRoute, brainSkill: skillSelection }),
     riskLevel: 'low',
     reason: `${plan.reason || 'Planner requested a write.'} Skill guard blocked the write: ${permission.reason}`,
   };
+}
+
+function getSafeClarificationQuestion({ message, plan = {}, brainRoute = null, brainSkill = null, negative = false } = {}) {
+  if (negative || hasNegativeWriteIntent(message)) {
+    return "Understood - I won't create anything. We can just talk it through.";
+  }
+
+  const skillId = brainSkill?.skill?.id || brainSkill?.id || brainRoute?.primary_skill || '';
+  const routeQuestion = String(brainRoute?.clarification_question || plan?.clarifyingQuestion || '').trim();
+  const genericRouteQuestion = /advice|create something|talk it through|what details should i use/i.test(routeQuestion);
+  if (routeQuestion && !(genericRouteQuestion && (skillId === 'calendar_planner' || looksLikeVagueCalendarBlockRequest(message)))) {
+    return routeQuestion;
+  }
+
+  if (skillId === 'calendar_planner' || looksLikeVagueCalendarBlockRequest(message) || plan.intent === 'create_calendar_event') {
+    if (looksLikeVagueCalendarBlockRequest(message)) return specificCalendarClarification(message);
+    return 'What exact start time, end time, and date should I use for the calendar event?';
+  }
+  if (skillId === 'memo_assistant' || plan.intent === 'create_memo') {
+    return 'What reminder title, date, and exact time should I use?';
+  }
+  if (skillId === 'health_coach' || plan.intent === 'update_health_log') {
+    return 'Do you want me to log this in Health? If yes, what date and time should I use?';
+  }
+  if (skillId === 'finance_analyst' || plan.intent === 'create_expense') {
+    return 'What amount, vendor, category, and date should I use for the expense?';
+  }
+  return routeQuestion || 'What exact details should I use?';
 }
 
 function isBrainActionAllowedForPlan(message, plan, context) {
@@ -1086,6 +1133,10 @@ function hasExplicitActionRequest(message) {
   if (!text || hasNegativeWriteIntent(text)) return false;
   if (/\b(?:create|add|log|schedule|remind me|set a memo|put .*calendar|put it in calendar|put this in calendar|block)\b/.test(text)) return true;
   if (/\b(?:segna|aggiungi|crea|programma|programmamelo|logga|ricordami|segnalo|segnala|metti .*calendario)\b/.test(text)) return true;
+  if (/\b(?:blocca|fissa|pianifica|metti|mettimelo|mettilo|segnami|segnamelo)\b/.test(text)
+    && /\b(?:oggi|domani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|calendario|evento|\d{1,2}(?::\d{2})?|mattina|pomeriggio|sera|dopo pranzo|dopo cena)\b/.test(text)) {
+    return true;
+  }
   if (/\bremember to\b/.test(text)) return true;
   if (/\b(?:expense|spesa|euro|euros|eur|dollar|dollars|usd|\$)\b/.test(text) && /\d/.test(text)) return true;
   if (isObviousDayScheduleRequest(message) || isObviousExplicitMultiEventCalendarRequest(message) || isFiniteRecurringCalendarRequest(message)) return true;
@@ -1207,8 +1258,10 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   }
   return sendSuccess(res, status, {
     ...responseData,
+    ...(context?.clientRequestId ? { client_request_id: context.clientRequestId } : {}),
     ...(context?.brainChat?.thread?.id ? {
       thread_id: context.brainChat.thread.id,
+      persisted_user_message: context.brainChat.userMessage ?? null,
       persisted_message: assistantMessage,
     } : {}),
   }, context);
@@ -1268,7 +1321,7 @@ export function hasExplicitCalendarCreationRequest(message) {
     && /\b(?:add|create|put|schedule|plan|log|crea|aggiungi|segna|segnalo|segnala|programma|programmamelo|pianifica)\b/.test(text);
   const explicitEventPhrase = /\b(?:create|add|schedule)\s+(?:an?\s+)?event\b/.test(text)
     || /\bcrea\s+(?:un\s+)?evento\b/.test(text);
-  const scheduleWithTime = /\b(?:schedule|programma|programmare|pianifica)\b/.test(text)
+  const scheduleWithTime = /\b(?:schedule|block|programma|programmare|pianifica|blocca|fissa)\b/.test(text)
     && /\b(?:today|tomorrow|oggi|domani|at|alle|dalle|from)\b/.test(text)
     && /\d{1,2}(?:(?:[:.]\d{2})|\s*(?:am|pm))?/.test(text);
   return explicitCalendarPhrase || explicitEventPhrase || scheduleWithTime;

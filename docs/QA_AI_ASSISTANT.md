@@ -25,6 +25,15 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 7. Pull to refresh and confirm the thread list and active thread messages reload.
 8. Confirm a failed AI request stores only a safe user-facing assistant error, not raw server/provider internals.
 
+## Brain Chat UX Stability
+
+1. Send a message in a long Brain thread and confirm the optimistic user bubble does not duplicate or flicker when persisted messages reload.
+2. Confirm the latest user message, loading indicator, and assistant response auto-scroll into view after sending.
+3. Simulate or manually test a slow `/api/ai/chat` request and confirm Brain exits loading after timeout with a visible error.
+4. Confirm the failed message is restored into the composer and the Retry button resubmits it.
+5. Confirm the textarea has `data-testid="brain-message-input"` and the send button has `data-testid="brain-send-button"`.
+6. Confirm the message list, loading indicator, and error card expose stable test ids for browser automation.
+
 ## Brain Memory
 
 1. Say: `Remember that I prefer direct practical advice and hate noisy dashboards.`
@@ -133,20 +142,26 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 16. Confirm route `read_only_analysis`, skill `product_builder`, real product critique, and no LifeOS CRUD write.
 17. Send `gym tomorrow 5`.
 18. Confirm route `clarification`, skill `calendar_planner`, and Brain asks whether to schedule gym, AM/PM, and/or end time. No write occurs.
-19. Send `tomorrow pill 8:30`.
-20. Confirm route `clarification` or a clearly safe memo route only if enough information is present. Brain must not silently write the wrong reminder.
-21. Send `I might need a nap tomorrow afternoon, don't schedule a memo`.
-22. Confirm route write intent is false, no memo/event is created, and no scary action error is logged.
-23. Send `remind me to take pill at 8:30pm`.
-24. Confirm route `explicit_action`, skill `memo_assistant`, and a memo is created.
-25. Send `schedule study tomorrow from 15:00 to 17:00`.
-26. Confirm route `explicit_action`, skill `calendar_planner`, and a calendar event is created.
-27. After a long answer, send `fammi una tabella`.
-28. Confirm route `follow_up_transform`, no LifeOS data write, and the previous answer is transformed.
-29. Multi-turn check: send `gym tomorrow 5`, then answer `yes, 5pm to 6:30`.
-30. Confirm the second message can route `explicit_action` with `calendar_planner` and create the event only if all required fields are clear.
-31. Inspect persisted `ai_chat_messages.metadata.brain_route` and confirm it includes `mode`, `primary_skill`, `confidence`, `needs_data`, `write_intent`, and `risk_level`.
-32. Confirm route metadata is included in sanitized AI action log payloads when actions are created.
+19. Send `blocca domani un'ora per sistemare il Vault dopo pranzo`.
+20. Confirm Brain asks for an exact time such as `14:30-15:30`, creates no event, and does not ask the generic `advice or create something` question.
+21. Send `palestra sabato sera`.
+22. Confirm Brain asks for exact time/duration and creates no event.
+23. Send `tomorrow pill 8:30`.
+24. Confirm route `clarification` or a clearly safe memo route only if enough information is present. Brain must not silently write the wrong reminder.
+25. Send `I might need a nap tomorrow afternoon, don't schedule a memo`.
+26. Confirm route write intent is false, no memo/event is created, and no scary action error is logged.
+27. Send `remind me to take pill at 8:30pm`.
+28. Confirm route `explicit_action`, skill `memo_assistant`, and a memo is created.
+29. Send `blocca domani 14:30-15:30 per sistemare il Vault`.
+30. Confirm route `explicit_action`, skill `calendar_planner`, and a calendar event is created.
+31. Send `schedule study tomorrow from 15:00 to 17:00`.
+32. Confirm route `explicit_action`, skill `calendar_planner`, and a calendar event is created.
+33. After a long answer, send `fammi una tabella`.
+34. Confirm route `follow_up_transform`, no LifeOS data write, and the previous answer is transformed.
+35. Multi-turn check: send `gym tomorrow 5`, then answer `yes, 5pm to 6:30`.
+36. Confirm the second message can route `explicit_action` with `calendar_planner` and create the event only if all required fields are clear.
+37. Inspect persisted `ai_chat_messages.metadata.brain_route` and confirm it includes `mode`, `primary_skill`, `confidence`, `needs_data`, `write_intent`, and `risk_level`.
+38. Confirm route metadata is included in sanitized AI action log payloads when actions are created.
 
 ## Brain Vault
 
