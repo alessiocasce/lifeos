@@ -3,7 +3,6 @@ import {
   Bot,
   BrainCircuit,
   ChevronDown,
-  Edit3,
   History,
   Loader2,
   MessageSquarePlus,
@@ -27,14 +26,12 @@ export function AIAssistantTab() {
     aiActionLogs,
     aiActionLogsStatus,
     aiChatMessagesStatus,
-    aiChatThreads,
     aiInsights,
     aiMemories,
     aiMemoriesStatus,
     aiVaultDocuments,
     aiVaultError,
     aiVaultStatus,
-    archiveAiChatThread,
     archiveAiMemory,
     archiveAiVaultDocument,
     createAiChatThread,
@@ -49,10 +46,8 @@ export function AIAssistantTab() {
     reloadExpenses,
     reloadHealthLogs,
     reloadMemos,
-    renameAiChatThread,
     reembedAiVaultDocuments,
     saveBrainMessageToVault,
-    selectAiChatThread,
     startNewAiChatDraft,
     updateAiMemory,
   } = useLifeOS();
@@ -66,8 +61,6 @@ export function AIAssistantTab() {
   const [recentActionsExpanded, setRecentActionsExpanded] = useState(false);
   const [showActionErrors, setShowActionErrors] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const [renamingThread, setRenamingThread] = useState(false);
-  const [threadTitleDraft, setThreadTitleDraft] = useState('');
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultDetail, setVaultDetail] = useState(null);
   const [vaultSaveMessage, setVaultSaveMessage] = useState(null);
@@ -83,11 +76,6 @@ export function AIAssistantTab() {
   const forceScrollRef = useRef(false);
   const sendingRef = useRef(false);
 
-  const activeThreads = useMemo(
-    () => aiChatThreads.filter((thread) => thread.status === 'active'),
-    [aiChatThreads],
-  );
-  const activeThread = activeThreads.find((thread) => thread.id === activeAiThreadId) ?? null;
   const messages = useMemo(
     () => mergeBrainMessages(activeAiChatMessages, pendingMessages),
     [activeAiChatMessages, pendingMessages],
@@ -111,19 +99,16 @@ export function AIAssistantTab() {
   }, []);
 
   useEffect(() => {
-    setThreadTitleDraft(activeThread?.title || '');
-    setRenamingThread(false);
-  }, [activeThread?.id, activeThread?.title]);
-
-  useEffect(() => {
     const updatePinnedState = () => {
-      userPinnedToBottomRef.current = isNearPageBottom();
+      userPinnedToBottomRef.current = isNearScrollBottom(messagesContainerRef.current);
     };
+    const container = messagesContainerRef.current;
+    if (!container) return undefined;
     updatePinnedState();
-    window.addEventListener('scroll', updatePinnedState, { passive: true });
+    container.addEventListener('scroll', updatePinnedState, { passive: true });
     window.addEventListener('resize', updatePinnedState);
     return () => {
-      window.removeEventListener('scroll', updatePinnedState);
+      container.removeEventListener('scroll', updatePinnedState);
       window.removeEventListener('resize', updatePinnedState);
     };
   }, []);
@@ -134,7 +119,7 @@ export function AIAssistantTab() {
     const behavior = forceScrollRef.current ? 'smooth' : 'auto';
     forceScrollRef.current = false;
     window.requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ block: 'end', behavior });
+      scrollMessagesToBottom(messagesContainerRef.current, behavior);
     });
   }, [messageScrollKey, aiStatus, aiError]);
 
@@ -331,21 +316,6 @@ export function AIAssistantTab() {
     startNewAiChatDraft?.();
   };
 
-  const handleArchiveThread = async () => {
-    if (!activeThread) return;
-    await archiveAiChatThread(activeThread.id);
-  };
-
-  const saveThreadTitle = async () => {
-    const title = threadTitleDraft.trim();
-    if (!activeThread || !title || title === activeThread.title) {
-      setRenamingThread(false);
-      return;
-    }
-    await renameAiChatThread(activeThread.id, title);
-    setRenamingThread(false);
-  };
-
   const beginMemoryEdit = (memory) => {
     setEditingMemoryId(memory.id);
     setMemoryDraft({ title: memory.title, content: memory.content });
@@ -360,84 +330,29 @@ export function AIAssistantTab() {
   };
 
   return (
-    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-3">
-      <Panel className="col-span-12 xl:col-span-9">
-        <div className="grid min-w-0 gap-2 border-b border-white/5 bg-gradient-to-r from-cyan-400/[0.05] via-transparent to-transparent px-3 py-2 sm:flex sm:items-center">
+    <div className="grid h-[calc(100dvh_-_env(safe-area-inset-top)_-_144px_-_env(safe-area-inset-bottom))] min-h-0 min-w-0 grid-cols-12 gap-3 overflow-hidden md:h-[calc(100dvh_-_104px)]">
+      <Panel className="col-span-12 flex min-h-0 flex-col overflow-hidden xl:col-span-9">
+        <div className="flex min-w-0 items-center gap-2 border-b border-white/5 bg-gradient-to-r from-cyan-400/[0.05] via-transparent to-transparent px-3 py-2">
           <div className="min-w-0 sm:mr-auto">
             <p className="data-text text-[10px] uppercase tracking-wider text-cyan-400">Brain</p>
-            {renamingThread ? (
-              <div className="mt-1 flex min-w-0 items-center gap-2">
-                <input
-                  value={threadTitleDraft}
-                  onChange={(event) => setThreadTitleDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') saveThreadTitle();
-                    if (event.key === 'Escape') setRenamingThread(false);
-                  }}
-                  className="h-9 min-w-0 flex-1 rounded-md border border-cyan-400/25 bg-black/50 px-3 text-base text-zinc-100 outline-none"
-                  aria-label="Brain thread title"
-                />
-                <button type="button" onClick={saveThreadTitle} className="grid h-9 w-9 place-items-center rounded-md border border-cyan-400/25 bg-cyan-400/10 text-cyan-200" aria-label="Save thread title">
-                  <Save size={15} />
-                </button>
-              </div>
-            ) : (
-              <div className="mt-1 flex min-w-0 items-center gap-2">
-                <h1 className="truncate text-base font-semibold text-zinc-100">{activeThread?.title || 'New Chat'}</h1>
-                <button
-                  type="button"
-                  onClick={() => setRenamingThread(true)}
-                  disabled={!activeThread}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-500 hover:text-zinc-200 disabled:opacity-40"
-                  aria-label="Rename Brain chat"
-                  title="Rename chat"
-                >
-                  <Edit3 size={14} />
-                </button>
-              </div>
-            )}
+            <h1 className="mt-0.5 truncate text-sm font-semibold text-zinc-100">Command chat</h1>
           </div>
           <div className="flex min-w-0 items-center gap-2">
-          <label className="relative min-w-0 flex-1 sm:w-60 sm:flex-none" aria-label="Select Brain conversation">
-            <select
-              value={activeAiThreadId || ''}
-              onChange={(event) => {
-                if (event.target.value) selectAiChatThread(event.target.value);
-                else startNewAiChatDraft?.();
-              }}
-              className="h-10 w-full appearance-none truncate rounded-md border border-white/10 bg-black/40 pl-3 pr-9 text-sm text-zinc-200 outline-none focus:border-cyan-400/40"
-            >
-              <option value="">New Chat</option>
-              {activeThreads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title}</option>)}
-            </select>
-            <ChevronDown size={15} className="pointer-events-none absolute right-3 top-3 text-zinc-500" />
-          </label>
           <button
             type="button"
             onClick={handleNewChat}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200 hover:border-cyan-300/50"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-cyan-400/25 bg-cyan-400/10 text-cyan-200 hover:border-cyan-300/50"
             aria-label="New Brain chat"
             title="New chat"
           >
             <MessageSquarePlus size={17} />
-            <span className="hidden sm:inline">New Chat</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleArchiveThread}
-            disabled={!activeThread}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-500 hover:border-amber-400/30 hover:text-amber-200 disabled:opacity-40"
-            aria-label="Archive current Brain chat"
-            title="Archive chat"
-          >
-            <Archive size={17} />
           </button>
           </div>
         </div>
 
         <div
           ref={messagesContainerRef}
-          className="grid min-h-[58dvh] content-start gap-2 p-2 md:min-h-[64dvh] md:p-3"
+          className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain p-2 md:p-3"
           aria-label="Brain conversation messages"
           data-testid="brain-message-list"
         >
@@ -448,25 +363,13 @@ export function AIAssistantTab() {
           ) : messages.length ? (
             messages.map((message) => <AssistantMessage key={message.id} message={message} />)
           ) : (
-            <div className="grid min-h-64 place-items-center rounded-lg border border-cyan-400/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.10),rgba(0,0,0,0.16)_42%,rgba(0,0,0,0.05))] p-5 text-center">
-              <div className="max-w-lg">
-                <div className="mx-auto grid h-11 w-11 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
-                  <BrainCircuit size={23} />
+            <div className="grid min-h-full place-items-center rounded-lg border border-cyan-400/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.08),rgba(0,0,0,0.14)_42%,rgba(0,0,0,0.04))] p-4 text-center">
+              <div className="max-w-sm">
+                <div className="mx-auto grid h-10 w-10 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
+                  <BrainCircuit size={21} />
                 </div>
-                <p className="mt-4 text-xl font-semibold text-zinc-50">What do we solve?</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-500">Ask, log, analyze, plan. Brain uses LifeOS context when it matters.</p>
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  {['Analyze today', 'What should I train?', 'Plan next move'].map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => setAiInput(chip)}
-                      className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-3 text-xs text-zinc-300 hover:border-cyan-400/25 hover:text-cyan-200"
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
+                <p className="mt-3 text-lg font-semibold text-zinc-50">What do we solve?</p>
+                <p className="mt-1 text-sm text-zinc-500">Ask, log, analyze, plan.</p>
               </div>
             </div>
           )}
@@ -487,17 +390,11 @@ export function AIAssistantTab() {
 
         <form
           onSubmit={submitAiMessage}
-          className="sticky bottom-[calc(env(safe-area-inset-bottom)+68px)] z-10 border-t border-white/10 bg-[#111]/95 p-3 backdrop-blur md:bottom-3"
+          className="shrink-0 border-t border-white/10 bg-[#111]/95 p-2 backdrop-blur md:p-3"
         >
-          {aiStatus === 'loading' ? (
-            <p className="mb-2 inline-flex items-center gap-2 text-xs text-cyan-300">
-              <Loader2 size={13} className="animate-spin" />
-              Brain is thinking...
-            </p>
-          ) : null}
           <div className="flex min-w-0 items-end gap-2">
             <textarea
-              rows={2}
+              rows={1}
               value={aiInput}
               onChange={(event) => {
                 setAiInput(event.target.value);
@@ -514,7 +411,7 @@ export function AIAssistantTab() {
               placeholder="Message LifeOS Brain..."
               aria-label="Brain message input"
               data-testid="brain-message-input"
-              className="max-h-40 min-h-12 min-w-0 flex-1 resize-y rounded-md border border-white/10 bg-black/50 px-3 py-3 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/40"
+              className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-md border border-white/10 bg-black/50 px-3 py-2.5 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/40"
             />
             <button
               type="submit"
@@ -531,7 +428,7 @@ export function AIAssistantTab() {
         </form>
       </Panel>
 
-      <div className="col-span-12 hidden min-w-0 content-start gap-3 xl:col-span-3 xl:grid">
+      <div className="col-span-12 hidden min-h-0 min-w-0 content-start gap-3 overflow-y-auto overscroll-contain xl:col-span-3 xl:grid">
         <Panel>
           <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
@@ -1033,11 +930,17 @@ function createClientRequestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function isNearPageBottom(threshold = 160) {
-  const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-  const scrollHeight = Math.max(document.documentElement.scrollHeight || 0, document.body?.scrollHeight || 0);
-  return scrollHeight - (scrollTop + viewportHeight) <= threshold;
+function scrollMessagesToBottom(container, behavior = 'auto') {
+  if (!container) return;
+  container.scrollTo({
+    top: container.scrollHeight,
+    behavior,
+  });
+}
+
+function isNearScrollBottom(container, threshold = 160) {
+  if (!container) return true;
+  return container.scrollHeight - (container.scrollTop + container.clientHeight) <= threshold;
 }
 
 function normalizeMessageSkill(value) {
