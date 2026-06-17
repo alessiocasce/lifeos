@@ -168,8 +168,8 @@ Real/persisted today:
 - Project money entries persisted in `project_money_entries`.
 - Projects/Ops tab creates flexible-goal projects, tracks active/completed work sessions, proof of work, project-level money entries, calculated balance, and progress.
 - Daily reviews persisted in `daily_reviews`.
-- Brain persists user-scoped chat threads/messages, uses curated long-term memories as bounded AI context, and keeps Recent Actions available as a secondary surface.
-- Brain exposes a collapsible `What LifeOS Knows` panel where active memories can be reviewed, edited, or archived.
+- Brain persists user-scoped chat threads/messages, uses curated long-term memories as bounded AI context, and keeps compact Recent Actions available as a secondary surface.
+- Brain Memory and Vault remain backend intelligence layers. They are hidden from the default Brain UI and available only through subtle diagnostics/manual commands when needed.
 - Daily Review remains persisted for backward compatibility but is hidden from Brain.
 - Token-protected Action API endpoints for external automation:
   - `POST /api/actions/expense`
@@ -271,7 +271,8 @@ Architecture:
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
 - Brain uses AI-first semantic routing before planner writes. The router classifies mode, selected skill, needed data, write intent, ambiguity, and risk from the current message plus bounded conversation/memory context.
 - Brain asks specific domain clarifications for vague calendar/time-block commands such as `blocca domani un'ora dopo pranzo`; vague time phrases never authorize writes by themselves.
-- Brain/Home redesign, automatic Vault report saving, and changing Brain to always open a new empty chat are intentionally out of scope for this stability pass.
+- Brain opens to a fresh empty `New Chat` draft by default. Old threads remain selectable, but no old conversation auto-opens unless selected.
+- Brain auto-saves eligible long-form analysis/advice responses into Brain Vault invisibly. Manual Save-to-Vault is not a primary user flow.
 - Deterministic keyword routing is now fallback/sanity behavior, not the primary understanding layer.
 - Brain's operating principle is: AI understands; backend code protects, validates, and executes.
 - The AI semantic router cannot execute writes. It can only propose route metadata, skill, data needs, and action types.
@@ -296,7 +297,7 @@ Architecture:
 - Referential commands rely on `last_subject` and recent structured subjects, not a phrase-specific deterministic router. If the referent is missing or ambiguous, Brain asks a specific clarification in the conversation language.
 - Working Context is advisory context for understanding only. It never authorizes writes by itself and does not override negative intent, destructive blocks, pending-action expiry/status, or supported-tool validation.
 - Brain Vault v1 stores long-form markdown-like Brain reports and saved assistant answers in Supabase.
-- Brain Vault documents are manually saved from assistant messages through the Brain UI or explicit follow-up commands such as `save this to vault`.
+- Brain Vault documents can be saved by explicit follow-up commands such as `save this to vault`, and eligible long-form Brain answers are auto-saved invisibly.
 - Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.
 - Vault context is stored in `ai_chat_messages.metadata.vault_context` for debugging and never creates write permission.
 - Vault context does not replace structured LifeOS tables and cannot authorize calendar, memo, health, expense, project, or workout writes.
@@ -309,7 +310,7 @@ Architecture:
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication itself uses normalized title/category/key-term overlap; Brain Vault is the pgvector-backed long-form retrieval layer.
 - Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.
-- Memory recall requests summarize active memories, and ambiguous forget requests direct the user to the memory panel.
+- Memory recall requests summarize active memories, and ambiguous forget requests ask clarification or direct the user to diagnostics/manual memory controls.
 - Gemini receives no database credentials and cannot run SQL.
 - Gemini first returns a strict JSON planner object.
 - Backend tools perform controlled reads/writes through Supabase service-role access and always filter/write `user_id = LIFEOS_ACTION_USER_ID`.
@@ -346,7 +347,7 @@ Architecture:
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
 - AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
-- Brain UI is chat-first. Thread controls are more prominent, the composer stays central, `What LifeOS Knows` and Recent Actions are secondary/collapsible, and Brain keeps Daily Review and canned Suggestions hidden.
+- Brain UI is chat-first. Thread controls and the composer stay central, Memory/Vault management is hidden behind diagnostics, Recent Actions stays compact, and Brain keeps Daily Review and canned Suggestions hidden.
 - Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
 - Future proactive features such as Morning Briefing and Weekly Review should build on Brain skills, but proactive automation is not implemented yet.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
@@ -547,18 +548,19 @@ Current behavior:
 
 - Uses persisted calendar events, memos, project sessions, health logs, workout sessions/sets, and expenses from context.
 - Loads today's calendar range and the current expense month without duplicating API wrappers.
-- Shows a compact Today Overview with next event, agenda counts, daily habit completion, memo count, workout status, project/Ops status, and today's spend.
-- Shows Today Agenda as a read-only list of today's events. Calendar editing, deletion, and status controls remain in the Calendar tab.
-- Shows a compact Memos panel with overdue/today reminders or the next open memo. Memo editing remains in the Memos tab.
+- Shows a compact command strip with date, sleep, habits, training, spend, and Ops status instead of duplicated shell metric boxes.
+- Shows one deterministic `Today Signal` card that answers what matters today, combining at most two high-priority signals.
+- Shows Today Agenda only when events exist. Calendar editing, deletion, and status controls remain in the Calendar tab.
+- Shows Memos only when overdue/today/upcoming reminders matter. Memo editing remains in the Memos tab.
 - Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
 - Shows time-aware Daily Habits from today's health log: Shower, Creatine, and Skin. Cards show count and latest time; Brush, Journal, and Water are not shown.
-- Shows Training Status focused on whether a workout is live/completed today, today's session name, working sets, volume, and exercise count.
+- Shows Training only when a workout is live or completed today, with today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
-- Shows Ops Status focused on live project sessions, today's logged project work, active project count, and latest project.
-- Shows Money Snapshot with today's spend, month spend, top category, and latest expense.
-- Shows Recent AI Activity from persisted `ai_action_logs`, including compact app/shortcut source, status, time, action type/count, and click-through details.
+- Shows Ops only when an active session, logged project work, or active project needs attention.
+- Shows Money only when spend/month/category data is meaningful.
+- Shows compact Recent AI writes from persisted successful `ai_action_logs`; old errors do not dominate Home.
 - Avoids duplicate finance ledger surfaces such as a full latest-expenses panel or large Home chart; the Finances tab owns deeper ledger views.
-- Shows compact loading and empty states with user-facing wording.
+- Collapses large empty states such as `No events planned today`, `No workout today`, and `No memos due` into the primary signal or quiet absence.
 - Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
 - Remains mobile-first with compact cards and no wide fixed layout.
 
@@ -729,11 +731,20 @@ Workout mobile direction:
   - Neon accents only for meaningful highlights.
   - `font-mono`/`data-text` treatment for numbers, metrics, logs, and system-like text.
 - Keep the UI dense, but not chaotic.
+- LifeOS UX principle:
+  - Brain should do invisible organization.
+  - Users should not manually manage Memory or Vault in normal usage.
+  - Valuable analysis should auto-save when it is useful long-term knowledge.
+  - Empty dashboard sections should collapse instead of consuming prime space.
+  - Home should show signal, not raw widget inventory.
+  - Logging and following the plan should feel obvious with minimal friction.
+  - Brain should feel like the main interface, not a settings/database screen.
 - The workout flow should be thumb-friendly, fast, and low-friction.
 - Real persisted data should be visually prioritized over sample/mock data.
 - Use icons for compact controls where appropriate.
 - Do not add large decorative hero sections or marketing-style layouts.
 - Avoid making mobile worse while improving desktop, and avoid making desktop worse while improving mobile.
+- Future UX phases may add Morning Briefing, proactive check-in nudges, missed-check-in outreach, and voice logging, but they are not implemented yet.
 
 ## Known Issues / Things To Test
 

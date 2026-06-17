@@ -53,6 +53,7 @@ export function AIAssistantTab() {
     reembedAiVaultDocuments,
     saveBrainMessageToVault,
     selectAiChatThread,
+    startNewAiChatDraft,
     updateAiMemory,
   } = useLifeOS();
   const [aiInput, setAiInput] = useState('');
@@ -64,6 +65,7 @@ export function AIAssistantTab() {
   const [memoryDraft, setMemoryDraft] = useState({ title: '', content: '' });
   const [recentActionsExpanded, setRecentActionsExpanded] = useState(false);
   const [showActionErrors, setShowActionErrors] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [renamingThread, setRenamingThread] = useState(false);
   const [threadTitleDraft, setThreadTitleDraft] = useState('');
   const [vaultOpen, setVaultOpen] = useState(false);
@@ -101,6 +103,12 @@ export function AIAssistantTab() {
   );
   const failedActionCount = aiActionLogs.length - successfulActionLogs.length;
   const brainActionLogs = showActionErrors ? aiActionLogs : successfulActionLogs;
+
+  useEffect(() => {
+    startNewAiChatDraft?.();
+    setPendingMessages([]);
+    setAiError(null);
+  }, []);
 
   useEffect(() => {
     setThreadTitleDraft(activeThread?.title || '');
@@ -319,7 +327,8 @@ export function AIAssistantTab() {
   const handleNewChat = async () => {
     setAiError(null);
     setPendingMessages([]);
-    await createAiChatThread();
+    setAiInput('');
+    startNewAiChatDraft?.();
   };
 
   const handleArchiveThread = async () => {
@@ -352,8 +361,8 @@ export function AIAssistantTab() {
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-3">
-      <Panel className="col-span-12 xl:col-span-8">
-        <div className="grid min-w-0 gap-2 border-b border-white/5 px-3 py-2 sm:flex sm:items-center">
+      <Panel className="col-span-12 xl:col-span-9">
+        <div className="grid min-w-0 gap-2 border-b border-white/5 bg-gradient-to-r from-cyan-400/[0.05] via-transparent to-transparent px-3 py-2 sm:flex sm:items-center">
           <div className="min-w-0 sm:mr-auto">
             <p className="data-text text-[10px] uppercase tracking-wider text-cyan-400">Brain</p>
             {renamingThread ? (
@@ -389,14 +398,16 @@ export function AIAssistantTab() {
             )}
           </div>
           <div className="flex min-w-0 items-center gap-2">
-          <label className="relative min-w-0 flex-1 sm:w-56 sm:flex-none" aria-label="Select Brain conversation">
+          <label className="relative min-w-0 flex-1 sm:w-60 sm:flex-none" aria-label="Select Brain conversation">
             <select
               value={activeAiThreadId || ''}
-              onChange={(event) => selectAiChatThread(event.target.value)}
-              disabled={!activeThreads.length}
+              onChange={(event) => {
+                if (event.target.value) selectAiChatThread(event.target.value);
+                else startNewAiChatDraft?.();
+              }}
               className="h-10 w-full appearance-none truncate rounded-md border border-white/10 bg-black/40 pl-3 pr-9 text-sm text-zinc-200 outline-none focus:border-cyan-400/40"
             >
-              {!activeThreads.length ? <option value="">No conversations</option> : null}
+              <option value="">New Chat</option>
               {activeThreads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title}</option>)}
             </select>
             <ChevronDown size={15} className="pointer-events-none absolute right-3 top-3 text-zinc-500" />
@@ -435,13 +446,27 @@ export function AIAssistantTab() {
               <Loader2 size={20} className="animate-spin" aria-label="Loading Brain messages" />
             </div>
           ) : messages.length ? (
-            messages.map((message) => <AssistantMessage key={message.id} message={message} onSaveToVault={openVaultSave} />)
+            messages.map((message) => <AssistantMessage key={message.id} message={message} />)
           ) : (
-            <div className="grid min-h-48 place-items-center rounded-md border border-dashed border-white/10 bg-black/20 p-4 text-center">
-              <div>
-                <BrainCircuit size={24} className="mx-auto text-cyan-300" />
-                <p className="mt-2 text-sm font-medium text-zinc-100">Start a conversation.</p>
-                <p className="mt-1 text-xs text-zinc-500">Brain can analyze LifeOS data or perform explicit supported actions.</p>
+            <div className="grid min-h-64 place-items-center rounded-lg border border-cyan-400/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.10),rgba(0,0,0,0.16)_42%,rgba(0,0,0,0.05))] p-5 text-center">
+              <div className="max-w-lg">
+                <div className="mx-auto grid h-11 w-11 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
+                  <BrainCircuit size={23} />
+                </div>
+                <p className="mt-4 text-xl font-semibold text-zinc-50">What do we solve?</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-500">Ask, log, analyze, plan. Brain uses LifeOS context when it matters.</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {['Analyze today', 'What should I train?', 'Plan next move'].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setAiInput(chip)}
+                      className="h-9 rounded-full border border-white/10 bg-white/[0.04] px-3 text-xs text-zinc-300 hover:border-cyan-400/25 hover:text-cyan-200"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -506,149 +531,7 @@ export function AIAssistantTab() {
         </form>
       </Panel>
 
-      <div className="col-span-12 grid min-w-0 content-start gap-3 xl:col-span-4">
-        <Panel>
-          <button
-            type="button"
-            onClick={() => setVaultOpen((open) => !open)}
-            className="flex w-full min-w-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 text-left"
-            aria-expanded={vaultOpen}
-          >
-            <div className="min-w-0">
-              <p className="data-text text-[10px] uppercase tracking-wider text-emerald-300">Vault</p>
-              <h2 className="truncate text-sm font-semibold text-zinc-100">Saved Reports</h2>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Tag tone="emerald">{aiVaultDocuments.length}</Tag>
-              <ChevronDown size={16} className={`text-zinc-500 transition ${vaultOpen ? 'rotate-180' : ''}`} />
-            </div>
-          </button>
-
-          {vaultOpen ? (
-            <div className="grid gap-2 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-zinc-500">Long-form Brain answers saved as searchable reports.</p>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={repairVaultEmbeddings}
-                    disabled={vaultRepairStatus === 'loading'}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-emerald-400/25 disabled:opacity-50"
-                  >
-                    {vaultRepairStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    Re-embed
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => reloadAiVaultDocuments?.()}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-emerald-400/25"
-                  >
-                    <RefreshCw size={14} />
-                    Refresh
-                  </button>
-                </div>
-              </div>
-              {vaultRepairMessage ? (
-                <p className={`text-xs ${vaultRepairStatus === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>{vaultRepairMessage}</p>
-              ) : null}
-              {aiVaultStatus === 'loading' && !aiVaultDocuments.length ? (
-                <p className="py-3 text-center text-sm text-zinc-500">Loading Vault...</p>
-              ) : aiVaultDocuments.length ? (
-                aiVaultDocuments.slice(0, 5).map((document) => (
-                  <VaultDocumentCard
-                    key={document.id}
-                    document={document}
-                    onOpen={() => setVaultDetail(document)}
-                    onArchive={() => archiveAiVaultDocument(document.id)}
-                  />
-                ))
-              ) : (
-                <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-                  <p className="text-sm font-medium text-zinc-100">No saved reports yet.</p>
-                  <p className="mt-1 text-xs leading-5 text-zinc-500">Use Save on a useful Brain answer to store it here.</p>
-                </div>
-              )}
-              {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
-            </div>
-          ) : null}
-        </Panel>
-
-        <Panel>
-          <button
-            type="button"
-            onClick={() => setMemoryOpen((open) => !open)}
-            className="flex w-full min-w-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 text-left"
-            aria-expanded={memoryOpen}
-          >
-            <div className="min-w-0">
-              <p className="data-text text-[10px] uppercase tracking-wider text-violet-300">Memory</p>
-              <h2 className="truncate text-sm font-semibold text-zinc-100">What LifeOS Knows</h2>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Tag tone="violet">{aiMemories.length}</Tag>
-              <ChevronDown size={16} className={`text-zinc-500 transition ${memoryOpen ? 'rotate-180' : ''}`} />
-            </div>
-          </button>
-
-          {memoryOpen ? (
-            <div className="grid gap-2 p-3">
-              <div className="flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={() => Promise.allSettled([reloadAiMemories?.(), reloadAiInsights?.()].filter(Boolean))}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-300 hover:border-cyan-400/25"
-                >
-                  <RefreshCw size={14} />
-                  Refresh
-                </button>
-              </div>
-              {aiMemoriesStatus === 'loading' && !aiMemories.length ? (
-                <p className="py-3 text-center text-sm text-zinc-500">Loading memory...</p>
-              ) : aiMemories.length ? (
-                aiMemories.map((memory) => (
-                  <MemoryCard
-                    key={memory.id}
-                    memory={memory}
-                    editing={editingMemoryId === memory.id}
-                    draft={memoryDraft}
-                    onDraftChange={setMemoryDraft}
-                    onEdit={() => beginMemoryEdit(memory)}
-                    onCancel={() => setEditingMemoryId(null)}
-                    onSave={() => saveMemoryEdit(memory.id)}
-                    onArchive={() => archiveAiMemory(memory.id)}
-                  />
-                ))
-              ) : (
-                <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-                  <p className="text-sm font-medium text-zinc-100">Memory will build as you use Brain.</p>
-                  <div className="mt-3 grid gap-1 text-xs leading-5 text-zinc-500">
-                    <p>Try:</p>
-                    <p>"Remember my name is Ale"</p>
-                    <p>"Remember I prefer direct practical advice"</p>
-                    <p>"Remember LifeOS is a business idea"</p>
-                  </div>
-                </div>
-              )}
-
-              {aiInsights.length ? (
-                <details className="rounded-md border border-white/5 bg-black/20 p-3">
-                  <summary className="cursor-pointer data-text text-[10px] uppercase tracking-wider text-zinc-500">
-                    Recent insights
-                  </summary>
-                  <div className="mt-3 grid gap-2">
-                    {aiInsights.slice(0, 3).map((insight) => (
-                      <div key={insight.id} className="rounded border border-white/5 bg-black/25 p-2">
-                        <p className="text-xs font-semibold text-zinc-200">{insight.title}</p>
-                        <p className="mt-1 text-xs leading-5 text-zinc-500">{insight.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-            </div>
-          ) : null}
-        </Panel>
-
+      <div className="col-span-12 hidden min-w-0 content-start gap-3 xl:col-span-3 xl:grid">
         <Panel>
           <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
@@ -675,6 +558,140 @@ export function AIAssistantTab() {
             </div>
           </div>
         </Panel>
+
+        <Panel>
+          <button
+            type="button"
+            onClick={() => setDiagnosticsOpen((open) => !open)}
+            className="flex w-full min-w-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2 text-left"
+            aria-expanded={diagnosticsOpen}
+          >
+            <div className="min-w-0">
+              <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Diagnostics</p>
+              <h2 className="truncate text-sm font-semibold text-zinc-100">Brain Data</h2>
+            </div>
+            <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition ${diagnosticsOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {diagnosticsOpen ? (
+            <div className="grid gap-3 p-3">
+              <DiagnosticsSection
+                count={aiVaultDocuments.length}
+                label="Vault"
+                open={vaultOpen}
+                tone="emerald"
+                title="Saved Reports"
+                onToggle={() => setVaultOpen((open) => !open)}
+              />
+              {vaultOpen ? (
+                <div className="grid gap-2 rounded-md border border-white/5 bg-black/20 p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-zinc-500">Auto-saved reports and semantic context.</p>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={repairVaultEmbeddings}
+                        disabled={vaultRepairStatus === 'loading'}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 hover:border-emerald-400/25 disabled:opacity-50"
+                      >
+                        {vaultRepairStatus === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                        Re-embed
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => reloadAiVaultDocuments?.()}
+                        className="grid h-8 w-8 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-300 hover:border-emerald-400/25"
+                        aria-label="Refresh Vault documents"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  {vaultRepairMessage ? (
+                    <p className={`text-xs ${vaultRepairStatus === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>{vaultRepairMessage}</p>
+                  ) : null}
+                  {aiVaultStatus === 'loading' && !aiVaultDocuments.length ? (
+                    <p className="py-3 text-center text-sm text-zinc-500">Loading Vault...</p>
+                  ) : aiVaultDocuments.length ? (
+                    aiVaultDocuments.slice(0, 5).map((document) => (
+                      <VaultDocumentCard
+                        key={document.id}
+                        document={document}
+                        onOpen={() => setVaultDetail(document)}
+                        onArchive={() => archiveAiVaultDocument(document.id)}
+                      />
+                    ))
+                  ) : (
+                    <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-500">
+                      Valuable long-form answers save here automatically.
+                    </p>
+                  )}
+                  {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
+                </div>
+              ) : null}
+
+              <DiagnosticsSection
+                count={aiMemories.length}
+                label="Memory"
+                open={memoryOpen}
+                tone="violet"
+                title="What LifeOS Knows"
+                onToggle={() => setMemoryOpen((open) => !open)}
+              />
+              {memoryOpen ? (
+                <div className="grid gap-2 rounded-md border border-white/5 bg-black/20 p-2">
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => Promise.allSettled([reloadAiMemories?.(), reloadAiInsights?.()].filter(Boolean))}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 hover:border-cyan-400/25"
+                    >
+                      <RefreshCw size={13} />
+                      Refresh
+                    </button>
+                  </div>
+                  {aiMemoriesStatus === 'loading' && !aiMemories.length ? (
+                    <p className="py-3 text-center text-sm text-zinc-500">Loading memory...</p>
+                  ) : aiMemories.length ? (
+                    aiMemories.map((memory) => (
+                      <MemoryCard
+                        key={memory.id}
+                        memory={memory}
+                        editing={editingMemoryId === memory.id}
+                        draft={memoryDraft}
+                        onDraftChange={setMemoryDraft}
+                        onEdit={() => beginMemoryEdit(memory)}
+                        onCancel={() => setEditingMemoryId(null)}
+                        onSave={() => saveMemoryEdit(memory.id)}
+                        onArchive={() => archiveAiMemory(memory.id)}
+                      />
+                    ))
+                  ) : (
+                    <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-500">
+                      Memory builds invisibly as you use Brain.
+                    </p>
+                  )}
+
+                  {aiInsights.length ? (
+                    <details className="rounded-md border border-white/5 bg-black/20 p-3">
+                      <summary className="cursor-pointer data-text text-[10px] uppercase tracking-wider text-zinc-500">
+                        Recent insights
+                      </summary>
+                      <div className="mt-3 grid gap-2">
+                        {aiInsights.slice(0, 3).map((insight) => (
+                          <div key={insight.id} className="rounded border border-white/5 bg-black/25 p-2">
+                            <p className="text-xs font-semibold text-zinc-200">{insight.title}</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">{insight.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </Panel>
       </div>
 
       {vaultSaveMessage ? (
@@ -699,6 +716,27 @@ export function AIAssistantTab() {
         />
       ) : null}
     </div>
+  );
+}
+
+function DiagnosticsSection({ count, label, onToggle, open, title, tone }) {
+  const toneClass = tone === 'emerald' ? 'text-emerald-300' : tone === 'violet' ? 'text-violet-300' : 'text-zinc-300';
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-md border border-white/5 bg-black/20 px-3 py-2 text-left hover:border-white/10"
+      aria-expanded={open}
+    >
+      <div className="min-w-0">
+        <p className={`data-text text-[10px] uppercase tracking-wider ${toneClass}`}>{label}</p>
+        <h3 className="truncate text-sm font-semibold text-zinc-100">{title}</h3>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Tag tone={tone}>{count}</Tag>
+        <ChevronDown size={15} className={`text-zinc-500 transition ${open ? 'rotate-180' : ''}`} />
+      </div>
+    </button>
   );
 }
 
@@ -913,7 +951,7 @@ function AssistantMessage({ message, onSaveToVault }) {
           </span>
         ) : null}
         <span className="ml-auto flex items-center gap-1">
-          {!isUser ? (
+          {!isUser && onSaveToVault ? (
             <button
               type="button"
               onClick={() => onSaveToVault?.(message)}

@@ -17,13 +17,14 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 ## Persistent Brain Chat
 
 1. Send a message in Brain and wait for the assistant response.
-2. Refresh `/assistant` and confirm both user and assistant messages remain.
-3. Send a follow-up that depends on the previous exchange and confirm Brain retains bounded conversation context.
-4. Create `New Chat` and confirm the old active thread remains selectable.
-5. Confirm the new thread title changes from `New Chat` to a deterministic title based on the first message.
-6. Archive the current thread and confirm another active thread is selected without affecting its messages.
-7. Pull to refresh and confirm the thread list and active thread messages reload.
-8. Confirm a failed AI request stores only a safe user-facing assistant error, not raw server/provider internals.
+2. Refresh `/assistant` and confirm Brain opens a fresh `New Chat` draft by default.
+3. Select the previous thread from the thread selector and confirm both user and assistant messages remain.
+4. Send a follow-up that depends on the previous exchange and confirm Brain retains bounded conversation context.
+5. Create `New Chat` and confirm the old active thread remains selectable.
+6. Confirm the new thread title changes from `New Chat` to a deterministic title based on the first message.
+7. Archive the current thread and confirm it is removed without affecting other thread messages.
+8. Pull to refresh and confirm the thread list reloads; selected thread messages reload only when a thread is selected.
+9. Confirm a failed AI request stores only a safe user-facing assistant error, not raw server/provider internals.
 
 ## Brain Chat UX Stability
 
@@ -34,15 +35,33 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 5. Confirm the textarea has `data-testid="brain-message-input"` and the send button has `data-testid="brain-send-button"`.
 6. Confirm the message list, loading indicator, and error card expose stable test ids for browser automation.
 
+## Brain UX Reset
+
+1. Navigate away from Brain, then return to Brain.
+2. Confirm a fresh empty `New Chat` is visible and no old thread auto-opens.
+3. Open the thread selector and confirm old threads remain selectable.
+4. Select an old thread and confirm its messages load.
+5. Navigate away and return again; confirm Brain returns to a fresh `New Chat` draft.
+6. Confirm the default Brain UI does not show Vault or Memory panels as primary cards.
+7. If the diagnostics control is visible on desktop, open it and confirm Vault/Memory data is secondary and collapsed.
+8. Confirm memory commands such as `remember my name, Ale`, `what do you know about me?`, and forget requests still work.
+9. Ask a long workout, project, finance, health, life-review, or product analysis.
+10. Confirm the answer appears normally with no save modal and no required manual Save-to-Vault action.
+11. Confirm an auto-saved Vault document is created in the backend with `metadata.created_by = brain_auto_save`.
+12. Ask casual `yo` and confirm no Vault report is created.
+13. Confirm manual Save-to-Vault controls are not prominent in default assistant message bubbles.
+14. Confirm `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, `si`, then `aggiungilo anche al calendario` still resolves through working context without asking for date/time again.
+15. Confirm Recent Actions shows at most 3 successful actions by default and old errors are hidden behind the Errors toggle.
+
 ## Brain Memory
 
 1. Say: `Remember that I prefer direct practical advice and hate noisy dashboards.`
-2. Confirm the response acknowledges it and a memory appears under `What LifeOS Knows`.
+2. Confirm the response acknowledges it and the memory can be recalled by asking what Brain remembers or by opening diagnostics.
 3. Ask later: `How should you answer me?`
 4. Confirm Brain applies the preference without dumping the entire memory list.
 5. Ask: `What do you remember about me?` and confirm active memories are summarized.
-6. Edit the memory in the panel, refresh, and confirm the edit persists.
-7. Archive/forget the memory from the panel and confirm it disappears from active memory and future prompt context.
+6. If diagnostics memory management is available, edit the memory there, refresh, and confirm the edit persists.
+7. Archive/forget the memory through diagnostics or a supported forget command and confirm it disappears from active memory and future prompt context.
 8. Discuss LifeOS as a SaaS/business direction and confirm a concise useful memory may be extracted.
 9. Repeat a similar durable statement and confirm it updates/deduplicates rather than creating obvious duplicates.
 10. Log a simple habit, expense, memo, or calendar event and confirm it does not create a durable memory.
@@ -57,11 +76,11 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 4. Confirm Brain answers conversationally or asks one follow-up and creates no calendar, memo, or health write.
 5. Send `remember my name, Ale`.
 6. Confirm it stores an `identity` memory titled `Name`, does not create a memo, and answers that it will remember the name.
-7. Refresh Brain and confirm the memory panel still shows the name memory.
+7. Refresh Brain, ask `what do you remember about me?`, and confirm the name memory is still active.
 8. Send `my name is Ale`.
 9. Confirm it updates/deduplicates the name memory instead of creating duplicate identity rows.
 10. Send `what do you remember about me?`.
-11. Confirm Brain summarizes active memories by category and mentions the memory panel can edit or forget them.
+11. Confirm Brain summarizes active memories by category and mentions diagnostics or supported forget commands can remove them.
 12. Send `I might need a nap tomorrow afternoon, don't schedule a memo`.
 13. Confirm no memo is created, no raw validation error appears, and Recent Actions is not polluted by a create_memo failure.
 14. Send `don't put this in calendar, but I might train chest tomorrow`.
@@ -226,11 +245,11 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 ## Brain Vault
 
 1. Ask a useful workout analysis question, such as `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
-2. Click Save on the assistant response.
-3. Confirm the Save modal opens with a title, document type, tags field, and a visible X/Cancel path.
-4. Save as `workout_report` and confirm the document appears in the collapsed/expanded Vault panel.
-5. Open the Vault document and confirm the full Markdown-like content renders safely.
-6. Archive the document and confirm it disappears from active Vault documents.
+2. Confirm the answer appears normally with no modal and no prominent manual Save button.
+3. Confirm a Vault document is auto-saved in the backend when the answer is long/structured enough.
+4. Confirm casual short chat such as `yo` does not create a Vault document.
+5. If diagnostics are available, open the Vault document and confirm the full Markdown-like content renders safely.
+6. Archive the document through diagnostics/API and confirm it disappears from active Vault documents.
 7. Confirm saved chunks use Gemini Embedding 2 with `embedding_model = 'gemini-embedding-2'` and 1536 dimensions.
 8. Ask a new related workout question and confirm Brain can reuse/reference the saved report as context when relevant.
 9. Confirm the assistant message metadata includes Vault context when relevant chunks are retrieved.
@@ -241,8 +260,8 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 14. Confirm the created action log, if shown, uses `create_vault_document` and does not expose raw secrets.
 15. Confirm Vault context is advisory only: a saved report that mentions a schedule or reminder must not create new calendar/memo rows unless the current user message explicitly asks for that write.
 16. Confirm `[[Back Day]]`-style links in saved content appear in document detail metadata if present.
-17. Pull to refresh and confirm Vault documents reload.
-18. Confirm Vault panel and detail modal have no horizontal overflow on mobile.
+17. Pull to refresh and confirm Vault documents reload in backend/diagnostics.
+18. Confirm diagnostics Vault detail modal has no horizontal overflow if exposed.
 
 ## API Security
 
@@ -461,10 +480,11 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 ## Mobile / iPhone
 
 1. Open Assistant on iPhone Safari.
-2. Confirm Brain contains persistent chat, compact thread selection, New Chat, `What LifeOS Knows`, and Recent Actions.
-3. Confirm the thread selector and memory panel do not overflow horizontally.
-4. Confirm no range/scope dropdowns exist.
-5. Confirm Daily Review and canned prompt Suggestions are absent.
-6. Confirm the textarea uses 16px text and does not zoom.
-7. Confirm the sticky composer/send button is thumb-friendly and not covered by bottom nav.
-8. Confirm Recent Actions remains compact and opens its detail view.
+2. Confirm Brain contains persistent chat, compact thread selection, New Chat, and compact Recent Actions.
+3. Confirm Memory/Vault are hidden from the default Brain UI or only visible behind diagnostics.
+4. Confirm the thread selector and diagnostics panel do not overflow horizontally.
+5. Confirm no range/scope dropdowns exist.
+6. Confirm Daily Review and canned prompt Suggestions are absent.
+7. Confirm the textarea uses 16px text and does not zoom.
+8. Confirm the sticky composer/send button is thumb-friendly and not covered by bottom nav.
+9. Confirm Recent Actions remains compact and opens its detail view.

@@ -660,7 +660,7 @@ export function LifeOSProvider({ children }) {
       setActiveAiThreadId((currentId) => {
         const nextId = currentId && sortedRows.some((thread) => thread.id === currentId && thread.status === 'active')
           ? currentId
-          : sortedRows.find((thread) => thread.status === 'active')?.id ?? null;
+          : null;
         activeAiThreadIdRef.current = nextId;
         return nextId;
       });
@@ -1518,8 +1518,23 @@ export function LifeOSProvider({ children }) {
         setAiChatMessagesStatus('ready');
         return created;
       },
+      startNewAiChatDraft: () => {
+        activeAiThreadIdRef.current = null;
+        setActiveAiThreadId(null);
+        setActiveAiChatMessages([]);
+        setAiChatMessagesError('');
+        setAiChatMessagesStatus(authUser ? 'ready' : 'no-session');
+      },
       selectAiChatThread: (threadId) => {
-        if (!threadId || threadId === activeAiThreadId) return;
+        if (!threadId) {
+          activeAiThreadIdRef.current = null;
+          setActiveAiThreadId(null);
+          setActiveAiChatMessages([]);
+          setAiChatMessagesError('');
+          setAiChatMessagesStatus(authUser ? 'ready' : 'no-session');
+          return;
+        }
+        if (threadId === activeAiThreadId) return;
         activeAiThreadIdRef.current = threadId;
         setActiveAiThreadId(threadId);
         setActiveAiChatMessages([]);
@@ -1530,10 +1545,10 @@ export function LifeOSProvider({ children }) {
         const remaining = sortAiChatThreads(aiChatThreads.map((thread) => (thread.id === threadId ? archived : thread)));
         setAiChatThreads(remaining);
         if (activeAiThreadId === threadId) {
-          const nextId = remaining.find((thread) => thread.status === 'active')?.id ?? null;
-          activeAiThreadIdRef.current = nextId;
-          setActiveAiThreadId(nextId);
+          activeAiThreadIdRef.current = null;
+          setActiveAiThreadId(null);
           setActiveAiChatMessages([]);
+          setAiChatMessagesStatus('ready');
         }
         return archived;
       },

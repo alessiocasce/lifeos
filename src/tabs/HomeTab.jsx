@@ -121,242 +121,307 @@ export function HomeTab() {
   const expensesLoading = isInitialLoading(expensesStatus, expenses);
   const monthLoading = isInitialLoading(monthlyExpensesStatus, currentMonthExpenses);
   const memosLoading = isInitialLoading(memosStatus, memos);
+  const todaySignal = buildTodaySignal({
+    activeProjectCount,
+    activeProjectSession,
+    completedHabitCount,
+    liveWorkout,
+    nextEvent,
+    overdueMemos,
+    todayProjectMinutes,
+    todaysMemos,
+    todaysWorkoutSessions,
+    todaysHealthLog,
+    visibleAgendaEvents,
+  });
+  const importantMemos = [...overdueMemos, ...todaysMemos].slice(0, 3);
+  const successfulAiActions = aiActionLogs.filter((log) => log.status !== 'error').slice(0, 2);
+  const showAgendaLane = visibleAgendaEvents.length > 0;
+  const showMemoLane = importantMemos.length > 0 || Boolean(nextMemo);
+  const showOpsLane = Boolean(activeProjectSession) || todayProjectMinutes > 0 || activeProjectCount > 0;
+  const showTrainingLane = Boolean(liveWorkout) || todaysWorkoutSessions.length > 0;
+  const showHabitsLane = completedHabitCount < HEALTH_HABITS.length || Boolean(todaysHealthLog);
+  const showFinanceLane = todaysExpenses.length > 0 || currentMonthSpend > 0 || Boolean(topCategory);
+  const showActionsLane = successfulAiActions.length > 0;
+  const TodaySignalIcon = todaySignal.icon;
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden">
-      <Panel className="col-span-12">
-        <PanelHeader
-          eyebrow="Today Command Center"
-          title="Today Overview"
-          right={<span className="data-text text-[11px] text-zinc-500">{formatDate(today)}</span>}
-        />
-        <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-          <OverviewMetric
-            icon={Clock3}
-            label="Next Event"
-            value={calendarLoading ? 'Loading...' : nextEvent ? nextEvent.title : 'No upcoming'}
-            detail={nextEvent ? formatEventTime(nextEvent) : calendarLoading ? 'Loading today...' : 'No upcoming events'}
-            tone={nextEvent ? 'text-cyan-300' : 'text-zinc-100'}
-          />
-          <OverviewMetric
-            icon={CalendarDays}
-            label="Agenda"
-            value={calendarLoading ? '...' : `${agendaCounts.planned}/${agendaCounts.done}/${agendaCounts.skipped}`}
-            detail="planned / done / skipped"
-            tone="text-violet-300"
-          />
-          <OverviewMetric
-            icon={CheckCircle2}
-            label="Habits"
-            value={healthLoading ? '...' : `${completedHabitCount}/3`}
-            detail={todaysHealthLog ? 'completed today' : 'no health log today'}
-            tone={completedHabitCount >= 3 ? 'text-emerald-300' : 'text-amber-300'}
-          />
-          <OverviewMetric
-            icon={Bell}
-            label="Memos"
-            value={memosLoading ? '...' : `${overdueMemos.length + todaysMemos.length}`}
-            detail={nextMemo ? `Next: ${truncateText(nextMemo.title, 24)}` : memosLoading ? 'loading memos...' : 'nothing due'}
-            tone={overdueMemos.length ? 'text-amber-300' : todaysMemos.length ? 'text-cyan-300' : 'text-zinc-100'}
-          />
-          <OverviewMetric
-            icon={Dumbbell}
-            label="Workout"
-            value={workoutsLoading ? '...' : workoutStatus.value}
-            detail={workoutStatus.detail}
-            tone={workoutStatus.tone}
-          />
-          <OverviewMetric
-            icon={Target}
-            label="Ops"
-            value={projectsLoading ? '...' : projectStatus.value}
-            detail={projectStatus.detail}
-            tone={projectStatus.tone}
-          />
-          <OverviewMetric
-            icon={CircleDollarSign}
-            label="Spend Today"
-            value={expensesLoading ? '...' : `EUR ${formatMoney(todaySpend)}`}
-            detail={todaysExpenses.length ? `${todaysExpenses.length} expense${todaysExpenses.length === 1 ? '' : 's'}` : 'no expenses today'}
-            tone={todaysExpenses.length ? 'text-amber-300' : 'text-zinc-100'}
-          />
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-7">
-        <PanelHeader eyebrow="Today" title="Today Agenda" />
-        <div className="space-y-2 p-3">
-          {calendarLoading ? (
-            <LoadingState label="Loading today..." />
-          ) : shownAgenda.length ? (
-            <>
-              {shownAgenda.map((event) => (
-                <AgendaRow key={event.id} event={event} />
-              ))}
-              {agendaMoreCount > 0 ? <p className="data-text px-1 text-[11px] text-zinc-500">+{agendaMoreCount} more today</p> : null}
-            </>
-          ) : isResolvedStatus(calendarEventsStatus) ? (
-            <EmptyState title="No events planned today." body="Calendar is clear for this selected day." />
-          ) : (
-            <LoadingState label="Loading today..." />
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Reminders" title="Memos" right={<span className="data-text text-[11px] text-cyan-300">{overdueMemos.length + todaysMemos.length} due</span>} />
-        <div className="grid gap-2 p-3">
-          {memosLoading ? (
-            <LoadingState label="Loading memos..." />
-          ) : overdueMemos.length || todaysMemos.length || nextMemo ? (
-            <>
-              {[...overdueMemos, ...todaysMemos].slice(0, 4).map((memo) => (
-                <MemoRow key={memo.id} memo={memo} today={today} />
-              ))}
-              {!overdueMemos.length && !todaysMemos.length && nextMemo ? <MemoRow memo={nextMemo} today={today} /> : null}
-            </>
-          ) : (
-            <EmptyState title="No memos due." body="Open reminders and memory items will appear here." />
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-7">
-        <PanelHeader eyebrow="Projects" title="Ops Status" right={<Target size={16} className="text-cyan-300" />} />
-        <div className="grid gap-3 p-3">
-          {projectsLoading ? (
-            <LoadingState label="Loading projects..." />
-          ) : projects.length || activeProjectSession ? (
-            <>
-              {activeProjectSession ? (
-                <div className="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Tag tone="cyan">ACTIVE SESSION</Tag>
-                    <span className="data-text text-[11px] text-zinc-500">{formatDuration(getProjectSessionMinutes(activeProjectSession))}</span>
-                  </div>
-                  <h3 className="mt-2 break-words text-base font-semibold text-zinc-100">
-                    {activeSessionProject?.name ?? 'Project session'}
-                  </h3>
-                  {activeProjectSession.target_output ? (
-                    <p className="mt-1 break-words text-xs text-zinc-500">{activeProjectSession.target_output}</p>
-                  ) : null}
-                </div>
-              ) : (
-                <EmptyState title="No active project session." body="Start one from Projects/Ops when it is time to execute." />
-              )}
-              <div className="grid grid-cols-3 gap-2">
-                <MiniMetric label="Today" value={formatDuration(todayProjectMinutes)} tone="text-cyan-300" sub="project work" />
-                <MiniMetric label="Active" value={activeProjectCount} tone="text-emerald-300" sub="projects" />
-                <MiniMetric
-                  label="Last Project"
-                  value={truncateText(getLastProjectName(projects, projectSessions), 16)}
-                  tone="text-zinc-100"
-                  sub="latest session"
-                />
-              </div>
-            </>
-          ) : (
-            <EmptyState title="No projects yet." body="Project execution tracking appears here after a project is created." />
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Health" title="Daily Habits" right={<span className="data-text text-[11px] text-emerald-300">{completedHabitCount}/3</span>} />
-        <div className="grid gap-3 p-3">
-          {healthLoading ? (
-            <LoadingState label="Loading habits..." />
-          ) : (
-            <>
-              {!todaysHealthLog ? <EmptyState title="No health log today." body="Habits start at zero until today is logged." /> : null}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-                {HEALTH_HABITS.map((habit) => (
-                  <HabitPill key={habit.id} habit={habit} entry={normalizedHabits[habit.id]} />
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <IconMetric icon={Moon} label="Sleep" value={formatWithUnit(todaysHealthLog?.sleep_hours, 'h')} tone="text-cyan-300" />
-                <IconMetric icon={Coffee} label="Coffee" value={formatNumber(todaysHealthLog?.coffee)} tone="text-amber-300" />
-                <IconMetric icon={Ban} label="ADC" value={formatNumber(todaysHealthLog?.adc)} tone="text-red-300" />
-              </div>
-            </>
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-6">
-        <PanelHeader eyebrow="Training" title="Training Status" />
-        <div className="grid gap-3 p-3">
-          {workoutsLoading ? (
-            <LoadingState label="Loading training..." />
-          ) : todaysWorkoutSessions.length || liveWorkout ? (
-            <>
-              <div className="rounded-md border border-white/5 bg-black/25 p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Tag tone={liveWorkout ? 'red' : 'emerald'}>{liveWorkout ? 'LIVE' : 'TRAINED'}</Tag>
-                  <span className="data-text text-[11px] text-zinc-500">{today}</span>
-                </div>
-                <h3 className="mt-2 truncate text-base font-semibold text-zinc-100" title={liveWorkout?.name ?? latestTodayWorkout?.name}>
-                  {liveWorkout?.name ?? latestTodayWorkout?.name ?? 'Workout'}
-                </h3>
-                <p className="mt-1 text-xs text-zinc-500">
-                  {todaysWorkoutSessions.length} session{todaysWorkoutSessions.length === 1 ? '' : 's'} today
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <MiniMetric label="Working Sets" value={todayWorkoutMetrics.setCount} tone="text-cyan-300" sub="warmups excluded" />
-                <MiniMetric label="Volume" value={formatCompact(todayWorkoutMetrics.volume)} tone="text-emerald-300" sub="kg total" />
-                <MiniMetric label="Exercises" value={todayWorkoutMetrics.exerciseCount} tone="text-amber-300" sub="unique" />
-              </div>
-            </>
-          ) : isResolvedStatus(workoutSessionsStatus) ? (
-            <EmptyState title="No workout today." body="Training status will update after a session starts or finishes." />
-          ) : (
-            <LoadingState label="Loading training..." />
-          )}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-6">
-        <PanelHeader eyebrow="Finance" title="Money Snapshot" />
-        <div className="grid gap-3 p-3">
-          {monthLoading ? <LoadingState label="Loading money snapshot..." /> : null}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <MiniMetric label="Today" value={`EUR ${formatMoney(todaySpend)}`} tone="text-cyan-300" sub={todaysExpenses.length ? `${todaysExpenses.length} logged` : 'none'} />
-            <MiniMetric label="Month" value={`EUR ${formatMoney(currentMonthSpend)}`} tone="text-emerald-300" sub={formatMonth(today)} />
-            <MiniMetric
-              label="Top Category"
-              value={topCategory ? truncateText(topCategory.category, 16) : '--'}
-              tone={topCategory ? 'text-amber-300' : 'text-zinc-100'}
-              sub={topCategory ? `EUR ${formatMoney(topCategory.total)}` : 'none yet'}
-            />
-            <MiniMetric
-              label="Latest"
-              value={latestExpense ? truncateText(latestExpense.vendor, 16) : '--'}
-              tone={latestExpense ? 'text-zinc-100' : 'text-zinc-500'}
-              sub={latestExpense ? `EUR ${formatMoney(latestExpense.amount)}` : 'no expenses'}
-            />
+      <section className="col-span-12 rounded-lg border border-white/5 bg-[linear-gradient(135deg,rgba(34,211,238,0.10),rgba(18,18,18,0.82)_36%,rgba(0,0,0,0.45))] p-3 shadow-[0_18px_80px_rgba(0,0,0,0.30)]">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="data-text text-[10px] uppercase tracking-[0.22em] text-cyan-300">Today Command</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">What matters today?</h1>
+            <p className="mt-1 text-sm text-zinc-500">{formatDate(today)}</p>
           </div>
-          {monthlyExpensesError ? <p className="data-text text-[11px] text-red-300">{monthlyExpensesError}</p> : null}
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap lg:justify-end">
+            <StatusPill label="Sleep" value={healthLoading ? '...' : formatWithUnit(todaysHealthLog?.sleep_hours, 'h')} tone={Number(todaysHealthLog?.sleep_hours ?? 0) > 0 && Number(todaysHealthLog?.sleep_hours) < 6 ? 'text-amber-300' : 'text-cyan-300'} />
+            <StatusPill label="Habits" value={healthLoading ? '...' : `${completedHabitCount}/${HEALTH_HABITS.length}`} tone={completedHabitCount >= HEALTH_HABITS.length ? 'text-emerald-300' : 'text-amber-300'} />
+            <StatusPill label="Training" value={workoutsLoading ? '...' : workoutStatus.value} tone={workoutStatus.tone} />
+            <StatusPill label="Spend" value={expensesLoading ? '...' : `EUR ${formatMoney(todaySpend)}`} tone={todaysExpenses.length ? 'text-amber-300' : 'text-zinc-300'} />
+            <StatusPill label="Ops" value={projectsLoading ? '...' : projectStatus.value} tone={projectStatus.tone} />
+          </div>
+        </div>
+      </section>
+
+      <Panel className="col-span-12">
+        <div className="flex min-w-0 flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/15 bg-cyan-400/[0.06] px-3 py-1">
+              <TodaySignalIcon size={14} className={todaySignal.tone} />
+              <span className="data-text text-[10px] uppercase tracking-wider text-cyan-300">Today Signal</span>
+            </div>
+            <h2 className="text-xl font-semibold text-zinc-50">{todaySignal.primary}</h2>
+            {todaySignal.secondary ? <p className="mt-2 text-sm leading-6 text-zinc-500">{todaySignal.secondary}</p> : null}
+          </div>
+          <div className="grid shrink-0 grid-cols-3 gap-2 md:w-72">
+            <SignalMini label="Agenda" value={calendarLoading ? '...' : String(visibleAgendaEvents.length)} />
+            <SignalMini label="Memos" value={memosLoading ? '...' : String(overdueMemos.length + todaysMemos.length)} />
+            <SignalMini label="Focus" value={projectsLoading ? '...' : formatDuration(todayProjectMinutes)} />
+          </div>
         </div>
       </Panel>
 
-      <Panel className="col-span-12">
-        <PanelHeader eyebrow="AI" title="Recent AI Activity" right={<History size={16} className="text-violet-300" />} />
-        <div className="grid gap-2 p-3">
-          {isInitialLoading(aiActionLogsStatus, aiActionLogs) ? (
-            <LoadingState label="Loading recent AI actions..." />
-          ) : aiActionLogs.length ? (
-            <div className="grid gap-2 lg:grid-cols-2">
-              <AiActionHistoryList logs={aiActionLogs.slice(0, 5)} status={aiActionLogsStatus} limit={5} />
+      {showAgendaLane ? (
+        <Panel className="col-span-12 xl:col-span-7">
+          <PanelHeader eyebrow="Agenda" title="Today" right={<span className="data-text text-[11px] text-cyan-300">{visibleAgendaEvents.length}</span>} />
+          <div className="space-y-2 p-3">
+            {shownAgenda.filter((event) => event.status !== 'cancelled').slice(0, 4).map((event) => (
+              <AgendaRow key={event.id} event={event} />
+            ))}
+            {agendaMoreCount > 0 ? <p className="data-text px-1 text-[11px] text-zinc-500">+{agendaMoreCount} more today</p> : null}
+          </div>
+        </Panel>
+      ) : null}
+
+      {showMemoLane ? (
+        <Panel className="col-span-12 xl:col-span-5">
+          <PanelHeader eyebrow="Reminders" title="Memos" right={<Bell size={16} className={overdueMemos.length ? 'text-amber-300' : 'text-cyan-300'} />} />
+          <div className="grid gap-2 p-3">
+            {importantMemos.map((memo) => <MemoRow key={memo.id} memo={memo} today={today} />)}
+            {!importantMemos.length && nextMemo ? <MemoRow memo={nextMemo} today={today} /> : null}
+          </div>
+        </Panel>
+      ) : null}
+
+      {showOpsLane ? (
+        <Panel className="col-span-12 xl:col-span-6">
+          <PanelHeader eyebrow="Ops" title="Execution" right={<Target size={16} className="text-cyan-300" />} />
+          <div className="grid gap-3 p-3">
+            {activeProjectSession ? (
+              <div className="rounded-md border border-cyan-400/20 bg-cyan-400/[0.06] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Tag tone="cyan">ACTIVE SESSION</Tag>
+                  <span className="data-text text-[11px] text-zinc-500">{formatDuration(getProjectSessionMinutes(activeProjectSession))}</span>
+                </div>
+                <h3 className="mt-2 break-words text-base font-semibold text-zinc-100">{activeSessionProject?.name ?? 'Project session'}</h3>
+                {activeProjectSession.target_output ? <p className="mt-1 break-words text-xs text-zinc-500">{activeProjectSession.target_output}</p> : null}
+              </div>
+            ) : (
+              <p className="rounded-md border border-amber-400/15 bg-amber-400/[0.05] p-3 text-sm text-amber-100">
+                No project work logged today. One focused session would move Ops forward.
+              </p>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              <MiniMetric label="Today" value={formatDuration(todayProjectMinutes)} tone="text-cyan-300" sub="project work" />
+              <MiniMetric label="Active" value={activeProjectCount} tone="text-emerald-300" sub="projects" />
+              <MiniMetric label="Latest" value={truncateText(getLastProjectName(projects, projectSessions), 16)} tone="text-zinc-100" sub="project" />
             </div>
-          ) : (
-            <EmptyState title="No AI actions yet." body="AI and Shortcut writes will appear here after they run." />
-          )}
-        </div>
-      </Panel>
+          </div>
+        </Panel>
+      ) : null}
+
+      {showTrainingLane ? (
+        <Panel className="col-span-12 xl:col-span-6">
+          <PanelHeader eyebrow="Training" title={liveWorkout ? 'Workout Live' : 'Training Done'} right={<Dumbbell size={16} className={liveWorkout ? 'text-red-300' : 'text-emerald-300'} />} />
+          <div className="grid gap-3 p-3">
+            <div className="rounded-md border border-white/5 bg-black/25 p-3">
+              <Tag tone={liveWorkout ? 'red' : 'emerald'}>{liveWorkout ? 'LIVE' : 'TRAINED'}</Tag>
+              <h3 className="mt-2 truncate text-base font-semibold text-zinc-100" title={liveWorkout?.name ?? latestTodayWorkout?.name}>
+                {liveWorkout?.name ?? latestTodayWorkout?.name ?? 'Workout'}
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500">{todaysWorkoutSessions.length || 1} session{(todaysWorkoutSessions.length || 1) === 1 ? '' : 's'} today</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <MiniMetric label="Sets" value={todayWorkoutMetrics.setCount} tone="text-cyan-300" sub="working" />
+              <MiniMetric label="Volume" value={formatCompact(todayWorkoutMetrics.volume)} tone="text-emerald-300" sub="kg" />
+              <MiniMetric label="Moves" value={todayWorkoutMetrics.exerciseCount} tone="text-amber-300" sub="exercises" />
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+
+      {showHabitsLane ? (
+        <Panel className="col-span-12 xl:col-span-6">
+          <PanelHeader eyebrow="Health" title="Daily Signals" right={<span className="data-text text-[11px] text-emerald-300">{completedHabitCount}/{HEALTH_HABITS.length}</span>} />
+          <div className="grid gap-3 p-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {HEALTH_HABITS.map((habit) => (
+                <HabitPill key={habit.id} habit={habit} entry={normalizedHabits[habit.id]} />
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <SignalMini label="Sleep" value={formatWithUnit(todaysHealthLog?.sleep_hours, 'h')} />
+              <SignalMini label="Coffee" value={formatNumber(todaysHealthLog?.coffee)} />
+              <SignalMini label="ADC" value={formatNumber(todaysHealthLog?.adc)} />
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+
+      {showFinanceLane ? (
+        <Panel className="col-span-12 xl:col-span-6">
+          <PanelHeader eyebrow="Money" title="Spend Snapshot" right={<CircleDollarSign size={16} className="text-amber-300" />} />
+          <div className="grid gap-3 p-3">
+            {monthLoading ? <LoadingState label="Loading money..." /> : null}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <MiniMetric label="Today" value={`EUR ${formatMoney(todaySpend)}`} tone="text-cyan-300" sub={todaysExpenses.length ? `${todaysExpenses.length} logged` : 'none'} />
+              <MiniMetric label="Month" value={`EUR ${formatMoney(currentMonthSpend)}`} tone="text-emerald-300" sub={formatMonth(today)} />
+              <MiniMetric label="Top" value={topCategory ? truncateText(topCategory.category, 16) : '--'} tone={topCategory ? 'text-amber-300' : 'text-zinc-100'} sub={topCategory ? `EUR ${formatMoney(topCategory.total)}` : 'none'} />
+              <MiniMetric label="Latest" value={latestExpense ? truncateText(latestExpense.vendor, 16) : '--'} tone={latestExpense ? 'text-zinc-100' : 'text-zinc-500'} sub={latestExpense ? `EUR ${formatMoney(latestExpense.amount)}` : 'none'} />
+            </div>
+            {monthlyExpensesError ? <p className="data-text text-[11px] text-red-300">{monthlyExpensesError}</p> : null}
+          </div>
+        </Panel>
+      ) : null}
+
+      {showActionsLane ? (
+        <Panel className="col-span-12">
+          <PanelHeader eyebrow="AI" title="Recent Writes" right={<History size={16} className="text-violet-300" />} />
+          <div className="grid gap-2 p-3 md:grid-cols-2">
+            <AiActionHistoryList logs={successfulAiActions} status={aiActionLogsStatus} limit={2} quietErrors />
+          </div>
+        </Panel>
+      ) : null}
     </div>
   );
+}
+
+function StatusPill({ label, tone, value }) {
+  return (
+    <div className="min-w-0 rounded-md border border-white/5 bg-black/25 px-3 py-2 lg:min-w-28">
+      <p className="data-text truncate text-[9px] uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className={`data-text mt-1 truncate text-sm font-bold ${tone}`}>{value || '--'}</p>
+    </div>
+  );
+}
+
+function SignalMini({ label, value }) {
+  return (
+    <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-2 text-center">
+      <p className="data-text text-[9px] uppercase tracking-wider text-zinc-500">{label}</p>
+      <p className="data-text mt-1 truncate text-sm font-bold text-zinc-100">{value || '--'}</p>
+    </div>
+  );
+}
+
+function buildTodaySignal({
+  activeProjectCount,
+  activeProjectSession,
+  completedHabitCount,
+  liveWorkout,
+  nextEvent,
+  overdueMemos,
+  todayProjectMinutes,
+  todaysMemos,
+  todaysWorkoutSessions,
+  todaysHealthLog,
+  visibleAgendaEvents,
+}) {
+  const sleep = Number(todaysHealthLog?.sleep_hours ?? 0);
+  const signals = [];
+  if (sleep > 0 && sleep < 6) {
+    signals.push({
+      icon: Moon,
+      primary: 'Low sleep - keep today realistic.',
+      secondary: 'Protect focus, keep training technical, and avoid stacking too many commitments.',
+      tone: 'text-amber-300',
+    });
+  }
+  if (activeProjectSession) {
+    signals.push({
+      icon: Target,
+      primary: 'Active Ops session running.',
+      secondary: 'Finish the current output before opening more loops.',
+      tone: 'text-cyan-300',
+    });
+  }
+  if (liveWorkout) {
+    signals.push({
+      icon: Dumbbell,
+      primary: 'Workout in progress.',
+      secondary: 'Keep logging clean sets and finish the session when done.',
+      tone: 'text-red-300',
+    });
+  }
+  if (overdueMemos.length) {
+    signals.push({
+      icon: Bell,
+      primary: `Reminder due: ${truncateText(overdueMemos[0].title, 52)}.`,
+      secondary: 'Clear or reschedule the stale reminder before it becomes background noise.',
+      tone: 'text-amber-300',
+    });
+  }
+  if (nextEvent) {
+    signals.push({
+      icon: Clock3,
+      primary: `Next: ${truncateText(nextEvent.title, 56)} at ${formatEventTime(nextEvent)}.`,
+      secondary: visibleAgendaEvents.length > 1 ? `${visibleAgendaEvents.length - 1} more agenda item${visibleAgendaEvents.length === 2 ? '' : 's'} after that.` : null,
+      tone: 'text-cyan-300',
+    });
+  }
+  if (todaysWorkoutSessions.length) {
+    signals.push({
+      icon: CheckCircle2,
+      primary: 'Training done.',
+      secondary: 'Recovery and the next useful block matter more than another dashboard check.',
+      tone: 'text-emerald-300',
+    });
+  }
+  if (activeProjectCount > 0 && todayProjectMinutes <= 0) {
+    signals.push({
+      icon: Target,
+      primary: 'No project work logged today.',
+      secondary: 'Start one focused session if Ops is supposed to move today.',
+      tone: 'text-amber-300',
+    });
+  }
+  if (!signals.length && completedHabitCount < 3) {
+    signals.push({
+      icon: CheckCircle2,
+      primary: 'Small health loop still open.',
+      secondary: 'Finish the remaining habits when they fit naturally.',
+      tone: 'text-emerald-300',
+    });
+  }
+  if (!signals.length && !visibleAgendaEvents.length && !todaysMemos.length && !todaysWorkoutSessions.length) {
+    signals.push({
+      icon: CalendarDays,
+      primary: 'Clear day - pick one focus block.',
+      secondary: 'The dashboard is quiet. Choose the single useful thing and start there.',
+      tone: 'text-cyan-300',
+    });
+  }
+  if (!signals.length) {
+    signals.push({
+      icon: BrainCircuitFallback,
+      primary: 'Today is under control.',
+      secondary: 'No urgent signal is dominating the day right now.',
+      tone: 'text-zinc-300',
+    });
+  }
+  const primary = signals[0];
+  const secondary = signals[1]?.primary && signals[1].primary !== primary.primary
+    ? [primary.secondary, signals[1].primary].filter(Boolean).join(' ')
+    : primary.secondary;
+  return {
+    ...primary,
+    secondary,
+  };
+}
+
+function BrainCircuitFallback(props) {
+  return <Target {...props} />;
 }
 
 function OverviewMetric({ detail, icon: Icon, label, tone, value }) {

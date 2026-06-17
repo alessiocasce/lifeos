@@ -34,17 +34,22 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 ## Home Integration
 
 1. Open Home.
-2. Confirm Today Overview shows the next event, agenda counts, habit completion, memo count, workout status, Ops status, and today's spend.
-3. Confirm Today Agenda shows today's calendar events and handles a no-event day with `No events planned today.`
-4. Confirm the Home Memos panel shows overdue/today memos or the next open memo.
-5. Confirm Daily Habits shows Shower, Creatine, and Skin with compact count/time details; Brush and Journal are absent.
-6. Confirm Training Status reflects a live or completed workout and excludes warmups from working set count and volume.
-7. Confirm Ops Status shows an active project session if one exists, today's project work time, active project count, and latest project.
-8. Confirm Money Snapshot shows today's spend, month spend, top category, and latest expense.
-9. Confirm Recent AI Activity shows compact recent app/Shortcut AI writes with source, status, time, action type/count, and no raw Markdown preview.
-10. Click a Recent AI Activity card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
-11. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
-12. Confirm no fake dashboard values are shown as real data.
+2. Confirm the initial viewport has a clear signal-first hierarchy: command strip, Today Signal, then only meaningful lanes.
+3. Confirm Home does not show giant empty `No events planned today`, `No workout today`, or `No memos due` panels.
+4. Confirm the compact status strip shows date, sleep, habits, training, spend, and Ops status without reintroducing Energy.
+5. Confirm Today Signal appears and combines at most two high-priority deterministic signals.
+6. Confirm Agenda appears only when today's calendar events exist.
+7. Confirm Memos appears only when overdue/today/upcoming reminders matter.
+8. Confirm Daily Signals shows Shower, Creatine, and Skin with compact count/time details; Brush and Journal are absent.
+9. Confirm Training appears only for a live or completed workout and excludes warmups from working set count and volume.
+10. Confirm Ops appears for active sessions, logged project work, or active projects needing attention.
+11. Confirm Money appears only when spend/category data is meaningful.
+12. Confirm Recent AI writes show max 2 successful actions and old errors do not dominate Home.
+13. Click a Recent AI write card and confirm the detail view opens with full request, full response, record refs, and rendered Markdown/callouts.
+14. Confirm Home does not show Water and does not duplicate a full latest-expenses panel.
+15. Confirm top-right shell metric boxes and bottom-left mini stat boxes do not clutter Home.
+16. Confirm mobile Home is readable and has no horizontal overflow.
+17. Confirm no fake dashboard values are shown as real data.
 
 ## Refresh Persistence
 
@@ -159,62 +164,64 @@ Run the focused checklists after the full flow:
 ## Brain
 
 1. Run the latest `supabase/schema.sql`, then open Assistant/Brain.
-2. Confirm persistent chat, expressive thread selector, New Chat, `What LifeOS Knows`, and Recent Actions are present.
-3. Confirm Daily Review is not rendered.
-4. Confirm canned Suggestions or prompt chips are not rendered.
-5. Confirm the main chat is visually dominant and Memory/Recent Actions are secondary or collapsed on mobile.
-6. Send `Hello` and confirm Brain gives a short greeting, not a full LifeOS status report.
-7. Send `I haven't trained today` and confirm Brain stays conversational with no write action.
-8. Send a normal analysis prompt and confirm Markdown/callouts still render.
-9. Refresh and confirm persisted user/assistant messages remain.
-10. Create a New Chat and confirm the old thread remains accessible.
-11. Rename a thread if the control is visible and confirm the new title persists.
-12. Confirm deterministic thread title generation works after the first message.
-13. Add a durable preference with `Remember that...` and confirm it appears in the memory panel.
-14. Send `remember my name, Ale` and confirm it creates a name memory, not a memo.
-15. Confirm the memory empty state gives compact examples such as `Remember my name is Ale`.
-16. Edit and archive a memory and confirm both operations persist.
-17. Confirm simple habit/expense/calendar commands do not flood memory.
-18. Send `I might need a nap tomorrow afternoon, don't schedule a memo` and confirm no memo/event/error action is created.
-19. After a workout analysis answer, send `mettile in ordine cronologico` and confirm Brain transforms the previous answer instead of treating it as casual chat.
-20. Refresh `/assistant`, send `fammi una tabella`, and confirm the persistent conversation history still allows the follow-up transform.
-21. Send a Brain message in a long thread and confirm there is no duplicated optimistic/server message flicker.
-22. Confirm Brain auto-scrolls to the newest message, loading indicator, response, or error after sending.
-23. Confirm a timed-out Brain request exits loading, restores the input, shows Retry, and does not leave an infinite spinner.
-24. Confirm browser automation can target `brain-message-input`, `brain-send-button`, `brain-message-list`, `brain-loading-indicator`, and `brain-error`.
-25. Pull to refresh and confirm threads, active messages, memories, insights, Vault documents, and Recent Actions reload without wiping typed Brain input.
-26. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
-27. Open a Recent Action and confirm its detail view still works.
-28. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
-29. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
-30. Confirm `hello` shows General behavior, `remember my name, Ale` shows Memory behavior, and `What should we build next in LifeOS?` shows Product behavior.
-31. Confirm selected skill routing does not bypass existing negative write, workout-advice read-only, memory command, or follow-up transform guards.
-32. Confirm AI-first `brain_route` metadata is present on new assistant messages but old messages without route metadata still render normally.
-33. Confirm `yo, I just opened LifeOS` stays casual/general and `Be brutally honest: is LifeOS becoming too complicated?` routes Product/read-only.
-34. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
-35. Confirm `blocca domani un'ora per sistemare il Vault dopo pranzo` asks for exact time and creates no event.
-36. Reply `14:30-15:30` and confirm Brain creates the stored Vault calendar block instead of asking the generic clarification again.
-37. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, confirm Brain asks to save `Pisolino 19:40-22:00`, then reply `si` and confirm it saves to Health notes without touching sleep start/wake time/sleep hours.
-38. Repeat the nap prompt and reply `si ma non segnarlo`; confirm no write occurs and the pending action is cancelled.
-39. Send `antibiotico dopo cena`, confirm Brain asks for exact reminder date/time, then reply `stasera alle 21:30` and confirm a memo is created.
-40. After a pending calendar clarification, send `comunque come sto andando con i workout?` and confirm Brain does not execute the pending action accidentally.
-41. Confirm retrying a pending action confirmation does not create duplicate records.
-42. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
-43. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
-44. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
-45. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
-46. Confirm Working Context metadata is not exposed in the normal Brain UI.
-47. Confirm Italian command clarifications and completions stay in Italian.
-48. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
-49. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
-50. Save an assistant workout/product/project answer to Vault and confirm it appears in the Vault panel.
-51. Open the saved Vault document and confirm the full content renders safely with tags and metadata.
-52. Archive the Vault document and confirm it is removed from the active panel.
-53. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
-54. If embeddings are not configured, confirm saving still works and Brain does not crash.
-55. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
-56. Click Vault `Re-embed` and confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
-57. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
+2. Confirm Brain opens to a fresh empty `New Chat` draft by default.
+3. Confirm old threads remain selectable from the thread selector, but no old thread auto-opens when entering Brain.
+4. Select an old thread manually and confirm messages load.
+5. Leave Brain and return; confirm the default is a fresh `New Chat` again.
+6. Confirm Memory and Vault panels are hidden from the default Brain UI.
+7. Confirm compact Recent Actions remains available on desktop and old errors are hidden by default.
+8. Confirm Daily Review is not rendered.
+9. Confirm the main chat and composer are visually dominant on desktop and mobile.
+10. Send `Hello` and confirm Brain gives a short greeting, not a full LifeOS status report.
+11. Send `I haven't trained today` and confirm Brain stays conversational with no write action.
+12. Send a normal analysis prompt and confirm Markdown/callouts still render.
+13. Refresh `/assistant`, select the old thread, and confirm persisted user/assistant messages remain.
+14. Create a New Chat and confirm the old thread remains accessible.
+15. Rename a thread if the control is visible and confirm the new title persists.
+16. Confirm deterministic thread title generation works after the first message.
+17. Add a durable preference with `Remember that...` and confirm it can be recalled or viewed from diagnostics.
+18. Send `remember my name, Ale` and confirm it creates a name memory, not a memo.
+19. If diagnostics are available, confirm Memory has a compact hidden-by-default state.
+20. Edit and archive a memory through diagnostics or supported commands and confirm both operations persist.
+21. Confirm simple habit/expense/calendar commands do not flood memory.
+22. Send `I might need a nap tomorrow afternoon, don't schedule a memo` and confirm no memo/event/error action is created.
+23. After a workout analysis answer, send `mettile in ordine cronologico` and confirm Brain transforms the previous answer instead of treating it as casual chat.
+24. Refresh `/assistant`, select the old thread, send `fammi una tabella`, and confirm persistent conversation history still allows the follow-up transform.
+25. Send a Brain message in a long thread and confirm there is no duplicated optimistic/server message flicker.
+26. Confirm Brain auto-scrolls to the newest message, loading indicator, response, or error after sending.
+27. Confirm a timed-out Brain request exits loading, restores the input, shows Retry, and does not leave an infinite spinner.
+28. Confirm browser automation can target `brain-message-input`, `brain-send-button`, `brain-message-list`, `brain-loading-indicator`, and `brain-error`.
+29. Pull to refresh and confirm threads, selected messages, memories, insights, Vault documents, and Recent Actions reload without wiping typed Brain input.
+30. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries.
+31. Open a Recent Action and confirm its detail view still works.
+32. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
+33. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
+34. Confirm `hello` shows General behavior, `remember my name, Ale` shows Memory behavior, and `What should we build next in LifeOS?` shows Product behavior.
+35. Confirm selected skill routing does not bypass existing negative write, workout-advice read-only, memory command, or follow-up transform guards.
+36. Confirm AI-first `brain_route` metadata is present on new assistant messages but old messages without route metadata still render normally.
+37. Confirm `yo, I just opened LifeOS` stays casual/general and `Be brutally honest: is LifeOS becoming too complicated?` routes Product/read-only.
+38. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
+39. Confirm `blocca domani un'ora per sistemare il Vault dopo pranzo` asks for exact time and creates no event.
+40. Reply `14:30-15:30` and confirm Brain creates the stored Vault calendar block instead of asking the generic clarification again.
+41. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, confirm Brain asks to save `Pisolino 19:40-22:00`, then reply `si` and confirm it saves to Health notes without touching sleep start/wake time/sleep hours.
+42. Repeat the nap prompt and reply `si ma non segnarlo`; confirm no write occurs and the pending action is cancelled.
+43. Send `antibiotico dopo cena`, confirm Brain asks for exact reminder date/time, then reply `stasera alle 21:30` and confirm a memo is created.
+44. After a pending calendar clarification, send `comunque come sto andando con i workout?` and confirm Brain does not execute the pending action accidentally.
+45. Confirm retrying a pending action confirmation does not create duplicate records.
+46. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
+47. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
+48. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
+49. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
+50. Confirm Working Context metadata is not exposed in the normal Brain UI.
+51. Confirm Italian command clarifications and completions stay in Italian.
+52. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
+53. On mobile, confirm thread controls, chat messages, skill badges, diagnostics, and Recent Actions do not overflow horizontally.
+54. Ask a long workout/product/project answer and confirm it auto-saves to Vault without a modal or prominent manual Save control.
+55. If diagnostics are available, open the saved Vault document and confirm the full content renders safely with tags and metadata.
+56. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
+57. If embeddings are not configured, confirm saving still works and Brain does not crash.
+58. Confirm `save this as a workout report` still saves the previous assistant answer to Vault and creates no memo/calendar row.
+59. If diagnostics expose Vault `Re-embed`, confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
 
 ## Workout Advice Write Boundary
 

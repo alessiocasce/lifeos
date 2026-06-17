@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { LifeOSLogo } from './LifeOSLogo';
 import { PullToRefresh } from './PullToRefresh';
+import { localDate } from '../utils/date';
 
 const icons = {
   home: Home,
@@ -39,7 +40,7 @@ export function Shell({ children }) {
   } = useLifeOS();
   const [signingOut, setSigningOut] = useState(false);
   const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label ?? 'Pulse';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   const todaysHealthLog = healthLogs.find((log) => log.logged_on === today) ?? null;
   const currentMonthSpend = expenses.filter(isCurrentMonthExpense).reduce((total, expense) => total + Math.abs(Number(expense.amount) || 0), 0);
   const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
@@ -91,10 +92,7 @@ export function Shell({ children }) {
           })}
         </nav>
 
-        <div className="space-y-2 border-t border-white/5 px-2 py-3">
-          <StatusPip label="ENG" value={formatMetric(todaysHealthLog?.energy, '/10')} tone="text-emerald-300" />
-          <StatusPip label="EXP" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-emerald-300" />
-        </div>
+        <div className="border-t border-white/5 px-2 py-3" />
       </aside>
 
       <main className="min-h-screen min-w-0 w-full md:ml-[76px] md:w-[calc(100%-76px)]">
@@ -113,8 +111,7 @@ export function Shell({ children }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden grid-cols-4 gap-2 text-right md:grid">
-              <HeaderMetric label="Energy" value={formatMetric(todaysHealthLog?.energy, '/10')} tone="text-emerald-300" />
+            <div className={activeTab === 'home' || activeTab === 'assistant' ? 'hidden' : 'hidden grid-cols-3 gap-2 text-right md:grid'}>
               <HeaderMetric label="Sleep" value={formatMetric(todaysHealthLog?.sleep_hours, 'h')} tone="text-cyan-300" />
               <HeaderMetric label="Spend" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-amber-300" />
               <HeaderMetric label="Training" value={trainingStatus.value} tone={trainingStatus.tone} />
@@ -187,15 +184,6 @@ function HeaderMetric({ label, value, tone }) {
     <div className="min-w-24 rounded-md border border-white/5 bg-[#121212] px-3 py-2">
       <p className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</p>
       <p className={`data-text text-sm font-bold ${tone}`}>{value}</p>
-    </div>
-  );
-}
-
-function StatusPip({ label, value, tone }) {
-  return (
-    <div className="rounded border border-white/5 bg-[#121212] px-1.5 py-1 text-center">
-      <p className="data-text text-[9px] text-zinc-600">{label}</p>
-      <p className={`data-text text-[11px] font-bold ${tone}`}>{value}</p>
     </div>
   );
 }
