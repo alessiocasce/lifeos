@@ -196,6 +196,33 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 29. Retry a pending action confirmation after a timeout if possible.
 30. Confirm no duplicate records are created; completed/cancelled pending action metadata prevents reusing the same pending id.
 
+## Brain Working Context / Referent Resolution
+
+1. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
+2. Confirm Brain asks to save the Health note with `19:40-22:00`.
+3. Reply `si`.
+4. Confirm Brain saves the Health note.
+5. Send `aggiungilo anche al calendario`.
+6. Confirm Brain creates a Calendar event using the same date, `19:40`, and `22:00`; it must not ask for date/time again.
+7. Confirm the completion response is in Italian.
+8. If a calendar pending action exists, send `la data e il tempo che hai gia usato`.
+9. Confirm Brain fills date/time from the last subject and does not repeat the same question.
+10. Send `crea anche un memo con lo stesso orario`.
+11. Confirm Brain uses the last subject's date/time and creates the memo or asks only for fields truly missing.
+12. Open a new empty chat and send `aggiungilo anche al calendario`.
+13. Confirm Brain asks what should be added and creates no action.
+14. Create or log two different things, then send `aggiungilo anche al calendario`.
+15. Confirm Brain asks which referent is meant and creates no action until clarified.
+16. In an Italian thread, confirm command-draft clarifications/completions stay in Italian and do not fall back to English.
+17. After a last subject exists, send `aggiungilo anche al calendario, anzi no non farlo`.
+18. Confirm no action is created.
+19. If the last subject is a Health note, send `spostalo a domani`.
+20. Confirm Brain does not claim it moved the Health note and instead explains the supported alternative or asks if it should create a new linked event/memo.
+21. After a pending calendar clarification, send `comunque come sto andando con i workout?`.
+22. Confirm Brain does not execute the pending action and answers the workout question.
+23. Retry after executing a referential command with the same client request id if possible.
+24. Confirm no duplicate calendar/memo records are created.
+
 ## Brain Vault
 
 1. Ask a useful workout analysis question, such as `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.

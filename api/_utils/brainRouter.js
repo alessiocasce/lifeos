@@ -504,7 +504,7 @@ function hasNegativeWriteIntent(message) {
     || /\bdon'?t\s+(?:make|schedule|create)\s+a\s+memo\b/.test(text)
     || /\bdon'?t\s+put\s+(?:this|it)?\s*(?:in|on)\s+(?:the\s+)?calendar\b/.test(text)
     || /\bdon'?t\s+add\s+(?:this|it)\b/.test(text)
-    || /\bnon\s+(?:programmare|segnare|creare|loggare|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
+    || /\bnon\s+(?:farlo|programmare|segnare|segnarlo|salvare|salvarlo|creare|crearlo|loggare|bloccare|bloccarlo|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
 }
 
 function hasDestructiveActionRequest(message) {

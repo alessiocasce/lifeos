@@ -290,6 +290,11 @@ Architecture:
 - Health nap/pisolino pending actions save to Health notes as context, not to `sleep_start`, `wake_time`, or calculated `sleep_hours`.
 - Vague calendar or memo requests can store known slots such as title/date/duration while asking only for the missing exact time/title/date; follow-up replies like `si`, `14:30-15:30`, or `non bloccarlo` resolve the stored action instead of restarting generic clarification.
 - Completed or cancelled pending actions are recorded as later assistant message metadata; the latest status for the pending id is treated as source of truth and helps avoid retry duplicates.
+- Brain has Working Context metadata in `ai_chat_messages.metadata.working_context`. It stores the current conversation language, latest operational subject, latest successful action result, and recent referents without exposing raw metadata in the UI.
+- Working Context lets Brain resolve unambiguous follow-ups such as `aggiungilo anche al calendario`, `usa lo stesso orario`, `mettilo anche nei memo`, and `la data e il tempo che hai gia usato` against the latest structured subject.
+- Brain uses an AI Command Draft protocol for referential/action-like turns. Gemini extracts a strict JSON command draft; deterministic backend code resolves references, validates safety/date/time/schema/action permissions, and executes only supported tools.
+- Referential commands rely on `last_subject` and recent structured subjects, not a phrase-specific deterministic router. If the referent is missing or ambiguous, Brain asks a specific clarification in the conversation language.
+- Working Context is advisory context for understanding only. It never authorizes writes by itself and does not override negative intent, destructive blocks, pending-action expiry/status, or supported-tool validation.
 - Brain Vault v1 stores long-form markdown-like Brain reports and saved assistant answers in Supabase.
 - Brain Vault documents are manually saved from assistant messages through the Brain UI or explicit follow-up commands such as `save this to vault`.
 - Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.

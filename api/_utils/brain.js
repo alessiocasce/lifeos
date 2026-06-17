@@ -172,7 +172,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
   };
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction }) {
+export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -195,6 +195,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
         brain_route: brainRoute && typeof brainRoute === 'object' ? brainRoute : null,
         vault_context: vaultContext && typeof vaultContext === 'object' ? vaultContext : null,
         pending_action: pendingAction && typeof pendingAction === 'object' ? pendingAction : null,
+        working_context: workingContext && typeof workingContext === 'object' ? workingContext : null,
         ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
       },
     })
@@ -212,7 +213,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
   return result.data;
 }
 
-export async function persistBrainErrorMessage({ chat, error, requestId, clientRequestId, selectedSkill, brainRoute, vaultContext, pendingAction }) {
+export async function persistBrainErrorMessage({ chat, error, requestId, clientRequestId, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext }) {
   if (!chat?.thread?.id || chat.assistantPersisted) return null;
   const status = Number(error?.status ?? 500);
   const content = status >= 500
@@ -231,6 +232,7 @@ export async function persistBrainErrorMessage({ chat, error, requestId, clientR
     brainRoute,
     vaultContext,
     pendingAction,
+    workingContext,
   });
 }
 

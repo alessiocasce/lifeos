@@ -339,15 +339,22 @@ async function extractPendingActionFieldUpdateWithAI({ message, pendingAction, c
         currentTime: localTime(),
         timeZone: 'Europe/Rome',
         pendingAction,
+        workingContext: context?.workingContext ? {
+          language: context.workingContext.language,
+          last_subject: context.workingContext.last_subject,
+          last_action_result: context.workingContext.last_action_result,
+        } : null,
         userMessage: message,
       }),
       temperature: 0,
       invalidMessage: 'Gemini returned an invalid pending action slot update.',
       repair: true,
     });
-    return normalizeFieldUpdate(raw);
+    const update = normalizeFieldUpdate(raw);
+    if (update.relation !== 'unrelated') return update;
+    return localFieldUpdateFallback(message, pendingAction, context?.workingContext);
   } catch {
-    return localFieldUpdateFallback(message, pendingAction);
+    return localFieldUpdateFallback(message, pendingAction, context?.workingContext);
   }
 }
 
@@ -363,8 +370,27 @@ function normalizeFieldUpdate(raw) {
   };
 }
 
-function localFieldUpdateFallback(message, pendingAction) {
+function localFieldUpdateFallback(message, pendingAction, workingContext = null) {
   const text = String(message ?? '');
+  const normalized = normalizeMessage(text);
+  const subject = workingContext?.last_subject;
+  if (subject && /\b(?:stesso orario|same time|come prima|gia usato|hai gia usato|tempo che hai gia usato|data e il tempo)\b/.test(normalized)) {
+    const patch = {};
+    if (pendingAction.action_type === 'create_calendar_event') {
+      if (subject.date) patch.event_date = subject.date;
+      if (subject.start_time) patch.start_time = subject.start_time;
+      if (subject.end_time) patch.end_time = subject.end_time;
+      if (!pendingAction.args?.title && subject.label) patch.title = subject.label;
+    }
+    if (pendingAction.action_type === 'create_memo') {
+      if (subject.date) patch.memo_date = subject.date;
+      if (subject.start_time) patch.memo_time = subject.start_time;
+      if (!pendingAction.args?.title && subject.label) patch.title = subject.label;
+    }
+    if (Object.keys(patch).length) {
+      return { relation: 'field_update', args_patch: patch, missing_fields: [], confirmation_required: false };
+    }
+  }
   const timeRange = text.match(/\b(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})\s*(?:-|–|to|alle|a)\s*(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})(?:\s*(am|pm|di sera))?\b/i);
   if (timeRange) {
     const start = normalizeSimpleTime(timeRange[1], timeRange[3]);

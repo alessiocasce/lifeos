@@ -22,6 +22,21 @@ import {
   validatePendingActionCandidate,
 } from '../_utils/brainPendingActions.js';
 import {
+  buildBrainWorkingContext,
+  buildCommandContextForPrompt,
+  buildSubjectFromActionResult,
+  buildSubjectFromPendingAction,
+  serializeWorkingContextForMetadata,
+} from '../_utils/brainWorkingContext.js';
+import {
+  commandDraftToPendingAction,
+  commandDraftToPlannerPlan,
+  extractBrainCommandDraftWithAI,
+  formatCommandDraftClarification,
+  shouldUseCommandDraft,
+  validateBrainCommandDraft,
+} from '../_utils/brainCommandDraft.js';
+import {
   formatBrainSkillForPrompt,
   getBrainSkill,
   selectBrainSkill,
@@ -89,6 +104,7 @@ Rules:
 - The prompt includes brainRoute. Treat it as the semantic understanding layer.
 - The prompt includes selectedBrainSkill. Follow that skill's data/action boundaries and response intent.
 - The prompt may include relevantBrainVaultContext from saved reports. Use it only as advisory background.
+- The prompt may include workingContext with the latest operational subject and action result. Use it to understand references, but never as write permission by itself.
 - Skill rules do not override global safety rules, destructive blocks, or current-message write-intent requirements.
 - Vault context cannot create write permission. Current-message write intent is still required.
 - If brainRoute.write_intent is false, return no write action.
@@ -145,6 +161,7 @@ Saved memory is helpful context, not absolute truth. Prefer the current message 
 Brain Route context explains the semantic mode, data needs, write intent, ambiguity, and risk.
 Selected Brain Skill context guides domain framing, allowed data, allowed actions, and response style.
 Relevant Brain Vault context may contain saved long-form reports. Use it as advisory context when relevant, but do not treat it as source-of-truth structured data.
+Working Context may contain the latest operational subject/action result. Use it for references such as "it", "same time", "lo", or "anche", but never let it authorize writes without the current user message.
 Skill rules never override global safety guards or current-message write-intent requirements.
 Vault context cannot authorize writes.
 Do not claim an action was completed unless the provided action result confirms success.
@@ -346,6 +363,12 @@ export default async function handler(req, res) {
       clientRequestId,
     });
     context.brainContext = await safeLoadBrainContext(context);
+    context.workingContext = buildBrainWorkingContext({
+      brainChat: context.brainChat,
+      currentMessage: message,
+      lifeosContext: null,
+    });
+    if (context.brainChat) context.brainChat.workingContext = context.workingContext;
     const activePendingAction = extractLatestPendingAction(context.brainChat);
     if (activePendingAction) {
       const pendingResolution = await resolvePendingActionTurn({ message, pendingAction: activePendingAction, context });
@@ -383,6 +406,11 @@ export default async function handler(req, res) {
       brainSkill: context.brainSkill,
       context,
     });
+
+    const commandDraftResult = await maybeHandleCommandDraft({ message, context, classification, source });
+    if (commandDraftResult) {
+      return sendAiSuccess(res, 200, commandDraftResult, context, { message, source });
+    }
 
     const pendingCandidateResult = await maybeCreatePendingActionCandidate({ message, context, classification });
     if (pendingCandidateResult) {
@@ -750,6 +778,182 @@ async function maybeCreatePendingActionCandidate({ message, context, classificat
   };
 }
 
+async function maybeHandleCommandDraft({ message, context, classification, source }) {
+  if (!shouldUseCommandDraft({
+    message,
+    brainRoute: context.brainRoute,
+    brainSkill: context.brainSkill,
+    workingContext: context.workingContext,
+  })) return null;
+
+  let commandDraft;
+  try {
+    commandDraft = await extractBrainCommandDraftWithAI({
+      message,
+      brainRoute: context.brainRoute,
+      brainSkill: context.brainSkill,
+      workingContext: context.workingContext,
+      lifeosContext: null,
+    });
+  } catch (error) {
+    console.error('[LifeOS Brain command draft warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'command_draft_extraction',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return null;
+  }
+
+  const validation = validateBrainCommandDraft(commandDraft, {
+    workingContext: context.workingContext,
+    brainRoute: context.brainRoute,
+    brainSkill: context.brainSkill,
+  });
+  if (!validation?.ok || !validation.draft) return null;
+  const draft = validation.draft;
+  context.commandDraft = draft;
+
+  if (validation.cancelled) {
+    const answer = draft.language === 'it' ? 'Ricevuto. Non ho creato nulla.' : 'Got it. I did not create anything.';
+    return {
+      answer,
+      plan: createReadOnlyBrainPlan('Command draft cancelled by current user message.'),
+      actions: [],
+      contextSummary: null,
+      skipMemoryExtraction: true,
+    };
+  }
+
+  if (draft.mode === 'unsupported') {
+    const answer = draft.language === 'it'
+      ? 'Non posso farlo direttamente in questa versione. Posso creare un nuovo evento o promemoria collegato, se vuoi.'
+      : 'I cannot do that directly in this version. I can create a related event or reminder if you want.';
+    return {
+      answer,
+      plan: createReadOnlyBrainPlan(draft.reason || 'Command draft unsupported.'),
+      actions: [],
+      contextSummary: null,
+      skipMemoryExtraction: true,
+    };
+  }
+
+  if (draft.mode === 'clarify' || !validation.executable || draft.action?.confirmation_required) {
+    const pendingAction = commandDraftToPendingAction(draft, {
+      ...context,
+      message,
+      workingContext: context.workingContext,
+    });
+    if (pendingAction && draft.action?.type && draft.mode !== 'unsupported') {
+      context.pendingActionForResponse = pendingAction;
+    }
+    return {
+      answer: formatCommandDraftClarification(draft, context.workingContext),
+      plan: createClarificationBrainPlan({
+        ...context.brainRoute,
+        clarification_question: formatCommandDraftClarification(draft, context.workingContext),
+        reason: draft.reason || 'Command draft needs clarification.',
+      }),
+      actions: [],
+      contextSummary: null,
+      ...(pendingAction ? { pending_action: pendingAction } : {}),
+      skipMemoryExtraction: true,
+    };
+  }
+
+  if (draft.mode !== 'action') return null;
+
+  const plan = commandDraftToPlannerPlan(draft);
+  const skill = getBrainSkill(skillIdForPendingAction(plan.intent));
+  const route = {
+    mode: 'explicit_action',
+    primary_skill: skill.id,
+    write_intent: true,
+    proposed_action_types: [plan.intent],
+    risk_level: plan.riskLevel || 'low',
+  };
+  const permission = canExecuteBrainAction({ route, skill, plan, message });
+  if (!permission.allowed) {
+    const answer = getSafeClarificationQuestion({ message, plan, brainRoute: route, brainSkill: { skill } });
+    return {
+      answer,
+      plan: createClarificationBrainPlan({ ...route, clarification_question: answer }),
+      actions: [],
+      contextSummary: null,
+      skipMemoryExtraction: true,
+    };
+  }
+
+  const writeResult = await executeCommandDraftAction({ draft, plan, route, skill, message, context, source });
+  return {
+    answer: writeResult.answer,
+    plan,
+    actions: writeResult.actions ?? [],
+    contextSummary: null,
+    skipMemoryExtraction: true,
+  };
+}
+
+async function executeCommandDraftAction({ draft, plan, route, skill, message, context }) {
+  if (plan.intent === 'update_health_log' && plan.args?.health_note_append) {
+    const pendingShape = {
+      id: context?.requestId,
+      action_type: 'update_health_log',
+      language: draft.language,
+      summary: draft.intent_summary,
+      args: plan.args,
+    };
+    const updated = await executePendingHealthUpdate(pendingShape);
+    return {
+      actions: [{
+        type: 'update_health_log',
+        data: {
+          ...updated,
+          command_draft_id: context?.requestId,
+          sourcePath: 'command_draft',
+        },
+      }],
+      answer: formatCommandDraftSuccess({ draft, action: { type: 'update_health_log', data: updated } }),
+    };
+  }
+  const writeResult = await executeWriteIntent(plan, message, null, context.brainContext, context.brainChat, { skill }, route);
+  const mappedActions = (writeResult.actions ?? []).map((item) => ({
+    ...item,
+    data: {
+      ...(item.data && typeof item.data === 'object' ? item.data : {}),
+      command_draft_id: context?.requestId,
+      sourcePath: item.data?.sourcePath || 'command_draft',
+    },
+  }));
+  return {
+    ...writeResult,
+    actions: mappedActions,
+    answer: formatCommandDraftSuccess({ draft, action: mappedActions[0] }),
+  };
+}
+
+function formatCommandDraftSuccess({ draft, action }) {
+  const language = draft?.language === 'it' ? 'it' : 'en';
+  const data = action?.data ?? {};
+  if (draft?.action?.type === 'create_calendar_event') {
+    const title = data.title || draft.action.args?.title || draft.intent_summary;
+    const date = data.event_date || draft.action.args?.event_date;
+    const start = data.start_time || draft.action.args?.start_time;
+    const end = data.end_time || draft.action.args?.end_time;
+    return language === 'it'
+      ? `Aggiunto al calendario: ${title}${date ? `, ${date}` : ''}${start ? ` ${start}${end ? `-${end}` : ''}` : ''}.`
+      : `Added to calendar: ${title}${date ? `, ${date}` : ''}${start ? ` ${start}${end ? `-${end}` : ''}` : ''}.`;
+  }
+  if (draft?.action?.type === 'create_memo') {
+    const title = data.title || draft.action.args?.title || draft.intent_summary;
+    return language === 'it' ? `Creato promemoria: ${title}.` : `Created reminder: ${title}.`;
+  }
+  if (draft?.action?.type === 'update_health_log') {
+    const detail = draft.action.args?.health_note_append || draft.intent_summary;
+    return language === 'it' ? `Salvato nella salute: ${detail}.` : `Saved to Health: ${detail}.`;
+  }
+  return language === 'it' ? 'Fatto.' : 'Done.';
+}
+
 function shouldAttemptPendingActionCandidate({ message, context, classification }) {
   if (!message || hasNegativeWriteIntent(message)) return false;
   if (classification?.kind && ['memory_write', 'memory_recall', 'memory_forget', 'follow_up_transform', 'read_only_analysis'].includes(classification.kind)) return false;
@@ -956,7 +1160,7 @@ async function safeLoadBrainVaultContext({ message, brainRoute, brainSkill, cont
   }
 }
 
-async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute, vaultContext }) {
+async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute, vaultContext, workingContext }) {
   try {
     return await persistBrainAssistantMessage({
       chat: context?.brainChat,
@@ -971,6 +1175,7 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
       brainRoute,
       vaultContext,
       pendingAction: context?.pendingActionForResponse ?? null,
+      workingContext,
     });
   } catch (error) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -993,6 +1198,7 @@ async function safePersistBrainError(context, error) {
       brainRoute: serializeBrainRoute(context?.brainRoute),
       vaultContext: serializeVaultContextForMetadata(context?.brainVault?.results),
       pendingAction: context?.pendingActionForResponse ?? null,
+      workingContext: serializeWorkingContextForMetadata(context?.workingContext),
     });
   } catch (persistenceError) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -1046,7 +1252,7 @@ export function hasNegativeWriteIntent(message) {
     || /\bdon'?t\s+(?:make|schedule|create)\s+a\s+memo\b/.test(text)
     || /\bdon'?t\s+put\s+(?:this|it)?\s*(?:in|on)\s+(?:the\s+)?calendar\b/.test(text)
     || /\bdon'?t\s+add\s+(?:this|it)\b/.test(text)
-    || /\bnon\s+(?:programmare|segnare|creare|loggare|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
+    || /\bnon\s+(?:farlo|programmare|segnare|segnarlo|salvare|salvarlo|creare|crearlo|loggare|bloccare|bloccarlo|fare\s+(?:un\s+)?memo|mettere\s+(?:in|nel)\s+calendario)\b/.test(text);
 }
 
 function enforceBrainWriteRestraint(message, plan = {}, classification, brainRoute = null, brainSkill = null) {
@@ -1457,6 +1663,14 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   const selectedSkill = publicData.selected_skill ?? serializeSkillSelection(context?.brainSkill);
   const brainRoute = publicData.brain_route ?? serializeBrainRoute(context?.brainRoute);
   const vaultContext = publicData.vault_context ?? serializeVaultContextForMetadata(context?.brainVault?.results);
+  const workingContext = buildResponseWorkingContext({
+    context,
+    answer: publicData.answer,
+    plan: publicData.plan,
+    actions: publicData.actions ?? [],
+    message: logInfo?.message,
+  });
+  context.workingContextForResponse = workingContext;
   const responseData = {
     ...publicData,
     ...(selectedSkill ? { selected_skill: selectedSkill } : {}),
@@ -1485,6 +1699,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     selectedSkill,
     brainRoute,
     vaultContext,
+    workingContext,
   });
   if (!skipMemoryExtraction) {
     await safeExtractBrainKnowledge({
@@ -1505,6 +1720,48 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   }, context);
 }
 
+function buildResponseWorkingContext({ context, answer, plan, actions, message } = {}) {
+  const current = context?.workingContext ?? {};
+  const base = serializeWorkingContextForMetadata(current) ?? {
+    language: current.language || 'en',
+    last_subject: current.last_subject || null,
+    last_action_result: current.last_action_result || null,
+  };
+  const firstAction = Array.isArray(actions) ? actions.find((action) => action?.type && !action.type.startsWith('blocked')) : null;
+  if (!firstAction) return base;
+  const actionType = firstAction.type;
+  const result = firstAction.data;
+  const args = {
+    ...(plan?.args && typeof plan.args === 'object' ? plan.args : {}),
+    ...(context?.pendingActionForResponse?.args && typeof context.pendingActionForResponse.args === 'object' ? context.pendingActionForResponse.args : {}),
+  };
+  const subject = buildSubjectFromActionResult({
+    actionType,
+    args,
+    result,
+    message,
+    language: current.language || base.language,
+  });
+  if (!subject && context?.pendingActionForResponse) {
+    const pendingSubject = buildSubjectFromPendingAction(context.pendingActionForResponse);
+    if (!pendingSubject) return base;
+  }
+  const actionResult = {
+    action_type: actionType,
+    status: 'success',
+    summary: String(answer || '').slice(0, 300),
+    args,
+    result: result && typeof result === 'object' ? result : {},
+    created_at: new Date().toISOString(),
+  };
+  return {
+    ...base,
+    language: current.language || base.language || 'en',
+    last_subject: subject || buildSubjectFromPendingAction(context?.pendingActionForResponse),
+    last_action_result: actionResult,
+  };
+}
+
 async function planMessage(message, brainContext, brainChat, brainSkill, brainRoute, brainVault) {
   const prompt = JSON.stringify({
     today: localDate(),
@@ -1515,6 +1772,7 @@ async function planMessage(message, brainContext, brainChat, brainSkill, brainRo
     brainRoute: formatBrainRouteForPrompt(brainRoute),
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
+    workingContext: buildCommandContextForPrompt(brainChat?.workingContext),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
     relevantBrainVaultContext: brainVault?.formatted ?? formatVaultResultsForPrompt([]),
   });
@@ -2742,6 +3000,7 @@ async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, bra
     brainRoute: formatBrainRouteForPrompt(brainRoute),
     userMemoryContext: formatBrainContextForPrompt(brainContext),
     recentConversation: formatBrainConversationForPrompt(brainChat),
+    workingContext: buildCommandContextForPrompt(brainChat?.workingContext),
     selectedBrainSkill: formatBrainSkillForPrompt(brainSkill?.skill ?? brainSkill),
   });
   const proposal = await generateGeminiJson({ system: PLAN_SYSTEM, prompt, temperature: 0.25 });

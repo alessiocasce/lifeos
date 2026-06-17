@@ -199,16 +199,22 @@ Run the focused checklists after the full flow:
 39. Send `antibiotico dopo cena`, confirm Brain asks for exact reminder date/time, then reply `stasera alle 21:30` and confirm a memo is created.
 40. After a pending calendar clarification, send `comunque come sto andando con i workout?` and confirm Brain does not execute the pending action accidentally.
 41. Confirm retrying a pending action confirmation does not create duplicate records.
-42. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
-43. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
-44. Save an assistant workout/product/project answer to Vault and confirm it appears in the Vault panel.
-45. Open the saved Vault document and confirm the full content renders safely with tags and metadata.
-46. Archive the Vault document and confirm it is removed from the active panel.
-47. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
-48. If embeddings are not configured, confirm saving still works and Brain does not crash.
-49. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
-50. Click Vault `Re-embed` and confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
-51. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
+42. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
+43. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
+44. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
+45. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
+46. Confirm Working Context metadata is not exposed in the normal Brain UI.
+47. Confirm Italian command clarifications and completions stay in Italian.
+48. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
+49. On mobile, confirm thread controls, chat messages, skill badges, the memory panel, and Recent Actions do not overflow horizontally.
+50. Save an assistant workout/product/project answer to Vault and confirm it appears in the Vault panel.
+51. Open the saved Vault document and confirm the full content renders safely with tags and metadata.
+52. Archive the Vault document and confirm it is removed from the active panel.
+53. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
+54. If embeddings are not configured, confirm saving still works and Brain does not crash.
+55. Confirm `save this as a workout report` saves the previous assistant answer to Vault and creates no memo/calendar row.
+56. Click Vault `Re-embed` and confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
+57. Confirm Vault panel is collapsed/secondary on mobile and has no horizontal overflow.
 
 ## Workout Advice Write Boundary
 
