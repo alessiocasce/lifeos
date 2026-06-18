@@ -208,7 +208,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
   };
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext }) {
+export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -240,6 +240,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
         vault_context: vaultContext && typeof vaultContext === 'object' ? vaultContext : null,
         pending_action: pendingAction && typeof pendingAction === 'object' ? pendingAction : null,
         working_context: workingContext && typeof workingContext === 'object' ? workingContext : null,
+        brain_trace: brainTrace && typeof brainTrace === 'object' ? brainTrace : null,
         ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
       },
     })
@@ -257,7 +258,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
   return result.data;
 }
 
-export async function persistBrainErrorMessage({ chat, error, requestId, clientRequestId, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext }) {
+export async function persistBrainErrorMessage({ chat, error, requestId, clientRequestId, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace }) {
   if (!chat?.thread?.id || chat.assistantPersisted) return null;
   const status = Number(error?.status ?? 500);
   const content = status >= 500
@@ -277,6 +278,7 @@ export async function persistBrainErrorMessage({ chat, error, requestId, clientR
     vaultContext,
     pendingAction,
     workingContext,
+    brainTrace,
   });
 }
 

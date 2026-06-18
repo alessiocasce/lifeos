@@ -8,19 +8,33 @@ import {
   requirePost,
   sendJson,
 } from '../../_utils/http.js';
+import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { handleBrainChatMessage } from '../../ai/chat.js';
 
 const MAX_WHATSAPP_BODY_LENGTH = 4000;
 
 export default async function handler(req, res) {
   const context = createRequestContext(req, res);
+  const debugFlags = getDebugFlags(req);
+  const endpointTrace = {
+    source: 'whatsapp',
+    secret_validated: false,
+    sender_allowed: false,
+    endpoint_validation_result: 'started',
+  };
   try {
     if (handleOptions(req, res)) return;
     requirePost(req);
     requireWhatsappBridgeSecret(req);
+    endpointTrace.secret_validated = true;
 
     const payload = normalizeWhatsappPayload(await readJsonBody(req));
+    endpointTrace.whatsapp_sender = payload.from;
+    endpointTrace.whatsapp_message_id = payload.message_id;
+    endpointTrace.is_group = payload.is_group;
     validateWhatsappSender(payload.from, payload.is_group);
+    endpointTrace.sender_allowed = true;
+    endpointTrace.endpoint_validation_result = 'accepted';
 
     const clientRequestId = buildWhatsappClientRequestId(payload, context.requestId);
     const result = await handleBrainChatMessage({
@@ -29,6 +43,8 @@ export default async function handler(req, res) {
       requestId: context.requestId,
       clientRequestId,
       responseMode: 'whatsapp',
+      debugFlags,
+      endpointTrace,
       channelMetadata: {
         source: 'whatsapp',
         channel: 'whatsapp',
@@ -46,8 +62,22 @@ export default async function handler(req, res) {
       thread_id: result?.thread_id ?? null,
       source: 'whatsapp',
       requestId: context.requestId,
+      ...(result?.debug ? { debug: result.debug } : {}),
     });
   } catch (error) {
+    endpointTrace.endpoint_validation_result = 'rejected';
+    if (debugFlags.enabled) {
+      console.warn('BRAIN_TRACE', JSON.stringify(sanitizeTraceValue({
+        source: 'whatsapp',
+        requestId: context.requestId,
+        endpoint_validation_result: endpointTrace.endpoint_validation_result,
+        secret_validated: endpointTrace.secret_validated,
+        sender_allowed: endpointTrace.sender_allowed,
+        whatsapp_sender: endpointTrace.whatsapp_sender,
+        status: error?.status ?? 500,
+        error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+      })));
+    }
     return handleApiError(res, error, context);
   }
 }

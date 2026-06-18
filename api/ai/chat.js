@@ -18,6 +18,7 @@ import {
   formatPendingActionCompletedAnswer,
   formatPendingActionQuestion,
   markPendingActionCompleted,
+  normalizePendingReplyIntent,
   resolvePendingActionTurn,
   validatePendingActionCandidate,
 } from '../_utils/brainPendingActions.js';
@@ -57,6 +58,14 @@ import {
   searchBrainVault,
   serializeVaultContextForMetadata,
 } from '../_utils/brainVault.js';
+import {
+  addBrainTraceStep,
+  createBrainTrace,
+  finishBrainTrace,
+  getDebugFlags,
+  safePreview,
+  sanitizeTraceValue,
+} from '../_utils/brainTrace.js';
 import {
   HttpError,
   createRequestContext,
@@ -356,6 +365,7 @@ export default async function handler(req, res) {
   try {
     if (handleOptions(req, res)) return;
     requirePost(req);
+    const debugFlags = getDebugFlags(req);
     const authInfo = await requireAssistantAuth(req);
 
     const body = await readJsonBody(req);
@@ -370,6 +380,7 @@ export default async function handler(req, res) {
       source,
       requestId: context.requestId,
       clientRequestId,
+      debugFlags,
     });
     return sendSuccess(res, 200, result, context);
   } catch (error) {
@@ -385,21 +396,51 @@ export async function handleBrainChatMessage({
   clientRequestId = null,
   channelMetadata = null,
   responseMode = null,
+  debugFlags = null,
+  endpointTrace = null,
 } = {}) {
   const context = {
     requestId: requestId || `brain-${Date.now()}`,
     clientRequestId: normalizeClientRequestId(clientRequestId),
     channelMetadata: channelMetadata && typeof channelMetadata === 'object' ? channelMetadata : null,
     responseMode: responseMode || null,
+    debugFlags: debugFlags && typeof debugFlags === 'object' ? debugFlags : { enabled: false, requested: false, full: false },
   };
   const normalizedMessage = String(message ?? '').trim();
   if (!normalizedMessage) throw new HttpError(400, 'message is required.');
   if (normalizedMessage.length > 4000) throw new HttpError(400, 'message must be 4000 characters or fewer.');
   const resolvedSource = normalizeAssistantSource(source);
+  context.brainTrace = createBrainTrace({
+    source: resolvedSource,
+    responseMode: context.responseMode || resolvedSource,
+    clientRequestId: context.clientRequestId,
+    userText: normalizedMessage,
+    channelMetadata: context.channelMetadata,
+    endpoint: endpointTrace,
+    full: context.debugFlags.full,
+  });
+  addBrainTraceStep(context.brainTrace, 'inbound_received', {
+    source: resolvedSource,
+    response_mode: context.responseMode || resolvedSource,
+    client_request_id: context.clientRequestId,
+    user_text_preview: safePreview(normalizedMessage),
+    whatsapp_sender: context.channelMetadata?.whatsapp_sender,
+    whatsapp_message_id: context.channelMetadata?.whatsapp_message_id,
+  });
   const messageForBrain = normalizedMessage;
   try {
     const existingResponse = await findExistingBrainResponseByClientRequestId(context.clientRequestId);
-    if (existingResponse) return existingResponse;
+    if (existingResponse) {
+      addBrainTraceStep(context.brainTrace, 'idempotent_response_found', {
+        client_request_id: context.clientRequestId,
+        thread_id: existingResponse.thread_id,
+      });
+      const trace = finalizeBrainTraceForResponse(context, {
+        final_response_type: 'idempotent_replay',
+        thread_id: existingResponse.thread_id,
+      });
+      return maybeAttachDebug(existingResponse, context, trace);
+    }
 
     context.brainChat = await safeBeginBrainChat({
       threadId,
@@ -409,20 +450,63 @@ export async function handleBrainChatMessage({
       clientRequestId: context.clientRequestId,
       channelMetadata: context.channelMetadata,
     });
+    context.brainTrace.thread_id = context.brainChat?.thread?.id ?? null;
+    context.brainTrace.user_message_id = context.brainChat?.userMessage?.id ?? null;
+    addBrainTraceStep(context.brainTrace, 'thread_resolved', {
+      thread_id: context.brainChat?.thread?.id,
+      user_message_id: context.brainChat?.userMessage?.id,
+      history_count: context.brainChat?.conversationHistory?.length ?? 0,
+      source: context.brainChat?.source,
+    });
     context.brainContext = await safeLoadBrainContext(context);
+    addBrainTraceStep(context.brainTrace, 'memory_context_loaded', {
+      memories: context.brainContext?.memories?.length ?? 0,
+      insights: context.brainContext?.insights?.length ?? 0,
+    });
     context.workingContext = buildBrainWorkingContext({
       brainChat: context.brainChat,
       currentMessage: messageForBrain,
       lifeosContext: null,
     });
+    context.brainTrace.language = context.workingContext?.language || 'unknown';
+    context.brainTrace.working_context = {
+      used: Boolean(context.workingContext),
+      last_subject_type: context.workingContext?.last_subject?.type ?? null,
+      last_subject_label: context.workingContext?.last_subject?.label ?? null,
+      last_action_type: context.workingContext?.last_action_result?.action_type ?? null,
+      referents: Array.isArray(context.workingContext?.referents) ? context.workingContext.referents.length : 0,
+    };
+    addBrainTraceStep(context.brainTrace, 'working_context_built', context.brainTrace.working_context);
     if (context.brainChat) {
       context.brainChat.workingContext = context.workingContext;
       context.brainChat.responseMode = context.responseMode;
       context.brainChat.channelMetadata = context.channelMetadata;
     }
     const activePendingAction = extractLatestPendingAction(context.brainChat);
+    const pendingReplyIntent = activePendingAction ? normalizePendingReplyIntent(messageForBrain) : null;
+    context.brainTrace.pending_action = activePendingAction ? {
+      found: true,
+      id: activePendingAction.id,
+      type: activePendingAction.action_type,
+      status: activePendingAction.status,
+      source_message_id: activePendingAction.source_user_message_id,
+      missing_fields: activePendingAction.missing_fields,
+    } : { found: false };
+    context.brainTrace.pending_reply_intent = pendingReplyIntent?.intent ?? null;
+    addBrainTraceStep(context.brainTrace, 'pending_action_checked', {
+      pending_action: context.brainTrace.pending_action,
+      pending_reply_intent: context.brainTrace.pending_reply_intent,
+    });
     if (activePendingAction) {
       const pendingResolution = await resolvePendingActionTurn({ message: messageForBrain, pendingAction: activePendingAction, context });
+      context.brainTrace.pending_resolution = pendingResolution?.handled
+        ? pendingResolutionTraceName(pendingResolution.type)
+        : 'not_handled';
+      addBrainTraceStep(context.brainTrace, 'pending_action_resolved', {
+        handled: Boolean(pendingResolution.handled),
+        type: pendingResolution.type ?? null,
+        pending_resolution: context.brainTrace.pending_resolution,
+      });
       if (pendingResolution.handled) {
         const result = await handlePendingActionResolution({
           resolution: pendingResolution,
@@ -436,6 +520,7 @@ export async function handleBrainChatMessage({
 
     const classification = classifyBrainMessage(messageForBrain, context.brainChat);
     context.brainClassification = classification;
+    addBrainTraceStep(context.brainTrace, 'deterministic_classification', classification);
     context.brainRoute = await safeRouteBrainMessage({
       message: messageForBrain,
       source: resolvedSource,
@@ -444,19 +529,42 @@ export async function handleBrainChatMessage({
       classification,
       context,
     });
+    context.brainTrace.route = context.brainRoute?.mode ?? null;
+    addBrainTraceStep(context.brainTrace, 'route_selected', {
+      mode: context.brainRoute?.mode,
+      primary_skill: context.brainRoute?.primary_skill,
+      confidence: context.brainRoute?.confidence,
+      write_intent: context.brainRoute?.write_intent,
+      proposed_action_types: context.brainRoute?.proposed_action_types,
+      needs_data: context.brainRoute?.needs_data,
+    });
     context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
       message: messageForBrain,
       classification,
       brainContext: context.brainContext,
       brainChat: context.brainChat,
     });
+    context.brainTrace.selected_skill = context.brainSkill?.skill?.id ?? context.brainSkill?.id ?? null;
+    addBrainTraceStep(context.brainTrace, 'skill_selected', {
+      skill: context.brainTrace.selected_skill,
+      confidence: context.brainSkill?.confidence,
+      reason: context.brainSkill?.reason,
+    });
     const negativeWriteIntent = hasNegativeWriteIntent(messageForBrain);
+    if (negativeWriteIntent) addBrainTraceStep(context.brainTrace, 'negative_write_intent_detected', { blocked: true });
     context.brainVault = await safeLoadBrainVaultContext({
       message: messageForBrain,
       brainRoute: context.brainRoute,
       brainSkill: context.brainSkill,
       context,
     });
+    context.brainTrace.vault = {
+      attempted: Boolean(context.brainVault?.attempted),
+      used: Number(context.brainVault?.results?.length ?? 0) > 0,
+      chunks: context.brainVault?.results?.length ?? 0,
+      documents: uniqueVaultDocumentCount(context.brainVault?.results),
+    };
+    addBrainTraceStep(context.brainTrace, 'vault_context_loaded', context.brainTrace.vault);
 
     const commandDraftResult = await maybeHandleCommandDraft({ message: messageForBrain, context, classification, source: resolvedSource });
     if (commandDraftResult) {
@@ -792,7 +900,17 @@ async function handlePendingActionResolution({ resolution, context, message, sou
 }
 
 async function maybeCreatePendingActionCandidate({ message, context, classification }) {
-  if (!shouldAttemptPendingActionCandidate({ message, context, classification })) return null;
+  if (!shouldAttemptPendingActionCandidate({ message, context, classification })) {
+    addBrainTraceStep(context?.brainTrace, 'pending_candidate_skipped', {
+      route: context?.brainRoute?.mode,
+      skill: context?.brainSkill?.skill?.id || context?.brainSkill?.id,
+    });
+    return null;
+  }
+  addBrainTraceStep(context?.brainTrace, 'pending_candidate_extraction_started', {
+    route: context?.brainRoute?.mode,
+    skill: context?.brainSkill?.skill?.id || context?.brainSkill?.id,
+  });
   let validation;
   try {
     validation = await extractPendingActionCandidateWithAI({
@@ -807,8 +925,17 @@ async function maybeCreatePendingActionCandidate({ message, context, classificat
       stage: 'pending_action_extraction',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
     }));
+    addBrainTraceStep(context?.brainTrace, 'pending_candidate_extraction_failed', {
+      error_code: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    });
     return null;
   }
+  addBrainTraceStep(context?.brainTrace, 'pending_candidate_validated', {
+    ok: Boolean(validation?.ok),
+    action_type: validation?.candidate?.action_type,
+    executable: Boolean(validation?.executable),
+    missing_fields: validation?.missing_fields,
+  });
   if (!validation?.ok || !validation.candidate) return null;
   const candidate = validation.candidate;
   if (validation.executable && !candidate.confirmation_required) return null;
@@ -819,6 +946,14 @@ async function maybeCreatePendingActionCandidate({ message, context, classificat
   });
   if (!pendingAction) return null;
   context.pendingActionForResponse = pendingAction;
+  context.brainTrace.pending_action = {
+    found: true,
+    id: pendingAction.id,
+    type: pendingAction.action_type,
+    status: pendingAction.status,
+    missing_fields: pendingAction.missing_fields,
+  };
+  addBrainTraceStep(context?.brainTrace, 'pending_candidate_stored', context.brainTrace.pending_action);
   return {
     answer: formatPendingActionQuestion(pendingAction),
     plan: createPendingActionPlan(pendingAction, { clarify: true, reason: 'Stored pending action candidate.' }),
@@ -835,10 +970,20 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
     brainRoute: context.brainRoute,
     brainSkill: context.brainSkill,
     workingContext: context.workingContext,
-  })) return null;
+  })) {
+    addBrainTraceStep(context?.brainTrace, 'command_draft_skipped', {
+      route: context?.brainRoute?.mode,
+      skill: context?.brainSkill?.skill?.id || context?.brainSkill?.id,
+    });
+    return null;
+  }
 
   let commandDraft;
   try {
+    addBrainTraceStep(context?.brainTrace, 'command_draft_extraction_started', {
+      route: context?.brainRoute?.mode,
+      skill: context?.brainSkill?.skill?.id || context?.brainSkill?.id,
+    });
     commandDraft = await extractBrainCommandDraftWithAI({
       message,
       brainRoute: context.brainRoute,
@@ -852,6 +997,9 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
       stage: 'command_draft_extraction',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
     }));
+    addBrainTraceStep(context?.brainTrace, 'command_draft_extraction_failed', {
+      error_code: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    });
     return null;
   }
 
@@ -863,8 +1011,11 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
   if (!validation?.ok || !validation.draft) return null;
   const draft = validation.draft;
   context.commandDraft = draft;
+  context.brainTrace.command_draft = summarizeCommandDraftForTrace(draft, validation);
+  addBrainTraceStep(context?.brainTrace, 'command_draft_validated', context.brainTrace.command_draft);
 
   if (validation.cancelled) {
+    addBrainTraceStep(context?.brainTrace, 'command_draft_cancelled', { mode: draft.mode });
     const answer = draft.language === 'it' ? 'Ricevuto. Non ho creato nulla.' : 'Got it. I did not create anything.';
     return {
       answer,
@@ -876,6 +1027,7 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
   }
 
   if (draft.mode === 'unsupported') {
+    addBrainTraceStep(context?.brainTrace, 'command_draft_unsupported', { reason: draft.reason });
     const answer = draft.language === 'it'
       ? 'Non posso farlo direttamente in questa versione. Posso creare un nuovo evento o promemoria collegato, se vuoi.'
       : 'I cannot do that directly in this version. I can create a related event or reminder if you want.';
@@ -896,7 +1048,20 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
     });
     if (pendingAction && draft.action?.type && draft.mode !== 'unsupported') {
       context.pendingActionForResponse = pendingAction;
+      context.brainTrace.pending_action = {
+        found: true,
+        id: pendingAction.id,
+        type: pendingAction.action_type,
+        status: pendingAction.status,
+        missing_fields: pendingAction.missing_fields,
+      };
     }
+    addBrainTraceStep(context?.brainTrace, 'command_draft_clarification', {
+      executable: Boolean(validation.executable),
+      confirmation_required: Boolean(draft.action?.confirmation_required),
+      pending_action: context.brainTrace.pending_action,
+      clarification_question: safePreview(formatCommandDraftClarification(draft, context.workingContext), 180),
+    });
     return {
       answer: formatCommandDraftClarification(draft, context.workingContext),
       plan: createClarificationBrainPlan({
@@ -924,6 +1089,10 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
   };
   const permission = canExecuteBrainAction({ route, skill, plan, message });
   if (!permission.allowed) {
+    addBrainTraceStep(context?.brainTrace, 'command_draft_blocked', {
+      reason: permission.reason,
+      action_type: plan.intent,
+    });
     const answer = getSafeClarificationQuestion({ message, plan, brainRoute: route, brainSkill: { skill } });
     return {
       answer,
@@ -935,6 +1104,10 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
   }
 
   const writeResult = await executeCommandDraftAction({ draft, plan, route, skill, message, context, source });
+  addBrainTraceStep(context?.brainTrace, 'command_draft_executed', {
+    action_type: plan.intent,
+    action_count: writeResult.actions?.length ?? 0,
+  });
   return {
     answer: writeResult.answer,
     plan,
@@ -1240,19 +1413,30 @@ async function safeLoadBrainContext(context) {
 
 async function safeRouteBrainMessage({ message, source, brainChat, brainContext, classification, context }) {
   try {
-    return await routeBrainMessageWithAI({
+    const route = await routeBrainMessageWithAI({
       message,
       source,
       brainChat,
       brainContext,
       classification,
     });
+    addBrainTraceStep(context?.brainTrace, 'semantic_router_completed', {
+      fallback: false,
+      mode: route?.mode,
+      primary_skill: route?.primary_skill,
+      confidence: route?.confidence,
+    });
+    return route;
   } catch (error) {
     console.error('[LifeOS Brain router warning]', JSON.stringify({
       requestId: context?.requestId,
       stage: 'semantic_router',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
     }));
+    addBrainTraceStep(context?.brainTrace, 'semantic_router_failed', {
+      fallback: true,
+      error_code: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    });
     return fallbackBrainRoute({
       message,
       classification,
@@ -1265,7 +1449,7 @@ async function safeRouteBrainMessage({ message, source, brainChat, brainContext,
 async function safeLoadBrainVaultContext({ message, brainRoute, brainSkill, context }) {
   try {
     if (!shouldRetrieveBrainVault({ brainRoute, brainSkill })) {
-      return { results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
+      return { attempted: false, results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
     }
     const skill = brainSkill?.skill ?? brainSkill;
     const query = [
@@ -1281,6 +1465,7 @@ async function safeLoadBrainVaultContext({ message, brainRoute, brainSkill, cont
       matchThreshold: 0.18,
     });
     return {
+      attempted: true,
       results,
       formatted: formatVaultResultsForPrompt(results),
     };
@@ -1290,11 +1475,11 @@ async function safeLoadBrainVaultContext({ message, brainRoute, brainSkill, cont
       stage: 'vault_retrieval',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
     }));
-    return { results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
+    return { attempted: true, error: error instanceof Error ? error.message : String(error ?? 'Unknown error'), results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
   }
 }
 
-async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute, vaultContext, workingContext }) {
+async function safePersistBrainSuccess({ context, answer, plan, actions, actionType, recordRefs, selectedSkill, brainRoute, vaultContext, workingContext, brainTrace }) {
   try {
     return await persistBrainAssistantMessage({
       chat: context?.brainChat,
@@ -1310,6 +1495,7 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
       vaultContext,
       pendingAction: context?.pendingActionForResponse ?? null,
       workingContext,
+      brainTrace,
     });
   } catch (error) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
@@ -1323,6 +1509,11 @@ async function safePersistBrainSuccess({ context, answer, plan, actions, actionT
 
 async function safePersistBrainError(context, error) {
   try {
+    const trace = finalizeBrainTraceForResponse(context, {
+      final_response_type: 'error',
+      error_code: error instanceof HttpError ? `http_${error.status}` : 'brain_error',
+      error_message: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    });
     await persistBrainErrorMessage({
       chat: context?.brainChat,
       error,
@@ -1333,7 +1524,9 @@ async function safePersistBrainError(context, error) {
       vaultContext: serializeVaultContextForMetadata(context?.brainVault?.results),
       pendingAction: context?.pendingActionForResponse ?? null,
       workingContext: serializeWorkingContextForMetadata(context?.workingContext),
+      brainTrace: trace,
     });
+    logBrainTraceIfEnabled(context, trace);
   } catch (persistenceError) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
       requestId: context?.requestId,
@@ -1363,7 +1556,9 @@ async function safeExtractBrainKnowledge({ context, message, answer, actionType 
 
 async function safeAutoSaveBrainReport({ context, assistantMessage, answer, actions, selectedSkill, brainRoute, workingContext, userMessage }) {
   try {
-    if (!shouldAutoSaveBrainReport({ assistantMessage, answer, actions, selectedSkill, brainRoute })) return null;
+    if (!shouldAutoSaveBrainReport({ assistantMessage, answer, actions, selectedSkill, brainRoute })) {
+      return { saved: false, reason: 'not_eligible' };
+    }
     const userId = getActionUserId();
     const duplicate = await getSupabaseAdmin()
       .from('ai_vault_documents')
@@ -1373,7 +1568,7 @@ async function safeAutoSaveBrainReport({ context, assistantMessage, answer, acti
       .contains('metadata', { source_message_id: assistantMessage.id })
       .maybeSingle();
     if (duplicate.error) throw duplicate.error;
-    if (duplicate.data?.id) return null;
+    if (duplicate.data?.id) return { saved: false, reason: 'duplicate', document_id: duplicate.data.id };
 
     const skillId = selectedSkill?.id || selectedSkill?.skill?.id || brainRoute?.primary_skill || 'brain';
     const documentType = autoVaultDocumentType(skillId);
@@ -1406,14 +1601,14 @@ async function safeAutoSaveBrainReport({ context, assistantMessage, answer, acti
       documentType,
       skillId,
     }));
-    return document;
+    return { saved: true, reason: 'saved', document_id: document?.id ?? null, document_type: documentType };
   } catch (error) {
     console.error('[LifeOS Brain Vault auto-save warning]', JSON.stringify({
       requestId: context?.requestId,
       stage: 'vault_auto_save',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
     }));
-    return null;
+    return { saved: false, reason: 'error', error_code: error instanceof Error ? error.message : String(error ?? 'Unknown error') };
   }
 }
 
@@ -1982,6 +2177,16 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     ...(brainRoute ? { brain_route: brainRoute } : {}),
     ...(vaultContext?.retrieved_count ? { vault_context: vaultContext } : {}),
   };
+  const traceForMetadata = finalizeBrainTraceForResponse(context, {
+    answer: responseData?.answer,
+    plan: responseData?.plan,
+    actions: responseData?.actions ?? [],
+    selectedSkill,
+    brainRoute,
+    vaultContext,
+    workingContext,
+    final_response_type: inferFinalResponseType(responseData?.plan, responseData?.actions ?? [], responseData?.answer),
+  });
   await safeLogAiSuccess({
     context,
     message: logInfo?.message,
@@ -2005,8 +2210,12 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     brainRoute,
     vaultContext,
     workingContext,
+    brainTrace: traceForMetadata,
   });
-  await safeAutoSaveBrainReport({
+  let responseTrace = assistantMessage?.id
+    ? { ...traceForMetadata, assistant_message_id: assistantMessage.id }
+    : traceForMetadata;
+  const autoSaveResult = await safeAutoSaveBrainReport({
     context,
     assistantMessage,
     answer: responseData?.answer,
@@ -2016,6 +2225,8 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
     workingContext,
     userMessage: logInfo?.message,
   });
+  responseTrace = mergeAutoSaveTraceResult(responseTrace, autoSaveResult);
+  await safeUpdateBrainTraceMetadata({ context, assistantMessage, brainTrace: responseTrace });
   if (!skipMemoryExtraction) {
     await safeExtractBrainKnowledge({
       context,
@@ -2033,8 +2244,228 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
       persisted_message: assistantMessage,
     } : {}),
   };
-  if (!res) return payload;
-  return sendSuccess(res, status, payload, context);
+  const debugPayload = maybeAttachDebug(payload, context, responseTrace);
+  logBrainTraceIfEnabled(context, responseTrace);
+  if (!res) return debugPayload;
+  return sendSuccess(res, status, debugPayload, context);
+}
+
+function finalizeBrainTraceForResponse(context, data = {}) {
+  if (!context?.brainTrace) return null;
+  const actions = Array.isArray(data.actions) ? data.actions : [];
+  const selectedSkill = data.selectedSkill ?? serializeSkillSelection(context?.brainSkill);
+  const brainRoute = data.brainRoute ?? serializeBrainRoute(context?.brainRoute);
+  const vaultContext = data.vaultContext ?? serializeVaultContextForMetadata(context?.brainVault?.results);
+  const autoSave = inferAutoSaveTrace({
+    answer: data.answer,
+    actions,
+    selectedSkill,
+    brainRoute,
+  });
+  const finalTrace = finishBrainTrace(context.brainTrace, {
+    source: context.brainTrace.source,
+    response_mode: context.brainTrace.response_mode,
+    client_request_id: context.clientRequestId,
+    thread_id: context.brainChat?.thread?.id ?? context.brainTrace.thread_id ?? null,
+    user_message_id: context.brainChat?.userMessage?.id ?? context.brainTrace.user_message_id ?? null,
+    whatsapp_sender: context.channelMetadata?.whatsapp_sender ?? context.brainTrace.whatsapp_sender ?? null,
+    whatsapp_message_id: context.channelMetadata?.whatsapp_message_id ?? context.brainTrace.whatsapp_message_id ?? null,
+    language: context.workingContext?.language || context.brainTrace.language || 'unknown',
+    route: brainRoute?.mode ?? context.brainTrace.route ?? null,
+    selected_skill: selectedSkill?.id ?? selectedSkill?.skill?.id ?? context.brainTrace.selected_skill ?? null,
+    working_context: context.brainTrace.working_context ?? {
+      used: Boolean(context.workingContext),
+      last_subject_type: context.workingContext?.last_subject?.type ?? null,
+      last_action_type: context.workingContext?.last_action_result?.action_type ?? null,
+    },
+    vault: context.brainTrace.vault ?? {
+      attempted: Boolean(context.brainVault?.attempted),
+      used: Number(context.brainVault?.results?.length ?? 0) > 0,
+      chunks: context.brainVault?.results?.length ?? 0,
+      documents: uniqueVaultDocumentCount(context.brainVault?.results),
+    },
+    tools: actionsToTraceTools(actions),
+    auto_save: autoSave,
+    final_response_type: data.final_response_type || inferFinalResponseType(data.plan, actions, data.answer),
+    error_code: data.error_code ?? null,
+    ...(context.debugFlags?.full ? { assistant_text_full: String(data.answer ?? '').slice(0, 8000) } : {}),
+    assistant_text_preview: safePreview(data.answer, 200),
+  });
+  context.finishedBrainTrace = finalTrace;
+  return finalTrace;
+}
+
+function maybeAttachDebug(payload, context, trace = context?.finishedBrainTrace) {
+  if (!context?.debugFlags?.enabled || !trace) return payload;
+  return {
+    ...payload,
+    debug: {
+      ...(payload?.debug && typeof payload.debug === 'object' ? payload.debug : {}),
+      brain_trace: trace,
+    },
+  };
+}
+
+function mergeAutoSaveTraceResult(trace, autoSaveResult) {
+  if (!trace || !autoSaveResult || !trace.auto_save) return trace;
+  const reason = autoSaveResult.saved
+    ? 'saved'
+    : (trace.auto_save.reason === 'eligible' ? autoSaveResult.reason || 'not_saved' : trace.auto_save.reason);
+  return {
+    ...trace,
+    auto_save: sanitizeTraceValue({
+      ...trace.auto_save,
+      saved: Boolean(autoSaveResult.saved),
+      reason,
+      document_id: autoSaveResult.document_id ?? null,
+      document_type: autoSaveResult.document_type ?? null,
+      error_code: autoSaveResult.error_code ?? null,
+    }),
+  };
+}
+
+async function safeUpdateBrainTraceMetadata({ context, assistantMessage, brainTrace }) {
+  if (!assistantMessage?.id || !brainTrace) return;
+  try {
+    const metadata = assistantMessage.metadata && typeof assistantMessage.metadata === 'object'
+      ? assistantMessage.metadata
+      : {};
+    const nextMetadata = {
+      ...metadata,
+      brain_trace: brainTrace,
+    };
+    const result = await getSupabaseAdmin()
+      .from('ai_chat_messages')
+      .update({ metadata: nextMetadata })
+      .eq('id', assistantMessage.id)
+      .eq('user_id', getActionUserId());
+    if (result.error) throw result.error;
+    assistantMessage.metadata = nextMetadata;
+  } catch (error) {
+    console.error('[LifeOS Brain trace persistence warning]', JSON.stringify({
+      requestId: context?.requestId,
+      stage: 'brain_trace_update',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+  }
+}
+
+function logBrainTraceIfEnabled(context, trace = context?.finishedBrainTrace) {
+  if (!context?.debugFlags?.enabled || !trace) return;
+  const compact = {
+    trace_id: trace.trace_id,
+    source: trace.source,
+    response_mode: trace.response_mode,
+    client_request_id: trace.client_request_id,
+    thread_id: trace.thread_id,
+    whatsapp_sender: trace.whatsapp_sender,
+    whatsapp_message_id: trace.whatsapp_message_id,
+    route: trace.route,
+    selected_skill: trace.selected_skill,
+    pending_action: trace.pending_action,
+    pending_reply_intent: trace.pending_reply_intent,
+    pending_resolution: trace.pending_resolution,
+    command_draft: trace.command_draft ? {
+      type: trace.command_draft.type,
+      confidence: trace.command_draft.confidence,
+      missing_fields: trace.command_draft.missing_fields,
+    } : null,
+    tools: trace.tools,
+    final_response_type: trace.final_response_type,
+    error_code: trace.error_code,
+    latency_ms: trace.latency_ms,
+  };
+  console.log('BRAIN_TRACE', JSON.stringify(sanitizeTraceValue(compact)));
+}
+
+function summarizeCommandDraftForTrace(draft, validation = {}) {
+  const args = draft?.action?.args && typeof draft.action.args === 'object' ? draft.action.args : {};
+  return sanitizeTraceValue({
+    mode: draft?.mode,
+    type: draft?.action?.type ?? null,
+    confidence: draft?.confidence ?? null,
+    missing_fields: validation?.missing_fields ?? draft?.action?.missing_fields ?? [],
+    executable: Boolean(validation?.executable),
+    confirmation_required: Boolean(draft?.action?.confirmation_required),
+    referent: draft?.referent ? {
+      needed: Boolean(draft.referent.needed),
+      resolved: Boolean(draft.referent.resolved),
+      source: draft.referent.source,
+      confidence: draft.referent.confidence,
+    } : null,
+    args_summary: summarizeArgsForTrace(args),
+  });
+}
+
+function summarizeArgsForTrace(args) {
+  if (!args || typeof args !== 'object') return {};
+  const output = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (value === undefined || value === null || value === '') continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      output[key] = safePreview(String(value), 80);
+    } else if (Array.isArray(value)) {
+      output[key] = { type: 'array', count: value.length };
+    } else if (typeof value === 'object') {
+      output[key] = { type: 'object', keys: Object.keys(value).slice(0, 8) };
+    }
+  }
+  return sanitizeTraceValue(output);
+}
+
+function actionsToTraceTools(actions) {
+  if (!Array.isArray(actions)) return [];
+  return actions
+    .filter((action) => action?.type)
+    .slice(0, 20)
+    .map((action) => ({
+      name: action.type,
+      result: String(action.type).startsWith('blocked') || action.type === 'error' ? 'blocked' : 'success',
+      error_code: action.error_code ?? null,
+      source_path: action.data?.sourcePath ?? null,
+      record_id: action.data?.id ?? action.data?.health_log?.id ?? action.data?.document?.id ?? null,
+      record_date: action.data?.event_date ?? action.data?.memo_date ?? action.data?.logged_on ?? action.data?.sleep_start_logged_on ?? null,
+    }));
+}
+
+function inferFinalResponseType(plan, actions, answer) {
+  const intent = plan?.intent;
+  if (Array.isArray(actions) && actions.some((action) => action?.type === 'error')) return 'error';
+  if (Array.isArray(actions) && actions.some((action) => action?.type && !String(action.type).startsWith('blocked'))) return 'action_confirmation';
+  if (intent === 'clarify' || plan?.clarifyingQuestion) return 'clarification';
+  if (intent === 'analyze' || plan?.needsRead) return 'analysis';
+  const text = String(answer ?? '').trim();
+  if (text.length < 240) return 'casual';
+  return 'analysis';
+}
+
+function inferAutoSaveTrace({ answer, actions, selectedSkill, brainRoute }) {
+  const content = String(answer ?? '').trim();
+  const skillId = selectedSkill?.id || selectedSkill?.skill?.id || brainRoute?.primary_skill || '';
+  const mode = brainRoute?.mode || '';
+  if (content.length < 600) return { eligible: false, saved: false, reason: 'too_short' };
+  if (Array.isArray(actions) && actions.some((action) => action?.type && !String(action.type).startsWith('blocked'))) {
+    return { eligible: false, saved: false, reason: 'action_response' };
+  }
+  if (!AUTO_SAVE_SKILLS.has(skillId)) return { eligible: false, saved: false, reason: 'skill_not_eligible' };
+  if (['casual_chat', 'clarification', 'memory_write', 'memory_recall', 'memory_forget', 'follow_up_transform'].includes(mode)) {
+    return { eligible: false, saved: false, reason: 'route_not_eligible' };
+  }
+  if (mode && mode !== 'read_only_analysis') return { eligible: false, saved: false, reason: 'mode_not_analysis' };
+  if (looksLikeShortOperationalReply(content)) return { eligible: false, saved: false, reason: 'operational_reply' };
+  return { eligible: true, saved: null, reason: 'eligible' };
+}
+
+function uniqueVaultDocumentCount(results) {
+  if (!Array.isArray(results)) return 0;
+  return new Set(results.map((item) => item?.document_id).filter(Boolean)).size;
+}
+
+function pendingResolutionTraceName(type) {
+  if (type === 'execute') return 'executed';
+  if (type === 'cancelled') return 'cancelled';
+  if (type === 'ask') return 'explained';
+  return type || 'not_handled';
 }
 
 function buildResponseWorkingContext({ context, answer, plan, actions, message } = {}) {

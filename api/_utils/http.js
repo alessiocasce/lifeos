@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 const MAX_JSON_BODY_BYTES = 32 * 1024;
 const CORS_METHODS = 'POST, OPTIONS';
-const CORS_HEADERS = 'Authorization, Content-Type, x-lifeos-whatsapp-secret';
+const CORS_HEADERS = 'Authorization, Content-Type, x-lifeos-whatsapp-secret, x-lifeos-debug';
 
 export class HttpError extends Error {
   constructor(status, message, details = null) {
@@ -94,11 +94,13 @@ export function sendJson(res, status, payload) {
 }
 
 export function sendSuccess(res, status, data, context = {}) {
-  sendJson(res, status, {
+  const payload = {
     ok: true,
     requestId: context.requestId,
     data,
-  });
+  };
+  if (data?.debug && typeof data.debug === 'object') payload.debug = data.debug;
+  sendJson(res, status, payload);
 }
 
 export function handleApiError(res, error, context = {}) {

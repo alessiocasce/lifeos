@@ -222,6 +222,8 @@ Run the focused checklists after the full flow:
 57. If embeddings are not configured, confirm saving still works and Brain does not crash.
 58. Confirm `save this as a workout report` still saves the previous assistant answer to Vault and creates no memo/calendar row.
 59. If diagnostics expose Vault `Re-embed`, confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
+60. Confirm new assistant messages can store compact `metadata.brain_trace` in Supabase without changing visible Brain UI behavior.
+61. Confirm enabling `x-lifeos-debug: true` returns debug JSON for API callers but does not render debug metadata in the app chat.
 
 ## WhatsApp Inbound Integration
 

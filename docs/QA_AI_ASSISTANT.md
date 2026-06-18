@@ -327,6 +327,21 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 16. Send the nap flow from the same WhatsApp sender: `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, then `si`, then `aggiungilo anche al calendario`.
 17. Confirm all messages use the same backend WhatsApp thread, Working Context resolves the nap, and Brain does not ask for date/time again.
 
+## Brain Trace Debugging
+
+1. Send a normal app Brain message.
+2. Inspect the assistant row in Supabase `ai_chat_messages.metadata.brain_trace`.
+3. Confirm the trace exists, has `source: app`, includes `thread_id`, `user_message_id`, `selected_skill` or `route` when available, and includes `latency_ms`.
+4. Call `/api/ai/chat` with `x-lifeos-debug: true` in a test request.
+5. Confirm the JSON response includes `debug.brain_trace` and the normal assistant answer is unchanged.
+6. Send a WhatsApp inbound message through `/api/integrations/whatsapp/inbound` with a valid secret/from/body and `x-lifeos-debug: true`.
+7. Confirm the JSON response includes `debug.brain_trace` with `source: whatsapp`, `whatsapp_sender`, `whatsapp_message_id`, and `thread_id`.
+8. Trigger a pending action through WhatsApp, then reply `Si`.
+9. Confirm the trace for the confirmation reply shows `pending_action.found: true`, `pending_reply_intent: confirm`, `pending_resolution: executed` or a safe failure, and a tool/action result entry.
+10. For the sleep-start flow, confirm the trace makes the failure point obvious if it breaks: missing pending action means thread/context issue, `pending_reply_intent: other` means normalization issue, generic Health command draft means mapping issue, and tool failure means execution issue.
+11. Inspect persisted trace metadata and debug responses.
+12. Confirm traces do not include API keys, bridge secrets, Authorization headers, Supabase service keys, Gemini keys, cookies, chain-of-thought, raw provider internals, or huge Vault chunk text.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.

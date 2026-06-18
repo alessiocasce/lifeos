@@ -91,6 +91,8 @@ LIFEOS_ACTION_USER_ID=...
 GEMINI_API_KEY=...
 LIFEOS_WHATSAPP_BRIDGE_SECRET=...
 LIFEOS_WHATSAPP_ALLOWED_SENDERS=...
+LIFEOS_BRAIN_DEBUG=...
+LIFEOS_BRAIN_DEBUG_FULL=...
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
@@ -296,6 +298,7 @@ Architecture:
 - Skill write permission and route write intent are additional guards. Skill rules never override global safety guards, negative write intent, tentative-language protection, workout-advice read-only behavior, follow-up transform read-only behavior, memory direct handling, or destructive-action blocks.
 - Selected skill metadata is stored in existing `ai_chat_messages.metadata.selected_skill`, included in `/api/ai/chat` responses, and shown as a subtle badge on assistant messages.
 - Brain route metadata is stored in existing `ai_chat_messages.metadata.brain_route`, included in `/api/ai/chat` responses, and included in sanitized AI action logs when actions are created.
+- Brain stores compact structured trace metadata in `ai_chat_messages.metadata.brain_trace` on assistant messages when possible. Trace debugging records decision metadata and ids, not hidden reasoning or secrets.
 - Brain has a pending-action / slot-filling layer for multi-turn writes. Candidate actions are AI-extracted into `ai_chat_messages.metadata.pending_action`, then deterministic backend validation handles confirmation, cancellation, missing fields, expiration, and execution.
 - Pending-action resolution runs before normal AI routing, skill selection, command draft extraction, planner writes, and casual fallback for both app Brain and WhatsApp Brain.
 - Short confirmation/cancellation/clarification replies such as `Sì`, `si`, `ok`, `confermo`, `fallo`, `yes`, `no`, `non farlo`, and `?` are normalized only when an active pending action exists, then resolve or explain that pending action before any new route is attempted.
@@ -372,6 +375,9 @@ Architecture:
 - AI write failures log sanitized requestId-based diagnostics in server logs. Setting `LIFEOS_DEBUG_AI=true` in a test deployment can include sanitized debug details in error responses.
 - AI planner-stage failures also log sanitized requestId diagnostics before any write routing runs, including whether the message looks like an explicit multi-event or day-schedule calendar request and the detected item/time-range counts.
 - `LIFEOS_DEBUG_AI=true` is for test deployments only and can expose sanitized planner/write debug details in error responses.
+- `LIFEOS_BRAIN_DEBUG=true` prints one compact `BRAIN_TRACE` JSON line per Brain-handled message in server logs and includes debug payloads in Brain HTTP responses.
+- `LIFEOS_BRAIN_DEBUG_FULL=true` enables capped full text fields for active debugging only. It still must not include secrets, API keys, auth headers, or chain-of-thought.
+- Requests with `x-lifeos-debug: true` receive `debug.brain_trace` in `/api/ai/chat` and `/api/integrations/whatsapp/inbound` JSON responses without adding debug text to the assistant or WhatsApp reply.
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
@@ -397,6 +403,22 @@ Current limitations:
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
 
+## Brain Trace Debugging
+
+Brain Trace Debugging v1 adds compact instrumentation to the shared Brain handler used by app chat, trusted callers, and WhatsApp inbound.
+
+Current behavior:
+
+- Each Brain-handled assistant response attempts to persist `metadata.brain_trace` on the assistant `ai_chat_messages` row.
+- Full user and assistant message text remains in `ai_chat_messages.content`; `brain_trace` stores compact decision/debug metadata and ids pointing to the relevant messages.
+- Trace fields can include source, response mode, client request id, thread id, user/assistant message ids, WhatsApp sender/message id, user text preview, detected language, selected route, selected skill, working-context summary, pending-action status, pending reply intent, command draft summary, Vault retrieval counts, tool names/results, auto-save eligibility, final response type, error code, and latency.
+- Trace helps identify whether a bug came from thread continuity, pending-action lookup, confirmation normalization, command draft extraction, deterministic validation, skill/routing, working context, Vault retrieval, tool execution, or response formatting.
+- Trace is compact and sanitized. It must not include chain-of-thought, API keys, Supabase service keys, Gemini keys, auth headers, bridge secrets, raw provider internals, or huge Vault chunks.
+- `LIFEOS_BRAIN_DEBUG=true` prints compact `BRAIN_TRACE` JSON lines in Vercel/server logs.
+- `LIFEOS_BRAIN_DEBUG_FULL=true` is optional active-debug mode. It can include capped full message fields in debug payloads/metadata when safe, but still never secrets or chain-of-thought.
+- `x-lifeos-debug: true` on `/api/ai/chat` or `/api/integrations/whatsapp/inbound` includes `debug.brain_trace` in the JSON response. The WhatsApp reply string itself remains clean.
+- Unauthorized WhatsApp requests do not create Brain messages; debug logging for rejected endpoint checks is minimal and sanitized.
+
 ## WhatsApp Bridge Current Status
 
 WhatsApp Bridge v1 supports inbound trusted messages from a local `whatsapp-web.js` bridge into LifeOS Brain.
@@ -412,6 +434,7 @@ Current behavior:
 - WhatsApp messages use `source = "whatsapp"` and include sanitized sender/message id metadata.
 - Each allowed sender gets one persistent backend Brain thread. This preserves WhatsApp conversation context without surfacing old thread selection in the normal Brain UI.
 - WhatsApp replies are generated by the same Brain handler used by app chat, with WhatsApp-friendly concise response instructions.
+- WhatsApp inbound can return `debug.brain_trace` in JSON when called with `x-lifeos-debug: true`; the bridge should keep that out of the WhatsApp reply text.
 - Pending actions, confirmation/cancellation normalization, structured sleep-start logging, Working Context, Command Draft referent resolution, memory commands, follow-up transforms, Brain Vault retrieval/auto-save, and deterministic tool guards remain active for WhatsApp.
 - V1 is inbound request/reply only. Proactive nudges, outbox polling, scheduled outbound messages, WhatsApp Business Cloud API, Meta templates, media/voice, and open group chat support are future work.
 

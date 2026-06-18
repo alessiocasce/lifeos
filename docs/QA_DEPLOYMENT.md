@@ -11,6 +11,8 @@ Core Brain/automation env vars include:
 - `GEMINI_API_KEY`
 - `LIFEOS_WHATSAPP_BRIDGE_SECRET`
 - `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
+- optional `LIFEOS_BRAIN_DEBUG`
+- optional `LIFEOS_BRAIN_DEBUG_FULL`
 
 ## Auth
 
@@ -142,6 +144,18 @@ Core Brain/automation env vars include:
 12. Run the Vault `Re-embed` repair action for old skipped, failed, pending, null-model, or non-Gemini chunks.
 13. Confirm Brain Skill Architecture still stores skill/route/Vault metadata in existing JSON metadata fields.
 
+## Brain Trace Debugging
+
+1. Keep `LIFEOS_BRAIN_DEBUG` unset or false during normal production use.
+2. For an active investigation, set `LIFEOS_BRAIN_DEBUG=true` and redeploy.
+3. Confirm Vercel function logs print compact `BRAIN_TRACE` JSON lines for Brain-handled messages.
+4. Keep `LIFEOS_BRAIN_DEBUG_FULL` unset or false unless actively debugging a hard issue.
+5. If `LIFEOS_BRAIN_DEBUG_FULL=true` is enabled, confirm traces still cap text fields and never include secrets, API keys, auth headers, or chain-of-thought.
+6. Call `/api/ai/chat` or `/api/integrations/whatsapp/inbound` with `x-lifeos-debug: true`.
+7. Confirm the JSON response includes `debug.brain_trace`.
+8. Inspect Supabase `ai_chat_messages.metadata.brain_trace` on assistant rows and confirm trace metadata is persisted even when the HTTP response is not in debug mode.
+9. Turn debug env vars back off after investigation.
+
 ## WhatsApp Bridge Deployment
 
 1. Set Vercel env vars:
@@ -181,6 +195,31 @@ Expected:
 - Unallowed sender returns `403`
 - Non-text message types are rejected safely
 - Brain app UI still opens fresh New Chat and does not show the WhatsApp backend thread selector
+
+10. To debug the same endpoint, add `x-lifeos-debug: true`:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \
+  -H "Content-Type: application/json" \
+  -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
+  -H "x-lifeos-debug: true" \
+  -d '{
+    "from": "111780936298528@lid",
+    "message_id": "debug-test-1",
+    "body": "Segna che sto andando a dormire ora alle 3.41am",
+    "type": "chat",
+    "is_group": false,
+    "source": "whatsapp"
+  }'
+```
+
+Expected:
+
+- JSON includes `reply`
+- JSON includes `debug.brain_trace`
+- The debug trace is not included inside the WhatsApp `reply` text
+
+11. To debug an actual live WhatsApp message, inspect Vercel `BRAIN_TRACE` logs if enabled, Supabase `ai_chat_messages.metadata.brain_trace`, and matching `client_request_id` or WhatsApp `message_id`.
 
 Troubleshooting:
 
