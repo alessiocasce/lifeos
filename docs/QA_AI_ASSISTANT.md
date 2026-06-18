@@ -336,11 +336,11 @@ Manual deployed QA:
 
 1. Run the latest `supabase/schema.sql` and confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
 2. Create an open memo with `memo_date = today` and `memo_time` two minutes in the future.
-3. After it is due, call `POST /api/integrations/whatsapp/outbox/evaluate` with valid secret and allowed `recipient`.
+3. After it is due, call `POST /api/integrations/whatsapp/outbox` with `action: "evaluate"`, valid secret, and allowed `recipient`.
 4. Confirm the response reports at least one queued message, or debug output explains duplicate/suppression.
-5. Call `POST /api/integrations/whatsapp/outbox/poll`.
+5. Call `POST /api/integrations/whatsapp/outbox` with `action: "poll"`.
 6. Confirm one message is returned with `rule_key: timed_memo_due`, `source_type: memo`, and a concise WhatsApp body.
-7. Call `POST /api/integrations/whatsapp/outbox/ack` with `status: sent`.
+7. Call `POST /api/integrations/whatsapp/outbox` with `action: "ack"` and `status: sent`.
 8. Confirm the outbox row becomes `sent`.
 9. Confirm an assistant message is persisted in the dedicated WhatsApp Brain thread with `metadata.proactive_message = true`, `expected_reply_type = memo_done_snooze_cancel`, and `working_context.last_subject.type = memo`.
 10. Through WhatsApp inbound from the same sender, reply `fatto`.

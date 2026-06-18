@@ -1,5 +1,8 @@
 {
   "rewrites": [
+    { "source": "/api/integrations/whatsapp/outbox/evaluate", "destination": "/api/integrations/whatsapp/outbox?action=evaluate" },
+    { "source": "/api/integrations/whatsapp/outbox/poll", "destination": "/api/integrations/whatsapp/outbox?action=poll" },
+    { "source": "/api/integrations/whatsapp/outbox/ack", "destination": "/api/integrations/whatsapp/outbox?action=ack" },
     { "source": "/((?!api/.*).*)", "destination": "/" }
   ]
 }

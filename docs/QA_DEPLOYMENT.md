@@ -237,47 +237,48 @@ Expected:
 ## Proactive WhatsApp Memo Outbox Deployment
 
 Schema must be rerun before this QA because v1A adds `brain_outbox_messages` and `brain_proactive_rules`.
+The outbox API is intentionally consolidated into one Vercel serverless function, `POST /api/integrations/whatsapp/outbox`, to stay under the Hobby plan function limit. Run `npm run check:functions` before deployment and keep the count at 12 or lower. Legacy `/outbox/evaluate`, `/outbox/poll`, and `/outbox/ack` paths are compatibility rewrites only; new bridge code should call the combined endpoint.
 
 1. Confirm Vercel env vars are set:
    - `LIFEOS_WHATSAPP_BRIDGE_SECRET`
    - `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
 2. On the local bridge, add `WHATSAPP_OUTBOX_POLL_SECONDS=60`.
 3. The bridge should periodically:
-   - POST `/api/integrations/whatsapp/outbox/evaluate`
-   - POST `/api/integrations/whatsapp/outbox/poll`
+   - POST `/api/integrations/whatsapp/outbox` with `action: "evaluate"`
+   - POST `/api/integrations/whatsapp/outbox` with `action: "poll"`
    - send returned messages with `client.sendMessage(to, body)`
-   - POST `/api/integrations/whatsapp/outbox/ack` with `sent` or `failed`
+   - POST `/api/integrations/whatsapp/outbox` with `action: "ack"` and `status: "sent"` or `status: "failed"`
 4. Keep the PC awake; if the bridge stops, WhatsApp outbound delivery stops too.
 5. In `DRY_RUN`, print outbound messages and avoid acking as `sent` unless intentionally testing ack behavior.
 
 Evaluate:
 
 ```bash
-curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox/evaluate" \
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox" \
   -H "Content-Type: application/json" \
   -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
   -H "x-lifeos-debug: true" \
-  -d '{"recipient":"111780936298528@lid","bridge_id":"local-main"}'
+  -d '{"action":"evaluate","recipient":"111780936298528@lid","bridge_id":"local-main"}'
 ```
 
 Poll:
 
 ```bash
-curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox/poll" \
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox" \
   -H "Content-Type: application/json" \
   -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
   -H "x-lifeos-debug: true" \
-  -d '{"recipient":"111780936298528@lid","bridge_id":"local-main","limit":3}'
+  -d '{"action":"poll","recipient":"111780936298528@lid","bridge_id":"local-main","limit":3}'
 ```
 
 Ack:
 
 ```bash
-curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox/ack" \
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox" \
   -H "Content-Type: application/json" \
   -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
   -H "x-lifeos-debug: true" \
-  -d '{"recipient":"111780936298528@lid","message_id":"OUTBOX_ID","status":"sent","bridge_id":"local-main"}'
+  -d '{"action":"ack","recipient":"111780936298528@lid","message_id":"OUTBOX_ID","status":"sent","bridge_id":"local-main"}'
 ```
 
 Expected:

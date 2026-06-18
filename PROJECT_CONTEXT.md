@@ -189,9 +189,7 @@ Real/persisted today:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
   - `POST /api/integrations/whatsapp/inbound`
-  - `POST /api/integrations/whatsapp/outbox/evaluate`
-  - `POST /api/integrations/whatsapp/outbox/poll`
-  - `POST /api/integrations/whatsapp/outbox/ack`
+  - `POST /api/integrations/whatsapp/outbox` with `action=evaluate|poll|ack`
   - Persistent Brain chat with a fresh New Chat draft by default. Old threads/messages persist in the backend, but old-thread selection is hidden from the normal UI for now.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
@@ -470,7 +468,8 @@ Current behavior:
 - Brain does not randomly decide to text the user. Deterministic rules evaluate open `memos` and enqueue outbound rows in `brain_outbox_messages`.
 - `brain_proactive_rules` stores future per-user rule settings such as enabled state, quiet hours, daily cap, min gap, and JSON config.
 - V1A rules cover timed memo due reminders, one quiet overdue follow-up, and date-only memo prompts that ask what time to use instead of guessing.
-- The local bridge calls `POST /api/integrations/whatsapp/outbox/evaluate`, then `POST /api/integrations/whatsapp/outbox/poll`, sends returned messages through WhatsApp, and calls `POST /api/integrations/whatsapp/outbox/ack`.
+- The local bridge calls one multiplexed endpoint, `POST /api/integrations/whatsapp/outbox`, with `action=evaluate`, then `action=poll`, sends returned messages through WhatsApp, and calls the same endpoint with `action=ack`.
+- The outbox endpoint is intentionally consolidated into one serverless function to stay under Vercel Hobby function limits. Legacy `/outbox/evaluate`, `/outbox/poll`, and `/outbox/ack` paths are rewrite-compatible when `vercel.json` is active, but new bridge code should use the combined endpoint.
 - Outbox rows are idempotent by `user_id + idempotency_key`; due messages move `queued -> claimed -> sent`, and failed sends retry up to a small capped attempt count before `failed`.
 - Successful ack persists the proactive WhatsApp text as an assistant message in the same dedicated WhatsApp Brain thread, with `metadata.proactive_message = true` and `working_context.last_subject` pointing to the memo.
 - Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when the latest WhatsApp assistant message is a proactive memo reminder.

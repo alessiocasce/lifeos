@@ -6,10 +6,10 @@ LifeOS exposes:
 
 ```text
 POST /api/integrations/whatsapp/inbound
-POST /api/integrations/whatsapp/outbox/evaluate
-POST /api/integrations/whatsapp/outbox/poll
-POST /api/integrations/whatsapp/outbox/ack
+POST /api/integrations/whatsapp/outbox
 ```
+
+The outbox endpoint is multiplexed to keep LifeOS under Vercel Hobby serverless-function limits. Use `action: "evaluate"`, `action: "poll"`, or `action: "ack"` in the JSON body. Legacy `/outbox/evaluate`, `/outbox/poll`, and `/outbox/ack` URLs are rewrite-compatible on Vercel, but new bridge code should use the combined endpoint.
 
 The local bridge should send:
 
@@ -44,10 +44,10 @@ The bridge only needs the LifeOS base URL, shared WhatsApp bridge secret, and se
 
 Proactive WhatsApp v1A is memo-only. The bridge should poll LifeOS instead of expecting server push:
 
-1. Every `WHATSAPP_OUTBOX_POLL_SECONDS`, call `POST /api/integrations/whatsapp/outbox/evaluate` with `{ "recipient": "111780936298528@lid", "bridge_id": "local-main" }`.
-2. Call `POST /api/integrations/whatsapp/outbox/poll` with the same recipient.
+1. Every `WHATSAPP_OUTBOX_POLL_SECONDS`, call `POST /api/integrations/whatsapp/outbox` with `{ "action": "evaluate", "recipient": "111780936298528@lid", "bridge_id": "local-main" }`.
+2. Call `POST /api/integrations/whatsapp/outbox` with `{ "action": "poll", "recipient": "111780936298528@lid", "bridge_id": "local-main" }`.
 3. For each returned message, send `body` to `to` through `client.sendMessage(to, body)`.
-4. Call `POST /api/integrations/whatsapp/outbox/ack` with `status: "sent"` or `status: "failed"`.
+4. Call `POST /api/integrations/whatsapp/outbox` with `{ "action": "ack", "recipient": "111780936298528@lid", "message_id": "OUTBOX_ID", "status": "sent" }` or `status: "failed"`.
 
 In `DRY_RUN`, print outbound messages instead of sending them. Do not ack as `sent` unless intentionally testing the ack endpoint.
 
