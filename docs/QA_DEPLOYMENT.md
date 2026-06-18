@@ -229,6 +229,8 @@ Troubleshooting:
 - Inspect the latest assistant message metadata and confirm `pending_action` exists after the confirmation prompt.
 - Confirm a later assistant message stores the same `pending_action.id` with `status: completed` or `status: cancelled` after resolution.
 - For sleep-start commands, confirm the action type is `log_sleep_start` and not a generic Health note.
+- If a sleep-start confirmation still loops, inspect `metadata.brain_trace` and verify `pending_action.type`, `pending_action.missing_fields`, `pending_reply_intent`, `pending_resolution`, and `tools`.
+- Dirty legacy pending shapes like `update_health_log` with `activity: sonno` or `health_field: inizio sonno` plus a time should normalize to `log_sleep_start` with no stale `health_field` missing field.
 
 ## Known Non-Failing Build Warning
 

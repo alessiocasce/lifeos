@@ -6,6 +6,9 @@ const PENDING_ACTION_TTL_HOURS = 24;
 const SUPPORTED_ACTIONS = new Set(['update_health_log', 'log_sleep_start', 'create_calendar_event', 'create_memo', 'create_expense']);
 const LOW_RISK_THRESHOLD = 0.72;
 const MEDIUM_RISK_THRESHOLD = 0.85;
+const SLEEP_START_SOURCE_PATTERN = /\b(?:sto andando a dormire|vado a dormire|andando a letto|sto andando a letto|inizio sonno|sleep start|bedtime|going to sleep|going to bed)\b/i;
+const SLEEP_START_FIELD_PATTERN = /\b(?:inizio\s+sonno|sleep[_\s-]?start|bedtime|dormire|andare\s+a\s+letto|andando\s+a\s+letto|sonno)\b/i;
+const NAP_CONTEXT_PATTERN = /\b(?:pisolino|pisolini|nap|napping)\b/i;
 
 const PENDING_ACTION_EXTRACTOR_SYSTEM = `
 You extract possible LifeOS pending action candidates.
@@ -144,14 +147,15 @@ export function isPendingActionCancellation(message) {
 }
 
 export async function resolvePendingActionTurn({ message, pendingAction, context } = {}) {
-  if (!pendingAction) return { handled: false };
+  const normalizedPendingAction = normalizePendingAction(pendingAction);
+  if (!normalizedPendingAction) return { handled: false };
   const replyIntent = normalizePendingReplyIntent(message);
   if (replyIntent.intent === 'cancel') {
     return {
       handled: true,
       type: 'cancelled',
-      answer: formatPendingActionCancelledAnswer(pendingAction),
-      pending_action: markPendingActionCancelled(pendingAction),
+      answer: formatPendingActionCancelledAnswer(normalizedPendingAction),
+      pending_action: markPendingActionCancelled(normalizedPendingAction),
     };
   }
 
@@ -159,21 +163,21 @@ export async function resolvePendingActionTurn({ message, pendingAction, context
     return {
       handled: true,
       type: 'ask',
-      answer: formatPendingActionClarificationAnswer(pendingAction),
-      pending_action: pendingAction,
+      answer: formatPendingActionClarificationAnswer(normalizedPendingAction),
+      pending_action: normalizedPendingAction,
     };
   }
 
   if (replyIntent.intent === 'confirm') {
-    const validation = validatePendingActionCandidate(pendingAction, context);
+    const validation = validatePendingActionCandidate(normalizedPendingAction, context);
     if (validation.executable) {
-      return { handled: true, type: 'execute', pending_action: pendingAction };
+      return { handled: true, type: 'execute', pending_action: validation.candidate };
     }
     const next = {
-      ...pendingAction,
+      ...validation.candidate,
       status: 'awaiting_fields',
       missing_fields: validation.missing_fields,
-      confirmation_question: validation.question || pendingAction.confirmation_question || formatPendingActionQuestion(pendingAction),
+      confirmation_question: validation.question || validation.candidate?.confirmation_question || formatPendingActionQuestion(validation.candidate),
     };
     return {
       handled: true,
@@ -183,30 +187,30 @@ export async function resolvePendingActionTurn({ message, pendingAction, context
     };
   }
 
-  const update = await extractPendingActionFieldUpdateWithAI({ message, pendingAction, context });
+  const update = await extractPendingActionFieldUpdateWithAI({ message, pendingAction: normalizedPendingAction, context });
   if (!update || update.relation === 'unrelated') return { handled: false };
   if (update.relation === 'cancellation') {
     return {
       handled: true,
       type: 'cancelled',
-      answer: formatPendingActionCancelledAnswer(pendingAction),
-      pending_action: markPendingActionCancelled(pendingAction),
+      answer: formatPendingActionCancelledAnswer(normalizedPendingAction),
+      pending_action: markPendingActionCancelled(normalizedPendingAction),
     };
   }
   if (update.relation === 'confirmation') {
-    const validation = validatePendingActionCandidate(pendingAction, context);
-    if (validation.executable) return { handled: true, type: 'execute', pending_action: pendingAction };
+    const validation = validatePendingActionCandidate(normalizedPendingAction, context);
+    if (validation.executable) return { handled: true, type: 'execute', pending_action: validation.candidate };
   }
 
   const merged = normalizePendingAction({
-    ...pendingAction,
+    ...normalizedPendingAction,
     args: {
-      ...safeObject(pendingAction.args),
+      ...safeObject(normalizedPendingAction.args),
       ...safeObject(update.args_patch),
     },
-    missing_fields: Array.isArray(update.missing_fields) ? update.missing_fields : pendingAction.missing_fields,
-    confirmation_required: update.confirmation_required ?? pendingAction.confirmation_required,
-    confirmation_question: update.confirmation_question || pendingAction.confirmation_question,
+    missing_fields: Array.isArray(update.missing_fields) ? update.missing_fields : normalizedPendingAction.missing_fields,
+    confirmation_required: update.confirmation_required ?? normalizedPendingAction.confirmation_required,
+    confirmation_question: update.confirmation_question || normalizedPendingAction.confirmation_question,
   });
   const validation = validatePendingActionCandidate(merged, context);
   if (validation.executable && !merged.confirmation_required) {
@@ -266,12 +270,15 @@ export function validatePendingActionCandidate(candidate, context = {}) {
   const normalizedArgs = normalizePendingArgs(action.action_type, action.args);
   const missing = normalizeMissingFields(action.action_type, normalizedArgs, action.missing_fields);
   const executable = missing.length === 0;
-  const status = executable
-    ? (action.confirmation_required ? 'awaiting_confirmation' : action.status)
-    : 'awaiting_fields';
+  const terminalStatus = ['completed', 'cancelled', 'expired'].includes(action.status);
+  const status = terminalStatus
+    ? action.status
+    : (executable
+      ? (action.confirmation_required ? 'awaiting_confirmation' : 'open')
+      : 'awaiting_fields');
   const normalized = {
     ...action,
-    status: action.status?.startsWith('awaiting') ? status : action.status,
+    status: terminalStatus ? action.status : status,
     args: normalizedArgs,
     missing_fields: missing,
     confirmation_question: action.confirmation_question || questionForMissing(action, missing),
@@ -293,7 +300,9 @@ export function buildPendingActionFromCandidate({ candidate, message, context } 
   return {
     ...action,
     id: action.id || context?.requestId || randomId(),
-    status: validation.executable && action.confirmation_required ? 'awaiting_confirmation' : 'awaiting_fields',
+    status: validation.executable
+      ? (action.confirmation_required ? 'awaiting_confirmation' : 'open')
+      : 'awaiting_fields',
     created_at: now.toISOString(),
     expires_at: new Date(now.getTime() + PENDING_ACTION_TTL_HOURS * 60 * 60 * 1000).toISOString(),
     source_user_message_id: context?.brainChat?.userMessage?.id || action.source_user_message_id || null,
@@ -472,34 +481,115 @@ function localFieldUpdateFallback(message, pendingAction, workingContext = null)
   return { relation: 'unrelated', args_patch: {}, missing_fields: [] };
 }
 
+export function isSleepStartLikePendingAction({ actionType, args, summary, source_user_message: sourceUserMessage } = {}) {
+  const type = String(actionType ?? '').trim();
+  const source = safeObject(args);
+  if (type !== 'update_health_log' && type !== 'log_sleep_start') return false;
+  const text = [
+    source.activity,
+    source.health_field,
+    source.healthField,
+    source.field,
+    summary,
+    sourceUserMessage,
+  ].map((item) => String(item ?? '')).join(' ');
+  const napText = [
+    source.health_note_append,
+    source.notes,
+    summary,
+    sourceUserMessage,
+  ].map((item) => String(item ?? '')).join(' ');
+  if (NAP_CONTEXT_PATTERN.test(napText)) return false;
+  const time = extractSleepStartTimeFromArgs(source, sourceUserMessage);
+  if (!time) return false;
+  if (type === 'log_sleep_start') return true;
+  if (source.sleep_start || source.sleepStart) return true;
+  if (SLEEP_START_FIELD_PATTERN.test(text)) return true;
+  return SLEEP_START_SOURCE_PATTERN.test(String(sourceUserMessage ?? ''));
+}
+
+export function extractSleepStartTimeFromArgs(args = {}, sourceUserMessage = '') {
+  const source = safeObject(args);
+  const direct = source.time
+    ?? source.sleep_start
+    ?? source.sleepStart
+    ?? source.start_time
+    ?? source.bedtime
+    ?? source.value;
+  const directTime = normalizeSimpleTime(direct);
+  if (directTime) return directTime;
+  const text = String(sourceUserMessage ?? '');
+  const match = text.match(/\b(?:alle|all'|at)?\s*(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})\s*(am|pm)?\b/i);
+  if (!match) return null;
+  return normalizeSimpleTime(match[1], match[2]);
+}
+
+export function coercePendingActionType(actionType, args, sourceLikeFields = {}) {
+  const type = String(actionType ?? '').trim();
+  if (type === 'update_health_log' && isSleepStartLikePendingAction({
+    actionType: type,
+    args,
+    summary: sourceLikeFields.summary,
+    source_user_message: sourceLikeFields.source_user_message,
+  })) {
+    return 'log_sleep_start';
+  }
+  return type;
+}
+
 function normalizePendingAction(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const rawArgs = safeObject(value.args);
-  let actionType = String(value.action_type ?? value.intent ?? '').trim();
-  if (actionType === 'update_health_log'
-    && (rawArgs.time || rawArgs.sleep_start || rawArgs.sleepStart)
-    && !rawArgs.wake_time
-    && !rawArgs.health_note_append
-    && !rawArgs.notes) {
-    actionType = 'log_sleep_start';
+  const rawActionType = String(value.action_type ?? value.intent ?? '').trim();
+  const sourceUserMessage = cleanText(value.source_user_message, 1200);
+  const rawSummary = cleanText(value.summary, 300) || rawActionType;
+  const actionType = coercePendingActionType(rawActionType, rawArgs, {
+    summary: rawSummary,
+    source_user_message: sourceUserMessage,
+  });
+  const coercedSleepStart = actionType === 'log_sleep_start' && rawActionType === 'update_health_log';
+  let args = rawArgs;
+  let confirmationQuestion = cleanText(value.confirmation_question, 500);
+  if (coercedSleepStart || actionType === 'log_sleep_start') {
+    const time = extractSleepStartTimeFromArgs(rawArgs, sourceUserMessage);
+    args = {
+      ...rawArgs,
+      ...(time ? { time } : {}),
+      logged_on: rawArgs.logged_on ?? rawArgs.date ?? rawArgs.event_date ?? rawArgs.memo_date,
+    };
+    if (isGenericHealthDetailQuestion(confirmationQuestion)) confirmationQuestion = null;
   }
   if (!actionType || actionType === 'unsupported') return null;
+  const language = value.language === 'it' || looksItalianSleepStart(`${rawSummary} ${sourceUserMessage}`) ? 'it' : 'en';
+  const normalizedArgs = normalizePendingArgs(actionType, args);
+  const missingFields = normalizeMissingFields(
+    actionType,
+    normalizedArgs,
+    Array.isArray(value.missing_fields) ? value.missing_fields.map(cleanField).filter(Boolean) : [],
+  );
+  const rawStatus = cleanText(value.status, 40) || 'awaiting_confirmation';
+  const status = rawStatus === 'awaiting_fields' && missingFields.length === 0
+    ? (value.confirmation_required === false ? 'open' : 'awaiting_confirmation')
+    : rawStatus;
+  const summary = coercedSleepStart && normalizedArgs.time
+    ? (language === 'it' ? `Registrare inizio sonno alle ${normalizedArgs.time}` : `Log sleep start at ${normalizedArgs.time}`)
+    : rawSummary;
   return {
     id: cleanText(value.id, 120),
-    status: cleanText(value.status, 40) || 'awaiting_confirmation',
+    status,
     created_at: cleanText(value.created_at, 80),
     expires_at: cleanText(value.expires_at, 80),
     source_user_message_id: cleanText(value.source_user_message_id, 120),
-    source_user_message: cleanText(value.source_user_message, 1200),
+    source_user_message: sourceUserMessage,
     skill: cleanText(value.skill, 80),
     intent: actionType,
     action_type: actionType,
-    summary: cleanText(value.summary, 300) || actionType,
-    args: rawArgs,
-    missing_fields: Array.isArray(value.missing_fields) ? value.missing_fields.map(cleanField).filter(Boolean) : [],
+    summary,
+    args: normalizedArgs,
+    missing_fields: missingFields,
     confirmation_required: value.confirmation_required !== false,
-    confirmation_question: cleanText(value.confirmation_question, 500),
-    language: value.language === 'it' ? 'it' : 'en',
+    confirmation_question: confirmationQuestion,
+    language,
     risk_level: ['low', 'medium', 'high'].includes(value.risk_level) ? value.risk_level : 'low',
     confidence: clampNumber(value.confidence, 0, 1, 0.8),
     reason: cleanText(value.reason, 400),
@@ -527,8 +617,7 @@ function normalizePendingArgs(actionType, args) {
   }
   if (actionType === 'log_sleep_start') {
     return {
-      ...source,
-      time: normalizeSimpleTime(source.time ?? source.sleep_start ?? source.sleepStart),
+      time: normalizeSimpleTime(source.time ?? source.sleep_start ?? source.sleepStart ?? source.start_time ?? source.bedtime ?? source.value),
       logged_on: normalizeDateValue(source.logged_on || source.date),
       notes: cleanText(source.notes, 1000),
     };
@@ -599,12 +688,14 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
   }
   for (const field of [...missing]) {
     if (field === 'date' && (args.logged_on || args.event_date || args.memo_date || args.spent_on)) missing.delete(field);
-    if (field === 'time' && (args.memo_time || args.start_time)) missing.delete(field);
+    if (field === 'time' && (args.time || args.memo_time || args.start_time || args.sleep_start || args.sleepStart)) missing.delete(field);
     if (field === 'time' && actionType === 'log_sleep_start' && args.time) missing.delete(field);
     if (field === 'start_time' && args.start_time) missing.delete(field);
     if (field === 'end_time' && args.end_time) missing.delete(field);
     if (field === 'title' && args.title) missing.delete(field);
     if (field === 'category' && args.category) missing.delete(field);
+    if (field === 'health_field' && actionType === 'log_sleep_start') missing.delete(field);
+    if (field === 'health_field' && (args.health_field || args.healthField || args.health_note_append || args.notes || args.coffee || args.adc || args.wake_time || args.sleep_start || args.sleepStart)) missing.delete(field);
   }
   return [...missing];
 }
@@ -635,6 +726,17 @@ function questionForMissing(action, missing) {
     return language === 'it' ? 'Che dettaglio devo salvare in Salute?' : 'What Health detail should I save?';
   }
   return formatPendingActionQuestion({ ...action, missing_fields: missing });
+}
+
+function isGenericHealthDetailQuestion(value) {
+  const text = normalizeMessage(value);
+  if (!text) return false;
+  return /\b(?:che dettaglio|quale dettaglio|what detail|what health detail|che valore)\b/.test(text);
+}
+
+function looksItalianSleepStart(value) {
+  const text = normalizeMessage(value);
+  return /\b(?:sto andando a dormire|vado a dormire|andando a letto|inizio sonno|sonno)\b/.test(text);
 }
 
 function normalizeDateValue(value) {

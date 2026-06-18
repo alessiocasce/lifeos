@@ -327,6 +327,25 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 16. Send the nap flow from the same WhatsApp sender: `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, then `si`, then `aggiungilo anche al calendario`.
 17. Confirm all messages use the same backend WhatsApp thread, Working Context resolves the nap, and Brain does not ask for date/time again.
 
+## Dirty Pending Action Normalization / Sleep Start
+
+1. Send app or WhatsApp message `Segna che sto andando a dormire ora alle 3.41am`.
+2. Confirm Brain either saves directly or asks one specific confirmation for sleep start at `03:41`.
+3. Confirm Brain never asks generic `Che dettaglio devo usare?`.
+4. If a pending action is created, inspect trace/metadata and confirm `pending_action.type` or `action_type` is `log_sleep_start`, `missing_fields` is empty, and args contain canonical `time: "03:41"`.
+5. Reply `Si` or `Sì`.
+6. Confirm Brain executes the sleep-start action, does not repeat the confirmation, and trace shows `pending_reply_intent: confirm`, `pending_resolution: executed`, and tool/action `log_sleep_start`.
+7. Manually simulate or inspect a legacy pending action shaped as `update_health_log` with `args.activity = "sonno"`, `args.start_time = "03:41"`, and `missing_fields = ["health_field"]`.
+8. Confirm validation normalizes it to `log_sleep_start` with `args.time = "03:41"` and no missing fields.
+9. Manually simulate or inspect a legacy pending action shaped as `update_health_log` with `args.health_field = "inizio sonno"`, `args.start_time = "03:41"`, and `missing_fields = ["health_field"]`.
+10. Confirm validation normalizes it to `log_sleep_start` with no stale `health_field`.
+11. Send `segna nota salute: mal di testa leggero alle 16`.
+12. Confirm generic Health note logging still uses `update_health_log` and is not coerced to sleep start.
+13. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
+14. Confirm naps/pisolini remain Health notes/context and are not mapped to `sleep_start`.
+15. Send `segnami creatina alle 9:37`.
+16. Confirm the action still works and trace shows Vault retrieval was not attempted for the simple explicit write.
+
 ## Brain Trace Debugging
 
 1. Send a normal app Brain message.

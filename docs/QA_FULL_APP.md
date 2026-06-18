@@ -208,22 +208,24 @@ Run the focused checklists after the full flow:
 43. Send `antibiotico dopo cena`, confirm Brain asks for exact reminder date/time, then reply `stasera alle 21:30` and confirm a memo is created.
 44. After a pending calendar clarification, send `comunque come sto andando con i workout?` and confirm Brain does not execute the pending action accidentally.
 45. Confirm retrying a pending action confirmation does not create duplicate records.
-46. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
-47. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
-48. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
-49. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
-50. Confirm Working Context metadata is not exposed in the normal Brain UI.
-51. Confirm Italian command clarifications and completions stay in Italian.
-52. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
-53. On mobile, confirm chat messages and skill badges do not overflow horizontally.
-54. Ask a long workout/product/project answer and confirm it auto-saves to Vault without a modal or prominent manual Save control.
-55. If diagnostics are available, open the saved Vault document and confirm the full content renders safely with tags and metadata.
-56. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
-57. If embeddings are not configured, confirm saving still works and Brain does not crash.
-58. Confirm `save this as a workout report` still saves the previous assistant answer to Vault and creates no memo/calendar row.
-59. If diagnostics expose Vault `Re-embed`, confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
-60. Confirm new assistant messages can store compact `metadata.brain_trace` in Supabase without changing visible Brain UI behavior.
-61. Confirm enabling `x-lifeos-debug: true` returns debug JSON for API callers but does not render debug metadata in the app chat.
+46. Send `Segna che sto andando a dormire ora alle 3.41am`, then reply `si` if confirmation is asked; confirm sleep start saves and Brain never asks generic `Che dettaglio devo usare?`.
+47. Confirm simple explicit writes such as Creatine or sleep-start logs skip Vault retrieval in trace.
+48. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
+49. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
+50. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
+51. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
+52. Confirm Working Context metadata is not exposed in the normal Brain UI.
+53. Confirm Italian command clarifications and completions stay in Italian.
+54. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
+55. On mobile, confirm chat messages and skill badges do not overflow horizontally.
+56. Ask a long workout/product/project answer and confirm it auto-saves to Vault without a modal or prominent manual Save control.
+57. If diagnostics are available, open the saved Vault document and confirm the full content renders safely with tags and metadata.
+58. If embeddings are configured, ask a related future question and confirm Brain can reuse relevant saved reports as advisory context.
+59. If embeddings are not configured, confirm saving still works and Brain does not crash.
+60. Confirm `save this as a workout report` still saves the previous assistant answer to Vault and creates no memo/calendar row.
+61. If diagnostics expose Vault `Re-embed`, confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
+62. Confirm new assistant messages can store compact `metadata.brain_trace` in Supabase without changing visible Brain UI behavior.
+63. Confirm enabling `x-lifeos-debug: true` returns debug JSON for API callers but does not render debug metadata in the app chat.
 
 ## WhatsApp Inbound Integration
 

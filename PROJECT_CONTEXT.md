@@ -306,6 +306,8 @@ Architecture:
 - Health nap/pisolino pending actions save to Health notes as context, not to `sleep_start`, `wake_time`, or calculated `sleep_hours`.
 - Going-to-sleep commands such as `sto andando a dormire`, `vado a dormire`, `inizio sonno`, `bedtime`, and `sleep start` with a time map to the structured `log_sleep_start` Brain action, not a generic Health note.
 - `log_sleep_start` reuses the same shared sleep-start helper as `/api/actions/sleep-start`, including Europe/Rome before-noon date assignment and next-day `sleep_hours` recalculation when a wake time exists.
+- `log_sleep_start` is the canonical Brain action for going-to-sleep commands. Dirty or legacy pending actions that look like `update_health_log` but contain sleep-start semantics, such as `activity: sonno` plus `start_time` or `health_field: inizio sonno`, are normalized to `log_sleep_start`.
+- Pending action validation recomputes `missing_fields` from normalized args. Stale fields such as `health_field` are removed when the normalized action is executable.
 - Vague calendar or memo requests can store known slots such as title/date/duration while asking only for the missing exact time/title/date; follow-up replies like `si`, `14:30-15:30`, or `non bloccarlo` resolve the stored action instead of restarting generic clarification.
 - Completed or cancelled pending actions are recorded as later assistant message metadata; the latest status for the pending id is treated as source of truth and helps avoid retry duplicates.
 - Brain has Working Context metadata in `ai_chat_messages.metadata.working_context`. It stores the current conversation language, latest operational subject, latest successful action result, and recent referents without exposing raw metadata in the UI.
@@ -316,6 +318,7 @@ Architecture:
 - Brain Vault v1 stores long-form markdown-like Brain reports and saved assistant answers in Supabase.
 - Brain Vault documents can be saved by explicit follow-up commands such as `save this to vault`, and eligible long-form Brain answers are auto-saved invisibly.
 - Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.
+- Simple explicit writes such as habit logs, sleep-start logs, memos, calendar creates, and expenses skip Brain Vault retrieval unless the current message also asks for analysis/advice/report context.
 - Vault context is stored in `ai_chat_messages.metadata.vault_context` for debugging and never creates write permission.
 - Vault context does not replace structured LifeOS tables and cannot authorize calendar, memo, health, expense, project, or workout writes.
 - Brain Vault embeddings are Gemini-native. The core model is `gemini-embedding-2`, configurable only through optional `GEMINI_EMBEDDING_MODEL`, with fixed 1536-dimension vectors stored in `ai_vault_chunks.embedding`.

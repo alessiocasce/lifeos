@@ -6,6 +6,10 @@ import {
   formatReferentClarification,
   resolveSimpleReferent,
 } from './brainWorkingContext.js';
+import {
+  coercePendingActionType,
+  extractSleepStartTimeFromArgs,
+} from './brainPendingActions.js';
 
 const SUPPORTED_ACTIONS = new Set(['create_calendar_event', 'create_memo', 'create_expense', 'update_health_log', 'log_sleep_start']);
 const COMMAND_MODES = new Set(['answer', 'action', 'clarify', 'cancel', 'field_update', 'transform', 'memory', 'unsupported']);
@@ -263,18 +267,26 @@ function normalizeCommandDraft(raw, workingContext = null) {
     ? raw.language
     : (workingContext?.language === 'it' ? 'it' : 'en');
   const rawActionArgs = safeObject(raw.action?.args);
-  let rawActionType = cleanText(raw.action?.type, 80);
-  if (rawActionType === 'update_health_log'
-    && (rawActionArgs.time || rawActionArgs.sleep_start || rawActionArgs.sleepStart)
-    && !rawActionArgs.wake_time
-    && !rawActionArgs.health_note_append
-    && !rawActionArgs.notes) {
-    rawActionType = 'log_sleep_start';
+  const rawActionType = cleanText(raw.action?.type, 80);
+  const actionType = coercePendingActionType(rawActionType, rawActionArgs, {
+    summary: raw.intent_summary || raw.reason,
+    source_user_message: null,
+  });
+  let actionArgs = rawActionArgs;
+  if (actionType === 'log_sleep_start') {
+    const time = extractSleepStartTimeFromArgs(rawActionArgs);
+    actionArgs = {
+      ...rawActionArgs,
+      ...(time ? { time } : {}),
+      logged_on: rawActionArgs.logged_on ?? rawActionArgs.date,
+    };
   }
+  let clarificationQuestion = cleanText(raw.clarification_question, 500);
+  if (actionType === 'log_sleep_start' && isGenericDetailQuestion(clarificationQuestion)) clarificationQuestion = null;
   const action = raw.action && typeof raw.action === 'object' && !Array.isArray(raw.action)
     ? {
-      type: rawActionType,
-      args: rawActionArgs,
+      type: actionType,
+      args: actionArgs,
       missing_fields: Array.isArray(raw.action.missing_fields) ? raw.action.missing_fields.map(cleanField).filter(Boolean) : [],
       confirmation_required: Boolean(raw.action.confirmation_required),
       risk_level: ['low', 'medium', 'high'].includes(raw.action.risk_level) ? raw.action.risk_level : 'low',
@@ -293,7 +305,7 @@ function normalizeCommandDraft(raw, workingContext = null) {
       reason: cleanText(raw.referent.reason, 300),
     } : { needed: false, resolved: false, source: null, confidence: 0, reason: null },
     action,
-    clarification_question: cleanText(raw.clarification_question, 500),
+    clarification_question: clarificationQuestion,
     confidence: clampNumber(raw.confidence, 0, 1, 0),
     reason: cleanText(raw.reason, 500),
   };
@@ -333,8 +345,7 @@ function normalizeActionArgs(actionType, args) {
   }
   if (actionType === 'log_sleep_start') {
     return {
-      ...source,
-      time: normalizeSimpleTime(source.time || source.sleep_start || source.sleepStart),
+      time: normalizeSimpleTime(source.time || source.sleep_start || source.sleepStart || source.start_time || source.bedtime || source.value),
       logged_on: normalizeDateValue(source.logged_on || source.date),
       notes: cleanText(source.notes, 1000),
     };
@@ -383,6 +394,8 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
     if (field === 'start_time' && args.start_time) return false;
     if (field === 'end_time' && args.end_time) return false;
     if (field === 'title' && args.title) return false;
+    if (field === 'health_field' && actionType === 'log_sleep_start') return false;
+    if (field === 'health_field' && (args.health_field || args.healthField || args.health_note_append || args.notes || args.wake_time || args.sleep_start || args.sleepStart)) return false;
     return true;
   });
 }
@@ -413,6 +426,11 @@ function questionForMissing(draft, workingContext) {
     }
   }
   return language === 'it' ? 'Che dettaglio devo usare?' : 'What detail should I use?';
+}
+
+function isGenericDetailQuestion(value) {
+  const text = normalizeText(value);
+  return Boolean(text && /\b(?:che dettaglio|quale dettaglio|what detail|what health detail|che valore)\b/.test(text));
 }
 
 function tableForAction(actionType) {
