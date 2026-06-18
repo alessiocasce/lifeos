@@ -504,10 +504,20 @@ export async function handleBrainChatMessage({
       context.brainTrace.pending_resolution = pendingResolution?.handled
         ? pendingResolutionTraceName(pendingResolution.type)
         : 'not_handled';
+      if (pendingResolution?.bypassed) {
+        context.brainTrace.pending_action_bypass = {
+          bypass: true,
+          reason: pendingResolution.reason || pendingResolution.pending_action_bypass?.reason || 'new_command',
+          confidence: pendingResolution.confidence ?? pendingResolution.pending_action_bypass?.confidence ?? null,
+          pending_action_type: pendingResolution.pending_action?.action_type ?? activePendingAction.action_type,
+        };
+      }
       addBrainTraceStep(context.brainTrace, 'pending_action_resolved', {
         handled: Boolean(pendingResolution.handled),
+        bypassed: Boolean(pendingResolution.bypassed),
         type: pendingResolution.type ?? null,
         pending_resolution: context.brainTrace.pending_resolution,
+        pending_action_bypass: context.brainTrace.pending_action_bypass ?? null,
       });
       if (pendingResolution.handled) {
         const result = await handlePendingActionResolution({
@@ -2384,6 +2394,7 @@ function logBrainTraceIfEnabled(context, trace = context?.finishedBrainTrace) {
     pending_action: trace.pending_action,
     pending_reply_intent: trace.pending_reply_intent,
     pending_resolution: trace.pending_resolution,
+    pending_action_bypass: trace.pending_action_bypass,
     command_draft: trace.command_draft ? {
       type: trace.command_draft.type,
       confidence: trace.command_draft.confidence,

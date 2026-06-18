@@ -72,6 +72,69 @@ export const napHealthNoteCandidate = {
   confidence: 0.86,
 };
 
+export const staleSleepPendingAction = {
+  action_type: 'log_sleep_start',
+  status: 'awaiting_confirmation',
+  confirmation_required: true,
+  args: {
+    time: '03:41',
+    logged_on: '2026-06-18',
+  },
+  summary: 'Registrare inizio sonno alle 03:41',
+  source_user_message: 'Segna che sto andando a dormire ora alle 3.41am',
+  missing_fields: [],
+  confirmation_question: 'Confermi che devo registrare l\'inizio del sonno alle 03:41?',
+  language: 'it',
+  confidence: 0.86,
+};
+
+export const calendarPendingMissingTime = {
+  action_type: 'create_calendar_event',
+  status: 'awaiting_fields',
+  confirmation_required: false,
+  args: {
+    title: 'Sistemare il Vault',
+    event_date: '2026-06-19',
+    duration_minutes: 60,
+  },
+  summary: 'Bloccare un ora per sistemare il Vault',
+  source_user_message: 'blocca domani un ora per sistemare il Vault dopo pranzo',
+  missing_fields: ['start_time', 'end_time'],
+  confirmation_question: 'Che orario esatto devo usare?',
+  language: 'it',
+  confidence: 0.9,
+};
+
+export const pendingInterruptionFixtures = {
+  bypassNewCommands: [
+    'Ricordami di fare matematica tra 10 minuti',
+    'ricordami tra 2 minuti di lavarmi i denti',
+    'segna creatina alle 9',
+    'ho preso due caffe',
+    'blocca domani palestra alle 18',
+    'ho speso 4 euro per gelato',
+    'sto andando a dormire ora',
+    'crea memo antibiotico alle 15',
+    'aggiungi evento studio domani 14:30-16:00',
+  ],
+  noBypassReplies: [
+    'si',
+    'Sì',
+    'ok',
+    'confermo',
+    'no',
+    'annulla',
+    '?',
+    'cosa?',
+    'alle 14:30',
+    '14:30-15:30',
+    'domani alle 10',
+    'usa lo stesso orario',
+    'la data e il tempo che hai gia usato',
+    'fai oggi e il tempo te l\'ho gia dato',
+  ],
+};
+
 export const simpleWriteVaultFixtures = [
   { message: 'segnami creatina alle 9:37', skill: 'health_coach', action: 'update_health_log' },
   { message: 'sto andando a dormire alle 3:41', skill: 'health_coach', action: 'log_sleep_start' },

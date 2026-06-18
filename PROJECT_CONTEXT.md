@@ -306,6 +306,9 @@ Architecture:
 - Brain has a pending-action / slot-filling layer for multi-turn writes. Candidate actions are AI-extracted into `ai_chat_messages.metadata.pending_action`, then deterministic backend validation handles confirmation, cancellation, missing fields, expiration, and execution.
 - Pending-action resolution runs before normal AI routing, skill selection, command draft extraction, planner writes, and casual fallback for both app Brain and WhatsApp Brain.
 - Short confirmation/cancellation/clarification replies such as `Sì`, `si`, `ok`, `confermo`, `fallo`, `yes`, `no`, `non farlo`, and `?` are normalized only when an active pending action exists, then resolve or explain that pending action before any new route is attempted.
+- Pending actions are interruptible and topic-safe. The resolver only handles confirmation, cancellation, clarification, plausible slot-fill, or explicit referential replies for the stored action.
+- New explicit independent commands such as `ricordami...`, `segna creatina...`, `blocca domani...`, `ho speso...`, or a new sleep-start command bypass stale or unrelated pending actions and continue into normal Brain routing/command draft.
+- Pending slot-fill extraction is gated by deterministic plausibility checks, so unrelated messages cannot mutate old pending args or stale confirmation questions.
 - Pending actions are thread-local, expire after a short window, and never bypass negative-write guards, destructive blocks, user ownership checks, skill/action permissions, or schema/date/time validation.
 - Health nap/pisolino pending actions save to Health notes as context, not to `sleep_start`, `wake_time`, or calculated `sleep_hours`.
 - Going-to-sleep commands such as `sto andando a dormire`, `vado a dormire`, `inizio sonno`, `bedtime`, and `sleep start` with a time map to the structured `log_sleep_start` Brain action, not a generic Health note.

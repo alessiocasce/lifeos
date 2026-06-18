@@ -3,6 +3,7 @@ import { addDays, localDate, localTime } from './date.js';
 import { normalizeTimeRange, optionalDate } from './validation.js';
 
 const PENDING_ACTION_TTL_HOURS = 24;
+const PENDING_CONFIRMATION_TTL_HOURS = 2;
 const SUPPORTED_ACTIONS = new Set(['update_health_log', 'log_sleep_start', 'create_calendar_event', 'create_memo', 'create_expense']);
 const LOW_RISK_THRESHOLD = 0.72;
 const MEDIUM_RISK_THRESHOLD = 0.85;
@@ -130,6 +131,10 @@ export function normalizePendingReplyIntent(message) {
     return { intent: 'cancel', confidence: 0.95, normalized };
   }
 
+  if (looksLikeNewExplicitIndependentCommand(normalized)) {
+    return { intent: 'other', confidence: 0.9, normalized };
+  }
+
   if (/^(?:si|sii|s|y|yes|yep|yeah|ok|okay|certo|confermo|conferma|confirmed|confirm|va bene|procedi|fallo|salva|salvalo|segna|segnalo|registralo|log it|save it|do it|proceed|correct|esatto|giusto)\b/.test(normalized)
     || /\b(?:fai oggi|fallo pure|procedi pure|tempo te l'ho gia dato|data e il tempo|time is already there|salva alle|registralo alle|conferma inizio|confermo inizio)\b/.test(normalized)) {
     return { intent: 'confirm', confidence: 0.95, normalized };
@@ -187,6 +192,27 @@ export async function resolvePendingActionTurn({ message, pendingAction, context
     };
   }
 
+  const bypass = shouldBypassPendingActionForNewCommand({ message, pendingAction: normalizedPendingAction, context });
+  if (bypass.bypass) {
+    return {
+      handled: false,
+      bypassed: true,
+      reason: bypass.reason,
+      confidence: bypass.confidence,
+      pending_action: normalizedPendingAction,
+      pending_action_bypass: bypass,
+    };
+  }
+
+  if (!isPotentialPendingSlotFill({ message, pendingAction: normalizedPendingAction, workingContext: context?.workingContext })) {
+    return {
+      handled: false,
+      bypassed: false,
+      reason: 'not_pending_slot_fill',
+      pending_action: normalizedPendingAction,
+    };
+  }
+
   const update = await extractPendingActionFieldUpdateWithAI({ message, pendingAction: normalizedPendingAction, context });
   if (!update || update.relation === 'unrelated') return { handled: false };
   if (update.relation === 'cancellation') {
@@ -232,6 +258,54 @@ export async function resolvePendingActionTurn({ message, pendingAction, context
     confirmation_question: validation.question || merged.confirmation_question || formatPendingActionQuestion(merged),
   };
   return { handled: true, type: 'ask', answer: next.confirmation_question, pending_action: next };
+}
+
+export function shouldBypassPendingActionForNewCommand({ message, pendingAction, context } = {}) {
+  const action = normalizePendingAction(pendingAction);
+  const replyIntent = normalizePendingReplyIntent(message);
+  if (!action) return { bypass: false, reason: 'no_pending_action', confidence: 0 };
+  if (replyIntent.intent !== 'other') return { bypass: false, reason: `pending_reply_${replyIntent.intent}`, confidence: replyIntent.confidence };
+  if (isPotentialPendingSlotFill({ message, pendingAction: action, workingContext: context?.workingContext })) {
+    return { bypass: false, reason: 'possible_pending_slot_fill', confidence: 0.72 };
+  }
+  const normalized = normalizeMessage(message);
+  const explicit = detectExplicitIndependentCommand(normalized);
+  if (explicit) {
+    return {
+      bypass: true,
+      reason: explicit,
+      confidence: 0.9,
+      pending_action_type: action.action_type,
+    };
+  }
+  return { bypass: false, reason: 'not_new_explicit_command', confidence: 0.35 };
+}
+
+export function isPotentialPendingSlotFill({ message, pendingAction, workingContext } = {}) {
+  const action = normalizePendingAction(pendingAction);
+  if (!action) return false;
+  const normalized = normalizeMessage(message);
+  if (!normalized) return false;
+  const replyIntent = normalizePendingReplyIntent(message);
+  if (replyIntent.intent === 'confirm' || replyIntent.intent === 'cancel' || replyIntent.intent === 'clarify') return true;
+  if (looksLikeNewExplicitIndependentCommand(normalized)) return false;
+
+  if (/\b(?:stesso orario|same time|come prima|gia usato|hai gia usato|tempo che hai gia usato|data e il tempo|usa lo stesso|use the same|same as before)\b/.test(normalized)) {
+    return Boolean(workingContext?.last_subject || action.args?.start_time || action.args?.time || action.args?.memo_time);
+  }
+
+  const missing = new Set(Array.isArray(action.missing_fields) ? action.missing_fields : []);
+  const needsTime = ['time', 'start_time', 'end_time', 'memo_time'].some((field) => missing.has(field));
+  const needsDate = missing.has('date') || missing.has('memo_date') || missing.has('event_date');
+  const needsTitle = missing.has('title');
+  if (needsTime && looksLikeTimeSlotFill(normalized)) return true;
+  if (needsDate && looksLikeDateSlotFill(normalized)) return true;
+  if ((needsDate || needsTime) && looksLikeDateTimeSlotFill(normalized)) return true;
+  if (needsTitle && looksLikeShortTitleSlotFill(normalized)) return true;
+
+  const summaryWords = significantWords(action.summary);
+  if (summaryWords.length && summaryWords.some((word) => normalized.includes(word)) && normalized.split(/\s+/).length <= 8) return true;
+  return false;
 }
 
 export async function extractPendingActionCandidateWithAI({ message, context, brainSkill, brainRoute } = {}) {
@@ -739,6 +813,64 @@ function looksItalianSleepStart(value) {
   return /\b(?:sto andando a dormire|vado a dormire|andando a letto|inizio sonno|sonno)\b/.test(text);
 }
 
+function looksLikeNewExplicitIndependentCommand(normalizedMessage) {
+  return Boolean(detectExplicitIndependentCommand(normalizedMessage));
+}
+
+function detectExplicitIndependentCommand(normalizedMessage) {
+  const text = String(normalizedMessage ?? '');
+  if (!text) return null;
+  if (/^(?:conferma|confermo|confirm|confirmed)\b/.test(text)) return null;
+  if (/\b(?:ricordami|ricordamelo|promemoria|crea memo|crea promemoria|create reminder|remind me|memo)\b/.test(text)) return 'new_memo_command';
+  if (/\b(?:blocca|fissa|pianifica|schedula|schedule|calendar|calendario|evento|aggiungi evento|crea evento|metti in calendario)\b/.test(text)) return 'new_calendar_command';
+  if (/\b(?:ho speso|speso|aggiungi spesa|segna spesa|log expense|spent)\b/.test(text)) return 'new_expense_command';
+  if (SLEEP_START_SOURCE_PATTERN.test(text)) return 'new_sleep_start_command';
+  if (/\b(?:ho fatto|fatto)\s+(?:un\s+)?(?:pisolino|nap)\b/.test(text)) return 'new_health_context';
+  if (/\b(?:ho preso|preso|bevuto|drank|took)\b/.test(text) && /\b(?:caffe|coffee|creatina|creatine|adc|pillola|pill|farmaco)\b/.test(text)) return 'new_health_log_command';
+  if (/\b(?:segna|segnami|registra|registrami|log|save)\b/.test(text)
+    && /\b(?:creatina|creatine|doccia|shower|skin|caffe|coffee|wake|sveglia|sonno|dormire|letto|adc|memo|promemoria|spesa|expense)\b/.test(text)) {
+    return 'new_explicit_log_command';
+  }
+  return null;
+}
+
+function looksLikeTimeSlotFill(normalizedMessage) {
+  const text = String(normalizedMessage ?? '').trim();
+  if (!text || text.split(/\s+/).length > 6) return false;
+  return /^(?:alle\s+|at\s+)?\d{1,2}(?::|\.)?(?:[0-5]\d)?\s*(?:am|pm)?$/.test(text)
+    || /^\d{1,2}(?::|\.)(?:[0-5]\d)\s*(?:-|–|a|alle|to)\s*\d{1,2}(?::|\.)(?:[0-5]\d)?\s*(?:am|pm)?$/.test(text)
+    || /^(?:tra|fra|in)\s+\d{1,3}\s*(?:m|min|minuti|minutes)?$/.test(text);
+}
+
+function looksLikeDateSlotFill(normalizedMessage) {
+  const text = String(normalizedMessage ?? '').trim();
+  if (!text || text.split(/\s+/).length > 5) return false;
+  return /^(?:oggi|domani|today|tomorrow|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/.test(text)
+    || /^\d{4}-\d{2}-\d{2}$/.test(text)
+    || /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?$/.test(text);
+}
+
+function looksLikeDateTimeSlotFill(normalizedMessage) {
+  const text = String(normalizedMessage ?? '').trim();
+  if (!text || text.split(/\s+/).length > 7) return false;
+  return /\b(?:oggi|domani|today|tomorrow|stasera|tonight)\b/.test(text)
+    && /\b(?:alle|at)?\s*\d{1,2}(?::|\.| )?(?:[0-5]\d)?\s*(?:am|pm)?\b/.test(text);
+}
+
+function looksLikeShortTitleSlotFill(normalizedMessage) {
+  const text = String(normalizedMessage ?? '').trim();
+  if (!text || text.length > 120 || text.split(/\s+/).length > 12) return false;
+  if (looksLikeNewExplicitIndependentCommand(text)) return false;
+  return !/[?]/.test(text);
+}
+
+function significantWords(value) {
+  return normalizeMessage(value)
+    .split(/\s+/)
+    .filter((word) => word.length >= 5 && !['registrare', 'creare', 'salvare', 'confermi', 'promemoria'].includes(word))
+    .slice(0, 6);
+}
+
 function normalizeDateValue(value) {
   if (value === undefined || value === null || value === '') return null;
   if (value === 'today_local') return localDate();
@@ -780,7 +912,15 @@ function addMinutesToTime(time, minutes) {
 
 function isExpired(action, now = Date.now()) {
   const expiresAt = Date.parse(action.expires_at || '');
-  return Number.isFinite(expiresAt) && expiresAt < now;
+  if (Number.isFinite(expiresAt) && expiresAt < now) return true;
+  const createdAt = Date.parse(action.created_at || '');
+  if (action.status === 'awaiting_confirmation'
+    && action.confirmation_required
+    && Number.isFinite(createdAt)
+    && now - createdAt > PENDING_CONFIRMATION_TTL_HOURS * 60 * 60 * 1000) {
+    return true;
+  }
+  return false;
 }
 
 function isActivePendingStatus(status) {

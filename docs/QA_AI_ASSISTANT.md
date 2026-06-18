@@ -236,8 +236,14 @@ Expected:
 26. Confirm Brain creates a date-only memo if supported or asks only for the missing time; it must not lose the `tomorrow` date.
 27. After a pending calendar clarification, send `comunque come sto andando con i workout?`.
 28. Confirm Brain does not execute the pending calendar action and answers the workout question or asks whether to ignore the pending action.
-29. Retry a pending action confirmation after a timeout if possible.
-30. Confirm no duplicate records are created; completed/cancelled pending action metadata prevents reusing the same pending id.
+29. Create a sleep-start confirmation, do not answer it, then later send `Ricordami di fare matematica tra 10 minuti`.
+30. Confirm Brain creates or clarifies the memo/reminder and does not repeat the old sleep-start confirmation.
+31. Immediately after a fresh pending confirmation, reply `sì`.
+32. Confirm Brain still resolves the pending action instead of treating `sì` as a new command.
+33. After a sleep-start confirmation, send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
+34. Confirm Brain does not mutate the sleep-start pending action time/question from the nap message.
+35. Retry a pending action confirmation after a timeout if possible.
+36. Confirm no duplicate records are created; completed/cancelled pending action metadata prevents reusing the same pending id.
 
 ## Brain Working Context / Referent Resolution
 

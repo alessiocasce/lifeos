@@ -4,9 +4,11 @@ import assert from 'node:assert/strict';
 import {
   buildPendingActionFromCandidate,
   extractLatestPendingAction,
+  isPotentialPendingSlotFill,
   isSleepStartLikePendingAction,
   normalizePendingReplyIntent,
   resolvePendingActionTurn,
+  shouldBypassPendingActionForNewCommand,
   validatePendingActionCandidate,
 } from '../api/_utils/brainPendingActions.js';
 import { validateBrainCommandDraft } from '../api/_utils/brainCommandDraft.js';
@@ -26,14 +28,17 @@ import {
 import { hasNegativeWriteIntent } from '../api/ai/chat.js';
 import {
   dirtySleepStartPendingActions,
+  calendarPendingMissingTime,
   napHealthNoteCandidate,
   negativeWriteFixtures,
+  pendingInterruptionFixtures,
   pendingReplyIntentFixtures,
   proactiveMemoFixtures,
   proactiveReplyFixtures,
   referentWorkingContextFixture,
   simpleWriteVaultFixtures,
   sleepStartSourceMessage,
+  staleSleepPendingAction,
 } from '../tests/brain/fixtures.js';
 
 const tests = [];
@@ -137,6 +142,92 @@ test('stale missing_fields does not block executable sleep-start confirm', async
   assert.equal(resolution.handled, true);
   assert.equal(resolution.type, 'execute', compact(resolution));
   assertSleepStartCandidate(resolution.pending_action, 'resolved pending action');
+});
+
+test('stale sleep pending bypasses new memo command', async () => {
+  const message = 'Ricordami di fare matematica tra 10 minuti';
+  assert.equal(normalizePendingReplyIntent(message).intent, 'other');
+  const bypass = shouldBypassPendingActionForNewCommand({
+    message,
+    pendingAction: staleSleepPendingAction,
+    context: {},
+  });
+  assert.equal(bypass.bypass, true, compact(bypass));
+  const resolution = await resolvePendingActionTurn({
+    message,
+    pendingAction: staleSleepPendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, false, compact(resolution));
+  assert.equal(resolution.bypassed, true, compact(resolution));
+  assert.equal(resolution.type, undefined);
+  assert.equal(resolution.answer, undefined);
+});
+
+test('pending confirmations and slot fills do not bypass', () => {
+  for (const message of pendingInterruptionFixtures.noBypassReplies) {
+    const bypass = shouldBypassPendingActionForNewCommand({
+      message,
+      pendingAction: message.includes('14:30') || message.includes('domani')
+        ? calendarPendingMissingTime
+        : staleSleepPendingAction,
+      context: {
+        workingContext: {
+          last_subject: {
+            date: '2026-06-18',
+            start_time: '03:41',
+            end_time: '04:41',
+            label: 'Inizio sonno',
+          },
+        },
+      },
+    });
+    assert.equal(bypass.bypass, false, `${message}: ${compact(bypass)}`);
+  }
+});
+
+test('calendar pending accepts exact time slot fill', () => {
+  assert.equal(isPotentialPendingSlotFill({
+    message: '14:30-15:30',
+    pendingAction: calendarPendingMissingTime,
+  }), true);
+  assert.equal(shouldBypassPendingActionForNewCommand({
+    message: '14:30-15:30',
+    pendingAction: calendarPendingMissingTime,
+    context: {},
+  }).bypass, false);
+});
+
+test('calendar pending bypasses independent memo command', async () => {
+  const resolution = await resolvePendingActionTurn({
+    message: 'Ricordami di fare matematica tra 10 minuti',
+    pendingAction: calendarPendingMissingTime,
+    context: {},
+  });
+  assert.equal(resolution.handled, false, compact(resolution));
+  assert.equal(resolution.bypassed, true, compact(resolution));
+});
+
+test('new explicit commands bypass stale pending actions', () => {
+  for (const message of pendingInterruptionFixtures.bypassNewCommands) {
+    const bypass = shouldBypassPendingActionForNewCommand({
+      message,
+      pendingAction: staleSleepPendingAction,
+      context: {},
+    });
+    assert.equal(bypass.bypass, true, `${message}: ${compact(bypass)}`);
+  }
+});
+
+test('pisolino message does not mutate sleep-start pending', async () => {
+  const resolution = await resolvePendingActionTurn({
+    message: 'oggi ho fatto un pisolino dalle 7.40 alle 10 di sera',
+    pendingAction: staleSleepPendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, false, compact(resolution));
+  assert.notEqual(resolution.pending_action?.args?.time, '22:00');
+  assert.equal(JSON.stringify(resolution).includes('19:40'), false);
 });
 
 test('nap health note does not coerce to sleep_start', () => {
