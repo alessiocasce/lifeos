@@ -41,6 +41,7 @@ const ACTION_TYPES = new Set([
   'finite_recurring_calendar_events',
   'create_memo',
   'update_health_log',
+  'log_sleep_start',
   'analyze_and_plan',
   'memory_update',
 ]);
@@ -104,6 +105,7 @@ Rules:
 - Calendar writes require explicit current-message schedule/calendar/day-planning intent.
 - Memo writes require explicit reminder/task intent.
 - Health writes require explicit log/update intent.
+- Going-to-sleep / bedtime / sleep start commands with a time are Health writes and should propose log_sleep_start.
 - Expense writes require explicit expense log intent.
 - Broad "how am I doing?" requests are read_only_analysis with life_review.
 - If previous assistant asked a specific clarification and the user confirms with enough details, mode may be explicit_action.
@@ -303,7 +305,8 @@ export function canExecuteBrainAction({ route, skill, plan, message }) {
     const compatibleCalendarBatch = intent === 'create_calendar_events'
       && (route.proposed_action_types.includes('finite_recurring_calendar_events') || route.proposed_action_types.includes('create_calendar_event'));
     const compatibleCalendarSingle = intent === 'create_calendar_event' && route.proposed_action_types.includes('create_calendar_events');
-    if (!compatibleCalendarBatch && !compatibleCalendarSingle) {
+    const compatibleSleepStart = intent === 'log_sleep_start' && route.proposed_action_types.includes('update_health_log');
+    if (!compatibleCalendarBatch && !compatibleCalendarSingle && !compatibleSleepStart) {
       return { allowed: false, reason: `Planner intent ${intent} was not proposed by the semantic route.` };
     }
   }
@@ -401,6 +404,7 @@ function mapClassificationToRouteMode(kind) {
 
 function inferFallbackActions(message, primarySkill) {
   const text = normalizeText(message);
+  if (/\b(?:sleep start|bedtime|going to sleep|vado a dormire|sto andando a dormire|andando a letto|inizio sonno)\b/.test(text)) return ['log_sleep_start'];
   if (primarySkill === 'memo_assistant') return ['create_memo'];
   if (primarySkill === 'calendar_planner') return ['create_calendar_event'];
   if (primarySkill === 'health_coach') return ['update_health_log'];

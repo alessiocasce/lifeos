@@ -182,6 +182,15 @@ Expected:
 - Non-text message types are rejected safely
 - Brain app UI still opens fresh New Chat and does not show the WhatsApp backend thread selector
 
+Troubleshooting:
+
+- If WhatsApp repeats the same pending-action confirmation after `Sì`, confirm the bridge sends the same stable `from` id on every message.
+- Confirm `LIFEOS_WHATSAPP_ALLOWED_SENDERS` exactly matches that `from` value.
+- Confirm the endpoint is reusing one WhatsApp Brain thread per sender instead of creating a new thread per message.
+- Inspect the latest assistant message metadata and confirm `pending_action` exists after the confirmation prompt.
+- Confirm a later assistant message stores the same `pending_action.id` with `status: completed` or `status: cancelled` after resolution.
+- For sleep-start commands, confirm the action type is `log_sleep_start` and not a generic Health note.
+
 ## Known Non-Failing Build Warning
 
 The production build may warn that a JavaScript chunk is larger than 500 kB. This is expected for now and does not block deployment.

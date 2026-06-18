@@ -7,7 +7,7 @@ import {
   resolveSimpleReferent,
 } from './brainWorkingContext.js';
 
-const SUPPORTED_ACTIONS = new Set(['create_calendar_event', 'create_memo', 'create_expense', 'update_health_log']);
+const SUPPORTED_ACTIONS = new Set(['create_calendar_event', 'create_memo', 'create_expense', 'update_health_log', 'log_sleep_start']);
 const COMMAND_MODES = new Set(['answer', 'action', 'clarify', 'cancel', 'field_update', 'transform', 'memory', 'unsupported']);
 
 const COMMAND_DRAFT_SYSTEM = `
@@ -29,7 +29,7 @@ Schema:
     "reason": "short reason"
   },
   "action": {
-    "type": "create_calendar_event" | "update_health_log" | "create_memo" | "create_expense" | "unsupported" | null,
+    "type": "create_calendar_event" | "update_health_log" | "log_sleep_start" | "create_memo" | "create_expense" | "unsupported" | null,
     "args": {},
     "missing_fields": [],
     "confirmation_required": false,
@@ -54,6 +54,7 @@ Rules:
 - If a supported action is complete, mode "action".
 - If a supported action is missing fields, mode "clarify".
 - Use the conversation language from workingContext unless the current user message clearly switches language.
+- Going to sleep / bedtime / inizio sonno / vado a dormire / sto andando a letto / sleep start messages map to action.type "log_sleep_start" with args.time in HH:MM. Do not map them to a generic Health note.
 
 Examples:
 Working context last_subject: health_event Pisolino today 19:40-22:00.
@@ -79,6 +80,9 @@ Output: mode clarify, question "Che cosa vuoi aggiungere al calendario?"
 Working context has date/time already.
 User: la data e il tempo che hai gia usato
 Output: mode field_update or action using previous pending action/last_subject; do not ask again for date/time if they exist.
+
+User: Segna che sto andando a dormire ora alle 3.41am
+Output: mode action, skill health_coach, action.type log_sleep_start, args time "03:41", missing_fields [], confirmation_required false or true depending safety.
 `;
 
 export async function extractBrainCommandDraftWithAI({ message, brainRoute, brainSkill, workingContext, lifeosContext = null } = {}) {
@@ -245,7 +249,7 @@ export function shouldUseCommandDraft({ message, brainRoute, brainSkill, working
   if (brainRoute?.mode && ['memory_write', 'memory_recall', 'memory_forget', 'follow_up_transform', 'read_only_analysis'].includes(brainRoute.mode)) return false;
   if (/\b(?:delete|remove|wipe|erase|destroy|elimina|cancella|rimuovi)\b/.test(text)) return false;
   const hasReferent = /\b(?:it|this|that|same|also|too|lo|la|questo|questa|quello|quella|stesso|stessa|orario|tempo|anche|li|lì|aggiungilo|mettilo|usato|prima)\b/.test(text);
-  const actionLike = /\b(?:add|put|create|log|save|schedule|remind|aggiungi|aggiungilo|metti|mettilo|crea|segna|salva|ricordami|blocca|calendario|memo|promemoria)\b/.test(text);
+  const actionLike = /\b(?:add|put|create|log|save|schedule|remind|aggiungi|aggiungilo|metti|mettilo|crea|segna|salva|ricordami|blocca|calendario|memo|promemoria|dormire|letto|sonno|bedtime|sleep start)\b/.test(text);
   const skillId = brainSkill?.skill?.id || brainSkill?.id || brainRoute?.primary_skill;
   if (hasReferent && workingContext?.last_subject) return true;
   if (brainRoute?.mode === 'clarification') return true;
@@ -258,10 +262,19 @@ function normalizeCommandDraft(raw, workingContext = null) {
   const language = raw.language === 'en' || raw.language === 'it'
     ? raw.language
     : (workingContext?.language === 'it' ? 'it' : 'en');
+  const rawActionArgs = safeObject(raw.action?.args);
+  let rawActionType = cleanText(raw.action?.type, 80);
+  if (rawActionType === 'update_health_log'
+    && (rawActionArgs.time || rawActionArgs.sleep_start || rawActionArgs.sleepStart)
+    && !rawActionArgs.wake_time
+    && !rawActionArgs.health_note_append
+    && !rawActionArgs.notes) {
+    rawActionType = 'log_sleep_start';
+  }
   const action = raw.action && typeof raw.action === 'object' && !Array.isArray(raw.action)
     ? {
-      type: cleanText(raw.action.type, 80),
-      args: safeObject(raw.action.args),
+      type: rawActionType,
+      args: rawActionArgs,
       missing_fields: Array.isArray(raw.action.missing_fields) ? raw.action.missing_fields.map(cleanField).filter(Boolean) : [],
       confirmation_required: Boolean(raw.action.confirmation_required),
       risk_level: ['low', 'medium', 'high'].includes(raw.action.risk_level) ? raw.action.risk_level : 'low',
@@ -318,6 +331,14 @@ function normalizeActionArgs(actionType, args) {
       nap_end_time: normalizeSimpleTime(source.nap_end_time),
     };
   }
+  if (actionType === 'log_sleep_start') {
+    return {
+      ...source,
+      time: normalizeSimpleTime(source.time || source.sleep_start || source.sleepStart),
+      logged_on: normalizeDateValue(source.logged_on || source.date),
+      notes: cleanText(source.notes, 1000),
+    };
+  }
   if (actionType === 'create_expense') {
     return {
       ...source,
@@ -348,6 +369,9 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
     if (!args.logged_on) missing.add('date');
     if (!args.health_note_append && !args.notes && !args.wake_time && !args.sleep_start) missing.add('health_field');
   }
+  if (actionType === 'log_sleep_start') {
+    if (!args.time) missing.add('time');
+  }
   if (actionType === 'create_expense') {
     if (!args.vendor) missing.add('vendor');
     if (!(Number(args.amount) > 0)) missing.add('amount');
@@ -355,7 +379,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
   }
   return [...missing].filter((field) => {
     if (field === 'date' && (args.event_date || args.memo_date || args.logged_on || args.spent_on)) return false;
-    if (field === 'time' && (args.memo_time || args.start_time)) return false;
+    if (field === 'time' && (args.memo_time || args.start_time || args.time)) return false;
     if (field === 'start_time' && args.start_time) return false;
     if (field === 'end_time' && args.end_time) return false;
     if (field === 'title' && args.title) return false;
@@ -366,6 +390,12 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
 function questionForMissing(draft, workingContext) {
   const language = draft?.language === 'it' || workingContext?.language === 'it' ? 'it' : 'en';
   const missing = draft?.action?.missing_fields ?? [];
+  if (!missing.length && draft?.action?.type === 'log_sleep_start') {
+    const time = draft.action.args?.time || draft.action.args?.sleep_start || draft.intent_summary;
+    return language === 'it'
+      ? `Confermi che devo registrare l'inizio del sonno alle ${time}?`
+      : `Confirm sleep start at ${time}?`;
+  }
   if (draft?.referent?.needed && !draft?.referent?.resolved) return formatReferentClarification({ workingContext, language });
   if (draft?.action?.type === 'create_calendar_event') {
     if (missing.includes('start_time') || missing.includes('end_time')) {
@@ -377,6 +407,11 @@ function questionForMissing(draft, workingContext) {
     if (missing.includes('title')) return language === 'it' ? 'Che promemoria devo creare?' : 'What reminder should I create?';
     if (missing.includes('date') || missing.includes('time')) return language === 'it' ? 'Che giorno e orario devo usare?' : 'What date and time should I use?';
   }
+  if (draft?.action?.type === 'log_sleep_start') {
+    if (missing.includes('time')) {
+      return language === 'it' ? "Mi manca solo l'orario di inizio sonno. Quale uso?" : 'I only need the sleep start time. What should I use?';
+    }
+  }
   return language === 'it' ? 'Che dettaglio devo usare?' : 'What detail should I use?';
 }
 
@@ -385,6 +420,7 @@ function tableForAction(actionType) {
   if (actionType === 'create_memo') return ['memos'];
   if (actionType === 'create_expense') return ['expenses'];
   if (actionType === 'update_health_log') return ['health_logs'];
+  if (actionType === 'log_sleep_start') return ['health_logs'];
   return [];
 }
 

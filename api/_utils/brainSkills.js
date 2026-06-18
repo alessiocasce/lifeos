@@ -71,10 +71,11 @@ const SKILL_DEFINITIONS = [
       'The user explicitly asks to log a tracked health field.',
     ],
     dataTables: ['health_logs'],
-    allowedActions: ['update_health_log'],
+    allowedActions: ['update_health_log', 'log_sleep_start'],
     forbiddenActions: ['create_calendar_event', 'create_memo', 'create_expense'],
     responseRules: [
       'Write health only when the user explicitly asks to log/update health.',
+      'Going-to-sleep commands with a time should use log_sleep_start, not a generic Health note.',
       'Sleep hours are calculated from previous sleep_start plus current wake_time.',
       'Visible Daily Habits are Shower, Creatine, and Skin only.',
       'Do not re-add Energy, Brush, or Journal as tracked habits.',
@@ -255,6 +256,7 @@ export function selectBrainSkill({ message, classification, plan = null } = {}) 
   }
 
   if (plan?.intent === 'update_health_log') signals.push('planner:update_health_log');
+  if (plan?.intent === 'log_sleep_start') signals.push('planner:log_sleep_start');
   if (plan?.intent === 'create_expense') signals.push('planner:create_expense');
   if (plan?.intent === 'create_memo') signals.push('planner:create_memo');
   if (['create_calendar_event', 'create_calendar_events', 'analyze_and_plan'].includes(plan?.intent)) signals.push(`planner:${plan.intent}`);
@@ -280,8 +282,8 @@ export function selectBrainSkill({ message, classification, plan = null } = {}) 
     ['shower', '\\bshower\\b|\\bdoccia\\b'],
     ['recovery', '\\brecovery\\b|\\brecupero\\b|\\bfatigue\\b|\\bstanco\\b'],
   ]);
-  if (plan?.intent === 'update_health_log' || healthSignals.length) {
-    return pick('health_coach', plan?.intent === 'update_health_log' ? 0.88 : 0.78, 'Health, sleep, habit, or recovery request.', healthSignals);
+  if (['update_health_log', 'log_sleep_start'].includes(plan?.intent) || healthSignals.length) {
+    return pick('health_coach', ['update_health_log', 'log_sleep_start'].includes(plan?.intent) ? 0.88 : 0.78, 'Health, sleep, habit, or recovery request.', healthSignals);
   }
 
   const calendarSignals = matchSignals(text, [

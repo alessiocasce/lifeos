@@ -84,6 +84,7 @@ import {
   resolveDate,
   updateHealthLog,
 } from '../_utils/lifeosTools.js';
+import { logSleepStart } from '../_utils/healthActions.js';
 import { normalizeTimeRange } from '../_utils/validation.js';
 
 const PLANNER_SYSTEM = `
@@ -91,7 +92,7 @@ You are the LifeOS planner. Convert the user's message into strict JSON only.
 No markdown. No natural language outside JSON.
 Schema:
 {
-  "intent": "analyze" | "create_expense" | "create_calendar_event" | "create_memo" | "update_health_log" | "analyze_and_plan" | "clarify" | "unsupported" | "blocked_destructive",
+  "intent": "analyze" | "create_expense" | "create_calendar_event" | "create_memo" | "update_health_log" | "log_sleep_start" | "analyze_and_plan" | "clarify" | "unsupported" | "blocked_destructive",
   "needsRead": boolean,
   "needsWrite": boolean,
   "range": "today" | "tomorrow" | "7d" | "30d" | "3m" | "6m" | "12m" | "all" | null,
@@ -129,6 +130,7 @@ Rules:
 - If the user says "in an hour" or "in 30 minutes", put that text in args.relative_time. If only a time is given, put it in memo_time.
 - If no date/time is given for a memo, leave memo_date and memo_time null.
 - For health logging, extract logged_on/date and provided fields: energy, coffee, adc, sleep_hours, sleep_start, wake_time, notes, and Daily Habits.
+- For going-to-sleep / bedtime / inizio sonno / vado a dormire / sto andando a letto / sleep start commands, use intent "log_sleep_start" with args.time. Do not map these to generic notes.
 - Daily Habits are shower, creatine, and skin. Put them in args.habits or direct args fields such as {"creatine": true}.
 - "took creatine" means habit creatine. "showered" means habit shower. "skincare" or "did skin" means habit skin.
 - If the user provides a habit time, put it in args.habit_time. Otherwise the backend records the current Europe/Rome local time.
@@ -148,7 +150,7 @@ Rules:
 - Negative write intent such as "don't schedule", "no memo", "do not log", or "non mettere in calendario" must result in needsWrite false.
 - Destructive delete/remove/wipe requests must use "blocked_destructive".
 - If required details are missing, use "clarify" with one concise clarifyingQuestion.
-- Low-risk additive writes are create_expense, create_calendar_event, create_memo, update_health_log, and small calendar plans.
+- Low-risk additive writes are create_expense, create_calendar_event, create_memo, update_health_log, log_sleep_start, and small calendar plans.
 `;
 
 const ANSWER_SYSTEM = `
@@ -943,6 +945,25 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
 }
 
 async function executeCommandDraftAction({ draft, plan, route, skill, message, context }) {
+  if (plan.intent === 'log_sleep_start') {
+    const result = await logSleepStart({
+      time: plan.args?.time ?? plan.args?.sleep_start ?? plan.args?.sleepStart,
+      loggedOn: plan.args?.logged_on || plan.args?.date ? resolveDate(plan.args.logged_on ?? plan.args.date, undefined) : undefined,
+      notes: plan.args?.notes,
+    });
+    return {
+      actions: [{
+        type: 'log_sleep_start',
+        data: {
+          ...result,
+          command_draft_id: context?.requestId,
+          sourcePath: 'command_draft',
+        },
+      }],
+      answer: formatCommandDraftSuccess({ draft, action: { type: 'log_sleep_start', data: result } }),
+    };
+  }
+
   if (plan.intent === 'update_health_log' && plan.args?.health_note_append) {
     const pendingShape = {
       id: context?.requestId,
@@ -1000,6 +1021,10 @@ function formatCommandDraftSuccess({ draft, action }) {
     const detail = draft.action.args?.health_note_append || draft.intent_summary;
     return language === 'it' ? `Salvato nella salute: ${detail}.` : `Saved to Health: ${detail}.`;
   }
+  if (draft?.action?.type === 'log_sleep_start') {
+    const time = data.sleep_start || draft.action.args?.time || draft.action.args?.sleep_start;
+    return language === 'it' ? `Salvato: inizio sonno alle ${time}.` : `Saved: sleep start at ${time}.`;
+  }
   return language === 'it' ? 'Fatto.' : 'Done.';
 }
 
@@ -1045,6 +1070,25 @@ async function executePendingAction(pendingAction, { message, context }) {
         },
       }],
       answer: formatPendingActionCompletedAnswer({ data: updated }, action),
+    };
+  }
+
+  if (action.action_type === 'log_sleep_start') {
+    const result = await logSleepStart({
+      time: action.args?.time ?? action.args?.sleep_start ?? action.args?.sleepStart,
+      loggedOn: action.args?.logged_on || action.args?.date ? resolveDate(action.args.logged_on ?? action.args.date, undefined) : undefined,
+      notes: action.args?.notes,
+    });
+    return {
+      actions: [{
+        type: 'log_sleep_start',
+        data: {
+          ...result,
+          pending_action_id: action.id,
+          sourcePath: 'pending_action',
+        },
+      }],
+      answer: formatPendingActionCompletedAnswer({ data: result }, action),
     };
   }
 
@@ -1107,6 +1151,7 @@ function createPendingActionPlan(pendingAction, { clarify = false, reason = '' }
 
 function tableForPendingAction(actionType) {
   if (actionType === 'update_health_log') return ['health_logs'];
+  if (actionType === 'log_sleep_start') return ['health_logs'];
   if (actionType === 'create_calendar_event') return ['calendar_events'];
   if (actionType === 'create_memo') return ['memos'];
   if (actionType === 'create_expense') return ['expenses'];
@@ -1115,6 +1160,7 @@ function tableForPendingAction(actionType) {
 
 function skillIdForPendingAction(actionType) {
   if (actionType === 'update_health_log') return 'health_coach';
+  if (actionType === 'log_sleep_start') return 'health_coach';
   if (actionType === 'create_calendar_event') return 'calendar_planner';
   if (actionType === 'create_memo') return 'memo_assistant';
   if (actionType === 'create_expense') return 'finance_analyst';
@@ -1596,6 +1642,9 @@ function getSafeClarificationQuestion({ message, plan = {}, brainRoute = null, b
   if (skillId === 'memo_assistant' || plan.intent === 'create_memo') {
     return 'What reminder title, date, and exact time should I use?';
   }
+  if (plan.intent === 'log_sleep_start') {
+    return 'What sleep start time should I use?';
+  }
   if (skillId === 'health_coach' || plan.intent === 'update_health_log') {
     return 'Do you want me to log this in Health? If yes, what date and time should I use?';
   }
@@ -1826,6 +1875,7 @@ function hasExplicitActionRequest(message) {
   if (!text || hasNegativeWriteIntent(text)) return false;
   if (/\b(?:create|add|log|schedule|remind me|set a memo|put .*calendar|put it in calendar|put this in calendar|block)\b/.test(text)) return true;
   if (/\b(?:segna|aggiungi|crea|programma|programmamelo|logga|ricordami|segnalo|segnala|metti .*calendario)\b/.test(text)) return true;
+  if (/\b(?:sleep start|bedtime|going to sleep|go to sleep|vado a dormire|sto andando a dormire|sto andando a letto|andando a letto|inizio sonno)\b/.test(text)) return true;
   if (/\b(?:blocca|fissa|pianifica|metti|mettimelo|mettilo|segnami|segnamelo)\b/.test(text)
     && /\b(?:oggi|domani|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|calendario|evento|\d{1,2}(?::\d{2})?|mattina|pomeriggio|sera|dopo pranzo|dopo cena)\b/.test(text)) {
     return true;
@@ -2632,6 +2682,18 @@ async function executeWriteIntent(plan, message, lifeosContext, brainContext, br
     };
   }
 
+  if (plan.intent === 'log_sleep_start') {
+    const result = await logSleepStart({
+      time: plan.args?.time ?? plan.args?.sleep_start ?? plan.args?.sleepStart,
+      loggedOn: plan.args?.logged_on || plan.args?.date ? resolveDate(plan.args.logged_on ?? plan.args.date, undefined) : undefined,
+      notes: plan.args?.notes,
+    });
+    return {
+      actions: [{ type: 'log_sleep_start', data: result }],
+      answer: formatSleepStartSuccess(result),
+    };
+  }
+
   if (plan.intent === 'analyze_and_plan') {
     const targetDate = resolveDate(plan.args?.target_date || plan.args?.event_date || plan.args?.date, localDate(1));
     const proposal = await proposeCalendarPlan(message, plan, lifeosContext, targetDate, brainContext, brainChat, brainSkill, brainRoute);
@@ -3217,6 +3279,10 @@ function formatHealthSuccess(updated) {
   return `Updated health log for ${updated.logged_on}.`;
 }
 
+function formatSleepStartSuccess(result) {
+  return `Saved: sleep start at ${result.sleep_start}.`;
+}
+
 function formatRecurrenceSuccess(result) {
   const created = result.created ?? [];
   const dates = created.map((event) => event.event_date).sort();
@@ -3496,6 +3562,14 @@ function extractRecordRefs(actions) {
         id: action.data.id,
         label: 'Health Log',
         date: action.data.logged_on,
+      });
+    }
+    if (action.type === 'log_sleep_start' && action.data?.health_log?.id) {
+      refs.push({
+        table: 'health_logs',
+        id: action.data.health_log.id,
+        label: 'Sleep Start',
+        date: action.data.sleep_start_logged_on || action.data.health_log.logged_on,
       });
     }
     if (action.type === 'create_memo' && action.data?.id) {

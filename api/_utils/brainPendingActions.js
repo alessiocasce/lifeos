@@ -3,7 +3,7 @@ import { addDays, localDate, localTime } from './date.js';
 import { normalizeTimeRange, optionalDate } from './validation.js';
 
 const PENDING_ACTION_TTL_HOURS = 24;
-const SUPPORTED_ACTIONS = new Set(['update_health_log', 'create_calendar_event', 'create_memo', 'create_expense']);
+const SUPPORTED_ACTIONS = new Set(['update_health_log', 'log_sleep_start', 'create_calendar_event', 'create_memo', 'create_expense']);
 const LOW_RISK_THRESHOLD = 0.72;
 const MEDIUM_RISK_THRESHOLD = 0.85;
 
@@ -15,7 +15,7 @@ Return strict JSON only. No markdown.
 Schema:
 {
   "candidate": {
-    "action_type": "update_health_log" | "create_calendar_event" | "create_memo" | "create_expense" | "update_project" | "log_project_session" | "unsupported" | null,
+    "action_type": "update_health_log" | "log_sleep_start" | "create_calendar_event" | "create_memo" | "create_expense" | "update_project" | "log_project_session" | "unsupported" | null,
     "confidence": 0.0,
     "language": "it" | "en",
     "summary": "short summary",
@@ -41,10 +41,14 @@ Rules:
 - If the user explicitly says not to create/log/save, return null or unsupported.
 - Prefer a pending action when the user gave useful low-risk action details but confirmation or slots are still needed.
 - For health naps/pisolini, do not set sleep_start, wake_time, or sleep_hours. Use health_note_append instead.
+- For going to sleep / bedtime / inizio sonno / vado a dormire / sto andando a letto / sleep start commands, use action_type "log_sleep_start" with args.time in 24-hour HH:MM. Do not map these to a generic health note.
 
 Examples:
 User: oggi ho fatto un pisolino dalle 7.40 alle 10 di sera
 Candidate: update_health_log, args date=today_local, health_note_append="Pisolino: 19:40-22:00", nap_start_time="19:40", nap_end_time="22:00", no missing fields, confirmation_required=true.
+
+User: Segna che sto andando a dormire ora alle 3.41am
+Candidate: log_sleep_start, args time="03:41", no missing fields, confirmation_required=true, confirmation_question="Confermi che devo registrare l'inizio del sonno alle 03:41?"
 
 User: blocca domani un'ora per sistemare il Vault dopo pranzo
 Candidate: create_calendar_event, title="Sistemare il Vault", date=tomorrow_local, duration_minutes=60, vague_time="dopo pranzo", missing_fields=["start_time"], confirmation_required=false.
@@ -88,38 +92,61 @@ export function extractLatestPendingAction(brainChat) {
   const closed = new Set();
   const now = Date.now();
   for (let index = history.length - 1; index >= 0; index -= 1) {
-    const action = normalizePendingAction(history[index]?.metadata?.pending_action);
-    if (!action?.id || closed.has(action.id)) continue;
-    if (['completed', 'cancelled', 'expired'].includes(action.status)) {
-      closed.add(action.id);
-      continue;
+    const metadata = history[index]?.metadata ?? {};
+    const candidates = [
+      metadata.pending_action,
+      metadata.working_context?.active_pending_action,
+    ];
+    for (const candidate of candidates) {
+      const action = normalizePendingAction(candidate);
+      if (!action?.id || closed.has(action.id)) continue;
+      if (['completed', 'cancelled', 'expired'].includes(action.status)) {
+        closed.add(action.id);
+        continue;
+      }
+      if (isExpired(action, now)) {
+        closed.add(action.id);
+        continue;
+      }
+      if (isActivePendingStatus(action.status)) return action;
     }
-    if (isExpired(action, now)) {
-      closed.add(action.id);
-      continue;
-    }
-    if (['awaiting_confirmation', 'awaiting_fields'].includes(action.status)) return action;
   }
   return null;
 }
 
+export function normalizePendingReplyIntent(message) {
+  const normalized = normalizeMessage(message);
+  if (!normalized) return { intent: 'other', confidence: 0, normalized };
+
+  if (/^\?+$/.test(normalized) || /^(?:cosa|cosa\?|che intendi|non ho capito|what|what\?|explain|spiega)\b/.test(normalized)) {
+    return { intent: 'clarify', confidence: 0.9, normalized };
+  }
+
+  if (/\b(?:non farlo|non salvare|non registrare|non segnare|non segnarlo|non salvarlo|non bloccare|non creare|non crearlo|don't|do not|dont|don't save|don't log)\b/.test(normalized)
+    || /^(?:no|annulla|cancella|cancel|stop|aspetta|lascia stare|lascia perdere|come non detto|nevermind|never mind)\b/.test(normalized)) {
+    return { intent: 'cancel', confidence: 0.95, normalized };
+  }
+
+  if (/^(?:si|sii|s|y|yes|yep|yeah|ok|okay|certo|confermo|conferma|confirmed|confirm|va bene|procedi|fallo|salva|salvalo|segna|segnalo|registralo|log it|save it|do it|proceed|correct|esatto|giusto)\b/.test(normalized)
+    || /\b(?:fai oggi|fallo pure|procedi pure|tempo te l'ho gia dato|data e il tempo|time is already there|salva alle|registralo alle|conferma inizio|confermo inizio)\b/.test(normalized)) {
+    return { intent: 'confirm', confidence: 0.95, normalized };
+  }
+
+  return { intent: 'other', confidence: 0.2, normalized };
+}
+
 export function isPendingActionConfirmation(message) {
-  const text = normalizeMessage(message);
-  if (!text || isPendingActionCancellation(text)) return false;
-  return /^(?:si|sì|yes|yep|yeah|ok|okay|certo|confermo|va bene|fallo|procedi|salvalo|segna|segnalo|crea|mettilo|esatto|corretto|confirm|do it|proceed|save it|log it|create it|correct)\b/.test(text)
-    || /\b(?:fai oggi|fallo pure|procedi pure|tempo te l'ho gia dato|time is already there)\b/.test(text);
+  return normalizePendingReplyIntent(message).intent === 'confirm';
 }
 
 export function isPendingActionCancellation(message) {
-  const text = normalizeMessage(message);
-  if (/\b(?:non segnarlo|non segnare niente|non salvarlo|non bloccare|non creare|non crearlo)\b/.test(text)) return true;
-  return /^(?:no|cancel|annulla|stop|nevermind|never mind|lascia stare|come non detto)\b/.test(text)
-    || /\b(?:non farlo|non segnare|non salvare|non bloccarlo|don't|do not|dont|don't create|don't log|forget it)\b/.test(text);
+  return normalizePendingReplyIntent(message).intent === 'cancel';
 }
 
 export async function resolvePendingActionTurn({ message, pendingAction, context } = {}) {
   if (!pendingAction) return { handled: false };
-  if (isPendingActionCancellation(message)) {
+  const replyIntent = normalizePendingReplyIntent(message);
+  if (replyIntent.intent === 'cancel') {
     return {
       handled: true,
       type: 'cancelled',
@@ -128,8 +155,16 @@ export async function resolvePendingActionTurn({ message, pendingAction, context
     };
   }
 
-  const confirmation = isPendingActionConfirmation(message);
-  if (confirmation) {
+  if (replyIntent.intent === 'clarify') {
+    return {
+      handled: true,
+      type: 'ask',
+      answer: formatPendingActionClarificationAnswer(pendingAction),
+      pending_action: pendingAction,
+    };
+  }
+
+  if (replyIntent.intent === 'confirm') {
     const validation = validatePendingActionCandidate(pendingAction, context);
     if (validation.executable) {
       return { handled: true, type: 'execute', pending_action: pendingAction };
@@ -285,6 +320,12 @@ export function markPendingActionCancelled(pendingAction) {
 export function formatPendingActionQuestion(pendingAction) {
   if (pendingAction?.confirmation_question) return pendingAction.confirmation_question;
   const language = pendingAction?.language === 'it' ? 'it' : 'en';
+  if (pendingAction?.action_type === 'log_sleep_start' && !pendingAction?.missing_fields?.length) {
+    const time = pendingAction.args?.time || pendingAction.args?.sleep_start || pendingAction.summary;
+    return language === 'it'
+      ? `Confermi che devo registrare l'inizio del sonno alle ${time}?`
+      : `Confirm sleep start at ${time}?`;
+  }
   if (pendingAction?.missing_fields?.length) {
     return language === 'it'
       ? `Mi manca: ${pendingAction.missing_fields.join(', ')}. Che valore devo usare?`
@@ -295,8 +336,27 @@ export function formatPendingActionQuestion(pendingAction) {
     : `Do you want me to proceed with: ${pendingAction?.summary || 'this action'}?`;
 }
 
+function formatPendingActionClarificationAnswer(pendingAction) {
+  const language = pendingAction?.language === 'it' ? 'it' : 'en';
+  if (pendingAction?.action_type === 'log_sleep_start') {
+    const time = pendingAction.args?.time || pendingAction.args?.sleep_start || pendingAction.summary;
+    return language === 'it'
+      ? `Ti sto chiedendo conferma per registrare l'inizio del sonno alle ${time}. Rispondi "sì" per salvarlo o "no" per annullare.`
+      : `I am asking you to confirm sleep start at ${time}. Reply "yes" to save it or "no" to cancel.`;
+  }
+  const summary = pendingAction?.summary || pendingAction?.action_type || 'questa azione';
+  return language === 'it'
+    ? `Ti sto chiedendo conferma per: ${summary}. Rispondi "sì" per procedere o "no" per annullare.`
+    : `I am asking you to confirm: ${summary}. Reply "yes" to proceed or "no" to cancel.`;
+}
+
 export function formatPendingActionCompletedAnswer(result, pendingAction) {
   const language = pendingAction?.language === 'it' ? 'it' : 'en';
+  if (pendingAction?.action_type === 'log_sleep_start') {
+    const item = result?.data || result;
+    const time = item?.sleep_start || pendingAction.args?.time || pendingAction.args?.sleep_start;
+    return language === 'it' ? `Salvato: inizio sonno alle ${time}.` : `Saved: sleep start at ${time}.`;
+  }
   if (pendingAction?.action_type === 'update_health_log') {
     const detail = pendingAction.args?.health_note_append || pendingAction.summary || 'log salute';
     return language === 'it' ? `Salvato nella salute: ${detail}.` : `Saved to Health: ${detail}.`;
@@ -320,11 +380,13 @@ export function formatPendingActionCancelledAnswer(pendingAction) {
   if (pendingAction?.language === 'it') {
     if (pendingAction.action_type === 'create_calendar_event') return 'Ricevuto. Nessun evento creato.';
     if (pendingAction.action_type === 'create_memo') return 'Ricevuto. Nessun promemoria creato.';
+    if (pendingAction.action_type === 'log_sleep_start') return 'Ricevuto. Non ho salvato nulla.';
     if (pendingAction.action_type === 'update_health_log') return 'Ricevuto. Non ho salvato nulla in Salute.';
     return 'Ricevuto. Non ho creato nulla.';
   }
   if (pendingAction?.action_type === 'create_calendar_event') return 'Got it. No event created.';
   if (pendingAction?.action_type === 'create_memo') return 'Got it. No reminder created.';
+  if (pendingAction?.action_type === 'log_sleep_start') return 'Got it. I did not save anything.';
   if (pendingAction?.action_type === 'update_health_log') return 'Got it. Nothing was saved to Health.';
   return 'Got it. I did not create anything.';
 }
@@ -402,12 +464,25 @@ function localFieldUpdateFallback(message, pendingAction, workingContext = null)
       return { relation: 'field_update', args_patch: { memo_time: start, time: start }, missing_fields: [], confirmation_required: false };
     }
   }
+  const singleTime = text.match(/\b(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})\s*(am|pm)?\b/i);
+  if (singleTime && pendingAction.action_type === 'log_sleep_start') {
+    const time = normalizeSimpleTime(singleTime[1], singleTime[2]);
+    if (time) return { relation: 'field_update', args_patch: { time }, missing_fields: [], confirmation_required: true };
+  }
   return { relation: 'unrelated', args_patch: {}, missing_fields: [] };
 }
 
 function normalizePendingAction(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const actionType = String(value.action_type ?? value.intent ?? '').trim();
+  const rawArgs = safeObject(value.args);
+  let actionType = String(value.action_type ?? value.intent ?? '').trim();
+  if (actionType === 'update_health_log'
+    && (rawArgs.time || rawArgs.sleep_start || rawArgs.sleepStart)
+    && !rawArgs.wake_time
+    && !rawArgs.health_note_append
+    && !rawArgs.notes) {
+    actionType = 'log_sleep_start';
+  }
   if (!actionType || actionType === 'unsupported') return null;
   return {
     id: cleanText(value.id, 120),
@@ -420,13 +495,13 @@ function normalizePendingAction(value) {
     intent: actionType,
     action_type: actionType,
     summary: cleanText(value.summary, 300) || actionType,
-    args: safeObject(value.args),
+    args: rawArgs,
     missing_fields: Array.isArray(value.missing_fields) ? value.missing_fields.map(cleanField).filter(Boolean) : [],
     confirmation_required: value.confirmation_required !== false,
     confirmation_question: cleanText(value.confirmation_question, 500),
     language: value.language === 'it' ? 'it' : 'en',
     risk_level: ['low', 'medium', 'high'].includes(value.risk_level) ? value.risk_level : 'low',
-    confidence: clampNumber(value.confidence, 0, 1, 0),
+    confidence: clampNumber(value.confidence, 0, 1, 0.8),
     reason: cleanText(value.reason, 400),
   };
 }
@@ -448,6 +523,14 @@ function normalizePendingArgs(actionType, args) {
       health_note_append: cleanText(source.health_note_append, 800),
       nap_start_time: normalizeSimpleTime(source.nap_start_time),
       nap_end_time: normalizeSimpleTime(source.nap_end_time),
+    };
+  }
+  if (actionType === 'log_sleep_start') {
+    return {
+      ...source,
+      time: normalizeSimpleTime(source.time ?? source.sleep_start ?? source.sleepStart),
+      logged_on: normalizeDateValue(source.logged_on || source.date),
+      notes: cleanText(source.notes, 1000),
     };
   }
   if (actionType === 'create_calendar_event') {
@@ -496,6 +579,9 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
     if (!args.logged_on) missing.add('date');
     if (!args.health_note_append && !args.notes && !args.coffee && !args.adc && !args.wake_time && !args.sleep_start) missing.add('health_field');
   }
+  if (actionType === 'log_sleep_start') {
+    if (!args.time) missing.add('time');
+  }
   if (actionType === 'create_calendar_event') {
     if (!args.title) missing.add('title');
     if (!args.event_date) missing.add('date');
@@ -514,6 +600,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
   for (const field of [...missing]) {
     if (field === 'date' && (args.logged_on || args.event_date || args.memo_date || args.spent_on)) missing.delete(field);
     if (field === 'time' && (args.memo_time || args.start_time)) missing.delete(field);
+    if (field === 'time' && actionType === 'log_sleep_start' && args.time) missing.delete(field);
     if (field === 'start_time' && args.start_time) missing.delete(field);
     if (field === 'end_time' && args.end_time) missing.delete(field);
     if (field === 'title' && args.title) missing.delete(field);
@@ -536,6 +623,13 @@ function questionForMissing(action, missing) {
   if (action.action_type === 'create_memo') {
     if (missing.includes('title')) return language === 'it' ? 'Che promemoria devo creare?' : 'What reminder should I create?';
     if (missing.includes('time')) return language === 'it' ? 'Che giorno e orario devo usare?' : 'What date and time should I use?';
+  }
+  if (action.action_type === 'log_sleep_start') {
+    if (missing.includes('time')) {
+      return language === 'it'
+        ? 'Che orario devo usare per l\'inizio del sonno?'
+        : 'What time should I use for sleep start?';
+    }
   }
   if (action.action_type === 'update_health_log') {
     return language === 'it' ? 'Che dettaglio devo salvare in Salute?' : 'What Health detail should I save?';
@@ -585,6 +679,10 @@ function addMinutesToTime(time, minutes) {
 function isExpired(action, now = Date.now()) {
   const expiresAt = Date.parse(action.expires_at || '');
   return Number.isFinite(expiresAt) && expiresAt < now;
+}
+
+function isActivePendingStatus(status) {
+  return !status || ['open', 'pending', 'awaiting_confirmation', 'awaiting_fields'].includes(status);
 }
 
 function safeObject(value) {

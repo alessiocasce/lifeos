@@ -101,10 +101,10 @@ export function getRangeWindow(range) {
 }
 
 export function normalizePlannerPlan(plan) {
-  const allowedIntents = new Set(['analyze', 'create_expense', 'create_calendar_event', 'create_memo', 'update_health_log', 'analyze_and_plan', 'clarify', 'unsupported', 'blocked_destructive']);
+  const allowedIntents = new Set(['analyze', 'create_expense', 'create_calendar_event', 'create_memo', 'update_health_log', 'log_sleep_start', 'analyze_and_plan', 'clarify', 'unsupported', 'blocked_destructive']);
   const allowedRanges = new Set(['today', 'tomorrow', '7d', '30d', '3m', '6m', '12m', 'all']);
   const intent = allowedIntents.has(plan?.intent) ? plan.intent : 'unsupported';
-  const writeIntents = new Set(['create_expense', 'create_calendar_event', 'create_memo', 'update_health_log', 'analyze_and_plan']);
+  const writeIntents = new Set(['create_expense', 'create_calendar_event', 'create_memo', 'update_health_log', 'log_sleep_start', 'analyze_and_plan']);
   const readIntents = new Set(['analyze', 'analyze_and_plan', 'blocked_destructive']);
   const tables = Array.isArray(plan?.tables)
     ? plan.tables.filter((table) => VALID_TABLES.has(table))

@@ -234,7 +234,8 @@ Run the focused checklists after the full flow:
 7. Confirm WhatsApp integration does not change Home UI, does not add Money/Finance, and does not add AI Recent Writes to Home.
 8. Confirm app Brain chat still works normally through `/api/ai/chat`.
 9. Confirm the WhatsApp flow supports pending-action and working-context behavior, such as nap -> `si` -> `aggiungilo anche al calendario`.
-10. Confirm wrong bridge secret returns `401` and unallowed sender returns `403`.
+10. Send `Segna che sto andando a dormire ora alle 3.41am`, then `Sì` if confirmation is requested, and confirm sleep start is saved once without a repeated confirmation loop.
+11. Confirm wrong bridge secret returns `401` and unallowed sender returns `403`.
 
 ## Workout Advice Write Boundary
 

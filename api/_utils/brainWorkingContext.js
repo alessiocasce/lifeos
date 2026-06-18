@@ -142,6 +142,16 @@ export function buildSubjectFromActionResult({ actionType, args = {}, result = {
       source: 'health_log_note',
     });
   }
+  if (actionType === 'log_sleep_start') {
+    return normalizeSubject({
+      ...common,
+      type: 'health_event',
+      label: language === 'it' ? 'Inizio sonno' : 'Sleep start',
+      date: data?.sleep_start_logged_on || data?.health_log?.logged_on || args?.logged_on || args?.date || null,
+      start_time: data?.sleep_start || args?.time || args?.sleep_start || null,
+      source: 'sleep_start',
+    });
+  }
   if (actionType === 'create_calendar_event') {
     return normalizeSubject({
       ...common,
@@ -193,6 +203,19 @@ export function buildSubjectFromPendingAction(pendingAction) {
       date: args.logged_on || args.date || null,
       start_time: args.nap_start_time || args.start_time || null,
       end_time: args.nap_end_time || args.end_time || null,
+      source: 'pending_action',
+      source_action_id: pendingAction.id,
+      confidence: pendingAction.confidence ?? 0.8,
+      raw: compactRaw(args),
+    });
+  }
+  if (pendingAction.action_type === 'log_sleep_start') {
+    return normalizeSubject({
+      id: pendingAction.id,
+      type: 'health_event',
+      label: pendingAction.language === 'it' ? 'Inizio sonno' : 'Sleep start',
+      date: args.logged_on || args.date || null,
+      start_time: args.time || args.sleep_start || null,
       source: 'pending_action',
       source_action_id: pendingAction.id,
       confidence: pendingAction.confidence ?? 0.8,

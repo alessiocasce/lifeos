@@ -307,6 +307,26 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 19. Call with `type` other than `chat` and confirm v1 rejects it without invoking Brain.
 20. Confirm WhatsApp source metadata appears on persisted user/assistant messages and sanitized AI action logs, without exposing bridge secret, Supabase keys, Gemini keys, or Authorization headers.
 
+## WhatsApp Pending Action Resolution
+
+1. Send WhatsApp body `Segna che sto andando a dormire ora alle 3.41am`.
+2. Confirm Brain either saves directly or asks one specific confirmation such as `Confermi che devo registrare l'inizio del sonno alle 03:41?`.
+3. Confirm Brain does not ask generic `Che dettaglio devo usare?`.
+4. If confirmation is asked, send `Sì`.
+5. Confirm Brain saves sleep start and replies in Italian, for example `Salvato: inizio sonno alle 03:41.`.
+6. Confirm the same pending action is marked completed and Brain does not repeat the confirmation.
+7. Repeat the sleep-start prompt and test confirmation variants `si`, `Sì`, `ok`, `confermo`, `fallo`, and `procedi`.
+8. Confirm each variant resolves the open pending action when applicable.
+9. Repeat the sleep-start prompt and send `no` or `non farlo`.
+10. Confirm no write occurs, the pending action is cancelled, and Brain does not loop.
+11. Repeat the sleep-start prompt and send `?`.
+12. Confirm Brain explains the active pending action in Italian and does not create a new pending action.
+13. Repeat the sleep-start prompt and send `Conferma inizio del sonno alle 3:41`.
+14. Confirm Brain treats it as confirmation with details, executes the pending action, and does not ask again.
+15. Confirm the saved sleep start uses the same behavior as `/api/actions/sleep-start`, including Europe/Rome date handling and next-day sleep-hours recalculation when wake time exists.
+16. Send the nap flow from the same WhatsApp sender: `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, then `si`, then `aggiungilo anche al calendario`.
+17. Confirm all messages use the same backend WhatsApp thread, Working Context resolves the nap, and Brain does not ask for date/time again.
+
 ## API Security
 
 1. Call `POST /api/ai/chat` with no `Authorization` header and confirm `401`.
