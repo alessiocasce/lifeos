@@ -50,6 +50,14 @@ async function handleEvaluate({ res, context, debugFlags, recipient, bridgeId })
   const skipped = [...evaluation.skipped];
 
   for (const candidate of evaluation.candidates) {
+    const metadata = {
+      ...candidate.metadata,
+      bridge_id: bridgeId,
+      proactive_trace: {
+        ...(candidate.metadata?.proactive_trace ?? {}),
+        decision: 'queued',
+      },
+    };
     const result = await enqueueOutboxMessage({
       userId,
       channel: candidate.channel,
@@ -62,14 +70,7 @@ async function handleEvaluate({ res, context, debugFlags, recipient, bridgeId })
       idempotencyKey: candidate.idempotency_key,
       scheduledFor: candidate.scheduled_for,
       expiresAt: candidate.expires_at,
-      metadata: {
-        ...candidate.metadata,
-        bridge_id: bridgeId,
-        proactive_trace: {
-          ...(candidate.metadata?.proactive_trace ?? {}),
-          decision: result.duplicate ? 'duplicate' : 'queued',
-        },
-      },
+      metadata,
     });
     if (result.duplicate) {
       skipped.push({ candidate, reason: 'duplicate' });
