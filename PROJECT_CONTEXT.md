@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-06-16
+Last updated: 2026-06-18
 Current branch: `main`
 Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
 
@@ -158,7 +158,7 @@ Real/persisted today:
 - Health tab creates or updates one log per `user_id + logged_on` and shows persisted 7-day history/summaries.
 - Expenses persisted in `expenses`.
 - Finances tab creates, edits, deletes, and summarizes persisted user-scoped expenses.
-- Home tab summarizes persisted calendar events, memos, workout sessions/sets, health logs, and expenses.
+- Home tab summarizes persisted calendar events, memos, workout sessions/sets, project sessions, and health logs through a signal-filtered daily view. Finance data stays in Finances.
 - Calendar events persisted in `calendar_events`.
 - Calendar tab creates, edits, deletes, and displays persisted user-scoped events in a day-first agenda.
 - Memos persisted in `memos`.
@@ -181,7 +181,7 @@ Real/persisted today:
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
-  - Persistent Brain chat with thread selection and New Chat.
+  - Persistent Brain chat with a fresh New Chat draft by default. Old threads/messages persist in the backend, but old-thread selection is hidden from the normal UI for now.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
 - AI Action History persisted in `ai_action_logs` for recent assistant/Shortcut writes and write failures.
@@ -254,24 +254,27 @@ Current behavior:
 
 ## AI Assistant Current Status
 
-`src/tabs/AIAssistantTab.jsx` is a persistent Brain chat surface with thread controls, long-term memory, and secondary Recent Actions.
+`src/tabs/AIAssistantTab.jsx` is a persistent Brain chat surface with a fresh-chat default, long-term memory, hidden Vault/Memory infrastructure, and compact desktop-only Recent Actions.
 
 Architecture:
 
 - Frontend sends the raw message and active `thread_id` to `POST /api/ai/chat`.
 - Brain chat requests carry a client request id. Optimistic user/assistant messages are deduped against persisted `ai_chat_messages.metadata.client_request_id` to avoid visible flicker or duplicate bubbles.
 - Brain chat requests have a frontend timeout and retry path, so a hung `/api/ai/chat` call exits loading instead of leaving an infinite spinner.
-- Brain auto-scrolls to the latest message/loading/error when the user submits, while avoiding aggressive jumps during background reloads.
+- Brain constrains the chat viewport so the Assistant tab/page does not become the primary scroll container on mobile.
+- Chat messages scroll inside the Brain message widget; earlier messages move within that internal scroll area while the composer remains visible inside the panel.
+- Brain auto-scrolls the internal message list to the latest message/loading/error when the user submits, while avoiding aggressive jumps during background reloads.
 - Brain input, send button, message list, loading indicator, and error card expose stable test ids for browser automation.
 - The frontend sends the current Supabase access token; the backend verifies it and ensures it matches `LIFEOS_ACTION_USER_ID`.
 - The endpoint can also accept `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` for trusted server/tool callers.
 - App chat requests append user/assistant messages to `ai_chat_messages`; Shortcut/API calls do not create personal chat history by default.
 - Threads are titled deterministically from the first meaningful user message without an extra Gemini title call.
+- Brain opens to a fresh empty `New Chat` draft by default. Old threads and messages remain persisted and reloadable through backend/context code, but the normal UI currently hides old-thread selection for minimum-friction chat-first use.
+- The empty New Chat state is intentionally minimal: `What do we solve?` plus `Ask, log, analyze, plan.`
 - The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
 - Brain uses AI-first semantic routing before planner writes. The router classifies mode, selected skill, needed data, write intent, ambiguity, and risk from the current message plus bounded conversation/memory context.
 - Brain asks specific domain clarifications for vague calendar/time-block commands such as `blocca domani un'ora dopo pranzo`; vague time phrases never authorize writes by themselves.
-- Brain opens to a fresh empty `New Chat` draft by default. Old threads remain selectable, but no old conversation auto-opens unless selected.
 - Brain auto-saves eligible long-form analysis/advice responses into Brain Vault invisibly. Manual Save-to-Vault is not a primary user flow.
 - Deterministic keyword routing is now fallback/sanity behavior, not the primary understanding layer.
 - Brain's operating principle is: AI understands; backend code protects, validates, and executes.
@@ -346,8 +349,8 @@ Architecture:
 - AI prefers `sleep_start` and `wake_time`; when both required times exist, automatic sleep calculation overrides a manual duration.
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
-- AI Action History powers Home Recent AI Activity and the Assistant Recent Actions preview. It is action history only; undo is not implemented yet.
-- Brain UI is chat-first. Thread controls and the composer stay central, Memory/Vault management is hidden behind diagnostics, Recent Actions stays compact, and Brain keeps Daily Review and canned Suggestions hidden.
+- AI Action History powers the Assistant Recent Actions preview. It is action history only; undo is not implemented yet. Home does not surface Recent AI Writes.
+- Brain UI is chat-first. The composer stays central, old-thread selection is hidden in the normal UI for now, Memory/Vault management is hidden behind diagnostics, Recent Actions stays compact on desktop, and Brain keeps Daily Review and canned Suggestions hidden.
 - Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
 - Future proactive features such as Morning Briefing and Weekly Review should build on Brain skills, but proactive automation is not implemented yet.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
@@ -518,7 +521,7 @@ Current behavior:
 - Project money is managed through project-level `project_money_entries`, not sessions.
 - Project Balance is calculated as total revenue minus total expenses.
 - Balance entries can be expenses or revenue, with amount, description, and entry date.
-- Home surfaces a compact Ops status with active session, project work today, active project count, and latest project.
+- Home surfaces Ops only when a project session is active or project work has been logged today. It does not show active project count or latest project merely because projects exist.
 - No per-session money spent/gained fields are implemented.
 - No AI OFM templates, output counters, metrics snapshots, badges, streaks, or pace predictor are implemented yet.
 - AI project planning/session logging is not implemented yet.
@@ -546,21 +549,22 @@ Current behavior:
 
 Current behavior:
 
-- Uses persisted calendar events, memos, project sessions, health logs, workout sessions/sets, and expenses from context.
-- Loads today's calendar range and the current expense month without duplicating API wrappers.
-- Shows a compact command strip with date, sleep, habits, training, spend, and Ops status instead of duplicated shell metric boxes.
-- Shows one deterministic `Today Signal` card that answers what matters today, combining at most two high-priority signals.
+- Uses persisted calendar events, memos, project sessions, health logs, and workout sessions/sets from context. Finance data stays in the Finances tab.
+- Loads today's calendar range without duplicating API wrappers.
+- Is signal-filtered: zero-value widgets, absence nags, and `no ... logged` cards are hidden completely instead of consuming space.
+- Shows a compact command strip only for meaningful logged values such as calculated sleep, logged habits, and due/today memos.
+- Shows one deterministic `Today Signal` card only when a real signal exists, combining at most two high-priority signals.
 - Shows Today Agenda only when events exist. Calendar editing, deletion, and status controls remain in the Calendar tab.
 - Shows Memos only when overdue/today/upcoming reminders matter. Memo editing remains in the Memos tab.
 - Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
-- Shows time-aware Daily Habits from today's health log: Shower, Creatine, and Skin. Cards show count and latest time; Brush, Journal, and Water are not shown.
+- Shows Sleep only when meaningful calculated sleep/wake data exists.
+- Shows time-aware Daily Habits only when actually logged today: Shower, Creatine, and Skin cards show count/latest time; Brush, Journal, and Water are not shown.
 - Shows Training only when a workout is live or completed today, with today's session name, working sets, volume, and exercise count.
 - Workout set and volume summaries exclude warmup sets.
-- Shows Ops only when an active session, logged project work, or active project needs attention.
-- Shows Money only when spend/month/category data is meaningful.
-- Shows compact Recent AI writes from persisted successful `ai_action_logs`; old errors do not dominate Home.
-- Avoids duplicate finance ledger surfaces such as a full latest-expenses panel or large Home chart; the Finances tab owns deeper ledger views.
-- Collapses large empty states such as `No events planned today`, `No workout today`, and `No memos due` into the primary signal or quiet absence.
+- Shows Ops only when a project session is active or project work is greater than 0 today. It does not show `No project work logged today`, `today 0m project work`, active project count, or latest project just because projects exist.
+- Does not show Money/Finance on Home. Finances owns spend, categories, history, and finance analysis.
+- Does not show AI Recent Writes or Recent Actions on Home. Brain/action history owns AI activity.
+- Collapses empty states such as `No events planned today`, `No workout today`, `No memos due`, and `No project work logged today` into quiet absence.
 - Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
 - Remains mobile-first with compact cards and no wide fixed layout.
 
@@ -736,9 +740,12 @@ Workout mobile direction:
   - Users should not manually manage Memory or Vault in normal usage.
   - Valuable analysis should auto-save when it is useful long-term knowledge.
   - Empty dashboard sections should collapse instead of consuming prime space.
-  - Home should show signal, not raw widget inventory.
+  - Home should never fill prime space with zero, empty, or `no ... logged` widgets.
+  - Home should show logged signal, not raw widget inventory or absence nags.
   - Logging and following the plan should feel obvious with minimal friction.
   - Brain should feel like the main interface, not a settings/database screen.
+  - Brain should be chat-first and viewport-contained on mobile, with scroll isolated to the chat message area.
+  - Old data can persist invisibly without being surfaced as normal admin UI.
 - The workout flow should be thumb-friendly, fast, and low-friction.
 - Real persisted data should be visually prioritized over sample/mock data.
 - Use icons for compact controls where appropriate.
@@ -765,10 +772,13 @@ Workout mobile direction:
   - Confirm selected-month totals exclude expenses outside the selected month.
   - Confirm recent history remains separate from selected-month summaries.
 - Test Home tab with `docs/QA_HOME.md`:
-  - Confirm empty states when no persisted module data exists.
-  - Create health, workout, and expense records and confirm Home updates.
+  - Confirm a no-data Home does not show zero-value/no-logged widgets.
+  - Confirm only logged daily signals appear.
+  - Create sleep, memo, habit, workout, and project-session records and confirm Home updates only for those actual signals.
   - Refresh and confirm persisted summaries reload.
-  - Confirm Home handles zero-set workouts, blank optional health fields, older-only expenses, long labels, and multiple sessions today.
+  - Confirm 0m project work with existing active projects does not show an Ops nag/card.
+  - Confirm expenses and AI action logs do not create Home Money or Recent AI Writes sections.
+  - Confirm Home handles blank optional health fields, long labels, and multiple sessions today without horizontal overflow.
 - Daily Review persistence remains available for backward compatibility, but it is no longer a visible Brain workflow.
 - Test Calendar tab with `docs/QA_CALENDAR.md`:
   - Create, edit, and delete persisted events.
@@ -797,7 +807,9 @@ Workout mobile direction:
   - Low-risk additive actions execute directly.
   - Destructive requests are blocked.
   - Workout analysis/advice remains read-only unless calendar creation is explicit.
-  - Brain shows chat and Recent Actions without Daily Review or suggestion chips.
+  - Brain shows a viewport-contained chat without Daily Review or suggestion chips.
+  - On mobile, the Assistant page itself should not require long scrolling to reach the composer; messages scroll inside the chat widget.
+  - Old thread selection is hidden from the default Brain UI for now, while old thread data persists in the backend.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.
@@ -823,7 +835,7 @@ Workout mobile direction:
 2. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
 3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
 4. QA the Finances tab against a real Supabase project.
-5. QA the Home dashboard against a real Supabase project after creating records in Health, Workout, and Finances.
+5. QA the Home dashboard against a real Supabase project after creating records in Health, Memos, Workout, and Projects/Ops.
 6. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
 7. Deploy the app and complete live iPhone QA against the real Supabase project.
 8. Live-test Action API calls from iPhone Shortcuts before relying on external automation.

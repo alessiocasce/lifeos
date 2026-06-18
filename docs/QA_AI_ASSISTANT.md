@@ -18,40 +18,42 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 
 1. Send a message in Brain and wait for the assistant response.
 2. Refresh `/assistant` and confirm Brain opens a fresh `New Chat` draft by default.
-3. Select the previous thread from the thread selector and confirm both user and assistant messages remain.
-4. Send a follow-up that depends on the previous exchange and confirm Brain retains bounded conversation context.
-5. Create `New Chat` and confirm the old active thread remains selectable.
-6. Confirm the new thread title changes from `New Chat` to a deterministic title based on the first message.
-7. Archive the current thread and confirm it is removed without affecting other thread messages.
-8. Pull to refresh and confirm the thread list reloads; selected thread messages reload only when a thread is selected.
-9. Confirm a failed AI request stores only a safe user-facing assistant error, not raw server/provider internals.
+3. Confirm old-thread selection is not visible in the normal Brain UI for now.
+4. Confirm old threads/messages still persist in Supabase/backend context after sending messages, even though the default UI does not expose the selector.
+5. Send a follow-up in the current chat and confirm Brain retains bounded conversation context.
+6. Confirm the persisted thread title changes from `New Chat` to a deterministic title based on the first message.
+7. Pull to refresh and confirm Brain data reloads without opening old threads in the default UI.
+8. Confirm a failed AI request stores only a safe user-facing assistant error, not raw server/provider internals.
 
 ## Brain Chat UX Stability
 
 1. Send a message in a long Brain thread and confirm the optimistic user bubble does not duplicate or flicker when persisted messages reload.
-2. Confirm the latest user message, loading indicator, and assistant response auto-scroll into view after sending.
+2. Confirm the latest user message, loading indicator, and assistant response auto-scroll inside the chat message widget after sending.
 3. Simulate or manually test a slow `/api/ai/chat` request and confirm Brain exits loading after timeout with a visible error.
 4. Confirm the failed message is restored into the composer and the Retry button resubmits it.
 5. Confirm the textarea has `data-testid="brain-message-input"` and the send button has `data-testid="brain-send-button"`.
 6. Confirm the message list, loading indicator, and error card expose stable test ids for browser automation.
+7. On mobile, confirm the Assistant page itself does not become a long scroll just to see the Brain widget/composer.
+8. Confirm earlier messages scroll inside `brain-message-list`, not in the page.
 
 ## Brain UX Reset
 
 1. Navigate away from Brain, then return to Brain.
-2. Confirm a fresh empty `New Chat` is visible and no old thread auto-opens.
-3. Open the thread selector and confirm old threads remain selectable.
-4. Select an old thread and confirm its messages load.
-5. Navigate away and return again; confirm Brain returns to a fresh `New Chat` draft.
-6. Confirm the default Brain UI does not show Vault or Memory panels as primary cards.
-7. If the diagnostics control is visible on desktop, open it and confirm Vault/Memory data is secondary and collapsed.
-8. Confirm memory commands such as `remember my name, Ale`, `what do you know about me?`, and forget requests still work.
-9. Ask a long workout, project, finance, health, life-review, or product analysis.
-10. Confirm the answer appears normally with no save modal and no required manual Save-to-Vault action.
-11. Confirm an auto-saved Vault document is created in the backend with `metadata.created_by = brain_auto_save`.
-12. Ask casual `yo` and confirm no Vault report is created.
-13. Confirm manual Save-to-Vault controls are not prominent in default assistant message bubbles.
-14. Confirm `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, `si`, then `aggiungilo anche al calendario` still resolves through working context without asking for date/time again.
-15. Confirm Recent Actions shows at most 3 successful actions by default and old errors are hidden behind the Errors toggle.
+2. Confirm a fresh empty chat is visible and no old thread auto-opens.
+3. Confirm old-thread selection is hidden from the normal Brain UI for now.
+4. Navigate away and return again; confirm Brain returns to a fresh chat draft.
+5. Confirm there is only one New Chat affordance/title and no duplicate `New Chat` labels.
+6. Confirm the empty-state text is minimal: `What do we solve?` and `Ask, log, analyze, plan.`
+7. Confirm the default Brain UI does not show Vault or Memory panels as primary cards.
+8. If the diagnostics control is visible on desktop, open it and confirm Vault/Memory data is secondary and collapsed.
+9. Confirm memory commands such as `remember my name, Ale`, `what do you know about me?`, and forget requests still work.
+10. Ask a long workout, project, finance, health, life-review, or product analysis.
+11. Confirm the answer appears normally with no save modal and no required manual Save-to-Vault action.
+12. Confirm an auto-saved Vault document is created in the backend with `metadata.created_by = brain_auto_save`.
+13. Ask casual `yo` and confirm no Vault report is created.
+14. Confirm manual Save-to-Vault controls are not prominent in default assistant message bubbles.
+15. Confirm `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, `si`, then `aggiungilo anche al calendario` still resolves through working context without asking for date/time again.
+16. Confirm Recent Actions shows at most 3 successful actions by default on desktop and old errors are hidden behind the Errors toggle.
 
 ## Brain Memory
 
@@ -285,7 +287,7 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 ## Low-Risk Writes
 
 1. Ask: `Add a 25 dollar expense for ChatGPT Plus.`
-2. Confirm an expense is created and appears in Finances/Home after refresh.
+2. Confirm an expense is created and appears in Finances after refresh, while Home does not show a Money/Spend section.
 3. Ask: `add a 25 euro expense for ChatGPT Plus on 13/05/26. The category should be "Subscriptions"`
 4. Confirm it creates `ChatGPT Plus`, amount `25`, category `Subscriptions`, spent on `2026-05-13`.
 5. Ask: `25 euro expense for chatgpt plus`.
@@ -357,8 +359,8 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 
 1. Ask: `Log that i took creatine today`.
 2. Confirm an `ai_action_logs` row is created with `action_type` `update_health_log`, `status` `success`, and a `health_logs` record reference.
-3. Confirm Home shows the entry in `Recent AI Activity`.
-4. Confirm Assistant shows the entry in `Recent Actions`.
+3. Confirm Home does not show the entry in `Recent AI Activity` or any AI writes panel.
+4. Confirm Assistant shows the entry in `Recent Actions` on desktop.
 5. Send a Shortcut-style request to `/api/ai/chat` with `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` if available.
 6. Confirm the action log source is `shortcut` or `api` and no token value is stored.
 7. Ask a recurrence request that creates seven events.
@@ -480,11 +482,13 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 ## Mobile / iPhone
 
 1. Open Assistant on iPhone Safari.
-2. Confirm Brain contains persistent chat, compact thread selection, New Chat, and compact Recent Actions.
+2. Confirm Brain contains the persistent chat surface and a single compact New Chat icon/button.
 3. Confirm Memory/Vault are hidden from the default Brain UI or only visible behind diagnostics.
-4. Confirm the thread selector and diagnostics panel do not overflow horizontally.
+4. Confirm no old-chat/thread selector is shown in the default mobile UI.
 5. Confirm no range/scope dropdowns exist.
 6. Confirm Daily Review and canned prompt Suggestions are absent.
 7. Confirm the textarea uses 16px text and does not zoom.
-8. Confirm the sticky composer/send button is thumb-friendly and not covered by bottom nav.
-9. Confirm Recent Actions remains compact and opens its detail view.
+8. Confirm the composer/send button is thumb-friendly, inside the Brain panel, and not covered by bottom nav.
+9. Confirm the Assistant page itself does not require long scrolling to reach the composer/widget.
+10. Confirm messages scroll inside the chat widget when the conversation grows.
+11. Confirm Recent Actions remains compact on desktop and opens its detail view.
