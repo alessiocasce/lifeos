@@ -248,6 +248,19 @@ Run the focused checklists after the full flow:
 10. Send `Segna che sto andando a dormire ora alle 3.41am`, then `Sì` if confirmation is requested, and confirm sleep start is saved once without a repeated confirmation loop.
 11. Confirm wrong bridge secret returns `401` and unallowed sender returns `403`.
 
+## Proactive WhatsApp Memo Outbox
+
+1. Run the latest `supabase/schema.sql` and confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
+2. Create a timed open memo due soon.
+3. Trigger `/api/integrations/whatsapp/outbox/evaluate`, then `/poll`, then `/ack` with valid secret and allowed recipient.
+4. Confirm the outbox row moves through queued/claimed/sent without duplicate rows for the same memo due slot.
+5. Confirm ack `sent` persists a proactive assistant message into the dedicated WhatsApp Brain thread.
+6. Reply through WhatsApp inbound with `fatto`, `snooze 30`, `annulla`, and `?` across separate test memos.
+7. Confirm memo status/snooze/explanation behavior is correct and no unrelated LifeOS writes occur.
+8. Confirm Home UI remains signal-filtered and does not show outbox/admin/proactive widgets.
+9. Confirm Brain UI still opens fresh New Chat by default and does not expose the WhatsApp thread selector.
+10. Confirm mobile Brain internal-scroll layout remains intact after proactive WhatsApp thread messages exist in the backend.
+
 ## Workout Advice Write Boundary
 
 1. Ask `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.

@@ -328,6 +328,33 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 19. Call with `type` other than `chat` and confirm v1 rejects it without invoking Brain.
 20. Confirm WhatsApp source metadata appears on persisted user/assistant messages and sanitized AI action logs, without exposing bridge secret, Supabase keys, Gemini keys, or Authorization headers.
 
+## Proactive WhatsApp Memo Outbox
+
+Run `npm run test:brain` first. It covers pure candidate generation, idempotency keys, outbox status transitions, proactive memo reply intent normalization, and proactive working-context metadata.
+
+Manual deployed QA:
+
+1. Run the latest `supabase/schema.sql` and confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
+2. Create an open memo with `memo_date = today` and `memo_time` two minutes in the future.
+3. After it is due, call `POST /api/integrations/whatsapp/outbox/evaluate` with valid secret and allowed `recipient`.
+4. Confirm the response reports at least one queued message, or debug output explains duplicate/suppression.
+5. Call `POST /api/integrations/whatsapp/outbox/poll`.
+6. Confirm one message is returned with `rule_key: timed_memo_due`, `source_type: memo`, and a concise WhatsApp body.
+7. Call `POST /api/integrations/whatsapp/outbox/ack` with `status: sent`.
+8. Confirm the outbox row becomes `sent`.
+9. Confirm an assistant message is persisted in the dedicated WhatsApp Brain thread with `metadata.proactive_message = true`, `expected_reply_type = memo_done_snooze_cancel`, and `working_context.last_subject.type = memo`.
+10. Through WhatsApp inbound from the same sender, reply `fatto`.
+11. Confirm the memo status becomes `done` and the reply confirms completion.
+12. Repeat with another timed memo and reply `snooze 30`.
+13. Confirm the memo remains open and its `memo_date`/`memo_time` move forward.
+14. Repeat with `annulla`.
+15. Confirm the memo is dismissed and queued/claimed reminders for that memo are cancelled.
+16. Repeat with `?` or `perche?`.
+17. Confirm Brain explains the reminder and does not mark the memo done, snooze it, or dismiss it.
+18. Run evaluate twice for the same due memo and confirm duplicate outbox rows are not created.
+19. Let a timed memo expire past the v1 expiry window and confirm poll does not send it.
+20. Confirm Home and Brain UI do not change and old WhatsApp backend threads remain hidden from normal Brain UI.
+
 ## WhatsApp Pending Action Resolution
 
 1. Send WhatsApp body `Segna che sto andando a dormire ora alle 3.41am`.

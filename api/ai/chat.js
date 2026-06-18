@@ -59,6 +59,7 @@ import {
   serializeVaultContextForMetadata,
 } from '../_utils/brainVault.js';
 import { shouldRetrieveBrainVault } from '../_utils/brainVaultEligibility.js';
+import { resolveProactiveMemoReply } from '../_utils/brainOutbox.js';
 import {
   addBrainTraceStep,
   createBrainTrace,
@@ -516,6 +517,21 @@ export async function handleBrainChatMessage({
           source: resolvedSource,
         });
         return sendAiSuccess(null, 200, result, context, { message: messageForBrain, source: resolvedSource });
+      }
+    }
+
+    if (resolvedSource === 'whatsapp') {
+      const proactiveResult = await resolveProactiveMemoReply({
+        message: messageForBrain,
+        brainChat: context.brainChat,
+        context,
+      });
+      addBrainTraceStep(context.brainTrace, 'proactive_reply_checked', {
+        handled: Boolean(proactiveResult),
+        action_type: proactiveResult?.actions?.[0]?.type ?? null,
+      });
+      if (proactiveResult) {
+        return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
       }
     }
 
@@ -2160,17 +2176,19 @@ function normalizeAssistantSource(value) {
 }
 
 async function sendAiSuccess(res, status, data, context, logInfo) {
-  const { skipMemoryExtraction = false, ...publicData } = data ?? {};
+  const { skipMemoryExtraction = false, working_context: explicitWorkingContext = null, ...publicData } = data ?? {};
   const selectedSkill = publicData.selected_skill ?? serializeSkillSelection(context?.brainSkill);
   const brainRoute = publicData.brain_route ?? serializeBrainRoute(context?.brainRoute);
   const vaultContext = publicData.vault_context ?? serializeVaultContextForMetadata(context?.brainVault?.results);
-  const workingContext = buildResponseWorkingContext({
-    context,
-    answer: publicData.answer,
-    plan: publicData.plan,
-    actions: publicData.actions ?? [],
-    message: logInfo?.message,
-  });
+  const workingContext = explicitWorkingContext && typeof explicitWorkingContext === 'object'
+    ? explicitWorkingContext
+    : buildResponseWorkingContext({
+      context,
+      answer: publicData.answer,
+      plan: publicData.plan,
+      actions: publicData.actions ?? [],
+      message: logInfo?.message,
+    });
   context.workingContextForResponse = workingContext;
   const responseData = {
     ...publicData,
@@ -3995,6 +4013,14 @@ function extractRecordRefs(actions) {
       });
     }
     if (action.type === 'create_memo' && action.data?.id) {
+      refs.push({
+        table: 'memos',
+        id: action.data.id,
+        label: action.data.title,
+        date: action.data.memo_date,
+      });
+    }
+    if (['update_memo_status', 'snooze_memo', 'dismiss_memo'].includes(action.type) && action.data?.id) {
       refs.push({
         table: 'memos',
         id: action.data.id,

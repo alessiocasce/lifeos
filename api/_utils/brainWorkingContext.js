@@ -173,6 +173,16 @@ export function buildSubjectFromActionResult({ actionType, args = {}, result = {
       source: 'memo',
     });
   }
+  if (['update_memo_status', 'snooze_memo', 'dismiss_memo'].includes(actionType)) {
+    return normalizeSubject({
+      ...common,
+      type: 'memo',
+      label: data?.title || args?.title || 'Memo',
+      date: data?.memo_date || args?.memo_date || null,
+      start_time: data?.memo_time || args?.memo_time || null,
+      source: 'memo',
+    });
+  }
   if (actionType === 'create_expense') {
     return normalizeSubject({
       ...common,

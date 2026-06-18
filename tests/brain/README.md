@@ -18,5 +18,6 @@ Covered regressions:
 - Simple explicit writes skip Brain Vault retrieval.
 - Negative write intent wins over action wording.
 - Working Context preserves referent date/time for follow-up commands like `aggiungilo anche al calendario`.
+- Proactive WhatsApp memo candidates, outbox state transitions, sent-message working context, and memo reply intents stay deterministic.
 
 Live behavior still needs the manual QA checks in `docs/QA_AI_ASSISTANT.md`, especially WhatsApp thread continuity and real tool execution.

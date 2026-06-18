@@ -123,6 +123,8 @@ Current tables:
 - `ai_insights`
 - `ai_vault_documents`
 - `ai_vault_chunks`
+- `brain_outbox_messages`
+- `brain_proactive_rules`
 
 All tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`.
 
@@ -134,6 +136,7 @@ RLS is enabled on all user tables. Current policies are user-scoped for authenti
 - `project_sessions` and `project_money_entries` also check that the referenced `projects` row belongs to the same authenticated user.
 - `ai_chat_messages` also checks that the referenced `ai_chat_threads` row belongs to the same authenticated user.
 - `ai_vault_chunks` also checks that the referenced `ai_vault_documents` row belongs to the same authenticated user.
+- `brain_outbox_messages` and `brain_proactive_rules` are user-scoped for future diagnostics/config UI, while writes are performed server-side through service-role utilities.
 
 The frontend currently uses Supabase Auth as a global app gate:
 
@@ -186,6 +189,9 @@ Real/persisted today:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
   - `POST /api/integrations/whatsapp/inbound`
+  - `POST /api/integrations/whatsapp/outbox/evaluate`
+  - `POST /api/integrations/whatsapp/outbox/poll`
+  - `POST /api/integrations/whatsapp/outbox/ack`
   - Persistent Brain chat with a fresh New Chat draft by default. Old threads/messages persist in the backend, but old-thread selection is hidden from the normal UI for now.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
@@ -326,7 +332,7 @@ Architecture:
 - Existing skipped, failed, pending, null-model, or non-`gemini-embedding-2` Vault chunks are excluded from semantic retrieval until repaired through the Vault Re-embed flow.
 - Missing or rate-limited Gemini embeddings do not break Vault document saving; semantic retrieval is unavailable until chunks are ready.
 - Future Vault work can embed screenshots, workout images, PDFs, audio logs, and other multimodal artifacts because Gemini Embedding 2 supports multimodal inputs, but this pass is text-only.
-- Future Morning Briefing, Weekly Review, post-workout reviews, and product reports should save synthesized outputs into Brain Vault, but proactive automation is not implemented yet.
+- Future Morning Briefing, Weekly Review, post-workout reviews, and product reports should save synthesized outputs into Brain Vault. Proactive WhatsApp v1A is currently limited to memo reminders.
 - Meaningful conversations may run a strict memory extractor after the main response. Extraction failure is isolated and never fails the chat response.
 - Memory deduplication itself uses normalized title/category/key-term overlap; Brain Vault is the pgvector-backed long-form retrieval layer.
 - Explicit memory commands such as `remember that ...`, `remember my name is Ale`, `call me Ale`, `my name is Ale`, `ricordati che mi chiamo Ale`, and `chiamami Ale` write directly to `ai_memories`, not to Memos.
@@ -370,7 +376,7 @@ Architecture:
 - Brain UI is chat-first. The composer stays central, old-thread selection is hidden in the normal UI for now, Memory/Vault management is hidden behind diagnostics, Recent Actions stays compact on desktop, and Brain keeps Daily Review and canned Suggestions hidden.
 - Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
 - WhatsApp inbound replies are concise and same-language for chat use, while preserving the same Brain action boundaries and backend validation as app chat.
-- Future proactive features such as Morning Briefing and Weekly Review should build on Brain skills, but proactive automation is not implemented yet.
+- Future proactive features such as Morning Briefing, Weekly Review, workouts, projects, and sleep/wake check-ins should build on Brain skills and the outbox pattern.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
 - AI Action History detail views show the full saved request, full saved response, action metadata, request id, record references, and sanitized action payloads. Saved assistant responses render with the same safe Markdown and LifeOS callout renderer used by chat messages.
 - AI Action History titles are deterministic frontend formatting and do not trigger an extra AI call.
@@ -384,7 +390,7 @@ Architecture:
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
-- Proactive Morning Briefings, voice, external email, outbound/proactive messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase.
+- Proactive Morning Briefings, voice, external email, broad proactive messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase. Outbound WhatsApp v1A is memo-only.
 
 Supported v1 intents/tools:
 
@@ -392,6 +398,7 @@ Supported v1 intents/tools:
 - Create expenses.
 - Create single calendar events, mixed point/range day schedules, explicit multi-event calendar schedules, and finite recurrence-expanded calendar schedules.
 - Create memos for reminders, tasks, and memory items.
+- Resolve proactive WhatsApp memo replies by marking memos done, dismissing them, or snoozing their date/time when the latest WhatsApp context is a proactive memo reminder.
 - Update provided daily health log fields.
 - Log structured sleep start through the same behavior as `/api/actions/sleep-start`.
 - Analyze recent context and create a small non-overlapping calendar plan when the user explicitly asks to plan/schedule.
@@ -402,7 +409,7 @@ Current limitations:
 - No arbitrary SQL.
 - No destructive writes.
 - Pending actions support low-risk multi-turn confirmation and slot filling for supported Health, Calendar, Memo, Expense, and related action flows.
-- External integrations: WhatsApp Bridge v1 inbound is supported through a local bridge and secure Vercel endpoint. Proactive outbound WhatsApp nudges are not implemented yet.
+- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. Broader proactive nudges are not implemented yet.
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
 
@@ -431,8 +438,8 @@ Current behavior:
 - `npm run test:brain` runs `scripts/test-brain-regressions.js`.
 - Fixtures live in `tests/brain/fixtures.js`; notes live in `tests/brain/README.md`.
 - The harness uses pure utilities and does not require Vercel, browser automation, WhatsApp, Gemini, or live Supabase writes.
-- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, and Working Context referent date/time preservation.
-- Run it before and after changes to Brain, WhatsApp inbound, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
+- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, and pure Proactive WhatsApp memo outbox behavior.
+- Run it before and after changes to Brain, WhatsApp inbound/outbox, proactive memo rules, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
 - Live WhatsApp thread continuity, real tool execution, provider behavior, and RLS still require the manual QA checklists.
 
 ## WhatsApp Bridge Current Status
@@ -452,7 +459,23 @@ Current behavior:
 - WhatsApp replies are generated by the same Brain handler used by app chat, with WhatsApp-friendly concise response instructions.
 - WhatsApp inbound can return `debug.brain_trace` in JSON when called with `x-lifeos-debug: true`; the bridge should keep that out of the WhatsApp reply text.
 - Pending actions, confirmation/cancellation normalization, structured sleep-start logging, Working Context, Command Draft referent resolution, memory commands, follow-up transforms, Brain Vault retrieval/auto-save, and deterministic tool guards remain active for WhatsApp.
-- V1 is inbound request/reply only. Proactive nudges, outbox polling, scheduled outbound messages, WhatsApp Business Cloud API, Meta templates, media/voice, and open group chat support are future work.
+- Proactive WhatsApp v1A uses bridge polling for timed memo delivery. WhatsApp Business Cloud API, Meta templates, media/voice, open group chat support, and broad proactive coaching are future work.
+
+## Proactive WhatsApp Current Status
+
+Proactive WhatsApp v1A is a conservative deterministic outbox for memo reminders only.
+
+Current behavior:
+
+- Brain does not randomly decide to text the user. Deterministic rules evaluate open `memos` and enqueue outbound rows in `brain_outbox_messages`.
+- `brain_proactive_rules` stores future per-user rule settings such as enabled state, quiet hours, daily cap, min gap, and JSON config.
+- V1A rules cover timed memo due reminders, one quiet overdue follow-up, and date-only memo prompts that ask what time to use instead of guessing.
+- The local bridge calls `POST /api/integrations/whatsapp/outbox/evaluate`, then `POST /api/integrations/whatsapp/outbox/poll`, sends returned messages through WhatsApp, and calls `POST /api/integrations/whatsapp/outbox/ack`.
+- Outbox rows are idempotent by `user_id + idempotency_key`; due messages move `queued -> claimed -> sent`, and failed sends retry up to a small capped attempt count before `failed`.
+- Successful ack persists the proactive WhatsApp text as an assistant message in the same dedicated WhatsApp Brain thread, with `metadata.proactive_message = true` and `working_context.last_subject` pointing to the memo.
+- Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when the latest WhatsApp assistant message is a proactive memo reminder.
+- Proactive outbound messages do not directly modify LifeOS records except outbox status. Memo completion, dismissal, or snooze happens only after a user reply.
+- V1A intentionally excludes Morning Briefing, calendar completion checks, workout/project nudges, sleep/wake missing nudges, finance nudges, PWA push, AI-generated coaching, and paid WhatsApp providers.
 
 ## Calendar Module Current Status
 
@@ -518,6 +541,8 @@ Current behavior:
 - Loads the current authenticated user's memos through RLS.
 - Creates, edits, and deletes memos.
 - Supports optional date, optional time, and optional notes.
+- Timed and overdue open memos can be delivered through Proactive WhatsApp v1A when the local bridge polls the outbox endpoints.
+- WhatsApp replies to proactive memo reminders can mark a memo `done`, dismiss it, or snooze by updating `memo_date`/`memo_time` through the backend after explicit user reply.
 - The Memos UI is a Reminder Timeline, not a stack of CRUD panels.
 - The Memos mobile UI uses a compact header and slim stats strip so the timeline or empty state appears high on the page.
 - The main page focuses on a unified visual timeline for open dated memos, with overdue, today, tomorrow, and future date headers inside one board.
@@ -821,11 +846,11 @@ Workout mobile direction:
 - Use icons for compact controls where appropriate.
 - Do not add large decorative hero sections or marketing-style layouts.
 - Avoid making mobile worse while improving desktop, and avoid making desktop worse while improving mobile.
-- Future UX phases may add Morning Briefing, proactive check-in nudges, missed-check-in outreach, and voice logging, but they are not implemented yet.
+- Future UX phases may add Morning Briefing, broader proactive check-in nudges, missed-check-in outreach, and voice logging, but they are not implemented yet.
 
 ## Known Issues / Things To Test
 
-- Before adding more external APIs such as Google Calendar sync or proactive messaging, deploy against the real Supabase project and run `docs/QA_DEPLOYMENT.md`.
+- Before adding more external APIs such as Google Calendar sync or broader proactive messaging, deploy against the real Supabase project and run `docs/QA_DEPLOYMENT.md`.
 - Test global Supabase Auth gate with fresh sign up, email-confirmation flow, sign in, sign out, and page reload.
 - Test app behavior when Supabase env vars are missing.
 - Test Health tab after running the latest `health_logs` migration:
@@ -886,6 +911,11 @@ Workout mobile direction:
   - WhatsApp messages reuse one backend Brain thread per sender.
   - Brain app UI still opens fresh New Chat by default and does not show old WhatsApp thread selection.
   - Pending actions and Working Context work through WhatsApp, including nap-to-calendar follow-ups.
+- Test Proactive WhatsApp v1A after running the latest schema:
+  - Create a timed memo, call outbox evaluate/poll/ack, and confirm the message is sent once.
+  - Confirm ack persists a proactive assistant message in the dedicated WhatsApp Brain thread.
+  - Reply `fatto`, `snooze 30`, `annulla`, and `?` from the same sender and confirm memo/outbox behavior.
+  - Confirm expired or duplicate reminders are not repeatedly sent after bridge downtime.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.

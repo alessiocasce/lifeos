@@ -208,7 +208,47 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
   };
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace }) {
+export async function findOrCreateWhatsappBrainThread({ sender } = {}) {
+  const whatsappSender = cleanText(sender, 160);
+  if (!whatsappSender) return null;
+  const client = getSupabaseAdmin();
+  const userId = getActionUserId();
+  const existing = await client
+    .from('ai_chat_threads')
+    .select('id, title, status, metadata, created_at, updated_at, last_message_at')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .contains('metadata', {
+      source: 'whatsapp',
+      whatsapp_sender: whatsappSender,
+    })
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existing.error) throw existing.error;
+  if (existing.data) return existing.data;
+
+  const created = await client
+    .from('ai_chat_threads')
+    .insert({
+      user_id: userId,
+      title: generateWhatsappThreadTitle(whatsappSender),
+      status: 'active',
+      metadata: {
+        created_by: 'brain_chat',
+        source: 'whatsapp',
+        whatsapp_sender: whatsappSender,
+        channel: 'whatsapp',
+      },
+    })
+    .select('id, title, status, metadata, created_at, updated_at, last_message_at')
+    .single();
+  if (created.error) throw created.error;
+  return created.data;
+}
+
+export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace, extraMetadata }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
@@ -241,6 +281,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
         pending_action: pendingAction && typeof pendingAction === 'object' ? pendingAction : null,
         working_context: workingContext && typeof workingContext === 'object' ? workingContext : null,
         brain_trace: brainTrace && typeof brainTrace === 'object' ? brainTrace : null,
+        ...(extraMetadata && typeof extraMetadata === 'object' ? sanitizeMetadata(extraMetadata) : {}),
         ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
       },
     })

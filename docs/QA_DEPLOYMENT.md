@@ -13,6 +13,7 @@ Core Brain/automation env vars include:
 - `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
 - optional `LIFEOS_BRAIN_DEBUG`
 - optional `LIFEOS_BRAIN_DEBUG_FULL`
+- local bridge optional `WHATSAPP_OUTBOX_POLL_SECONDS=60`
 
 The pure Brain regression harness does not require deployment env vars:
 
@@ -151,6 +152,10 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 11. Save a Vault report and confirm chunks are `ready` with `embedding_model = 'gemini-embedding-2'`.
 12. Run the Vault `Re-embed` repair action for old skipped, failed, pending, null-model, or non-Gemini chunks.
 13. Confirm Brain Skill Architecture still stores skill/route/Vault metadata in existing JSON metadata fields.
+14. Confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
+15. Confirm `brain_outbox_messages` has user-scoped RLS, status/priority/channel checks, and unique `(user_id, idempotency_key)`.
+16. Confirm `brain_proactive_rules` has user-scoped RLS and unique `(user_id, rule_key, channel)`.
+17. Confirm `ai_action_logs.source` accepts `whatsapp` so WhatsApp-originated Brain writes can be logged.
 
 ## Brain Trace Debugging
 
@@ -228,6 +233,60 @@ Expected:
 - The debug trace is not included inside the WhatsApp `reply` text
 
 11. To debug an actual live WhatsApp message, inspect Vercel `BRAIN_TRACE` logs if enabled, Supabase `ai_chat_messages.metadata.brain_trace`, and matching `client_request_id` or WhatsApp `message_id`.
+
+## Proactive WhatsApp Memo Outbox Deployment
+
+Schema must be rerun before this QA because v1A adds `brain_outbox_messages` and `brain_proactive_rules`.
+
+1. Confirm Vercel env vars are set:
+   - `LIFEOS_WHATSAPP_BRIDGE_SECRET`
+   - `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
+2. On the local bridge, add `WHATSAPP_OUTBOX_POLL_SECONDS=60`.
+3. The bridge should periodically:
+   - POST `/api/integrations/whatsapp/outbox/evaluate`
+   - POST `/api/integrations/whatsapp/outbox/poll`
+   - send returned messages with `client.sendMessage(to, body)`
+   - POST `/api/integrations/whatsapp/outbox/ack` with `sent` or `failed`
+4. Keep the PC awake; if the bridge stops, WhatsApp outbound delivery stops too.
+5. In `DRY_RUN`, print outbound messages and avoid acking as `sent` unless intentionally testing ack behavior.
+
+Evaluate:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox/evaluate" \
+  -H "Content-Type: application/json" \
+  -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
+  -H "x-lifeos-debug: true" \
+  -d '{"recipient":"111780936298528@lid","bridge_id":"local-main"}'
+```
+
+Poll:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox/poll" \
+  -H "Content-Type: application/json" \
+  -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
+  -H "x-lifeos-debug: true" \
+  -d '{"recipient":"111780936298528@lid","bridge_id":"local-main","limit":3}'
+```
+
+Ack:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/outbox/ack" \
+  -H "Content-Type: application/json" \
+  -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
+  -H "x-lifeos-debug: true" \
+  -d '{"recipient":"111780936298528@lid","message_id":"OUTBOX_ID","status":"sent","bridge_id":"local-main"}'
+```
+
+Expected:
+
+- Evaluate queues due timed memos and reports skipped duplicates/suppression in debug.
+- Poll returns only due, unexpired, queued messages and marks them claimed.
+- Ack `sent` marks the row sent and persists the proactive message into the dedicated WhatsApp Brain thread.
+- Ack `failed` retries while attempts are below the v1 cap, then marks failed.
+- Replies to the proactive WhatsApp message use the existing inbound endpoint and same WhatsApp sender id.
 
 Troubleshooting:
 

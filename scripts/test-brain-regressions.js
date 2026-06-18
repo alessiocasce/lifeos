@@ -12,12 +12,25 @@ import {
 import { validateBrainCommandDraft } from '../api/_utils/brainCommandDraft.js';
 import { buildBrainWorkingContext } from '../api/_utils/brainWorkingContext.js';
 import { shouldRetrieveBrainVault } from '../api/_utils/brainVaultEligibility.js';
+import {
+  buildProactiveWorkingContextFromOutbox,
+  nextOutboxStatusForAck,
+  normalizeProactiveMemoReply,
+} from '../api/_utils/brainOutbox.js';
+import {
+  buildMemoIdempotencyKey,
+  buildMemoProactiveCandidates,
+  isWithinQuietHours,
+  localDateTimeToUtcDate,
+} from '../api/_utils/brainProactiveRules.js';
 import { hasNegativeWriteIntent } from '../api/ai/chat.js';
 import {
   dirtySleepStartPendingActions,
   napHealthNoteCandidate,
   negativeWriteFixtures,
   pendingReplyIntentFixtures,
+  proactiveMemoFixtures,
+  proactiveReplyFixtures,
   referentWorkingContextFixture,
   simpleWriteVaultFixtures,
   sleepStartSourceMessage,
@@ -217,6 +230,96 @@ test('working context supplies referent date/time for calendar command draft', (
   assert.equal(validation.draft.action.args.start_time, '19:40');
   assert.equal(validation.draft.action.args.end_time, '22:00');
   assert.deepEqual(validation.missing_fields, []);
+});
+
+test('timed memo proactive candidate uses stable idempotency and WhatsApp body', () => {
+  const dueAt = localDateTimeToUtcDate('2026-06-18', '09:30');
+  const candidates = buildMemoProactiveCandidates({
+    memo: proactiveMemoFixtures.timedMemo,
+    now: new Date(dueAt.getTime() + 5 * 60000),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  const due = candidates.find((item) => item.rule_key === 'timed_memo_due');
+  assert.ok(due, compact(candidates));
+  assert.equal(due.idempotency_key, buildMemoIdempotencyKey('memo_due', proactiveMemoFixtures.timedMemo, dueAt));
+  assert.equal(due.source_type, 'memo');
+  assert.equal(due.source_id, proactiveMemoFixtures.timedMemo.id);
+  assert.equal(due.metadata.expected_reply_type, 'memo_done_snooze_cancel');
+  assert.match(due.body, /Promemoria|Reminder/);
+});
+
+test('closed memo and future date-only memo do not create immediate proactive candidates', () => {
+  assert.deepEqual(buildMemoProactiveCandidates({
+    memo: proactiveMemoFixtures.closedMemo,
+    now: new Date('2026-06-18T07:35:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  }), []);
+  assert.deepEqual(buildMemoProactiveCandidates({
+    memo: { ...proactiveMemoFixtures.dateOnlyMemo, memo_date: '2026-06-19' },
+    now: new Date('2026-06-18T07:35:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  }), []);
+});
+
+test('date-only memo asks for time after safe daytime check instead of guessing exact due time', () => {
+  const candidates = buildMemoProactiveCandidates({
+    memo: proactiveMemoFixtures.dateOnlyMemo,
+    now: new Date('2026-06-18T07:35:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  const dateOnly = candidates.find((item) => item.rule_key === 'date_only_memo_due_today');
+  assert.ok(dateOnly, compact(candidates));
+  assert.equal(dateOnly.metadata.date_only, true);
+  assert.equal(dateOnly.metadata.memo.memo_time, null);
+  assert.match(dateOnly.body, /A che ora|What time/);
+});
+
+test('quiet hours suppress non-critical proactive nudges', () => {
+  assert.equal(isWithinQuietHours(new Date('2026-06-18T00:00:00.000Z'), '23:00', '08:00'), true);
+  assert.equal(isWithinQuietHours(new Date('2026-06-18T10:00:00.000Z'), '23:00', '08:00'), false);
+});
+
+test('outbox ack status transitions retry then fail', () => {
+  assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'failed', expired: false }), { status: 'queued', retry: true });
+  assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 3, ackStatus: 'failed', expired: false }), { status: 'failed', retry: false });
+  assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'sent', expired: false }), { status: 'sent', retry: false });
+  assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'failed', expired: true }), { status: 'failed', retry: false });
+});
+
+test('sent proactive outbox message metadata supplies memo working context', () => {
+  const context = buildProactiveWorkingContextFromOutbox({
+    id: 'outbox-1',
+    rule_key: 'timed_memo_due',
+    source_type: 'memo',
+    source_id: proactiveMemoFixtures.timedMemo.id,
+    scheduled_for: '2026-06-18T07:30:00.000Z',
+    body: 'Promemoria: Prendere antibiotico. Fatto?',
+    metadata: {
+      expected_reply_type: 'memo_done_snooze_cancel',
+      language: 'it',
+      memo: proactiveMemoFixtures.timedMemo,
+    },
+  });
+  assert.equal(context.language, 'it');
+  assert.equal(context.last_subject.type, 'memo');
+  assert.equal(context.last_subject.id, proactiveMemoFixtures.timedMemo.id);
+  assert.equal(context.last_subject.label, proactiveMemoFixtures.timedMemo.title);
+  assert.equal(context.last_subject.source, 'proactive_whatsapp_memo');
+});
+
+test('proactive memo reply intents normalize', () => {
+  for (const value of proactiveReplyFixtures.done) {
+    assert.equal(normalizeProactiveMemoReply(value).intent, 'done', value);
+  }
+  for (const value of proactiveReplyFixtures.snooze) {
+    assert.equal(normalizeProactiveMemoReply(value).intent, 'snooze', value);
+  }
+  for (const value of proactiveReplyFixtures.cancel) {
+    assert.equal(normalizeProactiveMemoReply(value).intent, 'cancel', value);
+  }
+  for (const value of proactiveReplyFixtures.explain) {
+    assert.equal(normalizeProactiveMemoReply(value).intent, 'explain', value);
+  }
 });
 
 function test(name, fn) {

@@ -135,7 +135,7 @@ create table if not exists public.ai_action_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   request_id text,
-  source text not null default 'app' check (source in ('app', 'shortcut', 'api')),
+  source text not null default 'app' check (source in ('app', 'shortcut', 'api', 'whatsapp')),
   user_message text,
   answer text,
   status text not null default 'success' check (status in ('success', 'error')),
@@ -248,6 +248,48 @@ create table if not exists public.memos (
   status text not null default 'open' check (status in ('open', 'done', 'dismissed')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists public.brain_outbox_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  channel text not null default 'whatsapp' check (channel in ('whatsapp')),
+  recipient text not null,
+  body text not null,
+  status text not null default 'queued' check (status in ('queued', 'claimed', 'sent', 'failed', 'cancelled', 'expired')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high')),
+  rule_key text not null,
+  source_type text,
+  source_id uuid,
+  idempotency_key text not null,
+  scheduled_for timestamptz not null,
+  expires_at timestamptz,
+  claimed_at timestamptz,
+  sent_at timestamptz,
+  failed_at timestamptz,
+  attempts integer not null default 0 check (attempts >= 0),
+  last_error text,
+  ack_metadata jsonb not null default '{}'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, idempotency_key)
+);
+
+create table if not exists public.brain_proactive_rules (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  rule_key text not null,
+  enabled boolean not null default true,
+  channel text not null default 'whatsapp' check (channel in ('whatsapp')),
+  quiet_hours_start time default '23:00',
+  quiet_hours_end time default '08:00',
+  max_per_day integer default 6 check (max_per_day is null or max_per_day >= 0),
+  min_gap_minutes integer default 60 check (min_gap_minutes is null or min_gap_minutes >= 0),
+  config jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, rule_key, channel)
 );
 
 create table if not exists public.projects (
@@ -823,13 +865,21 @@ end $$;
 
 do $$
 begin
-  if not exists (
+  if exists (
     select 1 from pg_constraint
     where conname = 'ai_action_logs_source_check'
   ) then
     alter table public.ai_action_logs
+    drop constraint ai_action_logs_source_check;
+  end if;
+
+  if not exists (
+    select 1 from public.ai_action_logs
+    where source not in ('app', 'shortcut', 'api', 'whatsapp')
+  ) then
+    alter table public.ai_action_logs
     add constraint ai_action_logs_source_check
-    check (source in ('app', 'shortcut', 'api'));
+    check (source in ('app', 'shortcut', 'api', 'whatsapp'));
   end if;
 end $$;
 
@@ -1046,6 +1096,16 @@ create trigger set_memos_updated_at
 before update on public.memos
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_brain_outbox_messages_updated_at on public.brain_outbox_messages;
+create trigger set_brain_outbox_messages_updated_at
+before update on public.brain_outbox_messages
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_brain_proactive_rules_updated_at on public.brain_proactive_rules;
+create trigger set_brain_proactive_rules_updated_at
+before update on public.brain_proactive_rules
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_projects_updated_at on public.projects;
 create trigger set_projects_updated_at
 before update on public.projects
@@ -1209,6 +1269,11 @@ as $$
 $$;
 create index if not exists memos_user_status_due_idx on public.memos (user_id, status, memo_date, memo_time);
 create index if not exists memos_user_created_at_idx on public.memos (user_id, created_at desc);
+create index if not exists brain_outbox_messages_user_status_scheduled_idx on public.brain_outbox_messages (user_id, status, scheduled_for);
+create index if not exists brain_outbox_messages_user_channel_status_scheduled_idx on public.brain_outbox_messages (user_id, channel, status, scheduled_for);
+create index if not exists brain_outbox_messages_idempotency_key_idx on public.brain_outbox_messages (idempotency_key);
+create index if not exists brain_outbox_messages_source_idx on public.brain_outbox_messages (source_type, source_id);
+create index if not exists brain_proactive_rules_user_rule_channel_idx on public.brain_proactive_rules (user_id, rule_key, channel);
 create index if not exists projects_user_status_created_at_idx on public.projects (user_id, status, created_at desc);
 create index if not exists project_sessions_user_project_started_at_idx on public.project_sessions (user_id, project_id, started_at desc);
 create index if not exists project_sessions_user_ended_at_idx on public.project_sessions (user_id, ended_at);
@@ -1232,6 +1297,8 @@ alter table public.ai_insights enable row level security;
 alter table public.ai_vault_documents enable row level security;
 alter table public.ai_vault_chunks enable row level security;
 alter table public.memos enable row level security;
+alter table public.brain_outbox_messages enable row level security;
+alter table public.brain_proactive_rules enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_sessions enable row level security;
 alter table public.project_money_entries enable row level security;
@@ -1412,6 +1479,18 @@ drop policy if exists "lifeos local read memos" on public.memos;
 drop policy if exists "lifeos local write memos" on public.memos;
 drop policy if exists "memos are user scoped" on public.memos;
 create policy "memos are user scoped" on public.memos
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "brain_outbox_messages are user scoped" on public.brain_outbox_messages;
+create policy "brain_outbox_messages are user scoped" on public.brain_outbox_messages
+for all to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "brain_proactive_rules are user scoped" on public.brain_proactive_rules;
+create policy "brain_proactive_rules are user scoped" on public.brain_proactive_rules
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);

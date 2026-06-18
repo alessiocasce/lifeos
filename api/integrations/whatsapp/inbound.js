@@ -3,13 +3,13 @@ import {
   createRequestContext,
   handleApiError,
   handleOptions,
-  matchesSecret,
   readJsonBody,
   requirePost,
   sendJson,
 } from '../../_utils/http.js';
 import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { handleBrainChatMessage } from '../../ai/chat.js';
+import { requireWhatsappBridgeSecret, validateWhatsappSender } from '../../_utils/whatsappBridge.js';
 
 const MAX_WHATSAPP_BODY_LENGTH = 4000;
 
@@ -82,22 +82,6 @@ export default async function handler(req, res) {
   }
 }
 
-function requireWhatsappBridgeSecret(req) {
-  const configuredSecret = String(process.env.LIFEOS_WHATSAPP_BRIDGE_SECRET ?? '').trim();
-  if (!configuredSecret) {
-    if (isProduction()) {
-      throw new HttpError(500, 'WhatsApp bridge secret is not configured.');
-    }
-    console.warn('[LifeOS WhatsApp inbound] LIFEOS_WHATSAPP_BRIDGE_SECRET is not configured; development request allowed.');
-    return;
-  }
-
-  const provided = String(req.headers['x-lifeos-whatsapp-secret'] ?? '').trim();
-  if (!matchesSecret(provided, configuredSecret)) {
-    throw new HttpError(401, 'Unauthorized.');
-  }
-}
-
 function normalizeWhatsappPayload(body = {}) {
   const from = cleanText(body.from, 160);
   const rawBody = typeof body.body === 'string' ? body.body : null;
@@ -126,33 +110,6 @@ function normalizeWhatsappPayload(body = {}) {
   };
 }
 
-function validateWhatsappSender(from, isGroup) {
-  const allowedSenders = getAllowedSenders();
-  if (!allowedSenders.size) {
-    if (isProduction()) {
-      throw new HttpError(500, 'WhatsApp allowed sender list is not configured.');
-    }
-    if (isGroup) {
-      throw new HttpError(403, 'WhatsApp group messages require an explicit allowed sender.');
-    }
-    console.warn('[LifeOS WhatsApp inbound] LIFEOS_WHATSAPP_ALLOWED_SENDERS is not configured; development sender allowed.');
-    return;
-  }
-
-  if (!allowedSenders.has(from)) {
-    throw new HttpError(403, 'Sender is not allowed.');
-  }
-}
-
-function getAllowedSenders() {
-  return new Set(
-    String(process.env.LIFEOS_WHATSAPP_ALLOWED_SENDERS ?? '')
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
-  );
-}
-
 function buildWhatsappClientRequestId(payload, requestId) {
   const messageId = payload.message_id || payload.timestamp || requestId;
   return `whatsapp:${payload.from}:${messageId}`;
@@ -167,8 +124,4 @@ function normalizeTimestamp(value) {
 function cleanText(value, maxLength) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text ? text.slice(0, maxLength) : null;
-}
-
-function isProduction() {
-  return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 }

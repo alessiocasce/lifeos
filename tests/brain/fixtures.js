@@ -127,3 +127,40 @@ export const whatsappThreadIdentityFixtures = [
   },
 ];
 
+export const proactiveMemoFixtures = {
+  timedMemo: {
+    id: '11111111-1111-4111-8111-111111111111',
+    user_id: '22222222-2222-4222-8222-222222222222',
+    title: 'Prendere antibiotico',
+    memo_date: '2026-06-18',
+    memo_time: '09:30',
+    status: 'open',
+    notes: '',
+  },
+  dateOnlyMemo: {
+    id: '33333333-3333-4333-8333-333333333333',
+    user_id: '22222222-2222-4222-8222-222222222222',
+    title: 'Chiamare medico',
+    memo_date: '2026-06-18',
+    memo_time: null,
+    status: 'open',
+    notes: '',
+  },
+  closedMemo: {
+    id: '44444444-4444-4444-8444-444444444444',
+    user_id: '22222222-2222-4222-8222-222222222222',
+    title: 'Gia fatto',
+    memo_date: '2026-06-18',
+    memo_time: '09:30',
+    status: 'done',
+    notes: '',
+  },
+  recipient: '111780936298528@lid',
+};
+
+export const proactiveReplyFixtures = {
+  done: ['fatto', 'si', 'Sì', 'done', 'completed'],
+  snooze: ['snooze 30', 'tra 30 min', 'piu tardi', 'domani alle 10', '15:30'],
+  cancel: ['annulla', 'cancella', 'non ricordarmelo', 'cancel'],
+  explain: ['?', 'perche?', 'why'],
+};
