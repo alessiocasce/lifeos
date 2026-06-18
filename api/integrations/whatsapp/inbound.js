@@ -1,0 +1,144 @@
+import {
+  HttpError,
+  createRequestContext,
+  handleApiError,
+  handleOptions,
+  matchesSecret,
+  readJsonBody,
+  requirePost,
+  sendJson,
+} from '../../_utils/http.js';
+import { handleBrainChatMessage } from '../../ai/chat.js';
+
+const MAX_WHATSAPP_BODY_LENGTH = 4000;
+
+export default async function handler(req, res) {
+  const context = createRequestContext(req, res);
+  try {
+    if (handleOptions(req, res)) return;
+    requirePost(req);
+    requireWhatsappBridgeSecret(req);
+
+    const payload = normalizeWhatsappPayload(await readJsonBody(req));
+    validateWhatsappSender(payload.from, payload.is_group);
+
+    const clientRequestId = buildWhatsappClientRequestId(payload, context.requestId);
+    const result = await handleBrainChatMessage({
+      message: payload.body,
+      source: 'whatsapp',
+      requestId: context.requestId,
+      clientRequestId,
+      responseMode: 'whatsapp',
+      channelMetadata: {
+        source: 'whatsapp',
+        channel: 'whatsapp',
+        whatsapp_sender: payload.from,
+        whatsapp_author: payload.author,
+        whatsapp_message_id: payload.message_id,
+        whatsapp_timestamp: payload.timestamp,
+        whatsapp_type: payload.type,
+        whatsapp_is_group: payload.is_group,
+      },
+    });
+
+    return sendJson(res, 200, {
+      reply: String(result?.answer ?? ''),
+      thread_id: result?.thread_id ?? null,
+      source: 'whatsapp',
+      requestId: context.requestId,
+    });
+  } catch (error) {
+    return handleApiError(res, error, context);
+  }
+}
+
+function requireWhatsappBridgeSecret(req) {
+  const configuredSecret = String(process.env.LIFEOS_WHATSAPP_BRIDGE_SECRET ?? '').trim();
+  if (!configuredSecret) {
+    if (isProduction()) {
+      throw new HttpError(500, 'WhatsApp bridge secret is not configured.');
+    }
+    console.warn('[LifeOS WhatsApp inbound] LIFEOS_WHATSAPP_BRIDGE_SECRET is not configured; development request allowed.');
+    return;
+  }
+
+  const provided = String(req.headers['x-lifeos-whatsapp-secret'] ?? '').trim();
+  if (!matchesSecret(provided, configuredSecret)) {
+    throw new HttpError(401, 'Unauthorized.');
+  }
+}
+
+function normalizeWhatsappPayload(body = {}) {
+  const from = cleanText(body.from, 160);
+  const rawBody = typeof body.body === 'string' ? body.body : null;
+  const text = rawBody ? rawBody.trim() : '';
+  const type = cleanText(body.type, 40) || 'chat';
+
+  if (!from) throw new HttpError(400, 'from is required.');
+  if (rawBody === null) throw new HttpError(400, 'body must be a string.');
+  if (!text) throw new HttpError(400, 'body is required.');
+  if (text.length > MAX_WHATSAPP_BODY_LENGTH) {
+    throw new HttpError(400, `body must be ${MAX_WHATSAPP_BODY_LENGTH} characters or fewer.`);
+  }
+  if (type !== 'chat') {
+    throw new HttpError(400, 'Only text chat messages are supported in WhatsApp inbound v1.');
+  }
+
+  return {
+    from,
+    author: cleanText(body.author, 160),
+    message_id: cleanText(body.message_id ?? body.messageId ?? body.id, 180),
+    body: text,
+    timestamp: normalizeTimestamp(body.timestamp),
+    type,
+    is_group: Boolean(body.is_group ?? body.isGroup),
+    source: cleanText(body.source, 40) || 'whatsapp',
+  };
+}
+
+function validateWhatsappSender(from, isGroup) {
+  const allowedSenders = getAllowedSenders();
+  if (!allowedSenders.size) {
+    if (isProduction()) {
+      throw new HttpError(500, 'WhatsApp allowed sender list is not configured.');
+    }
+    if (isGroup) {
+      throw new HttpError(403, 'WhatsApp group messages require an explicit allowed sender.');
+    }
+    console.warn('[LifeOS WhatsApp inbound] LIFEOS_WHATSAPP_ALLOWED_SENDERS is not configured; development sender allowed.');
+    return;
+  }
+
+  if (!allowedSenders.has(from)) {
+    throw new HttpError(403, 'Sender is not allowed.');
+  }
+}
+
+function getAllowedSenders() {
+  return new Set(
+    String(process.env.LIFEOS_WHATSAPP_ALLOWED_SENDERS ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
+}
+
+function buildWhatsappClientRequestId(payload, requestId) {
+  const messageId = payload.message_id || payload.timestamp || requestId;
+  return `whatsapp:${payload.from}:${messageId}`;
+}
+
+function normalizeTimestamp(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function cleanText(value, maxLength) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function isProduction() {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+}

@@ -9,6 +9,7 @@ Run this after deploying to Vercel with:
 - `GEMINI_API_KEY`
 - optional `GEMINI_MODEL`
 - optional `GEMINI_EMBEDDING_MODEL=gemini-embedding-2`
+- `LIFEOS_WHATSAPP_BRIDGE_SECRET` and `LIFEOS_WHATSAPP_ALLOWED_SENDERS` for WhatsApp inbound QA
 
 The in-app Assistant sends the signed-in user's Supabase access token to `/api/ai/chat`. The backend verifies that user against `LIFEOS_ACTION_USER_ID`. The endpoint also accepts the action token for trusted server/tool callers.
 
@@ -264,6 +265,47 @@ Run the latest `supabase/schema.sql` before this checklist so Brain thread, mess
 16. Confirm `[[Back Day]]`-style links in saved content appear in document detail metadata if present.
 17. Pull to refresh and confirm Vault documents reload in backend/diagnostics.
 18. Confirm diagnostics Vault detail modal has no horizontal overflow if exposed.
+
+## WhatsApp Inbound Brain
+
+Use the deployed endpoint with `LIFEOS_WHATSAPP_BRIDGE_SECRET` and `LIFEOS_WHATSAPP_ALLOWED_SENDERS` configured.
+
+Manual curl shape:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \
+  -H "Content-Type: application/json" \
+  -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
+  -d '{
+    "from": "111780936298528@lid",
+    "message_id": "manual-test-1",
+    "body": "come stai?",
+    "type": "chat",
+    "is_group": false,
+    "source": "whatsapp"
+  }'
+```
+
+1. Send valid body `come stai?` with valid secret and allowed `from`.
+2. Confirm status `200`, JSON contains `reply`, `thread_id`, and `source: whatsapp`, and the reply is concise.
+3. Confirm one dedicated backend Brain thread is created or reused with `metadata.source = whatsapp` and `metadata.whatsapp_sender`.
+4. Open the app Brain UI and confirm it still opens fresh `New Chat` by default and does not show old thread selection or the WhatsApp thread in normal UI.
+5. Send WhatsApp body `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
+6. Confirm Brain asks confirmation in Italian with known `Pisolino 19:40-22:00` details and does not write yet unless the existing Brain rules choose a safe direct write.
+7. Send WhatsApp body `si` from the same sender.
+8. Confirm the Health note is saved and the reply confirms it in Italian.
+9. Send WhatsApp body `aggiungilo anche al calendario`.
+10. Confirm Working Context resolves the previous nap, creates a Calendar event with the same date/time, and does not ask for date/time again.
+11. Send WhatsApp body `segnami creatina alle 9:37`.
+12. Confirm today's Creatine habit logs with canonical time `09:37` and the reply confirms it.
+13. Send WhatsApp body `aggiungilo al calendario, anzi no non farlo`.
+14. Confirm no action is created and negative intent wins.
+15. Repeat a request with the same `message_id` if possible and confirm normal client request id dedupe/idempotency avoids obvious duplicate writes.
+16. Call with the wrong `x-lifeos-whatsapp-secret` and confirm `401`.
+17. Call with an unallowed `from` and confirm `403`.
+18. Call with a body over 4000 characters and confirm it is rejected safely.
+19. Call with `type` other than `chat` and confirm v1 rejects it without invoking Brain.
+20. Confirm WhatsApp source metadata appears on persisted user/assistant messages and sanitized AI action logs, without exposing bridge secret, Supabase keys, Gemini keys, or Authorization headers.
 
 ## API Security
 

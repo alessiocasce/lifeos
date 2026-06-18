@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-18
 Current branch: `main`
-Recent context: Assistant now has an in-app Gemini planner backed by controlled server-side LifeOS tools.
+Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with controlled server-side LifeOS tools.
 
 ## Project Goal
 
@@ -89,6 +89,8 @@ SUPABASE_SERVICE_ROLE_KEY=...
 LIFEOS_ACTION_TOKEN=...
 LIFEOS_ACTION_USER_ID=...
 GEMINI_API_KEY=...
+LIFEOS_WHATSAPP_BRIDGE_SECRET=...
+LIFEOS_WHATSAPP_ALLOWED_SENDERS=...
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
@@ -181,6 +183,7 @@ Real/persisted today:
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
+  - `POST /api/integrations/whatsapp/inbound`
   - Persistent Brain chat with a fresh New Chat draft by default. Old threads/messages persist in the backend, but old-thread selection is hidden from the normal UI for now.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
@@ -259,6 +262,8 @@ Current behavior:
 Architecture:
 
 - Frontend sends the raw message and active `thread_id` to `POST /api/ai/chat`.
+- WhatsApp inbound uses the dedicated `POST /api/integrations/whatsapp/inbound` endpoint. The local bridge never calls the frontend chat endpoint directly.
+- `/api/ai/chat` and `/api/integrations/whatsapp/inbound` both route through the same backend Brain execution handler, so WhatsApp reuses Brain routing, pending actions, working context, command drafts, Vault retrieval, memory, and deterministic write guards.
 - Brain chat requests carry a client request id. Optimistic user/assistant messages are deduped against persisted `ai_chat_messages.metadata.client_request_id` to avoid visible flicker or duplicate bubbles.
 - Brain chat requests have a frontend timeout and retry path, so a hung `/api/ai/chat` call exits loading instead of leaving an infinite spinner.
 - Brain constrains the chat viewport so the Assistant tab/page does not become the primary scroll container on mobile.
@@ -268,6 +273,8 @@ Architecture:
 - The frontend sends the current Supabase access token; the backend verifies it and ensures it matches `LIFEOS_ACTION_USER_ID`.
 - The endpoint can also accept `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` for trusted server/tool callers.
 - App chat requests append user/assistant messages to `ai_chat_messages`; Shortcut/API calls do not create personal chat history by default.
+- WhatsApp chat requests append user/assistant messages to a persistent dedicated backend Brain thread per sender using `metadata.source = "whatsapp"` and `metadata.whatsapp_sender`.
+- WhatsApp threads are backend context only. They must not auto-open in the app and must not reintroduce old-thread selection into the normal Brain UI.
 - Threads are titled deterministically from the first meaningful user message without an extra Gemini title call.
 - Brain opens to a fresh empty `New Chat` draft by default. Old threads and messages remain persisted and reloadable through backend/context code, but the normal UI currently hides old-thread selection for minimum-friction chat-first use.
 - The empty New Chat state is intentionally minimal: `What do we solve?` plus `Ask, log, analyze, plan.`
@@ -352,6 +359,7 @@ Architecture:
 - AI Action History powers the Assistant Recent Actions preview. It is action history only; undo is not implemented yet. Home does not surface Recent AI Writes.
 - Brain UI is chat-first. The composer stays central, old-thread selection is hidden in the normal UI for now, Memory/Vault management is hidden behind diagnostics, Recent Actions stays compact on desktop, and Brain keeps Daily Review and canned Suggestions hidden.
 - Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
+- WhatsApp inbound replies are concise and same-language for chat use, while preserving the same Brain action boundaries and backend validation as app chat.
 - Future proactive features such as Morning Briefing and Weekly Review should build on Brain skills, but proactive automation is not implemented yet.
 - AI Action History previews are compact and click-to-expand. Preview cards show source, status, time, deterministic action title, and action count without displaying the full raw request or response.
 - AI Action History detail views show the full saved request, full saved response, action metadata, request id, record references, and sanitized action payloads. Saved assistant responses render with the same safe Markdown and LifeOS callout renderer used by chat messages.
@@ -363,7 +371,7 @@ Architecture:
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
-- Proactive Morning Briefings, voice, external email/messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase.
+- Proactive Morning Briefings, voice, external email, outbound/proactive messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase.
 
 Supported v1 intents/tools:
 
@@ -380,9 +388,27 @@ Current limitations:
 - No arbitrary SQL.
 - No destructive writes.
 - Pending actions support low-risk multi-turn confirmation and slot filling for supported Health, Calendar, Memo, Expense, and related action flows.
-- No external API integrations beyond Gemini.
+- External integrations: WhatsApp Bridge v1 inbound is supported through a local bridge and secure Vercel endpoint. Proactive outbound WhatsApp nudges are not implemented yet.
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
+
+## WhatsApp Bridge Current Status
+
+WhatsApp Bridge v1 supports inbound trusted messages from a local `whatsapp-web.js` bridge into LifeOS Brain.
+
+Current behavior:
+
+- The local bridge runs on the user's PC or another always-on machine; it does not run inside Vercel.
+- Vercel exposes `POST /api/integrations/whatsapp/inbound` for the bridge.
+- The endpoint requires `x-lifeos-whatsapp-secret` to match server-only `LIFEOS_WHATSAPP_BRIDGE_SECRET`.
+- The endpoint requires the sender to be listed in `LIFEOS_WHATSAPP_ALLOWED_SENDERS` in production.
+- The endpoint validates text-only message payloads, rejects empty/oversized bodies, rejects unsupported message types, and keeps group behavior closed unless explicitly whitelisted.
+- The local bridge only needs `LIFEOS_BASE_URL`, `LIFEOS_WHATSAPP_BRIDGE_SECRET`, and its own allowed sender config. It must not know Supabase service keys, Gemini keys, or database credentials.
+- WhatsApp messages use `source = "whatsapp"` and include sanitized sender/message id metadata.
+- Each allowed sender gets one persistent backend Brain thread. This preserves WhatsApp conversation context without surfacing old thread selection in the normal Brain UI.
+- WhatsApp replies are generated by the same Brain handler used by app chat, with WhatsApp-friendly concise response instructions.
+- Pending actions, Working Context, Command Draft referent resolution, memory commands, follow-up transforms, Brain Vault retrieval/auto-save, and deterministic tool guards remain active for WhatsApp.
+- V1 is inbound request/reply only. Proactive nudges, outbox polling, scheduled outbound messages, WhatsApp Business Cloud API, Meta templates, media/voice, and open group chat support are future work.
 
 ## Calendar Module Current Status
 
@@ -755,7 +781,7 @@ Workout mobile direction:
 
 ## Known Issues / Things To Test
 
-- Before adding AI, chat automation, Google Calendar sync, or other external APIs, deploy against the real Supabase project and run `docs/QA_DEPLOYMENT.md`.
+- Before adding more external APIs such as Google Calendar sync or proactive messaging, deploy against the real Supabase project and run `docs/QA_DEPLOYMENT.md`.
 - Test global Supabase Auth gate with fresh sign up, email-confirmation flow, sign in, sign out, and page reload.
 - Test app behavior when Supabase env vars are missing.
 - Test Health tab after running the latest `health_logs` migration:
@@ -810,6 +836,12 @@ Workout mobile direction:
   - Brain shows a viewport-contained chat without Daily Review or suggestion chips.
   - On mobile, the Assistant page itself should not require long scrolling to reach the composer; messages scroll inside the chat widget.
   - Old thread selection is hidden from the default Brain UI for now, while old thread data persists in the backend.
+- Test WhatsApp Bridge v1 after deploying `LIFEOS_WHATSAPP_BRIDGE_SECRET` and `LIFEOS_WHATSAPP_ALLOWED_SENDERS`:
+  - Valid bridge requests to `/api/integrations/whatsapp/inbound` return a concise `reply`.
+  - Wrong secret returns `401`; unallowed sender returns `403`.
+  - WhatsApp messages reuse one backend Brain thread per sender.
+  - Brain app UI still opens fresh New Chat by default and does not show old WhatsApp thread selection.
+  - Pending actions and Working Context work through WhatsApp, including nap-to-calendar follow-ups.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.

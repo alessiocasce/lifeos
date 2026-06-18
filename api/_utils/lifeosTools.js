@@ -38,7 +38,7 @@ const VALID_TABLES = new Set([
   'project_money_entries',
 ]);
 const VALID_EVENT_STATUSES = new Set(['planned', 'done', 'skipped', 'cancelled']);
-const VALID_AI_LOG_SOURCES = new Set(['app', 'shortcut', 'api']);
+const VALID_AI_LOG_SOURCES = new Set(['app', 'shortcut', 'api', 'whatsapp']);
 const VALID_AI_LOG_STATUSES = new Set(['success', 'error']);
 const PREFERRED_CALENDAR_CATEGORIES = ['Work', 'Study', 'School', 'Health', 'Workout', 'Errands', 'Personal', 'Social', 'Entertainment', 'Sleep'];
 const CALENDAR_CATEGORY_ALIASES = new Map([

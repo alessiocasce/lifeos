@@ -72,10 +72,13 @@ Rules:
 - If nothing durable is present, return empty arrays.
 `;
 
-export async function beginBrainChat({ threadId, source, message, requestId, clientRequestId }) {
-  if (source !== 'app') return null;
+export async function beginBrainChat({ threadId, source, message, requestId, clientRequestId, channelMetadata = null }) {
+  const normalizedSource = normalizeChatSource(source);
+  if (!['app', 'whatsapp'].includes(normalizedSource)) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
+  const safeChannelMetadata = channelMetadata && typeof channelMetadata === 'object' ? sanitizeMetadata(channelMetadata) : {};
+  const whatsappSender = normalizedSource === 'whatsapp' ? cleanText(safeChannelMetadata.whatsapp_sender, 160) : null;
   let thread = null;
 
   if (isUuid(threadId)) {
@@ -90,7 +93,25 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
     thread = result.data;
   }
 
-  if (!thread && !threadId) {
+  if (!thread && normalizedSource === 'whatsapp' && whatsappSender) {
+    const result = await client
+      .from('ai_chat_threads')
+      .select('id, title, status, metadata, created_at, updated_at, last_message_at')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .contains('metadata', {
+        source: 'whatsapp',
+        whatsapp_sender: whatsappSender,
+      })
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    thread = result.data;
+  }
+
+  if (!thread && !threadId && normalizedSource === 'app') {
     const result = await client
       .from('ai_chat_threads')
       .select('id, title, status, metadata, created_at, updated_at, last_message_at')
@@ -109,9 +130,16 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
       .from('ai_chat_threads')
       .insert({
         user_id: userId,
-        title: generateThreadTitle(message),
+        title: normalizedSource === 'whatsapp' ? generateWhatsappThreadTitle(whatsappSender) : generateThreadTitle(message),
         status: 'active',
-        metadata: { created_by: 'brain_chat' },
+        metadata: {
+          created_by: 'brain_chat',
+          source: normalizedSource,
+          ...(normalizedSource === 'whatsapp' ? {
+            whatsapp_sender: whatsappSender,
+            channel: 'whatsapp',
+          } : {}),
+        },
       })
       .select('id, title, status, metadata, created_at, updated_at, last_message_at')
       .single();
@@ -126,7 +154,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
       .select('id, title, status, metadata, created_at, updated_at, last_message_at')
       .single();
     if (result.error) throw result.error;
-    thread = result.data;
+      thread = result.data;
   }
 
   const historyResult = await client
@@ -149,7 +177,13 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
       content: String(message).trim(),
       request_id: uuidOrNull(requestId),
       metadata: {
-        source: 'app',
+        source: normalizedSource,
+        ...(normalizedSource === 'whatsapp' ? {
+          channel: 'whatsapp',
+          whatsapp_sender: whatsappSender,
+          whatsapp_message_id: cleanText(safeChannelMetadata.whatsapp_message_id, 160),
+          whatsapp_timestamp: safeChannelMetadata.whatsapp_timestamp ?? null,
+        } : {}),
         ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
       },
     })
@@ -168,6 +202,8 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
     thread: { ...thread, last_message_at: now },
     userMessage: messageResult.data,
     conversationHistory,
+    source: normalizedSource,
+    channelMetadata: safeChannelMetadata,
     assistantPersisted: false,
   };
 }
@@ -177,6 +213,8 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
   const now = new Date().toISOString();
+  const source = normalizeChatSource(chat.source);
+  const channelMetadata = chat.channelMetadata && typeof chat.channelMetadata === 'object' ? sanitizeMetadata(chat.channelMetadata) : {};
   const result = await client
     .from('ai_chat_messages')
     .insert({
@@ -187,6 +225,12 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
       request_id: uuidOrNull(requestId),
       action_type: actionType || null,
       metadata: {
+        source,
+        ...(source === 'whatsapp' ? {
+          channel: 'whatsapp',
+          whatsapp_sender: cleanText(channelMetadata.whatsapp_sender, 160),
+          whatsapp_message_id: cleanText(channelMetadata.whatsapp_message_id, 160),
+        } : {}),
         planner_intent: plan?.intent ?? null,
         action_count: countActions(actions),
         record_refs: Array.isArray(recordRefs) ? recordRefs.slice(0, 80) : [],
@@ -535,6 +579,27 @@ export function generateThreadTitle(message) {
   const words = cleaned.split(' ').filter(Boolean).slice(0, 7);
   if (!words.length) return 'New Chat';
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').slice(0, 80);
+}
+
+function generateWhatsappThreadTitle(sender) {
+  const label = cleanText(sender, 60) || 'Unknown Sender';
+  return `WhatsApp - ${label}`.slice(0, 80);
+}
+
+function normalizeChatSource(source) {
+  const value = String(source ?? '').trim().toLowerCase();
+  if (['app', 'shortcut', 'api', 'whatsapp'].includes(value)) return value;
+  return 'api';
+}
+
+function sanitizeMetadata(metadata) {
+  return Object.fromEntries(Object.entries(metadata ?? {}).slice(0, 20).map(([key, value]) => {
+    if (/secret|token|password|authorization|api[_-]?key/i.test(key)) return [key, '[redacted]'];
+    if (value === null || value === undefined) return [key, null];
+    if (typeof value === 'string') return [key, value.slice(0, 500)];
+    if (typeof value === 'number' || typeof value === 'boolean') return [key, value];
+    return [key, String(value).slice(0, 500)];
+  }));
 }
 
 function normalizeMemoryCandidate(candidate) {

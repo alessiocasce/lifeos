@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 const MAX_JSON_BODY_BYTES = 32 * 1024;
 const CORS_METHODS = 'POST, OPTIONS';
-const CORS_HEADERS = 'Authorization, Content-Type';
+const CORS_HEADERS = 'Authorization, Content-Type, x-lifeos-whatsapp-secret';
 
 export class HttpError extends Error {
   constructor(status, message, details = null) {

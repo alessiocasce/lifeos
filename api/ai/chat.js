@@ -183,6 +183,13 @@ Format responses with concise Markdown:
 - Do not use callouts for casual chat.
 - Ask at most one useful follow-up when needed.
 - Never output raw HTML.
+If responseMode is whatsapp:
+- Keep the reply WhatsApp-friendly and concise.
+- Preserve the user's language.
+- Avoid giant tables and long markdown-heavy reports.
+- Short bullets are fine.
+- If the answer would be long, give the useful summary and offer to continue.
+This channel style must not change tool safety, write boundaries, or action behavior.
 You may use LifeOS callouts only when useful:
 - [good]...[/good] for positive signals.
 - [warn]...[/warn] for sparse data, weak evidence, or caution.
@@ -354,68 +361,109 @@ export default async function handler(req, res) {
     if (!message) throw new HttpError(400, 'message is required.');
     if (message.length > 2000) throw new HttpError(400, 'message must be 2000 characters or fewer.');
     const clientRequestId = normalizeClientRequestId(body.client_request_id ?? body.clientRequestId);
-    context.clientRequestId = clientRequestId;
     const source = resolveAssistantSource(authInfo, body);
-    context.brainChat = await safeBeginBrainChat({
+    const result = await handleBrainChatMessage({
+      message,
       threadId: body.thread_id,
       source,
-      message,
       requestId: context.requestId,
       clientRequestId,
+    });
+    return sendSuccess(res, 200, result, context);
+  } catch (error) {
+    handleApiError(res, error, context);
+  }
+}
+
+export async function handleBrainChatMessage({
+  message,
+  threadId = null,
+  source = 'app',
+  requestId = null,
+  clientRequestId = null,
+  channelMetadata = null,
+  responseMode = null,
+} = {}) {
+  const context = {
+    requestId: requestId || `brain-${Date.now()}`,
+    clientRequestId: normalizeClientRequestId(clientRequestId),
+    channelMetadata: channelMetadata && typeof channelMetadata === 'object' ? channelMetadata : null,
+    responseMode: responseMode || null,
+  };
+  const normalizedMessage = String(message ?? '').trim();
+  if (!normalizedMessage) throw new HttpError(400, 'message is required.');
+  if (normalizedMessage.length > 4000) throw new HttpError(400, 'message must be 4000 characters or fewer.');
+  const resolvedSource = normalizeAssistantSource(source);
+  const messageForBrain = normalizedMessage;
+  try {
+    const existingResponse = await findExistingBrainResponseByClientRequestId(context.clientRequestId);
+    if (existingResponse) return existingResponse;
+
+    context.brainChat = await safeBeginBrainChat({
+      threadId,
+      source: resolvedSource,
+      message: messageForBrain,
+      requestId: context.requestId,
+      clientRequestId: context.clientRequestId,
+      channelMetadata: context.channelMetadata,
     });
     context.brainContext = await safeLoadBrainContext(context);
     context.workingContext = buildBrainWorkingContext({
       brainChat: context.brainChat,
-      currentMessage: message,
+      currentMessage: messageForBrain,
       lifeosContext: null,
     });
-    if (context.brainChat) context.brainChat.workingContext = context.workingContext;
+    if (context.brainChat) {
+      context.brainChat.workingContext = context.workingContext;
+      context.brainChat.responseMode = context.responseMode;
+      context.brainChat.channelMetadata = context.channelMetadata;
+    }
     const activePendingAction = extractLatestPendingAction(context.brainChat);
     if (activePendingAction) {
-      const pendingResolution = await resolvePendingActionTurn({ message, pendingAction: activePendingAction, context });
+      const pendingResolution = await resolvePendingActionTurn({ message: messageForBrain, pendingAction: activePendingAction, context });
       if (pendingResolution.handled) {
         const result = await handlePendingActionResolution({
           resolution: pendingResolution,
           context,
-          message,
-          source,
+          message: messageForBrain,
+          source: resolvedSource,
         });
-        return sendAiSuccess(res, 200, result, context, { message, source });
+        return sendAiSuccess(null, 200, result, context, { message: messageForBrain, source: resolvedSource });
       }
     }
 
-    const classification = classifyBrainMessage(message, context.brainChat);
+    const classification = classifyBrainMessage(messageForBrain, context.brainChat);
     context.brainClassification = classification;
     context.brainRoute = await safeRouteBrainMessage({
-      message,
-      source,
+      message: messageForBrain,
+      source: resolvedSource,
       brainChat: context.brainChat,
       brainContext: context.brainContext,
       classification,
       context,
     });
     context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
-      message,
+      message: messageForBrain,
       classification,
       brainContext: context.brainContext,
       brainChat: context.brainChat,
     });
-    const negativeWriteIntent = hasNegativeWriteIntent(message);
+    const negativeWriteIntent = hasNegativeWriteIntent(messageForBrain);
     context.brainVault = await safeLoadBrainVaultContext({
-      message,
+      message: messageForBrain,
       brainRoute: context.brainRoute,
       brainSkill: context.brainSkill,
       context,
     });
 
-    const commandDraftResult = await maybeHandleCommandDraft({ message, context, classification, source });
+    const commandDraftResult = await maybeHandleCommandDraft({ message: messageForBrain, context, classification, source: resolvedSource });
     if (commandDraftResult) {
-      return sendAiSuccess(res, 200, commandDraftResult, context, { message, source });
+      return sendAiSuccess(null, 200, commandDraftResult, context, { message: messageForBrain, source: resolvedSource });
     }
 
-    const pendingCandidateResult = await maybeCreatePendingActionCandidate({ message, context, classification });
+    const pendingCandidateResult = await maybeCreatePendingActionCandidate({ message: messageForBrain, context, classification });
     if (pendingCandidateResult) {
-      return sendAiSuccess(res, 200, pendingCandidateResult, context, { message, source });
+      return sendAiSuccess(null, 200, pendingCandidateResult, context, { message: messageForBrain, source: resolvedSource });
     }
 
     if (context.brainRoute.mode === 'memory_write') {
@@ -423,14 +471,14 @@ export default async function handler(req, res) {
       const plan = createReadOnlyBrainPlan('Remember an explicit durable user memory.');
       if (!command) {
         const answer = 'Tell me exactly what to remember, like: "remember my name is Ale."';
-        return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
       }
       const savedMemory = await persistExplicitBrainMemory({
         memory: command.memory,
         existingMemories: context.brainContext?.memories ?? [],
       });
       const answer = command.response || "Got it - I'll remember that.";
-      return sendAiSuccess(res, 200, {
+      return sendAiSuccess(null, 200, {
         answer,
         plan,
         actions: [],
@@ -445,7 +493,7 @@ export default async function handler(req, res) {
     if (context.brainRoute.mode === 'memory_recall') {
       const plan = createReadOnlyBrainPlan('Summarize active long-term memory.');
       const answer = formatMemoryRecallAnswer(context.brainContext);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
     if (context.brainRoute.mode === 'memory_forget') {
@@ -455,7 +503,7 @@ export default async function handler(req, res) {
         existingMemories: context.brainContext?.memories ?? [],
       });
       const answer = formatMemoryForgetAnswer(result);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
     if (isSaveToVaultRequest(message)) {
@@ -463,7 +511,7 @@ export default async function handler(req, res) {
       const latestAssistant = getLatestAssistantMessage(context.brainChat);
       if (!latestAssistant) {
         const answer = 'There is no previous Brain answer to save yet.';
-        return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, skipMemoryExtraction: true }, context, { message, source });
       }
       const document = await createVaultDocumentFromMessage({
         sourceMessageId: latestAssistant.id,
@@ -477,7 +525,7 @@ export default async function handler(req, res) {
         },
       });
       const answer = formatVaultSaveAnswer(document);
-      return sendAiSuccess(res, 200, {
+      return sendAiSuccess(null, 200, {
         answer,
         plan,
         actions: [{
@@ -499,13 +547,13 @@ export default async function handler(req, res) {
     if (context.brainRoute.mode === 'follow_up_transform') {
       const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
       const answer = await answerFollowUpTransform(message, context.brainChat);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
     if (context.brainRoute.mode === 'clarification' || context.brainRoute.needs_clarification) {
       const plan = createClarificationBrainPlan(context.brainRoute);
       const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-      return sendAiSuccess(res, 200, {
+      return sendAiSuccess(null, 200, {
         answer,
         plan: { ...plan, clarifyingQuestion: answer },
         actions: [],
@@ -519,14 +567,14 @@ export default async function handler(req, res) {
     if (context.brainRoute.mode === 'casual_chat') {
       const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
       const answer = await answerWithGemini(message, plan, null, [], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
     if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isFiniteRecurringCalendarRequest(message)) {
       const plan = createFiniteRecurringCalendarSyntheticPlan();
       if (!isBrainActionAllowedForPlan(message, plan, context)) {
         const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-        return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
       }
       const actions = [];
       let answer = '';
@@ -534,7 +582,7 @@ export default async function handler(req, res) {
         const writeResult = await executeFiniteRecurringCalendarPlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'finite_recurring_calendar_events', error });
         await safeLogAiError({ context, message, source, plan, writePath: 'finite_recurring_calendar_events', error, diagnostics });
@@ -547,11 +595,11 @@ export default async function handler(req, res) {
       const plan = createDayScheduleSyntheticPlan(message);
       if (!isBrainActionAllowedForPlan(message, plan, context)) {
         const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-        return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
       }
       try {
         const writeResult = await executeDaySchedulePlan(message, plan);
-        return sendAiSuccess(res, 200, {
+        return sendAiSuccess(null, 200, {
           answer: writeResult.answer,
           plan,
           actions: writeResult.actions,
@@ -570,7 +618,7 @@ export default async function handler(req, res) {
       const plan = createExplicitCalendarSyntheticPlan(message);
       if (!isBrainActionAllowedForPlan(message, plan, context)) {
         const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-        return sendAiSuccess(res, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
       }
       const actions = [];
       let answer = '';
@@ -578,7 +626,7 @@ export default async function handler(req, res) {
         const writeResult = await executeExplicitCalendarPlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events_preplanner', error });
         await safeLogAiError({ context, message, source, plan, writePath: 'explicit_calendar_events_preplanner', error, diagnostics });
@@ -615,7 +663,7 @@ export default async function handler(req, res) {
 
     if (plan.intent === 'clarify') {
       answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-      return sendAiSuccess(res, 200, { answer, plan, actions }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions }, context, { message, source });
     }
 
     if (dayScheduleRequest) {
@@ -623,7 +671,7 @@ export default async function handler(req, res) {
         const writeResult = await executeDaySchedulePlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'day_schedule_events', error });
         await safeLogAiError({ context, message, source, plan, writePath: 'day_schedule_events', error, diagnostics });
@@ -638,7 +686,7 @@ export default async function handler(req, res) {
         const writeResult = await executeExplicitCalendarPlan(message, plan);
         actions.push(...writeResult.actions);
         answer = writeResult.answer;
-        return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
+        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
       } catch (error) {
         const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events', error });
         await safeLogAiError({ context, message, source, plan, writePath: 'explicit_calendar_events', error, diagnostics });
@@ -655,12 +703,12 @@ export default async function handler(req, res) {
       answer = await answerWithGemini(message, plan, lifeosContext, [
         { type: 'blocked_destructive', message: 'Deletion and destructive updates are not enabled for the AI assistant yet.' },
       ], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
-      return sendAiSuccess(res, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
     }
 
     if (plan.intent === 'unsupported') {
       answer = 'I cannot do that in this version of the LifeOS assistant.';
-      return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
     }
 
     if (plan.needsWrite) {
@@ -685,10 +733,10 @@ export default async function handler(req, res) {
       answer = appendWorkoutReadOnlyConfirmation(answer, message);
     }
 
-    return sendAiSuccess(res, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
+    return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
   } catch (error) {
     await safePersistBrainError(context, error);
-    handleApiError(res, error, context);
+    throw error;
   }
 }
 
@@ -1080,6 +1128,45 @@ async function safeBeginBrainChat(options) {
     console.error('[LifeOS Brain chat persistence warning]', JSON.stringify({
       requestId: options?.requestId,
       stage: 'begin_chat',
+      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+    return null;
+  }
+}
+
+async function findExistingBrainResponseByClientRequestId(clientRequestId) {
+  if (!clientRequestId) return null;
+  try {
+    const result = await getSupabaseAdmin()
+      .from('ai_chat_messages')
+      .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
+      .eq('user_id', getActionUserId())
+      .eq('role', 'assistant')
+      .contains('metadata', { client_request_id: clientRequestId })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    const message = result.data;
+    if (!message?.id) return null;
+    const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata : {};
+    return {
+      answer: message.content || '',
+      plan: null,
+      actions: [],
+      contextSummary: null,
+      selected_skill: metadata.selected_skill ?? null,
+      brain_route: metadata.brain_route ?? null,
+      ...(metadata.vault_context?.retrieved_count ? { vault_context: metadata.vault_context } : {}),
+      client_request_id: clientRequestId,
+      thread_id: message.thread_id,
+      persisted_message: message,
+      idempotent_replay: true,
+    };
+  } catch (error) {
+    console.error('[LifeOS Brain idempotency warning]', JSON.stringify({
+      clientRequestId,
+      stage: 'existing_response_lookup',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
     }));
     return null;
@@ -1820,6 +1907,12 @@ function resolveAssistantSource(authInfo, body = {}) {
   return 'shortcut';
 }
 
+function normalizeAssistantSource(value) {
+  const requested = String(value ?? '').trim().toLowerCase();
+  if (['app', 'shortcut', 'api', 'whatsapp'].includes(requested)) return requested;
+  return 'api';
+}
+
 async function sendAiSuccess(res, status, data, context, logInfo) {
   const { skipMemoryExtraction = false, ...publicData } = data ?? {};
   const selectedSkill = publicData.selected_skill ?? serializeSkillSelection(context?.brainSkill);
@@ -1881,7 +1974,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
       actionType,
     });
   }
-  return sendSuccess(res, status, {
+  const payload = {
     ...responseData,
     ...(context?.clientRequestId ? { client_request_id: context.clientRequestId } : {}),
     ...(context?.brainChat?.thread?.id ? {
@@ -1889,7 +1982,9 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
       persisted_user_message: context.brainChat.userMessage ?? null,
       persisted_message: assistantMessage,
     } : {}),
-  }, context);
+  };
+  if (!res) return payload;
+  return sendSuccess(res, status, payload, context);
 }
 
 function buildResponseWorkingContext({ context, answer, plan, actions, message } = {}) {
@@ -3186,6 +3281,8 @@ async function proposeCalendarPlan(message, plan, lifeosContext, targetDate, bra
 async function answerWithGemini(message, plan, lifeosContext, actions, brainContext, brainChat, brainSkill, brainRoute, brainVault) {
   const prompt = JSON.stringify({
     userMessage: message,
+    responseMode: brainChat?.responseMode ?? null,
+    channelMetadata: sanitizeValue(brainChat?.channelMetadata ?? null),
     plan,
     lifeosContext,
     actions,

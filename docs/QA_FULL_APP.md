@@ -223,6 +223,19 @@ Run the focused checklists after the full flow:
 58. Confirm `save this as a workout report` still saves the previous assistant answer to Vault and creates no memo/calendar row.
 59. If diagnostics expose Vault `Re-embed`, confirm skipped/failed/pending or wrong-model chunks are repaired when Gemini embedding is available.
 
+## WhatsApp Inbound Integration
+
+1. With the deployed endpoint configured, send a valid WhatsApp bridge request to `/api/integrations/whatsapp/inbound`.
+2. Confirm the response includes a concise `reply`, `thread_id`, and `source: whatsapp`.
+3. Confirm WhatsApp messages persist in a backend Brain thread with `metadata.source = whatsapp`.
+4. Confirm the app Brain still opens to a fresh empty `New Chat` draft by default.
+5. Confirm the normal Brain UI still does not show old-thread selection or the WhatsApp backend thread.
+6. Confirm Brain mobile internal-scroll layout remains intact after WhatsApp messages exist in the backend.
+7. Confirm WhatsApp integration does not change Home UI, does not add Money/Finance, and does not add AI Recent Writes to Home.
+8. Confirm app Brain chat still works normally through `/api/ai/chat`.
+9. Confirm the WhatsApp flow supports pending-action and working-context behavior, such as nap -> `si` -> `aggiungilo anche al calendario`.
+10. Confirm wrong bridge secret returns `401` and unallowed sender returns `403`.
+
 ## Workout Advice Write Boundary
 
 1. Ask `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.

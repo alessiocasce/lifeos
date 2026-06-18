@@ -2,6 +2,16 @@
 
 Run this against the deployed URL after applying `supabase/schema.sql` to the target Supabase project and setting deployment environment variables.
 
+Core Brain/automation env vars include:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `LIFEOS_ACTION_USER_ID`
+- `LIFEOS_ACTION_TOKEN`
+- `GEMINI_API_KEY`
+- `LIFEOS_WHATSAPP_BRIDGE_SECRET`
+- `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
+
 ## Auth
 
 1. Open the deployed URL while signed out.
@@ -43,17 +53,17 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 ## Brain Persistence And Memory
 
 1. Open Assistant.
-2. Send a Brain message and refresh; confirm the thread and messages reload.
-3. Create a second thread and confirm both active threads remain available.
-4. Add an explicit durable memory and confirm it appears in `What LifeOS Knows`.
-5. Archive the memory and confirm it is no longer active AI context.
+2. Send a Brain message and refresh; confirm Brain opens a fresh New Chat draft while old messages remain persisted in Supabase/backend context.
+3. Confirm old-thread selection remains hidden in the normal UI for now.
+4. Add an explicit durable memory and confirm it can be recalled by asking Brain what it remembers or through diagnostics if exposed.
+5. Archive/forget the memory through supported controls or commands and confirm it is no longer active AI context.
 6. Verify RLS with a second user: threads, messages, memories, insights, Vault documents, and Vault chunks must remain user-scoped.
 7. Confirm `/api/ai/chat` persists app messages without changing Shortcut/API action behavior.
 8. Send `hello` and confirm `/api/ai/chat` returns selected skill `general_chat` and the assistant message shows a subtle skill badge.
 9. Send `What should we build next in LifeOS?` and confirm selected skill `product_builder` is returned/persisted without any LifeOS CRUD write.
 10. Send a workout-advice prompt and confirm selected skill `workout_coach` is returned while no calendar event is created.
 11. Inspect the persisted assistant row in `ai_chat_messages` and confirm `metadata.selected_skill` is present for new assistant messages.
-12. Save an assistant response to Brain Vault and confirm the document appears in the Vault panel.
+12. Ask a long eligible analysis and confirm an assistant response can auto-save to Brain Vault without a prominent manual save flow.
 13. With `GEMINI_API_KEY` configured, confirm chunks are embedded with `embedding_model = 'gemini-embedding-2'` and a related future Brain question can retrieve the saved report.
 14. If Gemini embedding fails or is rate-limited, confirm the Vault document still saves, chunks are marked failed/skipped, and Brain keeps working.
 
@@ -71,7 +81,8 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 4. Directly visit `/ai` and confirm Assistant opens.
 5. Confirm `/api/ai/chat` still returns API behavior and is not rewritten to the SPA.
 6. Confirm `/api/ai/actions` still returns API behavior and is not rewritten to the SPA.
-7. Confirm `/api/actions/expense`, `/api/actions/health`, and `/api/actions/calendar` still reach serverless API behavior.
+7. Confirm `/api/integrations/whatsapp/inbound` still returns API behavior and is not rewritten to the SPA.
+8. Confirm `/api/actions/expense`, `/api/actions/health`, and `/api/actions/calendar` still reach serverless API behavior.
 
 ## Sign Out / Sign In
 
@@ -130,6 +141,46 @@ Run this against the deployed URL after applying `supabase/schema.sql` to the ta
 11. Save a Vault report and confirm chunks are `ready` with `embedding_model = 'gemini-embedding-2'`.
 12. Run the Vault `Re-embed` repair action for old skipped, failed, pending, null-model, or non-Gemini chunks.
 13. Confirm Brain Skill Architecture still stores skill/route/Vault metadata in existing JSON metadata fields.
+
+## WhatsApp Bridge Deployment
+
+1. Set Vercel env vars:
+   - `LIFEOS_WHATSAPP_BRIDGE_SECRET`
+   - `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
+2. Redeploy after setting the env vars.
+3. On the local bridge machine, set:
+   - `LIFEOS_BASE_URL=https://lifeos-ruby-gamma.vercel.app`
+   - `LIFEOS_WHATSAPP_BRIDGE_SECRET` to the same shared secret as Vercel.
+   - `WHATSAPP_ALLOWED_SENDERS` to the sender id allowed locally.
+4. Do not add Supabase service keys, Gemini keys, database credentials, or frontend-only env values to the local bridge.
+5. Confirm `.env`, `.wwebjs_auth/`, and `.wwebjs_cache/` are not committed.
+6. Run the local bridge, scan the QR code, and keep the PC awake.
+7. If the PC sleeps or the process stops, confirm WhatsApp inbound stops until the bridge is restarted.
+8. For 24/7 operation, move the bridge to an always-on PC, Raspberry Pi, or VPS.
+9. Manually test the deployed endpoint:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \
+  -H "Content-Type: application/json" \
+  -H "x-lifeos-whatsapp-secret: YOUR_SECRET" \
+  -d '{
+    "from": "111780936298528@lid",
+    "message_id": "manual-test-1",
+    "body": "come stai?",
+    "type": "chat",
+    "is_group": false,
+    "source": "whatsapp"
+  }'
+```
+
+Expected:
+
+- `200`
+- JSON includes `reply`, `thread_id`, and `source: whatsapp`
+- Wrong secret returns `401`
+- Unallowed sender returns `403`
+- Non-text message types are rejected safely
+- Brain app UI still opens fresh New Chat and does not show the WhatsApp backend thread selector
 
 ## Known Non-Failing Build Warning
 

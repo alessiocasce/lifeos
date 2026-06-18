@@ -6,6 +6,11 @@ dist/
 .env
 .env.*
 !.env.example
+whatsapp-bridge/.env
+whatsapp-bridge/.wwebjs_auth/
+whatsapp-bridge/.wwebjs_cache/
+.wwebjs_auth/
+.wwebjs_cache/
 
 npm-debug.log*
 yarn-debug.log*
