@@ -2,6 +2,13 @@
 
 Run this after applying `supabase/schema.sql` to a Supabase project and setting `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
+## Pre-Release Automated Checks
+
+1. Run `npm run test:brain`.
+2. Confirm the Brain regression harness passes without live Gemini, WhatsApp, browser automation, or Supabase writes.
+3. Run `npm run build`.
+4. Run `git diff --check`.
+
 ## Auth Gate
 
 1. Open the app while signed out.

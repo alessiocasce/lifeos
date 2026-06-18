@@ -15,6 +15,27 @@ The in-app Assistant sends the signed-in user's Supabase access token to `/api/a
 
 Run the latest `supabase/schema.sql` before this checklist so Brain thread, message, memory, insight, and Vault tables/functions exist.
 
+## Brain Regression Harness
+
+Run before and after Brain, WhatsApp, pending-action, command-draft, working-context, Vault gate, or sleep/wake command changes:
+
+```bash
+npm run test:brain
+```
+
+Expected:
+
+- Runs locally without Vercel, browser automation, live WhatsApp, Gemini calls, or live Supabase writes.
+- Dirty `update_health_log` sleep-start shapes and command drafts normalize to `log_sleep_start`.
+- Stale `missing_fields` do not block confirmed executable pending actions.
+- `Si`, `Sì`, `ok`, `confermo`, `procedi`, `fallo`, `yes`, and `do it` normalize to confirmation.
+- Negative replies such as `non farlo`, `annulla`, `cancel`, and `don't` normalize to cancellation.
+- `?`, `cosa?`, `non ho capito`, and `what?` normalize to clarification.
+- Naps/pisolini do not coerce to sleep start.
+- Simple explicit writes skip Brain Vault retrieval.
+- Negative write intent wins over action wording.
+- Working Context exposes enough prior-subject date/time data for `aggiungilo anche al calendario`.
+
 ## Persistent Brain Chat
 
 1. Send a message in Brain and wait for the assistant response.
@@ -328,6 +349,8 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 17. Confirm all messages use the same backend WhatsApp thread, Working Context resolves the nap, and Brain does not ask for date/time again.
 
 ## Dirty Pending Action Normalization / Sleep Start
+
+Run `npm run test:brain` first; it covers the pure regression cases in this section. Then run the live/manual cases below for app or WhatsApp execution.
 
 1. Send app or WhatsApp message `Segna che sto andando a dormire ora alle 3.41am`.
 2. Confirm Brain either saves directly or asks one specific confirmation for sleep start at `03:41`.

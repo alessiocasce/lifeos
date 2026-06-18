@@ -422,6 +422,19 @@ Current behavior:
 - `x-lifeos-debug: true` on `/api/ai/chat` or `/api/integrations/whatsapp/inbound` includes `debug.brain_trace` in the JSON response. The WhatsApp reply string itself remains clean.
 - Unauthorized WhatsApp requests do not create Brain messages; debug logging for rejected endpoint checks is minimal and sanitized.
 
+## Brain Regression Harness
+
+Brain Regression Harness v1 adds a lightweight local test layer for deterministic Brain protocol behavior.
+
+Current behavior:
+
+- `npm run test:brain` runs `scripts/test-brain-regressions.js`.
+- Fixtures live in `tests/brain/fixtures.js`; notes live in `tests/brain/README.md`.
+- The harness uses pure utilities and does not require Vercel, browser automation, WhatsApp, Gemini, or live Supabase writes.
+- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, and Working Context referent date/time preservation.
+- Run it before and after changes to Brain, WhatsApp inbound, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
+- Live WhatsApp thread continuity, real tool execution, provider behavior, and RLS still require the manual QA checklists.
+
 ## WhatsApp Bridge Current Status
 
 WhatsApp Bridge v1 supports inbound trusted messages from a local `whatsapp-web.js` bridge into LifeOS Brain.

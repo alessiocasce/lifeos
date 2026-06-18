@@ -24,6 +24,7 @@ Before changing code, read `PROJECT_CONTEXT.md`. Treat it as the source of truth
 Run validation before finishing changes:
 
 ```bash
+npm run test:brain
 npm run build
 git diff --check
 ```
@@ -41,6 +42,7 @@ If behavior changes, update the relevant docs:
 - module-specific QA docs if present
 
 There is no full automated regression suite yet, so preserve and expand QA checklists.
+Brain has a focused deterministic harness; run `npm run test:brain` before and after Brain, WhatsApp, pending-action, command-draft, working-context, Vault gate, or sleep/wake command changes.
 
 ## Brain-Specific Rules
 

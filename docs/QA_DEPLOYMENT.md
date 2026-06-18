@@ -14,6 +14,14 @@ Core Brain/automation env vars include:
 - optional `LIFEOS_BRAIN_DEBUG`
 - optional `LIFEOS_BRAIN_DEBUG_FULL`
 
+The pure Brain regression harness does not require deployment env vars:
+
+```bash
+npm run test:brain
+```
+
+Run it locally before deployment when Brain, WhatsApp, pending-action, command-draft, working-context, Vault gate, or sleep/wake command behavior changed.
+
 ## Auth
 
 1. Open the deployed URL while signed out.
