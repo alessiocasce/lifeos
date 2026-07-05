@@ -1,15 +1,29 @@
 import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { findOrCreateWhatsappBrainThread, persistBrainAssistantMessage } from './brain.js';
-import { localDateTime, addDays } from './date.js';
+import { buildProactiveWorkingContextFromOutbox } from './brainProactiveReplies.js';
+import {
+  buildAckMetadataPatch,
+  buildClaimMetadataPatch,
+  buildReclaimMetadataPatch,
+  canAckOutboxMessage,
+  computeClaimRecovery,
+  computeRetryBackoff,
+  getClaimReclaimTimeoutMinutes,
+  nextOutboxStatusForAck,
+  normalizeAckStatus,
+} from './brainOutboxStateMachine.js';
 
 const MAX_OUTBOX_LIMIT = 10;
 const DEFAULT_OUTBOX_LIMIT = 3;
-const MAX_ATTEMPTS = 3;
 const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
-const DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES = 10;
-const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
-const PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS = 36;
+
+export {
+  buildProactiveWorkingContextFromOutbox,
+  computeClaimRecovery as classifyClaimedOutboxForRecovery,
+  computeRetryBackoff as getOutboxRetryDelayMinutes,
+  nextOutboxStatusForAck,
+};
 
 export async function enqueueOutboxMessage({
   userId = getActionUserId(),
@@ -74,8 +88,8 @@ export async function pollOutboxMessages({
   const client = getSupabaseAdmin();
   const now = new Date().toISOString();
 
-  await expireStaleOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
-  await reclaimStaleClaimedOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
+  const expiredCount = await expireStaleOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
+  const reclaimed = await reclaimStaleClaimedOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
 
   const due = await client
     .from('brain_outbox_messages')
@@ -99,11 +113,11 @@ export async function pollOutboxMessages({
         status: 'claimed',
         claimed_at: now,
         attempts: Number(row.attempts ?? 0) + 1,
-        ack_metadata: {
-          ...(row.ack_metadata && typeof row.ack_metadata === 'object' ? row.ack_metadata : {}),
-          bridge_id: optionalText(bridgeId, 120),
-          claimed_at: now,
-        },
+        ack_metadata: buildClaimMetadataPatch({
+          existingMetadata: row.ack_metadata,
+          bridgeId: optionalText(bridgeId, 120),
+          now,
+        }),
       })
       .eq('id', row.id)
       .eq('user_id', userId)
@@ -114,6 +128,14 @@ export async function pollOutboxMessages({
     if (update.data) claimed.push(update.data);
   }
 
+  Object.defineProperty(claimed, 'diagnostics', {
+    value: {
+      outbox_claimed_count: claimed.length,
+      outbox_reclaimed_count: reclaimed.length,
+      outbox_expired_count: expiredCount,
+    },
+    enumerable: false,
+  });
   return claimed;
 }
 
@@ -142,7 +164,7 @@ export async function reclaimStaleClaimedOutboxMessages({
 
   const reclaimed = [];
   for (const row of result.data ?? []) {
-    const decision = classifyClaimedOutboxForRecovery(row, nowDate);
+    const decision = computeClaimRecovery(row, nowDate);
     if (decision.action === 'keep') continue;
     const update = await client
       .from('brain_outbox_messages')
@@ -169,6 +191,7 @@ export async function ackOutboxMessage({
   userId = getActionUserId(),
 } = {}) {
   const safeStatus = normalizeAckStatus(status);
+  if (!safeStatus) throw new HttpError(400, 'status must be sent or failed.');
   const safeRecipient = requiredText(recipient, 'recipient', 180);
   const safeChannel = normalizeChannel(channel);
   const id = requiredText(messageId, 'message_id', 80);
@@ -248,331 +271,10 @@ export async function persistSentProactiveMessageToWhatsappThread({ userId = get
   });
 }
 
-export async function resolveProactiveMemoReply({ message, brainChat, context } = {}) {
-  const selection = selectProactiveMemoReplyTarget({ message, brainChat, now: new Date() });
-  if (selection.type === 'none') return null;
-  if (selection.type === 'stale') {
-    return buildProactiveClarificationResult({
-      language: selection.language,
-      answer: selection.language === 'it'
-        ? 'Questo promemoria sembra vecchio. Quale promemoria vuoi aggiornare?'
-        : 'This reminder looks old. Which reminder do you want to update?',
-      workingContext: selection.proactive?.working_context,
-      reason: 'Proactive memo reply was outside the valid reply window.',
-    });
-  }
-  if (selection.type === 'ambiguous') {
-    return buildProactiveClarificationResult({
-      language: selection.language,
-      answer: formatProactiveMemoDisambiguation(selection.candidates, selection.language),
-      workingContext: selection.candidates?.[0]?.working_context,
-      reason: 'Multiple recent proactive memo reminders matched a short reply.',
-    });
-  }
-  const proactive = selection.proactive;
-  const intent = selection.intent;
-
-  const memoId = proactive.source_id;
-  if (!memoId) {
-    return buildProactiveReplyResult({
-      answer: proactive.language === 'it'
-        ? 'Mi manca il riferimento al promemoria. Apri Memos per aggiornarlo.'
-        : 'I am missing the reminder reference. Open Memos to update it.',
-      actionType: 'proactive_memo_unresolved',
-      data: { reason: 'missing_source_id' },
-      workingContext: proactive.working_context,
-    });
-  }
-
-  if (intent.intent === 'explain') {
-    return {
-      answer: proactive.language === 'it'
-        ? `Te l'ho scritto per questo promemoria: ${proactive.title}.`
-        : `I texted you for this reminder: ${proactive.title}.`,
-      plan: createProactiveReadOnlyPlan('Explain proactive memo reminder.'),
-      actions: [],
-      contextSummary: null,
-      working_context: proactive.working_context,
-      skipMemoryExtraction: true,
-    };
-  }
-
-  if (intent.intent === 'done') {
-    const memo = await updateMemoStatus({ memoId, status: 'done' });
-    const answer = proactive.language === 'it'
-      ? `Fatto. Ho segnato il promemoria come completato: ${memo.title}.`
-      : `Done. I marked the reminder complete: ${memo.title}.`;
-    return buildProactiveReplyResult({
-      answer,
-      actionType: 'update_memo_status',
-      data: memo,
-      workingContext: buildMemoWorkingContext({ memo, language: proactive.language, actionType: 'update_memo_status', answer }),
-    });
-  }
-
-  if (intent.intent === 'cancel') {
-    const memo = await updateMemoStatus({ memoId, status: 'dismissed' });
-    const answer = proactive.language === 'it'
-      ? `Ricevuto. Ho annullato il promemoria: ${memo.title}.`
-      : `Got it. I dismissed the reminder: ${memo.title}.`;
-    await cancelQueuedOutboxForMemo({ memoId });
-    return buildProactiveReplyResult({
-      answer,
-      actionType: 'dismiss_memo',
-      data: memo,
-      workingContext: buildMemoWorkingContext({ memo, language: proactive.language, actionType: 'dismiss_memo', answer }),
-    });
-  }
-
-  if (intent.intent === 'snooze') {
-    const target = resolveSnoozeTarget({ intent, language: proactive.language });
-    if (!target) {
-      return {
-        answer: proactive.language === 'it'
-          ? 'Che orario devo usare per ricordartelo piu tardi?'
-          : 'What time should I use to remind you later?',
-        plan: createProactiveReadOnlyPlan('Ask for memo snooze time.'),
-        actions: [],
-        contextSummary: null,
-        working_context: proactive.working_context,
-        skipMemoryExtraction: true,
-      };
-    }
-    const memo = await rescheduleMemo({ memoId, memoDate: target.memo_date, memoTime: target.memo_time });
-    await cancelQueuedOutboxForMemo({ memoId });
-    const answer = proactive.language === 'it'
-      ? `Ok, te lo ricordo ${formatMemoDateTime(target.memo_date, target.memo_time)}.`
-      : `Ok, I will remind you ${formatMemoDateTime(target.memo_date, target.memo_time)}.`;
-    return buildProactiveReplyResult({
-      answer,
-      actionType: 'snooze_memo',
-      data: memo,
-      workingContext: buildMemoWorkingContext({ memo, language: proactive.language, actionType: 'snooze_memo', answer }),
-    });
-  }
-
-  return null;
-}
-
-export function extractLatestProactiveMemoMessage(brainChat) {
-  return extractRecentProactiveMemoMessages(brainChat, { now: new Date(), includeExpired: true })[0] ?? null;
-}
-
-export function extractRecentProactiveMemoMessages(brainChat, { now = new Date(), includeExpired = false } = {}) {
-  const history = Array.isArray(brainChat?.conversationHistory) ? brainChat.conversationHistory : [];
-  const nowDate = normalizeDate(now);
-  const messages = [];
-  for (let index = history.length - 1; index >= 0; index -= 1) {
-    const item = history[index];
-    if (item?.role !== 'assistant') continue;
-    const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
-    if (!metadata.proactive_message || metadata.expected_reply_type !== MEMO_REPLY_TYPE) continue;
-    const workingContext = metadata.working_context && typeof metadata.working_context === 'object' ? metadata.working_context : {};
-    const subject = workingContext.last_subject && typeof workingContext.last_subject === 'object' ? workingContext.last_subject : {};
-    const createdAt = normalizeDate(item.created_at ?? metadata.created_at ?? nowDate);
-    const message = {
-      message_id: item.id,
-      outbox_message_id: metadata.outbox_message_id,
-      source_id: metadata.source_id || subject.id,
-      source_type: metadata.source_type || subject.source_type || 'memo',
-      title: subject.label || metadata.memo_title || item.content || 'Memo',
-      language: workingContext.language === 'en' ? 'en' : 'it',
-      working_context: workingContext,
-      expected_reply_type: metadata.expected_reply_type,
-      rule_key: metadata.rule_key || subject.raw?.rule_key || null,
-      created_at: createdAt.toISOString(),
-      reply_window_hours: getProactiveReplyWindowHours(metadata.rule_key || subject.raw?.rule_key),
-      expired: isProactiveMemoReplyExpired({ createdAt, now: nowDate, ruleKey: metadata.rule_key || subject.raw?.rule_key }),
-    };
-    if (includeExpired || !message.expired) messages.push(message);
-  }
-  return messages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-}
-
-export function selectProactiveMemoReplyTarget({ message, brainChat, now = new Date() } = {}) {
-  const intent = normalizeProactiveMemoReply(message);
-  if (intent.intent === 'other') return { type: 'none', intent };
-  const all = extractRecentProactiveMemoMessages(brainChat, { now, includeExpired: true });
-  if (!all.length) return { type: 'none', intent };
-  const language = all[0]?.language === 'en' ? 'en' : 'it';
-  const active = dedupeProactiveMemoMessages(all.filter((item) => !item.expired));
-  if (!active.length) return { type: 'stale', intent, proactive: all[0], language };
-  if (active.length === 1) return { type: 'target', intent, proactive: active[0], language: active[0].language };
-
-  const explicitMatches = active.filter((item) => proactiveMemoTitleMatches(message, item.title));
-  if (explicitMatches.length === 1) {
-    return { type: 'target', intent, proactive: explicitMatches[0], language: explicitMatches[0].language };
-  }
-
-  return { type: 'ambiguous', intent, candidates: active.slice(0, 3), language };
-}
-
-export function normalizeProactiveMemoReply(message) {
-  const text = normalizeText(message);
-  if (!text) return { intent: 'other', confidence: 0, normalized: text };
-  if (/^(?:\?|cosa\??|perche\??|why\??|what\??|non ho capito\??|spiega|explain)$/.test(text)) {
-    return { intent: 'explain', confidence: 0.9, normalized: text };
-  }
-  if (/\b(?:annulla|cancella|non ricordarmelo|non farlo|dismiss|cancel|stop|forget it)\b/.test(text)) {
-    return { intent: 'cancel', confidence: 0.95, normalized: text };
-  }
-  if (/\b(?:snooze|rimanda|posticipa|piu tardi|piu avanti|tra \d+|fra \d+|later|tomorrow|domani|alle \d|at \d)\b/.test(text) || looksLikeTimeOnly(text)) {
-    return { intent: 'snooze', confidence: 0.86, normalized: text, minutes: extractSnoozeMinutes(text), time: extractTime(text), tomorrow: /\b(?:domani|tomorrow)\b/.test(text) };
-  }
-  if (/^(?:si|s|yes|y|ok|okay|fatto|done|completato|completa|completed|ce l ho|ce lho|gia fatto|gia|esatto)$/.test(text)
-    || /\b(?:fatto|done|completato|completed|mark done|segna completato)\b/.test(text)) {
-    return { intent: 'done', confidence: 0.9, normalized: text };
-  }
-  return { intent: 'other', confidence: 0.2, normalized: text };
-}
-
-export function nextOutboxStatusForAck({ currentAttempts = 0, ackStatus, expired = false } = {}) {
-  if (ackStatus === 'sent') return { status: 'sent', retry: false };
-  if (expired) return { status: 'expired', retry: false };
-  if (Number(currentAttempts ?? 0) < MAX_ATTEMPTS) return { status: 'queued', retry: true };
-  return { status: 'failed', retry: false };
-}
-
-export function getOutboxRetryDelayMinutes(currentAttempts = 0) {
-  const attempts = Math.max(0, Math.trunc(Number(currentAttempts)) || 0);
-  if (attempts <= 1) return 2;
-  if (attempts === 2) return 5;
-  return 0;
-}
-
-export function classifyClaimedOutboxForRecovery(row, now = new Date()) {
-  const nowDate = normalizeDate(now);
-  if (!row || row.status !== 'claimed' || row.sent_at) return { action: 'keep', reason: 'not_reclaimable' };
-  if (row.expires_at && new Date(row.expires_at) <= nowDate) return { action: 'expire', reason: 'expired' };
-  if (Number(row.attempts ?? 0) >= MAX_ATTEMPTS) return { action: 'fail', reason: 'max_attempts' };
-  return { action: 'requeue', reason: 'stale_claim', scheduled_for: nowDate.toISOString() };
-}
-
-export function buildProactiveWorkingContextFromOutbox(outboxMessage) {
-  const metadata = outboxMessage?.metadata && typeof outboxMessage.metadata === 'object' ? outboxMessage.metadata : {};
-  const memo = metadata.memo && typeof metadata.memo === 'object' ? metadata.memo : {};
-  const language = metadata.language === 'en' ? 'en' : 'it';
-  return {
-    language,
-    last_subject: {
-      id: outboxMessage.source_id || memo.id || null,
-      type: 'memo',
-      label: memo.title || outboxMessage.body || 'Memo',
-      date: memo.memo_date || null,
-      start_time: memo.memo_time || null,
-      source: 'proactive_whatsapp_memo',
-      source_type: outboxMessage.source_type || 'memo',
-      source_id: outboxMessage.source_id || memo.id || null,
-      due_at: metadata.due_at || outboxMessage.scheduled_for || null,
-      created_by_last_action: false,
-      confidence: 0.95,
-      raw: {
-        outbox_message_id: outboxMessage.id,
-        rule_key: outboxMessage.rule_key,
-        expected_reply_type: metadata.expected_reply_type || MEMO_REPLY_TYPE,
-      },
-    },
-    last_action_result: null,
-  };
-}
-
-function buildProactiveReplyResult({ answer, actionType, data, workingContext }) {
-  return {
-    answer,
-    plan: {
-      intent: actionType,
-      needsRead: false,
-      needsWrite: true,
-      riskLevel: 'low',
-      args: { id: data?.id },
-      reasoning: 'Resolved contextual proactive memo reply.',
-    },
-    actions: [{
-      type: actionType,
-      data: {
-        ...data,
-        sourcePath: 'proactive_whatsapp_reply',
-      },
-    }],
-    contextSummary: null,
-    working_context: workingContext,
-    skipMemoryExtraction: true,
-  };
-}
-
-function createProactiveReadOnlyPlan(reason) {
-  return {
-    intent: 'clarify',
-    needsRead: false,
-    needsWrite: false,
-    riskLevel: 'low',
-    args: {},
-    reasoning: reason,
-  };
-}
-
-function buildProactiveClarificationResult({ answer, workingContext, reason }) {
-  return {
-    answer,
-    plan: createProactiveReadOnlyPlan(reason),
-    actions: [],
-    contextSummary: null,
-    working_context: workingContext ?? null,
-    skipMemoryExtraction: true,
-  };
-}
-
-function formatProactiveMemoDisambiguation(candidates = [], language = 'it') {
-  const labels = candidates
-    .slice(0, 3)
-    .map((item) => item.title)
-    .filter(Boolean)
-    .map((title) => title.length > 70 ? `${title.slice(0, 67)}...` : title);
-  const joined = labels.length ? labels.join(', ') : (language === 'en' ? 'the recent reminders' : 'i promemoria recenti');
-  return language === 'en'
-    ? `Which reminder do you mean? ${joined}.`
-    : `A quale promemoria ti riferisci? ${joined}.`;
-}
-
-function getProactiveReplyWindowHours(ruleKey) {
-  return ruleKey === 'memo_overdue_followup'
-    ? PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS
-    : PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS;
-}
-
-function isProactiveMemoReplyExpired({ createdAt, now, ruleKey }) {
-  const created = normalizeDate(createdAt);
-  const nowDate = normalizeDate(now);
-  const windowMs = getProactiveReplyWindowHours(ruleKey) * 60 * 60000;
-  return nowDate.getTime() - created.getTime() > windowMs;
-}
-
-function dedupeProactiveMemoMessages(messages) {
-  const seen = new Set();
-  const unique = [];
-  for (const message of messages) {
-    const key = message.source_id || message.outbox_message_id || message.message_id;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(message);
-  }
-  return unique;
-}
-
-function proactiveMemoTitleMatches(message, title) {
-  const text = normalizeText(message);
-  const tokens = normalizeText(title)
-    .split(' ')
-    .filter((token) => token.length >= 4);
-  if (!text || !tokens.length) return false;
-  return tokens.some((token) => text.includes(token));
-}
-
 async function markOutboxSent({ client, row, metadata = {} }) {
-  if (row.status === 'sent') return row;
-  if (row.status !== 'claimed') {
-    throw new HttpError(409, `Cannot mark outbox message as sent from status ${row.status}.`);
-  }
+  const permission = canAckOutboxMessage({ row, ackStatus: 'sent' });
+  if (permission.idempotent) return row;
+  if (!permission.allowed) throw new HttpError(409, `Cannot mark outbox message as sent from status ${row.status}.`);
   const now = new Date().toISOString();
   const update = await client
     .from('brain_outbox_messages')
@@ -581,11 +283,12 @@ async function markOutboxSent({ client, row, metadata = {} }) {
       sent_at: row.sent_at || now,
       failed_at: null,
       last_error: null,
-      ack_metadata: {
-        ...(row.ack_metadata && typeof row.ack_metadata === 'object' ? row.ack_metadata : {}),
-        ...compactMetadata(metadata),
-        acked_at: now,
-      },
+      ack_metadata: buildAckMetadataPatch({
+        existingMetadata: row.ack_metadata,
+        metadata: compactMetadata(metadata),
+        now,
+        transition: permission.transition,
+      }),
     })
     .eq('id', row.id)
     .eq('user_id', row.user_id)
@@ -597,14 +300,13 @@ async function markOutboxSent({ client, row, metadata = {} }) {
 }
 
 async function markOutboxFailed({ client, row, error, metadata = {} }) {
-  if (row.status !== 'claimed') {
-    throw new HttpError(409, `Cannot mark outbox message as failed from status ${row.status}.`);
-  }
+  const permission = canAckOutboxMessage({ row, ackStatus: 'failed' });
+  if (!permission.allowed) throw new HttpError(409, `Cannot mark outbox message as failed from status ${row.status}.`);
   const nowDate = new Date();
   const now = nowDate.toISOString();
   const expired = Boolean(row.expires_at && new Date(row.expires_at) <= nowDate);
   const next = nextOutboxStatusForAck({ currentAttempts: row.attempts, ackStatus: 'failed', expired });
-  const retryDelay = next.retry ? getOutboxRetryDelayMinutes(row.attempts) : 0;
+  const retryDelay = next.retry ? computeRetryBackoff(row.attempts) : 0;
   const retryAfter = next.retry ? new Date(nowDate.getTime() + retryDelay * 60000).toISOString() : null;
   const update = await client
     .from('brain_outbox_messages')
@@ -614,14 +316,15 @@ async function markOutboxFailed({ client, row, error, metadata = {} }) {
       scheduled_for: retryAfter || row.scheduled_for,
       failed_at: next.status === 'failed' ? now : null,
       last_error: optionalText(error, 500),
-      ack_metadata: {
-        ...(row.ack_metadata && typeof row.ack_metadata === 'object' ? row.ack_metadata : {}),
-        ...compactMetadata(metadata),
-        last_failed_at: now,
+      ack_metadata: buildAckMetadataPatch({
+        existingMetadata: row.ack_metadata,
+        metadata: compactMetadata(metadata),
+        now,
+        transition: `claimed->${next.status}`,
         retry: next.retry,
-        retry_after: retryAfter,
-        retry_delay_minutes: retryDelay || null,
-      },
+        retryAfter,
+        retryDelayMinutes: retryDelay,
+      }),
     })
     .eq('id', row.id)
     .eq('user_id', row.user_id)
@@ -641,18 +344,20 @@ async function expireStaleOutboxMessages({ client, userId, recipient, channel, n
     .eq('channel', channel)
     .eq('status', 'queued')
     .not('expires_at', 'is', null)
-    .lte('expires_at', now);
+    .lte('expires_at', now)
+    .select('id');
   if (result.error) throw result.error;
+  return result.data?.length ?? 0;
 }
 
 function buildClaimRecoveryUpdate(row, decision, nowDate) {
   const nowIso = nowDate.toISOString();
-  const baseMetadata = {
-    ...(row.ack_metadata && typeof row.ack_metadata === 'object' ? row.ack_metadata : {}),
-    reclaimed_at: nowIso,
-    reclaimed_reason: decision.reason,
-    prior_claimed_at: row.claimed_at ?? null,
-  };
+  const baseMetadata = buildReclaimMetadataPatch({
+    existingMetadata: row.ack_metadata,
+    row,
+    decision,
+    now: nowDate,
+  });
   if (decision.action === 'expire') {
     return {
       status: 'expired',
@@ -677,123 +382,8 @@ function buildClaimRecoveryUpdate(row, decision, nowDate) {
   };
 }
 
-async function updateMemoStatus({ memoId, status }) {
-  const result = await getSupabaseAdmin()
-    .from('memos')
-    .update({ status })
-    .eq('id', memoId)
-    .eq('user_id', getActionUserId())
-    .select('id, title, memo_date, memo_time, status, notes, updated_at')
-    .single();
-  if (result.error) throw result.error;
-  return result.data;
-}
-
-async function rescheduleMemo({ memoId, memoDate, memoTime }) {
-  const result = await getSupabaseAdmin()
-    .from('memos')
-    .update({ memo_date: memoDate, memo_time: memoTime, status: 'open' })
-    .eq('id', memoId)
-    .eq('user_id', getActionUserId())
-    .select('id, title, memo_date, memo_time, status, notes, updated_at')
-    .single();
-  if (result.error) throw result.error;
-  return result.data;
-}
-
-async function cancelQueuedOutboxForMemo({ memoId }) {
-  const result = await getSupabaseAdmin()
-    .from('brain_outbox_messages')
-    .update({ status: 'cancelled' })
-    .eq('user_id', getActionUserId())
-    .eq('source_type', 'memo')
-    .eq('source_id', memoId)
-    .in('status', ['queued', 'claimed']);
-  if (result.error) throw result.error;
-}
-
-function resolveSnoozeTarget({ intent, language }) {
-  if (intent.minutes) {
-    const local = localDateTime(Number(intent.minutes));
-    return { memo_date: local.date, memo_time: local.time };
-  }
-  if (intent.time) {
-    const nowLocal = localDateTime(0);
-    let date = intent.tomorrow ? addDays(nowLocal.date, 1) : nowLocal.date;
-    if (!intent.tomorrow && intent.time <= nowLocal.time) date = addDays(nowLocal.date, 1);
-    return { memo_date: date, memo_time: intent.time };
-  }
-  if (intent.tomorrow) {
-    return { memo_date: addDays(localDateTime(0).date, 1), memo_time: '09:00' };
-  }
-  if (intent.normalized.includes('piu tardi') || intent.normalized.includes('later')) {
-    const local = localDateTime(60);
-    return { memo_date: local.date, memo_time: local.time };
-  }
-  return language === 'it' ? null : null;
-}
-
-function buildMemoWorkingContext({ memo, language, actionType, answer }) {
-  return {
-    language: language === 'en' ? 'en' : 'it',
-    last_subject: {
-      id: memo.id,
-      type: 'memo',
-      label: memo.title,
-      date: memo.memo_date,
-      start_time: memo.memo_time,
-      source: 'memo',
-      created_by_last_action: true,
-      confidence: 0.95,
-      raw: { status: memo.status },
-    },
-    last_action_result: {
-      action_type: actionType,
-      status: 'success',
-      summary: answer,
-      args: { id: memo.id },
-      result: { id: memo.id, status: memo.status, memo_date: memo.memo_date, memo_time: memo.memo_time },
-      created_at: new Date().toISOString(),
-    },
-  };
-}
-
-function formatMemoDateTime(date, time) {
-  return [date, time].filter(Boolean).join(' alle ');
-}
-
-function extractSnoozeMinutes(text) {
-  const match = text.match(/\b(?:snooze|tra|fra|in|later)\s+(\d{1,3})\b/) || text.match(/\b(\d{1,3})\s*(?:m|min|minutes|minuti)\b/);
-  if (!match) return null;
-  const value = Number(match[1]);
-  return Number.isInteger(value) && value > 0 && value <= 720 ? value : null;
-}
-
-function extractTime(text) {
-  const match = text.match(/\b(?:alle|at)?\s*(\d{1,2})(?::|\.| )?(\d{2})?\s*(am|pm)?\b/);
-  if (!match) return null;
-  let hours = Number(match[1]);
-  const minutes = Number(match[2] ?? 0);
-  const suffix = match[3];
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || minutes < 0 || minutes > 59) return null;
-  if (suffix === 'pm' && hours < 12) hours += 12;
-  if (suffix === 'am' && hours === 12) hours = 0;
-  if (hours < 0 || hours > 23) return null;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
-function looksLikeTimeOnly(text) {
-  return /^(?:alle\s+|at\s+)?\d{1,2}(?::|\.| )?\d{0,2}\s*(?:am|pm)?$/.test(text);
-}
-
 function outboxSelect() {
   return 'id, user_id, channel, recipient, body, status, priority, rule_key, source_type, source_id, idempotency_key, scheduled_for, expires_at, claimed_at, sent_at, failed_at, attempts, last_error, ack_metadata, metadata, created_at, updated_at';
-}
-
-function normalizeAckStatus(value) {
-  const text = String(value ?? '').trim().toLowerCase();
-  if (text === 'sent' || text === 'failed') return text;
-  throw new HttpError(400, 'status must be sent or failed.');
 }
 
 function normalizeChannel(value) {
@@ -816,12 +406,6 @@ function normalizeDateTime(value, field) {
 function normalizeDate(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function getClaimReclaimTimeoutMinutes() {
-  const value = Number(process.env.LIFEOS_OUTBOX_CLAIM_TIMEOUT_MINUTES ?? DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES);
-  if (!Number.isFinite(value)) return DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES;
-  return Math.min(60, Math.max(1, Math.trunc(value)));
 }
 
 function requiredText(value, field, max = 1000) {
@@ -853,14 +437,4 @@ function sanitizeObject(value, depth) {
     }));
   }
   return String(value).slice(0, 500);
-}
-
-function normalizeText(value) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s:?'.]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }

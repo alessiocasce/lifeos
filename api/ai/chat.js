@@ -59,7 +59,7 @@ import {
   serializeVaultContextForMetadata,
 } from '../_utils/brainVault.js';
 import { shouldRetrieveBrainVault } from '../_utils/brainVaultEligibility.js';
-import { resolveProactiveMemoReply } from '../_utils/brainOutbox.js';
+import { resolveProactiveWhatsappReply } from '../_utils/brainProactiveReplies.js';
 import {
   addBrainTraceStep,
   createBrainTrace,
@@ -530,19 +530,13 @@ export async function handleBrainChatMessage({
       }
     }
 
-    if (resolvedSource === 'whatsapp') {
-      const proactiveResult = await resolveProactiveMemoReply({
-        message: messageForBrain,
-        brainChat: context.brainChat,
-        context,
-      });
-      addBrainTraceStep(context.brainTrace, 'proactive_reply_checked', {
-        handled: Boolean(proactiveResult),
-        action_type: proactiveResult?.actions?.[0]?.type ?? null,
-      });
-      if (proactiveResult) {
-        return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
-      }
+    const proactiveResult = await maybeResolveProactiveWhatsappReply({
+      message: messageForBrain,
+      resolvedSource,
+      context,
+    });
+    if (proactiveResult) {
+      return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
     }
 
     const classification = classifyBrainMessage(messageForBrain, context.brainChat);
@@ -924,6 +918,29 @@ async function handlePendingActionResolution({ resolution, context, message, sou
     contextSummary: null,
     skipMemoryExtraction: true,
   };
+}
+
+async function maybeResolveProactiveWhatsappReply({ message, resolvedSource, context }) {
+  if (resolvedSource !== 'whatsapp') return null;
+  const proactiveResult = await resolveProactiveWhatsappReply({
+    message,
+    brainChat: context.brainChat,
+    context,
+  });
+  const trace = proactiveResult?.proactive_reply_trace ?? {};
+  const traceData = {
+    proactive_reply_checked: true,
+    proactive_reply_handled: Boolean(proactiveResult),
+    proactive_reply_reason: trace.reason ?? proactiveResult?.plan?.reasoning ?? null,
+    proactive_reply_action_type: trace.action_type ?? proactiveResult?.actions?.[0]?.type ?? null,
+    proactive_reply_ambiguous: Boolean(trace.ambiguous),
+    proactive_reply_stale: Boolean(trace.stale),
+  };
+  context.brainTrace.proactive_reply = traceData;
+  addBrainTraceStep(context.brainTrace, 'proactive_reply_checked', traceData);
+  if (!proactiveResult) return null;
+  const { proactive_reply_trace: _internalTrace, ...publicResult } = proactiveResult;
+  return publicResult;
 }
 
 async function maybeCreatePendingActionCandidate({ message, context, classification }) {

@@ -447,7 +447,7 @@ Current behavior:
 - `npm run test:brain` runs `scripts/test-brain-regressions.js`.
 - Fixtures live in `tests/brain/fixtures.js`; notes live in `tests/brain/README.md`.
 - The harness uses pure utilities and does not require Vercel, browser automation, WhatsApp, Gemini, or live Supabase writes.
-- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, and pure Proactive WhatsApp memo outbox behavior.
+- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
 - Run it before and after changes to Brain, WhatsApp inbound/outbox, proactive memo rules, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
 - Live WhatsApp thread continuity, real tool execution, provider behavior, and RLS still require the manual QA checklists.
 
@@ -482,10 +482,14 @@ Current behavior:
 - The local bridge calls one multiplexed endpoint, `POST /api/integrations/whatsapp/outbox`, with `action=evaluate`, then `action=poll`, sends returned messages through WhatsApp, and calls the same endpoint with `action=ack`.
 - The outbox endpoint is intentionally consolidated into one serverless function to stay under Vercel Hobby function limits. Legacy `/outbox/evaluate`, `/outbox/poll`, and `/outbox/ack` paths are rewrite-compatible when `vercel.json` is active, but new bridge code should use the combined endpoint.
 - Outbox rows are idempotent by `user_id + idempotency_key`; due messages move `queued -> claimed -> sent`, and failed sends retry up to a small capped attempt count before `failed`.
+- Outbox lifecycle decisions are centralized in `api/_utils/brainOutboxStateMachine.js`; Supabase reads/writes stay in `api/_utils/brainOutbox.js`.
 - Polling reclaims stale `claimed` rows after a short claim timeout so bridge crashes after poll do not permanently hide reminders. Expired claimed rows become `expired`, and claimed rows over the attempt cap become `failed`.
 - ACK handling is state-aware: normal sent ACKs require `claimed -> sent`, repeated `sent -> sent` is idempotent, and queued/expired/failed/cancelled rows are not silently marked sent. Failed ACKs requeue with short backoff while attempts remain.
 - Successful ack persists the proactive WhatsApp text as an assistant message in the same dedicated WhatsApp Brain thread, with `metadata.proactive_message = true` and `working_context.last_subject` pointing to the memo.
+- Proactive reply resolution lives in `api/_utils/brainProactiveReplies.js` behind `resolveProactiveWhatsappReply()`. It currently routes only memo replies but is structured for future proactive families.
 - Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when recent WhatsApp context contains one unambiguous proactive memo reminder inside the reply window. Stale or multiple recent reminders ask clarification instead of mutating a memo.
+- `api/_utils/brainProactiveRules.js` exposes a small `proactiveRuleRegistry` and candidate validator so future rule families can plug in without changing the evaluator contract.
+- `docs/WHATSAPP_PROACTIVE_ARCHITECTURE.md` documents the outbox lifecycle, reply resolution rules, and future extension points.
 - Proactive outbound messages do not directly modify LifeOS records except outbox status. Memo completion, dismissal, or snooze happens only after a user reply.
 - V1A intentionally excludes Morning Briefing, calendar completion checks, workout/project nudges, sleep/wake missing nudges, finance nudges, PWA push, AI-generated coaching, and paid WhatsApp providers.
 

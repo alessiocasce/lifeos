@@ -337,7 +337,7 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 
 ## Proactive WhatsApp Memo Outbox
 
-Run `npm run test:brain` first. It covers pure candidate generation, idempotency keys, stale claimed outbox recovery classification, outbox status transitions/backoff, proactive memo reply intent normalization, proactive reply target selection, and proactive working-context metadata.
+Run `npm run test:brain` first. It covers pure candidate generation, idempotency keys, the outbox state-machine helper, stale claimed outbox recovery classification, outbox status transitions/backoff, proactive memo reply intent normalization, proactive reply target selection in `brainProactiveReplies`, proactive rule candidate validation, and proactive working-context metadata.
 
 Manual deployed QA:
 

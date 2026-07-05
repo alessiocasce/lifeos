@@ -11,6 +11,13 @@ const OVERDUE_GRACE_MINUTES = 60;
 const OVERDUE_EXPIRY_HOURS = 36;
 const DATE_ONLY_CHECK_TIME = '09:00';
 
+export const proactiveRuleRegistry = [
+  {
+    family: 'memo',
+    buildCandidates: buildMemoProactiveCandidates,
+  },
+];
+
 export async function evaluateProactiveCandidates({ userId = getActionUserId(), now = new Date(), recipient } = {}) {
   const client = getSupabaseAdmin();
   const nowDate = normalizeDate(now);
@@ -32,18 +39,43 @@ export async function evaluateProactiveCandidates({ userId = getActionUserId(), 
   const candidates = [];
   const skipped = [];
   for (const memo of memosResult.data ?? []) {
-    const memoCandidates = buildMemoProactiveCandidates({ memo, now: nowDate, recipient });
-    for (const candidate of memoCandidates) {
-      const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate });
-      if (suppression.suppressed) {
-        skipped.push({ candidate, reason: suppression.reason });
-      } else {
-        candidates.push(candidate);
+    for (const rule of proactiveRuleRegistry) {
+      const ruleCandidates = rule.family === 'memo'
+        ? rule.buildCandidates({ memo, now: nowDate, recipient })
+        : [];
+      for (const candidate of ruleCandidates) {
+        const validation = validateProactiveCandidate(candidate);
+        if (!validation.ok) {
+          skipped.push({ candidate, reason: validation.reason });
+          continue;
+        }
+        const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate });
+        if (suppression.suppressed) {
+          skipped.push({ candidate, reason: suppression.reason });
+        } else {
+          candidates.push(candidate);
+        }
       }
     }
   }
 
   return { candidates, skipped };
+}
+
+export function validateProactiveCandidate(candidate) {
+  if (!candidate || typeof candidate !== 'object') return { ok: false, reason: 'invalid_candidate' };
+  const required = ['channel', 'recipient', 'body', 'priority', 'rule_key', 'source_type', 'source_id', 'idempotency_key', 'scheduled_for'];
+  for (const field of required) {
+    if (!cleanText(candidate[field], field === 'body' ? 1500 : 240)) return { ok: false, reason: `missing_${field}` };
+  }
+  if (candidate.channel !== 'whatsapp') return { ok: false, reason: 'unsupported_channel' };
+  if (!['low', 'normal', 'high'].includes(candidate.priority)) return { ok: false, reason: 'invalid_priority' };
+  if (Number.isNaN(new Date(candidate.scheduled_for).getTime())) return { ok: false, reason: 'invalid_scheduled_for' };
+  if (candidate.expires_at && Number.isNaN(new Date(candidate.expires_at).getTime())) return { ok: false, reason: 'invalid_expires_at' };
+  if (!candidate.metadata || typeof candidate.metadata !== 'object' || Array.isArray(candidate.metadata)) {
+    return { ok: false, reason: 'invalid_metadata' };
+  }
+  return { ok: true, reason: null };
 }
 
 export function buildMemoProactiveCandidates({ memo, now = new Date(), recipient } = {}) {

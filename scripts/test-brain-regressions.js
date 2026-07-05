@@ -15,18 +15,22 @@ import { validateBrainCommandDraft } from '../api/_utils/brainCommandDraft.js';
 import { buildBrainWorkingContext } from '../api/_utils/brainWorkingContext.js';
 import { shouldRetrieveBrainVault } from '../api/_utils/brainVaultEligibility.js';
 import {
-  buildProactiveWorkingContextFromOutbox,
-  classifyClaimedOutboxForRecovery,
-  getOutboxRetryDelayMinutes,
+  canAckOutboxMessage,
+  computeClaimRecovery,
+  computeRetryBackoff,
   nextOutboxStatusForAck,
+} from '../api/_utils/brainOutboxStateMachine.js';
+import {
+  buildProactiveWorkingContextFromOutbox,
   normalizeProactiveMemoReply,
   selectProactiveMemoReplyTarget,
-} from '../api/_utils/brainOutbox.js';
+} from '../api/_utils/brainProactiveReplies.js';
 import {
   buildMemoIdempotencyKey,
   buildMemoProactiveCandidates,
   isWithinQuietHours,
   localDateTimeToUtcDate,
+  validateProactiveCandidate,
 } from '../api/_utils/brainProactiveRules.js';
 import { hasNegativeWriteIntent } from '../api/ai/chat.js';
 import {
@@ -340,6 +344,8 @@ test('timed memo proactive candidate uses stable idempotency and WhatsApp body',
   assert.equal(due.source_id, proactiveMemoFixtures.timedMemo.id);
   assert.equal(due.metadata.expected_reply_type, 'memo_done_snooze_cancel');
   assert.match(due.body, /Promemoria|Reminder/);
+  assert.deepEqual(validateProactiveCandidate(due), { ok: true, reason: null });
+  assert.equal(validateProactiveCandidate({ ...due, body: '' }).ok, false);
 });
 
 test('closed memo and future date-only memo do not create immediate proactive candidates', () => {
@@ -378,14 +384,29 @@ test('outbox ack status transitions retry then fail', () => {
   assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 3, ackStatus: 'failed', expired: false }), { status: 'failed', retry: false });
   assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'sent', expired: false }), { status: 'sent', retry: false });
   assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'failed', expired: true }), { status: 'expired', retry: false });
-  assert.equal(getOutboxRetryDelayMinutes(1), 2);
-  assert.equal(getOutboxRetryDelayMinutes(2), 5);
-  assert.equal(getOutboxRetryDelayMinutes(3), 0);
+  assert.equal(computeRetryBackoff(1), 2);
+  assert.equal(computeRetryBackoff(2), 5);
+  assert.equal(computeRetryBackoff(3), 0);
+});
+
+test('outbox state machine allows only safe ACK transitions', () => {
+  assert.deepEqual(canAckOutboxMessage({ row: { id: '1', status: 'claimed' }, ackStatus: 'sent' }), {
+    allowed: true,
+    reason: null,
+    idempotent: false,
+    transition: 'claimed->sent',
+  });
+  assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'sent' }, ackStatus: 'sent' }).idempotent, true);
+  assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'queued' }, ackStatus: 'sent' }).allowed, false);
+  assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'expired' }, ackStatus: 'sent' }).allowed, false);
+  assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'cancelled' }, ackStatus: 'sent' }).allowed, false);
+  assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'failed' }, ackStatus: 'sent' }).allowed, false);
+  assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'claimed' }, ackStatus: 'failed' }).allowed, true);
 });
 
 test('claimed outbox recovery classifies stale, expired, and max-attempt rows', () => {
   const now = new Date('2026-06-18T10:00:00.000Z');
-  assert.deepEqual(classifyClaimedOutboxForRecovery({
+  assert.deepEqual(computeClaimRecovery({
     status: 'claimed',
     attempts: 1,
     sent_at: null,
@@ -395,19 +416,19 @@ test('claimed outbox recovery classifies stale, expired, and max-attempt rows', 
     reason: 'stale_claim',
     scheduled_for: '2026-06-18T10:00:00.000Z',
   });
-  assert.deepEqual(classifyClaimedOutboxForRecovery({
+  assert.deepEqual(computeClaimRecovery({
     status: 'claimed',
     attempts: 1,
     sent_at: null,
     expires_at: '2026-06-18T09:59:00.000Z',
   }, now), { action: 'expire', reason: 'expired' });
-  assert.deepEqual(classifyClaimedOutboxForRecovery({
+  assert.deepEqual(computeClaimRecovery({
     status: 'claimed',
     attempts: 3,
     sent_at: null,
     expires_at: '2026-06-18T11:00:00.000Z',
   }, now), { action: 'fail', reason: 'max_attempts' });
-  assert.deepEqual(classifyClaimedOutboxForRecovery({
+  assert.deepEqual(computeClaimRecovery({
     status: 'sent',
     attempts: 1,
     sent_at: '2026-06-18T09:55:00.000Z',
@@ -544,6 +565,32 @@ test('clean proactive snooze and cancel replies select the recent reminder', () 
     });
     assert.equal(selection.type, 'target', `${message}: ${compact(selection)}`);
   }
+});
+
+test('proactive explain targets the reminder and random messages fall through', () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-1',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const explain = selectProactiveMemoReplyTarget({
+    message: '?',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(explain.type, 'target', compact(explain));
+  assert.equal(explain.intent.intent, 'explain');
+
+  const random = selectProactiveMemoReplyTarget({
+    message: 'quanto volume ho fatto in palestra?',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(random.type, 'none', compact(random));
 });
 
 function test(name, fn) {

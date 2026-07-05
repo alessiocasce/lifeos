@@ -252,6 +252,8 @@ Run the focused checklists after the full flow:
 
 ## Proactive WhatsApp Memo Outbox
 
+Before live QA, run `npm run test:brain` and confirm the outbox state machine, proactive reply resolver, and proactive candidate validator checks pass.
+
 1. Run the latest `supabase/schema.sql` and confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
 2. Create a timed open memo due soon.
 3. Trigger `/api/integrations/whatsapp/outbox` with `action=evaluate`, then `action=poll`, then `action=ack` with valid secret and allowed recipient.

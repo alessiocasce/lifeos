@@ -111,6 +111,9 @@ async function handlePoll({ res, context, debugFlags, body, recipient, bridgeId 
     messages: messages.map(formatBridgeMessage),
     ...(debugFlags.enabled ? {
       debug: {
+        outbox_claimed_count: messages.diagnostics?.outbox_claimed_count ?? messages.length,
+        outbox_reclaimed_count: messages.diagnostics?.outbox_reclaimed_count ?? null,
+        outbox_expired_count: messages.diagnostics?.outbox_expired_count ?? null,
         claimed: sanitizeTraceValue(messages.map((item) => ({
           id: item.id,
           rule_key: item.rule_key,
@@ -151,6 +154,7 @@ async function handleAck({ res, context, debugFlags, body, recipient, bridgeId }
           sent_at: row.sent_at,
           failed_at: row.failed_at,
           last_error: row.last_error,
+          outbox_ack_transition: row.ack_metadata?.outbox_ack_transition ?? null,
           ack_metadata: row.ack_metadata,
         }),
       },
