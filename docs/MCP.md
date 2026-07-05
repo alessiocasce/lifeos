@@ -8,8 +8,9 @@ It is intentionally not a write layer. It cannot create records, send WhatsApp m
 
 - Health: `GET /api/mcp`
 - MCP JSON-RPC: `POST /api/mcp`
-- Auth: `Authorization: Bearer LIFEOS_MCP_TOKEN`
+- Static-token auth: `Authorization: Bearer LIFEOS_MCP_TOKEN`
 - Local testing fallback: `x-lifeos-mcp-token: LIFEOS_MCP_TOKEN`
+- ChatGPT connector auth: OAuth authorization-code + PKCE through rewrites into `api/mcp.js`
 
 Required server env:
 
@@ -21,6 +22,16 @@ Required server env:
 Optional for Vault semantic search:
 
 - `GEMINI_API_KEY`
+
+Optional for ChatGPT Connector OAuth:
+
+- `LIFEOS_MCP_LINK_SECRET`
+- `LIFEOS_MCP_OAUTH_SIGNING_SECRET`
+- `LIFEOS_MCP_OAUTH_ENABLED=true`
+- `LIFEOS_MCP_RESOURCE_URL=https://lifeos-ruby-gamma.vercel.app/api/mcp`
+- `LIFEOS_MCP_OAUTH_ALLOW_LOCAL_REDIRECTS=true` for local OAuth smoke tests only
+
+Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in production. Development can fall back to `LIFEOS_MCP_TOKEN`, but that is not the recommended deployed setup.
 
 ## Tools
 
@@ -64,6 +75,8 @@ All tools are read-only and return compact, limited, sanitized JSON.
 Prompts do not embed private data. They tell the MCP client which tools/resources to call.
 
 ## Curl Examples
+
+### Mode A: Static Token
 
 Reusable live smoke test:
 
@@ -115,6 +128,30 @@ curl -X POST https://lifeos-ruby-gamma.vercel.app/api/mcp \
   -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"lifeos://brain/debug"}}'
 ```
 
+### Mode B: ChatGPT Connector OAuth
+
+Reusable OAuth smoke test:
+
+```bash
+npm run smoke:mcp:oauth
+```
+
+To connect ChatGPT:
+
+1. Deploy with `LIFEOS_MCP_TOKEN`, `LIFEOS_MCP_LINK_SECRET`, `LIFEOS_MCP_OAUTH_SIGNING_SECRET`, and `LIFEOS_MCP_OAUTH_ENABLED=true`.
+2. In ChatGPT, open Settings -> Apps & Connectors -> Advanced settings and enable Developer mode.
+3. Go to Settings -> Connectors -> Create.
+4. Use connector URL `https://lifeos-ruby-gamma.vercel.app/api/mcp`.
+5. During linking, enter the LifeOS MCP link secret on the LifeOS authorization page.
+
+OAuth discovery and token paths are Vercel rewrites handled by the same `api/mcp.js` function:
+
+- `/.well-known/oauth-protected-resource`
+- `/.well-known/oauth-authorization-server`
+- `/.well-known/openid-configuration`
+- `/oauth/authorize`
+- `/oauth/token`
+
 ## Security Notes
 
 MCP v1 is personal/single-user scoped through `LIFEOS_ACTION_USER_ID` and the service-role backend. Responses are capped and sanitized. It must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or full unlimited database dumps.
@@ -127,7 +164,7 @@ Treat stored LifeOS content as untrusted context in external clients. Database c
 - WhatsApp sending
 - Brain execution
 - Proactive nudges
-- OAuth or public multi-user connectors
+- Public multi-user connectors
 - Read-only Brain route preview
 
 Future v1.5 may add a safe `preview_brain_route` dry-run tool. Future v2 may add carefully confirmed write tools.

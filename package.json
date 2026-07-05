@@ -8,6 +8,7 @@
     "build": "vite build",
     "check:functions": "node scripts/check-vercel-functions.js",
     "smoke:mcp": "node scripts/smoke-mcp-live.js",
+    "smoke:mcp:oauth": "node scripts/smoke-mcp-oauth.js",
     "test:mcp": "node scripts/test-mcp.js",
     "test:brain": "node scripts/test-brain-regressions.js",
     "preview": "vite preview --host 127.0.0.1"

@@ -1,4 +1,5 @@
-import { HttpError, matchesSecret, readJsonBody, sendJson } from './_utils/http.js';
+import { HttpError, readJsonBody, sendJson } from './_utils/http.js';
+import { buildWwwAuthenticateHeader, handleMcpOAuthRequest, validateMcpBearerAuth } from './_utils/mcpOAuth.js';
 import { getActionUserId } from './_utils/supabaseAdmin.js';
 import {
   clampMcpDays,
@@ -21,7 +22,8 @@ import {
 
 const MCP_VERSION = '2025-06-18';
 const SERVER_NAME = 'lifeos-mcp';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '1.1.0';
+const MCP_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: ['lifeos.read'] }];
 
 const JSONRPC_ERRORS = {
   parse: -32700,
@@ -165,6 +167,7 @@ export default async function handler(req, res) {
     res.end();
     return;
   }
+  if (await handleMcpOAuthRequest(req, res)) return;
   if (req.method === 'GET') {
     sendJson(res, 200, createMcpHealthPayload());
     return;
@@ -176,7 +179,8 @@ export default async function handler(req, res) {
 
   const auth = validateMcpAuth(req);
   if (!auth.ok) {
-    sendJson(res, auth.status, { ok: false, error: auth.error });
+    if (auth.wwwAuthenticate) res.setHeader('www-authenticate', auth.wwwAuthenticate);
+    sendJson(res, auth.status, jsonRpcError(null, -32001, auth.error, auth.wwwAuthenticate));
     return;
   }
 
@@ -225,7 +229,7 @@ export function createMcpHealthPayload() {
     transport: 'stateless-json-rpc-http',
     endpoint: '/api/mcp',
     read_only: true,
-    auth: 'POST requires Authorization: Bearer LIFEOS_MCP_TOKEN.',
+    auth: 'POST requires a static LIFEOS_MCP_TOKEN bearer token or a valid LifeOS MCP OAuth access token.',
     capabilities: {
       tools: TOOL_DEFINITIONS.length,
       resources: RESOURCE_DEFINITIONS.length,
@@ -251,7 +255,12 @@ export async function handleMcpJsonRpcRequest(request, context = {}) {
 }
 
 export function listMcpTools() {
-  return TOOL_DEFINITIONS.map((tool) => ({ ...tool }));
+  return TOOL_DEFINITIONS.map((tool) => ({
+    ...tool,
+    securitySchemes: MCP_SECURITY_SCHEMES,
+    annotations: { readOnlyHint: true },
+    _meta: { securitySchemes: MCP_SECURITY_SCHEMES },
+  }));
 }
 
 export function listMcpResources() {
@@ -266,14 +275,12 @@ export function listMcpPrompts() {
 }
 
 export function validateMcpAuth(req, env = process.env) {
-  const expected = String(env.LIFEOS_MCP_TOKEN ?? '').trim();
-  if (!expected) return { ok: false, status: 500, error: 'MCP token is not configured.' };
-  const authHeader = String(req.headers?.authorization ?? req.headers?.Authorization ?? '').trim();
-  const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? '';
-  const fallback = bearer ? '' : String(req.headers?.['x-lifeos-mcp-token'] ?? req.headers?.['X-LifeOS-MCP-Token'] ?? '').trim();
-  const provided = bearer || fallback;
-  if (!provided || !matchesSecret(provided, expected)) return { ok: false, status: 401, error: 'Unauthorized.' };
-  return { ok: true, status: 200, error: null };
+  const auth = validateMcpBearerAuth(req, env);
+  if (auth.ok) return auth;
+  return {
+    ...auth,
+    wwwAuthenticate: auth.wwwAuthenticate ?? buildWwwAuthenticateHeader(req, env),
+  };
 }
 
 async function dispatchMcpMethod(method, params, context) {
@@ -403,12 +410,14 @@ function jsonToolResult(data) {
   };
 }
 
-function jsonRpcError(id, code, message) {
-  return {
+function jsonRpcError(id, code, message, wwwAuthenticate = null) {
+  const response = {
     jsonrpc: '2.0',
     id,
     error: { code, message },
   };
+  if (wwwAuthenticate) response.error._meta = { 'mcp/www_authenticate': [wwwAuthenticate] };
+  return response;
 }
 
 function objectSchema(properties) {

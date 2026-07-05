@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-06-18
+Last updated: 2026-07-05
 Current branch: `main`
 Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with controlled server-side LifeOS tools.
 
@@ -54,7 +54,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `api/_utils/date.js` is the shared backend source for Europe/Rome local date/time defaults. Backend code must not use UTC ISO slicing for user-facing "today" behavior.
 - `api/_utils/health.js` owns persisted sleep-hour recalculation from the previous day's `sleep_start` and the current day's `wake_time`.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- `api/actions/` contains token-protected Vercel Serverless Functions for external automation. These are server-only and use `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
+- `api/actions.js` is the token-protected multiplexed Vercel Serverless Function for external automation. It routes `expense`, `health`, `wake`, `sleep-start`, `habit`, and `calendar` actions and uses `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
 - `api/ai/chat.js` contains the in-app Gemini-powered LifeOS assistant endpoint. Gemini plans intent, while backend-controlled tools read/write Supabase.
 - `src/data/lifeosData.js` contains remaining local mock data for legacy/unconverted surfaces, but the real Workout tab no longer displays a mock workout archive.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
@@ -93,6 +93,10 @@ LIFEOS_WHATSAPP_BRIDGE_SECRET=...
 LIFEOS_WHATSAPP_ALLOWED_SENDERS=...
 LIFEOS_BRAIN_DEBUG=...
 LIFEOS_BRAIN_DEBUG_FULL=...
+LIFEOS_MCP_TOKEN=...
+LIFEOS_MCP_LINK_SECRET=...
+LIFEOS_MCP_OAUTH_SIGNING_SECRET=...
+LIFEOS_MCP_OAUTH_ENABLED=true
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be exposed through a `VITE_` variable or frontend code.
@@ -178,13 +182,14 @@ Real/persisted today:
 - Brain persists user-scoped chat threads/messages, uses curated long-term memories as bounded AI context, and keeps compact Recent Actions available as a secondary surface.
 - Brain Memory and Vault remain backend intelligence layers. They are hidden from the default Brain UI and available only through subtle diagnostics/manual commands when needed.
 - Daily Review remains persisted for backward compatibility but is hidden from Brain.
-- Token-protected Action API endpoints for external automation:
-  - `POST /api/actions/expense`
-  - `POST /api/actions/health`
-  - `POST /api/actions/wake`
-  - `POST /api/actions/sleep-start`
-  - `POST /api/actions/habit`
-  - `POST /api/actions/calendar`
+- Token-protected Action API endpoint for external automation:
+  - `POST /api/actions?action=expense`
+  - `POST /api/actions?action=health`
+  - `POST /api/actions?action=wake`
+  - `POST /api/actions?action=sleep-start`
+  - `POST /api/actions?action=habit`
+  - `POST /api/actions?action=calendar`
+  - Legacy `/api/actions/<action>` paths are compatibility rewrites to the single function.
 - In-app Gemini LifeOS assistant:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
@@ -235,11 +240,14 @@ Current behavior:
 
 ## Action API Current Status
 
-The Action API is a minimal Vercel Serverless API for iPhone Shortcuts or other trusted external tools.
+The Action API is a minimal Vercel Serverless API for iPhone Shortcuts or other trusted external tools. It is consolidated into one multiplexed function, `api/actions.js`, to preserve Vercel Hobby function headroom.
 
 Current behavior:
 
 - Requires `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` on every request.
+- Canonical route is `POST /api/actions?action=<action>`, or a body field such as `"action": "wake"`.
+- Supported actions are `expense`, `health`, `wake`, `sleep-start`, `habit`, and `calendar`.
+- Legacy paths `/api/actions/expense`, `/api/actions/health`, `/api/actions/wake`, `/api/actions/sleep-start`, `/api/actions/habit`, and `/api/actions/calendar` are Vercel rewrites into the single endpoint. Do not restore separate route files unless the deployment plan changes.
 - Returns `401` for missing or incorrect tokens.
 - Supports unauthenticated `OPTIONS` preflight with CORS headers for browser-based callers.
 - Rejects non-POST/non-OPTIONS methods with JSON `405` responses.
@@ -250,10 +258,10 @@ Current behavior:
 - Validates server-only config and requires `LIFEOS_ACTION_USER_ID` to be a UUID.
 - Writes all rows with `user_id = LIFEOS_ACTION_USER_ID` because service-role access bypasses RLS.
 - Supports creating expenses, upserting partial daily health logs, logging wake/sleep-start times, logging time-aware habits, and creating calendar events.
-- The dedicated wake endpoint accepts `time`, `wake_time`, or `wakeTime`, defaults `logged_on` to the Europe/Rome local date, preserves other health fields, and recalculates persisted `sleep_hours` when the previous day's sleep start exists.
-- `POST /api/actions/sleep-start` accepts `time`, `sleep_start`, or `sleepStart`. When no date is supplied, before-noon times are assigned to the previous Europe/Rome date so the following wake log can calculate sleep correctly.
+- The `wake` action accepts `time`, `wake_time`, or `wakeTime`, defaults `logged_on` to the Europe/Rome local date, preserves other health fields, and recalculates persisted `sleep_hours` when the previous day's sleep start exists.
+- The `sleep-start` action accepts `time`, `sleep_start`, or `sleepStart`. When no date is supplied, before-noon times are assigned to the previous Europe/Rome date so the following wake log can calculate sleep correctly.
 - The sleep-start endpoint recalculates the following day's `sleep_hours` when a wake time already exists.
-- `POST /api/actions/habit` updates Shower, Creatine, or Skin without Gemini. It accepts Italian aliases such as `doccia` and `creatina`, defaults to Europe/Rome date/time, and increments by one unless set mode is requested.
+- The `habit` action updates Shower, Creatine, or Skin without Gemini. It accepts Italian aliases such as `doccia` and `creatina`, defaults to Europe/Rome date/time, and increments by one unless set mode is requested.
 - Time-aware habits use `health_logs.hygiene` entries such as `{ "count": 1, "times": ["09:37"] }`.
 - Legacy numeric, boolean, array, Brush, Journal, and unknown hygiene data remains readable and is preserved during tracked-habit updates.
 - Expense categories created through the Action API normalize to canonical display casing when possible.
@@ -312,7 +320,7 @@ Architecture:
 - Pending actions are thread-local, expire after a short window, and never bypass negative-write guards, destructive blocks, user ownership checks, skill/action permissions, or schema/date/time validation.
 - Health nap/pisolino pending actions save to Health notes as context, not to `sleep_start`, `wake_time`, or calculated `sleep_hours`.
 - Going-to-sleep commands such as `sto andando a dormire`, `vado a dormire`, `inizio sonno`, `bedtime`, and `sleep start` with a time map to the structured `log_sleep_start` Brain action, not a generic Health note.
-- `log_sleep_start` reuses the same shared sleep-start helper as `/api/actions/sleep-start`, including Europe/Rome before-noon date assignment and next-day `sleep_hours` recalculation when a wake time exists.
+- `log_sleep_start` reuses the same shared sleep-start helper as `/api/actions?action=sleep-start`, including Europe/Rome before-noon date assignment and next-day `sleep_hours` recalculation when a wake time exists.
 - `log_sleep_start` is the canonical Brain action for going-to-sleep commands. Dirty or legacy pending actions that look like `update_health_log` but contain sleep-start semantics, such as `activity: sonno` plus `start_time` or `health_field: inizio sonno`, are normalized to `log_sleep_start`.
 - Pending action validation recomputes `missing_fields` from normalized args. Stale fields such as `health_field` are removed when the normalized action is executable.
 - Vague calendar or memo requests can store known slots such as title/date/duration while asking only for the missing exact time/title/date; follow-up replies like `si`, `14:30-15:30`, or `non bloccarlo` resolve the stored action instead of restarting generic clarification.
@@ -401,7 +409,7 @@ Supported v1 intents/tools:
 - Create memos for reminders, tasks, and memory items.
 - Resolve proactive WhatsApp memo replies by marking memos done, dismissing them, or snoozing their date/time when the latest WhatsApp context is a proactive memo reminder.
 - Update provided daily health log fields.
-- Log structured sleep start through the same behavior as `/api/actions/sleep-start`.
+- Log structured sleep start through the same behavior as `/api/actions?action=sleep-start`.
 - Analyze recent context and create a small non-overlapping calendar plan when the user explicitly asks to plan/schedule.
 - Block destructive requests such as deleting records or mass updates.
 
@@ -410,7 +418,7 @@ Current limitations:
 - No arbitrary SQL.
 - No destructive writes.
 - Pending actions support low-risk multi-turn confirmation and slot filling for supported Health, Calendar, Memo, Expense, and related action flows.
-- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. LifeOS MCP v1 exposes read-only context/debug access through one authenticated endpoint. Broader proactive nudges are not implemented yet.
+- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. LifeOS MCP v1.1 exposes read-only context/debug access through one authenticated endpoint with static-token and ChatGPT Connector OAuth auth modes. Broader proactive nudges are not implemented yet.
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
 
@@ -481,22 +489,30 @@ Current behavior:
 
 ## MCP Server Current Status
 
-LifeOS MCP Server v1 exposes external read-only context/debug access for MCP-compatible clients without turning them into write-capable LifeOS agents.
+LifeOS MCP Server v1.1 exposes external read-only context/debug access for MCP-compatible clients and ChatGPT Connectors without turning them into write-capable LifeOS agents.
 
 Current behavior:
 
 - Vercel exposes one serverless MCP endpoint at `api/mcp.js` / `POST /api/mcp`.
 - The endpoint uses a minimal stateless JSON-RPC 2.0 MCP-compatible HTTP handler and supports `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
 - `GET /api/mcp` returns only a safe health/capability summary and no private data.
-- Private MCP operations require server-only `LIFEOS_MCP_TOKEN` through `Authorization: Bearer ...` or `x-lifeos-mcp-token` for local testing.
+- Static-token private MCP operations require server-only `LIFEOS_MCP_TOKEN` through `Authorization: Bearer ...` or `x-lifeos-mcp-token` for local testing and custom clients.
+- ChatGPT Connector OAuth compatibility is handled by rewrites into `api/mcp.js`, not separate route files:
+  - `/.well-known/oauth-protected-resource`
+  - `/.well-known/oauth-authorization-server`
+  - `/.well-known/openid-configuration`
+  - `/oauth/authorize`
+  - `/oauth/token`
+- OAuth mode supports authorization-code + PKCE S256 for the personal connector, with `lifeos.read` scope only. It uses `LIFEOS_MCP_LINK_SECRET` for the linking page and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` for stateless signed codes/access tokens. `LIFEOS_MCP_OAUTH_ENABLED=false` is the emergency rollback flag.
 - MCP is scoped to the configured personal user via `LIFEOS_ACTION_USER_ID` and service-role Supabase reads.
 - MCP tools/resources provide compact summaries for snapshots, today/week, workouts, health, open memos, upcoming calendar, projects, Brain traces/action logs, WhatsApp outbox, Vault search, and open loops.
 - MCP prompts are instruction templates only; they do not embed private data directly.
-- MCP v1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
+- MCP v1.1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.
-- The route was added as a single function so the Vercel Hobby function count remains at or below 12. Run `npm run check:functions` before deployment.
+- MCP OAuth metadata/authorize/token requests are all served by the same `api/mcp.js` function. Action API consolidation keeps total Vercel function count under the Hobby limit. Run `npm run check:functions` before deployment.
 - Local validation uses `npm run test:mcp`; it does not require live Supabase, Gemini, Vercel, or WhatsApp.
 - Deployed validation uses `npm run smoke:mcp`, which reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env, calls the real deployed endpoint, and prints pass/fail results without dumping private LifeOS data or token material.
+- OAuth deployed validation uses `npm run smoke:mcp:oauth`, which reads the link secret from `.env.local` or process env, completes PKCE linking against the deployed endpoint, and redacts codes/tokens from output.
 - Future MCP v1.5 may add a read-only Brain route preview. Future v2 may add carefully confirmed write tools, but writes are intentionally excluded from v1.
 
 ## Calendar Module Current Status
@@ -759,7 +775,7 @@ Current behavior:
 - Legacy numeric/boolean/array hygiene values normalize safely. Brush, Journal, Floss, Stretch, and unknown keys remain untouched but are not visible or updated.
 - AI health habit logging writes to the same `hygiene` JSON field and merges habit-only updates with existing daily values.
 - Missing optional nullable health fields such as `sleep_hours`, `sleep_start`, and `wake_time` are ignored by backend validation unless explicitly provided.
-- Health UI saves, AI health writes, `/api/actions/health`, and `/api/actions/wake` recalculate affected sleep hours when sleep start or wake time changes.
+- Health UI saves, AI health writes, `/api/actions?action=health`, and `/api/actions?action=wake` recalculate affected sleep hours when sleep start or wake time changes.
 - Health and AI summaries treat habits as standalone stats instead of one generic hygiene total.
 - Does not use iPhone Screen Time integration yet.
 
@@ -913,6 +929,8 @@ Workout mobile direction:
   - Confirm Supabase, `/api`, Gemini, and auth responses are not cached by the service worker.
 - Run deployment setup from `docs/DEPLOYMENT.md` and live deployed QA from `docs/QA_DEPLOYMENT.md` before external API automation work.
 - Run `docs/ACTION_API.md` manual QA after deploying Action API env vars:
+  - Canonical `/api/actions?action=<action>` calls work for each supported action.
+  - Legacy `/api/actions/<action>` paths rewrite to the consolidated endpoint without separate route files.
   - Unauthorized requests return `401`.
   - Preflight requests return `204`.
   - Wrong methods return `405`.
@@ -938,13 +956,15 @@ Workout mobile direction:
   - Confirm ack persists a proactive assistant message in the dedicated WhatsApp Brain thread.
   - Reply `fatto`, `snooze 30`, `annulla`, and `?` from the same sender and confirm memo/outbox behavior.
   - Confirm expired or duplicate reminders are not repeatedly sent after bridge downtime.
-- Test LifeOS MCP Server v1 after deploying `LIFEOS_MCP_TOKEN`:
+- Test LifeOS MCP Server v1.1 after deploying `LIFEOS_MCP_TOKEN` and, for ChatGPT Connector mode, `LIFEOS_MCP_LINK_SECRET` plus `LIFEOS_MCP_OAUTH_SIGNING_SECRET`:
   - `GET /api/mcp` returns only safe capability metadata.
   - POST without a valid token returns `401`.
+  - The `401` response includes OAuth resource metadata through `WWW-Authenticate` when OAuth is enabled.
   - `initialize`, `tools/list`, `resources/list`, and `prompts/list` return valid JSON-RPC results.
+  - `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
   - `get_brain_debug_context` returns compact trace summaries without secrets.
   - No MCP tool mutates LifeOS records or sends WhatsApp messages.
-  - Run `npm run test:mcp`, `npm run smoke:mcp`, and `npm run check:functions`; function count must remain at or below 12.
+  - Run `npm run test:mcp`, `npm run smoke:mcp`, `npm run smoke:mcp:oauth`, and `npm run check:functions`; function count must remain at or below 12.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.
@@ -973,7 +993,7 @@ Workout mobile direction:
 5. QA the Home dashboard against a real Supabase project after creating records in Health, Memos, Workout, and Projects/Ops.
 6. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
 7. Deploy the app and complete live iPhone QA against the real Supabase project.
-8. Live-test Action API calls from iPhone Shortcuts before relying on external automation.
+8. Live-test consolidated Action API calls from iPhone Shortcuts before relying on external automation.
 9. Live-test the Gemini in-app assistant with `docs/QA_AI_ASSISTANT.md`.
 10. Convert Chat Messages only after assistant transcript persistence is clearly defined and live QA has passed.
 

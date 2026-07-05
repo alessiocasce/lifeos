@@ -1,5 +1,16 @@
 {
   "rewrites": [
+    { "source": "/.well-known/oauth-protected-resource", "destination": "/api/mcp?mcp_oauth=protected-resource" },
+    { "source": "/.well-known/oauth-authorization-server", "destination": "/api/mcp?mcp_oauth=authorization-server" },
+    { "source": "/.well-known/openid-configuration", "destination": "/api/mcp?mcp_oauth=openid-configuration" },
+    { "source": "/oauth/authorize", "destination": "/api/mcp?mcp_oauth=authorize" },
+    { "source": "/oauth/token", "destination": "/api/mcp?mcp_oauth=token" },
+    { "source": "/api/actions/expense", "destination": "/api/actions?action=expense" },
+    { "source": "/api/actions/health", "destination": "/api/actions?action=health" },
+    { "source": "/api/actions/wake", "destination": "/api/actions?action=wake" },
+    { "source": "/api/actions/sleep-start", "destination": "/api/actions?action=sleep-start" },
+    { "source": "/api/actions/habit", "destination": "/api/actions?action=habit" },
+    { "source": "/api/actions/calendar", "destination": "/api/actions?action=calendar" },
     { "source": "/api/integrations/whatsapp/outbox/evaluate", "destination": "/api/integrations/whatsapp/outbox?action=evaluate" },
     { "source": "/api/integrations/whatsapp/outbox/poll", "destination": "/api/integrations/whatsapp/outbox?action=poll" },
     { "source": "/api/integrations/whatsapp/outbox/ack", "destination": "/api/integrations/whatsapp/outbox?action=ack" },

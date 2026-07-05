@@ -268,13 +268,25 @@ Run the focused checklists after the full flow:
 
 1. Run `npm run test:mcp`.
 2. Run `npm run smoke:mcp` against the deployed endpoint.
-3. Run `npm run check:functions` and confirm the Vercel API route count stays at or below 12.
-4. Call `GET /api/mcp` and confirm it returns only safe capability metadata.
-5. Call `POST /api/mcp` without a token and confirm it returns `401`.
-6. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
-7. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
-8. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
-9. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+3. Run `npm run smoke:mcp:oauth` after the deployed OAuth rewrites are live.
+4. Run `npm run check:functions` and confirm the Vercel API route count stays at or below 12.
+5. Call `GET /api/mcp` and confirm it returns only safe capability metadata.
+6. Call `POST /api/mcp` without a token and confirm it returns `401` with OAuth protected-resource metadata in `WWW-Authenticate`.
+7. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
+8. Confirm `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
+9. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
+10. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
+11. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
+12. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+
+## Consolidated Action API
+
+1. Run `npm run check:functions` and confirm action consolidation keeps the function count below the Hobby limit.
+2. Confirm `POST /api/actions?action=expense`, `health`, `wake`, `sleep-start`, `habit`, and `calendar` reach API behavior.
+3. Confirm body-based routing such as `{ "action": "wake", "time": "08:37" }` works for trusted callers.
+4. Confirm legacy paths such as `/api/actions/wake` rewrite to `/api/actions?action=wake` without separate route files.
+5. Confirm missing/invalid `LIFEOS_ACTION_TOKEN` still returns `401`.
+6. Confirm shortcut-created records still use `LIFEOS_ACTION_USER_ID` and do not leak across users.
 
 ## Workout Advice Write Boundary
 
@@ -349,23 +361,23 @@ Run the focused checklists after the full flow:
 
 ## Wake Time Action API
 
-1. Call `POST /api/actions/wake` with a valid action token and `{"time":"8.37"}`.
+1. Call `POST /api/actions?action=wake` with a valid action token and `{"time":"8.37"}`.
 2. Confirm the response and Health UI show wake time `08:37` for today's Europe/Rome date.
 3. Repeat with `{"wake_time":"08:37"}` and confirm the alias works.
 4. Send `{"time":"banana"}` and confirm a clear `400` response.
 5. Confirm existing Energy, habits, coffee, water, ADC, and notes remain unchanged.
 6. Call without Authorization and with an invalid token; confirm both return `401`.
-7. Confirm the existing `/api/actions/health` endpoint still accepts `wake_time`.
+7. Confirm the existing `/api/actions?action=health` action still accepts `wake_time`.
 8. Set yesterday's sleep start to `01:30`, log today's wake time as `09:00`, and confirm today's persisted `sleep_hours` becomes `7.5`.
 
 ## Sleep-Start And Habit Action APIs
 
-1. Call `/api/actions/sleep-start` with `{"time":"1.30"}` and confirm `01:30` is stored.
+1. Call `/api/actions?action=sleep-start` with `{"time":"1.30"}` and confirm `01:30` is stored.
 2. Confirm omitted `logged_on` assigns a before-noon sleep start to the previous Europe/Rome date.
 3. Repeat with explicit `logged_on` and confirm the explicit date is respected.
 4. Confirm next-day `sleep_hours` recalculates when a wake time exists.
 5. Confirm invalid sleep-start time returns a clear `400`.
-6. Call `/api/actions/habit` with `{"habit":"creatine","time":"9:37 AM"}` and confirm `09:37`.
+6. Call `/api/actions?action=habit` with `{"habit":"creatine","time":"9:37 AM"}` and confirm `09:37`.
 7. Call it with `{"habit":"skin","time":"10:45 PM"}` and confirm `22:45`.
 8. Use `doccia` and confirm Shower increments.
 9. Confirm invalid habit/time requests return clear `400` responses.
@@ -392,7 +404,7 @@ Run the focused checklists after the full flow:
 15. Confirm Energy is not shown in Health or Home.
 16. Confirm Brush and Journal are not shown in Health or Home.
 17. Confirm Shower, Creatine, and Skin counts/times autosave and reload.
-18. Confirm `/api/actions/health` defaults `logged_on` to the Europe/Rome date.
+18. Confirm `/api/actions?action=health` defaults `logged_on` to the Europe/Rome date.
 
 ## iPhone Safari Basics
 

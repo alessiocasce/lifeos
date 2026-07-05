@@ -93,7 +93,8 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 5. Confirm `/api/ai/chat` still returns API behavior and is not rewritten to the SPA.
 6. Confirm `/api/ai/actions` still returns API behavior and is not rewritten to the SPA.
 7. Confirm `/api/integrations/whatsapp/inbound` still returns API behavior and is not rewritten to the SPA.
-8. Confirm `/api/actions/expense`, `/api/actions/health`, and `/api/actions/calendar` still reach serverless API behavior.
+8. Confirm `/api/actions?action=expense`, `/api/actions?action=health`, and `/api/actions?action=calendar` reach serverless API behavior.
+9. Confirm legacy paths such as `/api/actions/expense`, `/api/actions/health`, and `/api/actions/calendar` rewrite to the consolidated action function and are not SPA routes.
 
 ## Sign Out / Sign In
 
@@ -132,7 +133,7 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 9. Confirm incomplete half-written fields do not block the update.
 10. Save the set, pull again, and confirm the update applies.
 11. Confirm there is no repeated or infinite reload loop.
-12. Confirm `/api/ai/chat`, `/api/ai/actions`, and `/api/actions/*` still return API behavior after the update.
+12. Confirm `/api/ai/chat`, `/api/ai/actions`, and `/api/actions?action=wake` still return API behavior after the update.
 13. Confirm the installed iPhone PWA moves the main tab content with the pull gesture, holds it lowered during refresh, and smoothly returns it afterward.
 14. Confirm the shell header and bottom navigation remain stable and no content remains stuck translated after success, failure, or an update-ready guard.
 15. Pull to refresh on Brain and confirm threads, current messages, memories, insights, Vault documents, and Recent Actions update without wiping typed composer text.
@@ -143,7 +144,7 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 2. Confirm `ai_chat_threads`, `ai_chat_messages`, `ai_memories`, `ai_insights`, `ai_vault_documents`, and `ai_vault_chunks` exist.
 3. Confirm authenticated users can only read/write their own rows.
 4. Confirm the composite thread/message ownership foreign key rejects cross-user message insertion.
-5. Confirm deploying Brain changes does not break `/api/actions/health`, `/api/actions/wake`, `/api/actions/sleep-start`, `/api/actions/habit`, `/api/actions/calendar`, or `/api/actions/expense`.
+5. Confirm deploying Brain changes does not break consolidated Action API calls such as `/api/actions?action=health`, `/api/actions?action=wake`, `/api/actions?action=sleep-start`, `/api/actions?action=habit`, `/api/actions?action=calendar`, or `/api/actions?action=expense`.
 6. Confirm the `vector` extension is enabled in the `extensions` schema.
 7. Confirm `match_ai_vault_chunks` does not return another user's chunks.
 8. Confirm `match_ai_vault_chunks_for_user` is usable by service-role calls and still filters to the configured target user.
@@ -302,10 +303,13 @@ Troubleshooting:
 
 ## LifeOS MCP Deployment
 
-No schema rerun is required for MCP v1.
+No schema rerun is required for MCP v1.1. The Action API is consolidated into one function before MCP OAuth is enabled, so `npm run check:functions` should remain below the Vercel Hobby limit.
 
-1. Set Vercel env var:
+1. Set Vercel env vars:
    - `LIFEOS_MCP_TOKEN`
+   - `LIFEOS_MCP_LINK_SECRET`
+   - `LIFEOS_MCP_OAUTH_SIGNING_SECRET`
+   - `LIFEOS_MCP_OAUTH_ENABLED=true`
 2. Confirm existing server env vars are still present:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
@@ -314,11 +318,14 @@ No schema rerun is required for MCP v1.
 4. Run before deployment:
    - `npm run test:mcp`
    - `npm run smoke:mcp` after deployment or against the deployed preview URL
+   - `npm run smoke:mcp:oauth` after deployment or against the deployed preview URL
    - `npm run check:functions`
 5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
-6. Confirm MCP v1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
+6. Confirm MCP v1.1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
+7. Confirm ChatGPT OAuth discovery paths are handled by rewrites into `api/mcp.js`, not by separate API route files.
 
 The smoke script reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env and does not print it. To test a preview deployment, run it with `LIFEOS_MCP_BASE_URL=https://your-preview-url.vercel.app`.
+The OAuth smoke script reads `LIFEOS_MCP_LINK_SECRET` or the dev fallback from `.env.local` or process env and redacts authorization codes/access tokens from output.
 
 Health:
 
@@ -362,10 +369,26 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/mcp" \
   -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"lifeos://brain/debug"}}'
 ```
 
+OAuth protected resource metadata:
+
+```bash
+curl -X GET "https://lifeos-ruby-gamma.vercel.app/.well-known/oauth-protected-resource"
+```
+
+OAuth authorization server metadata:
+
+```bash
+curl -X GET "https://lifeos-ruby-gamma.vercel.app/.well-known/oauth-authorization-server"
+```
+
+For ChatGPT Connector setup, paste `https://lifeos-ruby-gamma.vercel.app/api/mcp` as the connector URL and enter the LifeOS MCP link secret on the authorization page.
+
 Expected:
 
 - Invalid or missing token returns `401`.
+- Missing auth includes a `WWW-Authenticate` header pointing to the OAuth protected resource metadata.
 - Unknown methods/tools/resources return JSON-RPC errors.
+- `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
 - Responses include compact summaries only.
 - No API keys, bearer tokens, Supabase service keys, Gemini keys, WhatsApp secrets, or auth headers appear in responses.
 

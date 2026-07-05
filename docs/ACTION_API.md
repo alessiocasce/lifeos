@@ -94,10 +94,22 @@ Store the generated value as `LIFEOS_ACTION_TOKEN`.
 
 Replace `https://your-lifeos.vercel.app` and `$TOKEN` with your deployed URL and token.
 
+Canonical endpoint:
+
+```text
+POST /api/actions?action=<action>
+```
+
+Supported actions are `expense`, `health`, `wake`, `sleep-start`, `habit`, and `calendar`.
+The request body may also include `"action": "expense"` instead of using the query string.
+
+Legacy paths such as `/api/actions/expense` remain compatibility rewrites in `vercel.json`.
+New shortcuts and automations should use the canonical multiplexed endpoint so LifeOS stays under Vercel Hobby function limits.
+
 ### Create Expense
 
 ```bash
-curl -X POST https://your-lifeos.vercel.app/api/actions/expense \
+curl -X POST 'https://your-lifeos.vercel.app/api/actions?action=expense' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -124,7 +136,7 @@ Limits:
 ### Upsert Health Log
 
 ```bash
-curl -X POST https://your-lifeos.vercel.app/api/actions/health \
+curl -X POST 'https://your-lifeos.vercel.app/api/actions?action=health' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -157,7 +169,7 @@ Validation:
 ### Log Wake Time
 
 ```bash
-curl -X POST https://your-lifeos.vercel.app/api/actions/wake \
+curl -X POST 'https://your-lifeos.vercel.app/api/actions?action=wake' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -187,7 +199,7 @@ Success example:
 ### Log Sleep Start
 
 ```bash
-curl -X POST https://your-lifeos.vercel.app/api/actions/sleep-start \
+curl -X POST 'https://your-lifeos.vercel.app/api/actions?action=sleep-start' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -204,7 +216,7 @@ The endpoint updates only `sleep_start`, preserves other health fields, and reca
 ### Log Habit
 
 ```bash
-curl -X POST https://your-lifeos.vercel.app/api/actions/habit \
+curl -X POST 'https://your-lifeos.vercel.app/api/actions?action=habit' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,7 +261,7 @@ Quick bodies:
 ### Create Calendar Event
 
 ```bash
-curl -X POST https://your-lifeos.vercel.app/api/actions/calendar \
+curl -X POST 'https://your-lifeos.vercel.app/api/actions?action=calendar' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -285,7 +297,7 @@ Limits:
 Create a shortcut with:
 
 1. Get Contents of URL.
-2. URL: `https://your-lifeos.vercel.app/api/actions/<endpoint>`.
+2. URL: `https://your-lifeos.vercel.app/api/actions?action=<action>`.
 3. Method: `POST`.
 4. Headers:
    - `Authorization`: `Bearer <LIFEOS_ACTION_TOKEN>`
@@ -300,7 +312,7 @@ Keep the token private. Treat anyone with the token as able to create records fo
 2. Add `Get Current Date`.
 3. Add `Format Date` with custom format `HH:mm`.
 4. Add `Get Contents of URL`.
-5. Set URL to `https://your-lifeos.vercel.app/api/actions/wake`.
+5. Set URL to `https://your-lifeos.vercel.app/api/actions?action=wake`.
 6. Set method to `POST`.
 7. Add headers:
    - `Authorization`: `Bearer <LIFEOS_ACTION_TOKEN>`
@@ -317,7 +329,7 @@ Keep the token private. Treat anyone with the token as able to create records fo
 
 1. Add `Get Current Date`.
 2. Format it as `HH:mm` or `h:mm a`.
-3. POST to `https://your-lifeos.vercel.app/api/actions/sleep-start`.
+3. POST to `https://your-lifeos.vercel.app/api/actions?action=sleep-start`.
 4. Use the standard Authorization and Content-Type headers.
 5. Send:
 
@@ -331,7 +343,7 @@ The endpoint applies the before-noon previous-date rule automatically when `logg
 
 ### iPhone Habit Shortcuts
 
-POST to `https://your-lifeos.vercel.app/api/actions/habit` with one of:
+POST to `https://your-lifeos.vercel.app/api/actions?action=habit` with one of:
 
 ```json
 { "habit": "creatine", "time": "<formatted time>" }
@@ -352,7 +364,7 @@ Use these against the deployed Vercel URL after setting environment variables.
 Missing auth should return `401`:
 
 ```bash
-curl -i -X POST https://your-lifeos.vercel.app/api/actions/expense \
+curl -i -X POST 'https://your-lifeos.vercel.app/api/actions?action=expense' \
   -H "Content-Type: application/json" \
   -d '{"vendor":"Test","category":"Test","amount":1}'
 ```
@@ -360,7 +372,7 @@ curl -i -X POST https://your-lifeos.vercel.app/api/actions/expense \
 Invalid token should return `401`:
 
 ```bash
-curl -i -X POST https://your-lifeos.vercel.app/api/actions/expense \
+curl -i -X POST 'https://your-lifeos.vercel.app/api/actions?action=expense' \
   -H "Authorization: Bearer wrong-token" \
   -H "Content-Type: application/json" \
   -d '{"vendor":"Test","category":"Test","amount":1}'
@@ -369,7 +381,7 @@ curl -i -X POST https://your-lifeos.vercel.app/api/actions/expense \
 Invalid payload should return `400`:
 
 ```bash
-curl -i -X POST https://your-lifeos.vercel.app/api/actions/calendar \
+curl -i -X POST 'https://your-lifeos.vercel.app/api/actions?action=calendar' \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"","event_date":"not-a-date"}'
@@ -378,7 +390,7 @@ curl -i -X POST https://your-lifeos.vercel.app/api/actions/calendar \
 Preflight should return `204`:
 
 ```bash
-curl -i -X OPTIONS https://your-lifeos.vercel.app/api/actions/expense
+curl -i -X OPTIONS 'https://your-lifeos.vercel.app/api/actions?action=expense'
 ```
 
 ## Manual QA
@@ -395,14 +407,15 @@ curl -i -X OPTIONS https://your-lifeos.vercel.app/api/actions/expense
 10. Send `null` for `energy` or `sleep_start` and confirm the existing value is cleared.
 11. Create a calendar event and confirm it appears in Calendar.
 12. Try a calendar event where `end_time` is earlier than `start_time` and confirm it is rejected.
-13. Call `/api/actions/wake` with `{"time":"8.37"}` and confirm Health shows `08:37`.
+13. Call `/api/actions?action=wake` with `{"time":"8.37"}` and confirm Health shows `08:37`.
 14. Repeat with `{"wake_time":"08:37"}` and `{"wakeTime":"8:37 AM"}`.
 15. Call it with `{"time":"banana"}` and confirm a clear `400` error.
 16. Confirm an existing health log keeps its other fields after the wake update.
-17. Call `/api/actions/sleep-start` with `{"time":"1.30"}` and confirm `01:30` is stored on the previous local date.
+17. Call `/api/actions?action=sleep-start` with `{"time":"1.30"}` and confirm `01:30` is stored on the previous local date.
 18. Repeat with an explicit `logged_on` and confirm that date is respected.
 19. Confirm a following-day wake row has `sleep_hours` recalculated.
-20. Call `/api/actions/habit` for Creatine at `9:37 AM` and Skin at `10:45 PM`; confirm `09:37` and `22:45` are stored.
+20. Call `/api/actions?action=habit` for Creatine at `9:37 AM` and Skin at `10:45 PM`; confirm `09:37` and `22:45` are stored.
 21. Confirm `doccia` increments Shower.
 22. Confirm invalid habit/time values return clear `400` errors.
 23. Sign in as another user and confirm the action-created records are not visible.
+24. Confirm legacy paths such as `/api/actions/wake` still work through rewrites, without restoring separate route files.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto';
 import {
   createMcpHealthPayload,
   handleMcpJsonRpcRequest,
@@ -8,6 +9,8 @@ import {
   validateMcpAuth,
 } from '../api/mcp.js';
 import { clampMcpDays, clampMcpLimit, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
+import { getMcpOAuthRequestKind, signAccessTokenForTest, verifyOAuthAccessTokenForTest, verifyPkceForTest } from '../api/_utils/mcpOAuth.js';
+import { resolveActionName } from '../api/actions.js';
 
 const checks = [];
 
@@ -41,6 +44,10 @@ test('tools/list includes expected tools', () => {
   ]) {
     assert(tools.includes(name), `missing tool ${name}`);
   }
+  const firstTool = listMcpTools()[0];
+  assert(firstTool.annotations.readOnlyHint, 'tool missing read-only annotation');
+  assertEqual(firstTool.securitySchemes[0].type, 'oauth2');
+  assert(firstTool.securitySchemes[0].scopes.includes('lifeos.read'), 'tool missing lifeos.read scope');
 });
 
 test('resources/list includes expected resources', () => {
@@ -93,7 +100,45 @@ test('auth accepts bearer and fallback header only with matching token', () => {
   assertEqual(validateMcpAuth({ headers: { 'x-lifeos-mcp-token': 'test-token' } }, env).ok, true);
   assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer wrong' } }, env).status, 401);
   assertEqual(validateMcpAuth({ headers: {} }, env).status, 401);
-  assertEqual(validateMcpAuth({ headers: {} }, {}).status, 500);
+  assert(validateMcpAuth({ headers: {} }, env).wwwAuthenticate.includes('oauth-protected-resource'), 'missing WWW-Authenticate metadata');
+});
+
+test('auth accepts signed OAuth access tokens without accepting wrong tokens', () => {
+  const env = {
+    LIFEOS_MCP_TOKEN: 'static-token',
+    LIFEOS_MCP_OAUTH_SIGNING_SECRET: 'oauth-signing-secret',
+  };
+  const req = { headers: { host: 'lifeos-ruby-gamma.vercel.app', 'x-forwarded-proto': 'https' } };
+  const token = signAccessTokenForTest({
+    iss: 'https://lifeos-ruby-gamma.vercel.app',
+    aud: 'https://lifeos-ruby-gamma.vercel.app/api/mcp',
+    sub: 'test-user',
+    scope: 'lifeos.read',
+    client_id: 'test-client',
+  }, env);
+  assertEqual(verifyOAuthAccessTokenForTest(token, req, env), true);
+  assertEqual(validateMcpAuth({ headers: { ...req.headers, authorization: `Bearer ${token}` } }, env).ok, true);
+  assertEqual(validateMcpAuth({ headers: { ...req.headers, authorization: 'Bearer wrong' } }, env).status, 401);
+});
+
+test('PKCE verifier matches S256 challenge', async () => {
+  const verifier = 'test-code-verifier';
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  assertEqual(verifyPkceForTest(verifier, challenge), true);
+});
+
+test('OAuth route detection supports rewrite query and original paths', () => {
+  assertEqual(getMcpOAuthRequestKind({ query: { mcp_oauth: 'token' }, headers: {}, url: '/api/mcp' }), 'token');
+  assertEqual(getMcpOAuthRequestKind({ headers: { host: 'example.com' }, url: '/.well-known/oauth-protected-resource' }), 'protected-resource');
+  assertEqual(getMcpOAuthRequestKind({ headers: { host: 'example.com' }, url: '/oauth/authorize' }), 'authorize');
+});
+
+test('consolidated Action API resolves supported action names only', () => {
+  assertEqual(resolveActionName('expense'), 'expense');
+  assertEqual(resolveActionName('sleep_start'), 'sleep-start');
+  assertEqual(resolveActionName('wake-time'), 'wake');
+  assertEqual(resolveActionName('calendar'), 'calendar');
+  assertEqual(resolveActionName('delete-everything'), null);
 });
 
 test('MCP data clamps excessive limits and day windows', () => {

@@ -378,7 +378,7 @@ Manual deployed QA:
 12. Confirm Brain explains the active pending action in Italian and does not create a new pending action.
 13. Repeat the sleep-start prompt and send `Conferma inizio del sonno alle 3:41`.
 14. Confirm Brain treats it as confirmation with details, executes the pending action, and does not ask again.
-15. Confirm the saved sleep start uses the same behavior as `/api/actions/sleep-start`, including Europe/Rome date handling and next-day sleep-hours recalculation when wake time exists.
+15. Confirm the saved sleep start uses the same behavior as `/api/actions?action=sleep-start`, including Europe/Rome date handling and next-day sleep-hours recalculation when wake time exists.
 16. Send the nap flow from the same WhatsApp sender: `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, then `si`, then `aggiungilo anche al calendario`.
 17. Confirm all messages use the same backend WhatsApp thread, Working Context resolves the nap, and Brain does not ask for date/time again.
 
@@ -424,13 +424,14 @@ MCP is an external read-only context/debug layer. It is not the in-app Brain and
 
 1. Run `npm run test:mcp`.
 2. Deploy with `LIFEOS_MCP_TOKEN`.
-3. Call `POST /api/mcp` with `tools/call` and tool `get_brain_debug_context`.
+3. Call `POST /api/mcp` with `tools/call` and tool `get_brain_debug_context`, using either `Authorization: Bearer LIFEOS_MCP_TOKEN` or a valid OAuth access token from the ChatGPT Connector flow.
 4. Confirm the response includes recent `brain_trace` summaries, selected skills/routes when available, pending-action state, command-draft summaries, tool results, final response type, and recent action log failures.
 5. Confirm full chat transcripts are not dumped by default.
 6. Confirm no Supabase keys, Gemini keys, WhatsApp bridge secrets, action tokens, bearer tokens, auth headers, or cookies appear.
 7. Confirm MCP calls do not create `ai_chat_messages`, do not execute actions, do not enqueue outbox messages, and do not send WhatsApp messages.
 8. Confirm `GET /api/mcp` returns only safe health/capability metadata.
-9. Confirm missing or invalid `LIFEOS_MCP_TOKEN` returns `401` for private POST operations.
+9. Confirm missing or invalid auth returns `401` for private POST operations and includes OAuth protected-resource metadata when OAuth is enabled.
+10. Confirm ChatGPT Connector OAuth discovery/linking does not add write-capable tools or expose private data on the authorization page.
 
 ## API Security
 
