@@ -275,9 +275,11 @@ Run the focused checklists after the full flow:
 7. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
 8. Confirm `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
 9. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
-10. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
-11. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
-12. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+10. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
+11. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
+12. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
+13. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
+14. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
 
 ## Consolidated Action API
 

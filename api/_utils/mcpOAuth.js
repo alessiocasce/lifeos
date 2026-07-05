@@ -98,8 +98,8 @@ export function buildAuthorizationServerMetadata(req, env = process.env) {
   const issuer = getIssuer(req, env);
   return {
     issuer,
-    authorization_endpoint: `${issuer}/oauth/authorize`,
-    token_endpoint: `${issuer}/oauth/token`,
+    authorization_endpoint: getMcpOAuthEndpointUrl(req, 'authorize', env),
+    token_endpoint: getMcpOAuthEndpointUrl(req, 'token', env),
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code'],
     code_challenge_methods_supported: ['S256'],
@@ -144,7 +144,7 @@ async function handleAuthorizeGet(req, res) {
     sendHtml(res, 400, renderErrorPage(validation.error));
     return;
   }
-  sendHtml(res, 200, renderAuthorizePage(params));
+  sendHtml(res, 200, renderAuthorizePage(params, getMcpOAuthEndpointUrl(req, 'authorize')));
 }
 
 async function handleAuthorizePost(req, res) {
@@ -302,7 +302,7 @@ function normalizeFormObject(body) {
   return normalized;
 }
 
-function renderAuthorizePage(params) {
+function renderAuthorizePage(params, actionUrl) {
   const hidden = [
     'response_type',
     'client_id',
@@ -317,7 +317,7 @@ function renderAuthorizePage(params) {
     <main>
       <h1>Link LifeOS MCP to ChatGPT</h1>
       <p>Enter your private LifeOS MCP link secret to grant read-only access.</p>
-      <form method="post" action="/oauth/authorize" autocomplete="off">
+      <form method="post" action="${escapeHtml(actionUrl)}" autocomplete="off">
         ${hidden}
         <label>
           Link secret
@@ -388,11 +388,17 @@ function getLinkSecret(env = process.env) {
 }
 
 function getProtectedResourceMetadataUrl(req, env = process.env) {
-  return `${getIssuer(req, env)}/.well-known/oauth-protected-resource`;
+  return getMcpOAuthEndpointUrl(req, 'protected-resource', env);
 }
 
 function getMcpResourceUrl(req, env = process.env) {
   return String(env.LIFEOS_MCP_RESOURCE_URL || `${getIssuer(req, env)}/api/mcp`).replace(/\/+$/, '');
+}
+
+function getMcpOAuthEndpointUrl(req, kind, env = process.env) {
+  const url = new URL(getMcpResourceUrl(req, env));
+  url.searchParams.set('mcp_oauth', kind);
+  return url.toString();
 }
 
 function getIssuer(req, env = process.env) {

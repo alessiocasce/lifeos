@@ -10,7 +10,7 @@ It is intentionally not a write layer. It cannot create records, send WhatsApp m
 - MCP JSON-RPC: `POST /api/mcp`
 - Static-token auth: `Authorization: Bearer LIFEOS_MCP_TOKEN`
 - Local testing fallback: `x-lifeos-mcp-token: LIFEOS_MCP_TOKEN`
-- ChatGPT connector auth: OAuth authorization-code + PKCE through rewrites into `api/mcp.js`
+- ChatGPT connector auth: OAuth authorization-code + PKCE through direct `api/mcp.js` OAuth URLs
 
 Required server env:
 
@@ -144,13 +144,22 @@ To connect ChatGPT:
 4. Use connector URL `https://lifeos-ruby-gamma.vercel.app/api/mcp`.
 5. During linking, enter the LifeOS MCP link secret on the LifeOS authorization page.
 
-OAuth discovery and token paths are Vercel rewrites handled by the same `api/mcp.js` function:
+OAuth metadata advertises direct API URLs handled by the same `api/mcp.js` function:
+
+- `/api/mcp?mcp_oauth=protected-resource`
+- `/api/mcp?mcp_oauth=authorization-server`
+- `/api/mcp?mcp_oauth=authorize`
+- `/api/mcp?mcp_oauth=token`
+
+Root OAuth paths remain compatibility rewrites only:
 
 - `/.well-known/oauth-protected-resource`
 - `/.well-known/oauth-authorization-server`
 - `/.well-known/openid-configuration`
 - `/oauth/authorize`
 - `/oauth/token`
+
+If clicking "Log in with LifeOS" opens the normal LifeOS app instead of the authorization page, a root OAuth rewrite was likely swallowed by the SPA fallback. Re-run `npm run smoke:mcp:oauth` and confirm the metadata points to `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`.
 
 ## Security Notes
 

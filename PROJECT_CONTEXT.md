@@ -497,7 +497,12 @@ Current behavior:
 - The endpoint uses a minimal stateless JSON-RPC 2.0 MCP-compatible HTTP handler and supports `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
 - `GET /api/mcp` returns only a safe health/capability summary and no private data.
 - Static-token private MCP operations require server-only `LIFEOS_MCP_TOKEN` through `Authorization: Bearer ...` or `x-lifeos-mcp-token` for local testing and custom clients.
-- ChatGPT Connector OAuth compatibility is handled by rewrites into `api/mcp.js`, not separate route files:
+- ChatGPT Connector OAuth compatibility is handled by direct `api/mcp.js` query URLs, not separate route files:
+  - `/api/mcp?mcp_oauth=protected-resource`
+  - `/api/mcp?mcp_oauth=authorization-server`
+  - `/api/mcp?mcp_oauth=authorize`
+  - `/api/mcp?mcp_oauth=token`
+- Root OAuth paths remain compatibility rewrites only and should not be the URLs advertised to ChatGPT:
   - `/.well-known/oauth-protected-resource`
   - `/.well-known/oauth-authorization-server`
   - `/.well-known/openid-configuration`
@@ -509,7 +514,7 @@ Current behavior:
 - MCP prompts are instruction templates only; they do not embed private data directly.
 - MCP v1.1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.
-- MCP OAuth metadata/authorize/token requests are all served by the same `api/mcp.js` function. Action API consolidation keeps total Vercel function count under the Hobby limit. Run `npm run check:functions` before deployment.
+- MCP OAuth metadata/authorize/token requests are all served by the same `api/mcp.js` function. OAuth metadata advertises direct `/api/mcp?mcp_oauth=...` URLs so ChatGPT linking cannot be swallowed by the SPA fallback. Action API consolidation keeps total Vercel function count under the Hobby limit. Run `npm run check:functions` before deployment.
 - Local validation uses `npm run test:mcp`; it does not require live Supabase, Gemini, Vercel, or WhatsApp.
 - Deployed validation uses `npm run smoke:mcp`, which reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env, calls the real deployed endpoint, and prints pass/fail results without dumping private LifeOS data or token material.
 - OAuth deployed validation uses `npm run smoke:mcp:oauth`, which reads the link secret from `.env.local` or process env, completes PKCE linking against the deployed endpoint, and redacts codes/tokens from output.
@@ -960,6 +965,8 @@ Workout mobile direction:
   - `GET /api/mcp` returns only safe capability metadata.
   - POST without a valid token returns `401`.
   - The `401` response includes OAuth resource metadata through `WWW-Authenticate` when OAuth is enabled.
+  - OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`.
+  - Direct `GET /api/mcp?mcp_oauth=authorize` returns MCP authorization HTML/errors, not the frontend SPA.
   - `initialize`, `tools/list`, `resources/list`, and `prompts/list` return valid JSON-RPC results.
   - `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
   - `get_brain_debug_context` returns compact trace summaries without secrets.

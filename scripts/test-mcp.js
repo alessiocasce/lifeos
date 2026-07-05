@@ -9,7 +9,14 @@ import {
   validateMcpAuth,
 } from '../api/mcp.js';
 import { clampMcpDays, clampMcpLimit, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
-import { getMcpOAuthRequestKind, signAccessTokenForTest, verifyOAuthAccessTokenForTest, verifyPkceForTest } from '../api/_utils/mcpOAuth.js';
+import {
+  buildAuthorizationServerMetadata,
+  buildWwwAuthenticateHeader,
+  getMcpOAuthRequestKind,
+  signAccessTokenForTest,
+  verifyOAuthAccessTokenForTest,
+  verifyPkceForTest,
+} from '../api/_utils/mcpOAuth.js';
 import { resolveActionName } from '../api/actions.js';
 
 const checks = [];
@@ -100,7 +107,7 @@ test('auth accepts bearer and fallback header only with matching token', () => {
   assertEqual(validateMcpAuth({ headers: { 'x-lifeos-mcp-token': 'test-token' } }, env).ok, true);
   assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer wrong' } }, env).status, 401);
   assertEqual(validateMcpAuth({ headers: {} }, env).status, 401);
-  assert(validateMcpAuth({ headers: {} }, env).wwwAuthenticate.includes('oauth-protected-resource'), 'missing WWW-Authenticate metadata');
+  assert(validateMcpAuth({ headers: {} }, env).wwwAuthenticate.includes('/api/mcp?mcp_oauth=protected-resource'), 'missing direct WWW-Authenticate metadata');
 });
 
 test('auth accepts signed OAuth access tokens without accepting wrong tokens', () => {
@@ -131,6 +138,14 @@ test('OAuth route detection supports rewrite query and original paths', () => {
   assertEqual(getMcpOAuthRequestKind({ query: { mcp_oauth: 'token' }, headers: {}, url: '/api/mcp' }), 'token');
   assertEqual(getMcpOAuthRequestKind({ headers: { host: 'example.com' }, url: '/.well-known/oauth-protected-resource' }), 'protected-resource');
   assertEqual(getMcpOAuthRequestKind({ headers: { host: 'example.com' }, url: '/oauth/authorize' }), 'authorize');
+});
+
+test('OAuth metadata advertises direct API authorize and token URLs', () => {
+  const req = { headers: { host: 'lifeos-ruby-gamma.vercel.app', 'x-forwarded-proto': 'https' }, url: '/api/mcp' };
+  const metadata = buildAuthorizationServerMetadata(req, {});
+  assertEqual(metadata.authorization_endpoint, 'https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=authorize');
+  assertEqual(metadata.token_endpoint, 'https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=token');
+  assert(buildWwwAuthenticateHeader(req, {}).includes('/api/mcp?mcp_oauth=protected-resource'), 'WWW-Authenticate should use direct API metadata URL');
 });
 
 test('consolidated Action API resolves supported action names only', () => {

@@ -322,7 +322,7 @@ No schema rerun is required for MCP v1.1. The Action API is consolidated into on
    - `npm run check:functions`
 5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
 6. Confirm MCP v1.1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
-7. Confirm ChatGPT OAuth discovery paths are handled by rewrites into `api/mcp.js`, not by separate API route files.
+7. Confirm ChatGPT OAuth metadata advertises direct `api/mcp.js` URLs, not root OAuth paths, for authorize/token.
 
 The smoke script reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env and does not print it. To test a preview deployment, run it with `LIFEOS_MCP_BASE_URL=https://your-preview-url.vercel.app`.
 The OAuth smoke script reads `LIFEOS_MCP_LINK_SECRET` or the dev fallback from `.env.local` or process env and redacts authorization codes/access tokens from output.
@@ -369,16 +369,22 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/mcp" \
   -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"lifeos://brain/debug"}}'
 ```
 
-OAuth protected resource metadata:
+Direct OAuth protected resource metadata:
 
 ```bash
-curl -X GET "https://lifeos-ruby-gamma.vercel.app/.well-known/oauth-protected-resource"
+curl -X GET "https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=protected-resource"
 ```
 
-OAuth authorization server metadata:
+Direct OAuth authorization server metadata:
 
 ```bash
-curl -X GET "https://lifeos-ruby-gamma.vercel.app/.well-known/oauth-authorization-server"
+curl -X GET "https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=authorization-server"
+```
+
+Direct OAuth authorize route:
+
+```bash
+curl -i -X GET "https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=authorize"
 ```
 
 For ChatGPT Connector setup, paste `https://lifeos-ruby-gamma.vercel.app/api/mcp` as the connector URL and enter the LifeOS MCP link secret on the authorization page.
@@ -387,6 +393,8 @@ Expected:
 
 - Invalid or missing token returns `401`.
 - Missing auth includes a `WWW-Authenticate` header pointing to the OAuth protected resource metadata.
+- Direct `GET /api/mcp?mcp_oauth=authorize` with missing params returns MCP authorization error HTML, not the SPA.
+- Root `/oauth/authorize` is compatibility only; direct API OAuth URLs are the source of truth.
 - Unknown methods/tools/resources return JSON-RPC errors.
 - `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
 - Responses include compact summaries only.

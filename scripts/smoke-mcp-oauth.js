@@ -18,30 +18,32 @@ if (!LINK_SECRET) {
 const checks = [];
 const oauth = {};
 
-test('protected resource metadata is available', async () => {
-  const response = await fetchJson(`${BASE_URL}/.well-known/oauth-protected-resource`);
+test('direct protected resource metadata is available', async () => {
+  const response = await fetchJson(`${BASE_URL}/api/mcp?mcp_oauth=protected-resource`);
   assertEqual(response.status, 200);
   assertEqual(response.body.resource, `${BASE_URL}/api/mcp`);
   assert(response.body.authorization_servers?.includes(BASE_URL), 'missing authorization server');
   assert(response.body.scopes_supported?.includes('lifeos.read'), 'missing lifeos.read scope');
 });
 
-test('authorization server metadata is available', async () => {
-  const response = await fetchJson(`${BASE_URL}/.well-known/oauth-authorization-server`);
+test('direct authorization server metadata is available', async () => {
+  const response = await fetchJson(`${BASE_URL}/api/mcp?mcp_oauth=authorization-server`);
   assertEqual(response.status, 200);
   assertEqual(response.body.issuer, BASE_URL);
-  assertEqual(response.body.authorization_endpoint, `${BASE_URL}/oauth/authorize`);
-  assertEqual(response.body.token_endpoint, `${BASE_URL}/oauth/token`);
+  assertEqual(response.body.authorization_endpoint, `${BASE_URL}/api/mcp?mcp_oauth=authorize`);
+  assertEqual(response.body.token_endpoint, `${BASE_URL}/api/mcp?mcp_oauth=token`);
   assert(response.body.grant_types_supported?.includes('authorization_code'), 'missing authorization_code grant');
   assert(response.body.code_challenge_methods_supported?.includes('S256'), 'missing S256 PKCE support');
+  oauth.authorizationEndpoint = response.body.authorization_endpoint;
+  oauth.tokenEndpoint = response.body.token_endpoint;
 });
 
-test('authorize page renders without private data', async () => {
+test('direct authorize page renders without private data', async () => {
   Object.assign(oauth, buildPkce());
   oauth.clientId = 'codex-smoke-client';
   oauth.redirectUri = 'https://chatgpt.com/connector/oauth/codex-smoke';
   oauth.state = crypto.randomUUID();
-  const url = new URL(`${BASE_URL}/oauth/authorize`);
+  const url = new URL(oauth.authorizationEndpoint);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', oauth.clientId);
   url.searchParams.set('redirect_uri', oauth.redirectUri);
@@ -53,10 +55,11 @@ test('authorize page renders without private data', async () => {
   const response = await fetchText(url.toString());
   assertEqual(response.status, 200);
   assert(response.text.includes('Link LifeOS MCP to ChatGPT'), 'authorize page title missing');
+  assert(response.text.includes('/api/mcp?mcp_oauth=authorize'), 'authorize form does not post to direct API endpoint');
   assert(!response.text.includes(LINK_SECRET), 'authorize page leaked link secret');
 });
 
-test('authorize post returns signed code redirect', async () => {
+test('direct authorize post returns signed code redirect', async () => {
   const form = new URLSearchParams({
     response_type: 'code',
     client_id: oauth.clientId,
@@ -68,7 +71,7 @@ test('authorize post returns signed code redirect', async () => {
     scope: 'lifeos.read',
     link_secret: LINK_SECRET,
   });
-  const response = await fetch(`${BASE_URL}/oauth/authorize`, {
+  const response = await fetch(oauth.authorizationEndpoint, {
     method: 'POST',
     redirect: 'manual',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -84,7 +87,7 @@ test('authorize post returns signed code redirect', async () => {
   assert(oauth.code, 'missing authorization code');
 });
 
-test('token endpoint exchanges code for bearer token', async () => {
+test('direct token endpoint exchanges code for bearer token', async () => {
   const form = new URLSearchParams({
     grant_type: 'authorization_code',
     code: oauth.code,
@@ -92,7 +95,7 @@ test('token endpoint exchanges code for bearer token', async () => {
     redirect_uri: oauth.redirectUri,
     code_verifier: oauth.codeVerifier,
   });
-  const response = await fetchJson(`${BASE_URL}/oauth/token`, {
+  const response = await fetchJson(oauth.tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form.toString(),
@@ -134,6 +137,8 @@ if (!process.exitCode) {
   console.log(`All live MCP OAuth smoke checks passed against ${BASE_URL}.`);
 }
 
+await runRootCompatibilityChecks();
+
 function test(name, fn) {
   checks.push({ name, fn });
 }
@@ -159,6 +164,41 @@ async function fetchJson(url, options = {}) {
 async function fetchText(url, options = {}) {
   const response = await fetch(url, options);
   return { status: response.status, text: await response.text() };
+}
+
+async function runRootCompatibilityChecks() {
+  const checks = [
+    async () => {
+      const response = await fetchJson(`${BASE_URL}/.well-known/oauth-protected-resource`);
+      return response.status === 200 && response.body?.resource === `${BASE_URL}/api/mcp`;
+    },
+    async () => {
+      const response = await fetchJson(`${BASE_URL}/.well-known/oauth-authorization-server`);
+      return response.status === 200 && response.body?.authorization_endpoint;
+    },
+    async () => {
+      const response = await fetchText(`${BASE_URL}/oauth/authorize`);
+      return response.text.includes('Authorization error') || response.text.includes('Link LifeOS MCP to ChatGPT');
+    },
+  ];
+  const labels = [
+    'root protected resource compatibility',
+    'root authorization server compatibility',
+    'root authorize compatibility',
+  ];
+
+  for (let index = 0; index < checks.length; index += 1) {
+    try {
+      const ok = await checks[index]();
+      if (ok) {
+        console.log(`PASS ${labels[index]}`);
+      } else {
+        console.warn(`WARN ${labels[index]} did not return MCP OAuth content; direct API OAuth remains authoritative.`);
+      }
+    } catch {
+      console.warn(`WARN ${labels[index]} failed; direct API OAuth remains authoritative.`);
+    }
+  }
 }
 
 function readEnvLocalValue(key) {
