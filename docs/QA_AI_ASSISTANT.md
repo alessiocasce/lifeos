@@ -10,6 +10,7 @@ Run this after deploying to Vercel with:
 - optional `GEMINI_MODEL`
 - optional `GEMINI_EMBEDDING_MODEL=gemini-embedding-2`
 - `LIFEOS_WHATSAPP_BRIDGE_SECRET` and `LIFEOS_WHATSAPP_ALLOWED_SENDERS` for WhatsApp inbound QA
+- `LIFEOS_MCP_TOKEN` for external read-only MCP debug/context QA
 
 The in-app Assistant sends the signed-in user's Supabase access token to `/api/ai/chat`. The backend verifies that user against `LIFEOS_ACTION_USER_ID`. The endpoint also accepts the action token for trusted server/tool callers.
 
@@ -416,6 +417,20 @@ Run `npm run test:brain` first; it covers the pure regression cases in this sect
 10. For the sleep-start flow, confirm the trace makes the failure point obvious if it breaks: missing pending action means thread/context issue, `pending_reply_intent: other` means normalization issue, generic Health command draft means mapping issue, and tool failure means execution issue.
 11. Inspect persisted trace metadata and debug responses.
 12. Confirm traces do not include API keys, bridge secrets, Authorization headers, Supabase service keys, Gemini keys, cookies, chain-of-thought, raw provider internals, or huge Vault chunk text.
+
+## MCP Brain Debug Access
+
+MCP is an external read-only context/debug layer. It is not the in-app Brain and must not execute Brain writes.
+
+1. Run `npm run test:mcp`.
+2. Deploy with `LIFEOS_MCP_TOKEN`.
+3. Call `POST /api/mcp` with `tools/call` and tool `get_brain_debug_context`.
+4. Confirm the response includes recent `brain_trace` summaries, selected skills/routes when available, pending-action state, command-draft summaries, tool results, final response type, and recent action log failures.
+5. Confirm full chat transcripts are not dumped by default.
+6. Confirm no Supabase keys, Gemini keys, WhatsApp bridge secrets, action tokens, bearer tokens, auth headers, or cookies appear.
+7. Confirm MCP calls do not create `ai_chat_messages`, do not execute actions, do not enqueue outbox messages, and do not send WhatsApp messages.
+8. Confirm `GET /api/mcp` returns only safe health/capability metadata.
+9. Confirm missing or invalid `LIFEOS_MCP_TOKEN` returns `401` for private POST operations.
 
 ## API Security
 

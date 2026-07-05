@@ -300,6 +300,72 @@ Troubleshooting:
 - If a sleep-start confirmation still loops, inspect `metadata.brain_trace` and verify `pending_action.type`, `pending_action.missing_fields`, `pending_reply_intent`, `pending_resolution`, and `tools`.
 - Dirty legacy pending shapes like `update_health_log` with `activity: sonno` or `health_field: inizio sonno` plus a time should normalize to `log_sleep_start` with no stale `health_field` missing field.
 
+## LifeOS MCP Deployment
+
+No schema rerun is required for MCP v1.
+
+1. Set Vercel env var:
+   - `LIFEOS_MCP_TOKEN`
+2. Confirm existing server env vars are still present:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `LIFEOS_ACTION_USER_ID`
+3. Optional: keep `GEMINI_API_KEY` configured if `search_lifeos_vault` should use semantic Vault search.
+4. Run before deployment:
+   - `npm run test:mcp`
+   - `npm run check:functions`
+5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
+6. Confirm MCP v1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
+
+Health:
+
+```bash
+curl -X GET "https://lifeos-ruby-gamma.vercel.app/api/mcp"
+```
+
+Initialize:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MCP_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"test"}}}'
+```
+
+Tools list:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MCP_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+```
+
+Tool call:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MCP_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_recent_workouts","arguments":{"days":7}}}'
+```
+
+Resource read:
+
+```bash
+curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_MCP_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"lifeos://brain/debug"}}'
+```
+
+Expected:
+
+- Invalid or missing token returns `401`.
+- Unknown methods/tools/resources return JSON-RPC errors.
+- Responses include compact summaries only.
+- No API keys, bearer tokens, Supabase service keys, Gemini keys, WhatsApp secrets, or auth headers appear in responses.
+
 ## Known Non-Failing Build Warning
 
 The production build may warn that a JavaScript chunk is larger than 500 kB. This is expected for now and does not block deployment.

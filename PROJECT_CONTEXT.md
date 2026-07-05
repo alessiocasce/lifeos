@@ -410,7 +410,7 @@ Current limitations:
 - No arbitrary SQL.
 - No destructive writes.
 - Pending actions support low-risk multi-turn confirmation and slot filling for supported Health, Calendar, Memo, Expense, and related action flows.
-- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. Broader proactive nudges are not implemented yet.
+- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. LifeOS MCP v1 exposes read-only context/debug access through one authenticated endpoint. Broader proactive nudges are not implemented yet.
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
 
@@ -478,6 +478,25 @@ Current behavior:
 - Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when the latest WhatsApp assistant message is a proactive memo reminder.
 - Proactive outbound messages do not directly modify LifeOS records except outbox status. Memo completion, dismissal, or snooze happens only after a user reply.
 - V1A intentionally excludes Morning Briefing, calendar completion checks, workout/project nudges, sleep/wake missing nudges, finance nudges, PWA push, AI-generated coaching, and paid WhatsApp providers.
+
+## MCP Server Current Status
+
+LifeOS MCP Server v1 exposes external read-only context/debug access for MCP-compatible clients without turning them into write-capable LifeOS agents.
+
+Current behavior:
+
+- Vercel exposes one serverless MCP endpoint at `api/mcp.js` / `POST /api/mcp`.
+- The endpoint uses a minimal stateless JSON-RPC 2.0 MCP-compatible HTTP handler and supports `initialize`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `prompts/list`, and `prompts/get`.
+- `GET /api/mcp` returns only a safe health/capability summary and no private data.
+- Private MCP operations require server-only `LIFEOS_MCP_TOKEN` through `Authorization: Bearer ...` or `x-lifeos-mcp-token` for local testing.
+- MCP is scoped to the configured personal user via `LIFEOS_ACTION_USER_ID` and service-role Supabase reads.
+- MCP tools/resources provide compact summaries for snapshots, today/week, workouts, health, open memos, upcoming calendar, projects, Brain traces/action logs, WhatsApp outbox, Vault search, and open loops.
+- MCP prompts are instruction templates only; they do not embed private data directly.
+- MCP v1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
+- Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.
+- The route was added as a single function so the Vercel Hobby function count remains at or below 12. Run `npm run check:functions` before deployment.
+- Local validation uses `npm run test:mcp`; it does not require live Supabase, Gemini, Vercel, or WhatsApp.
+- Future MCP v1.5 may add a read-only Brain route preview. Future v2 may add carefully confirmed write tools, but writes are intentionally excluded from v1.
 
 ## Calendar Module Current Status
 
@@ -918,6 +937,13 @@ Workout mobile direction:
   - Confirm ack persists a proactive assistant message in the dedicated WhatsApp Brain thread.
   - Reply `fatto`, `snooze 30`, `annulla`, and `?` from the same sender and confirm memo/outbox behavior.
   - Confirm expired or duplicate reminders are not repeatedly sent after bridge downtime.
+- Test LifeOS MCP Server v1 after deploying `LIFEOS_MCP_TOKEN`:
+  - `GET /api/mcp` returns only safe capability metadata.
+  - POST without a valid token returns `401`.
+  - `initialize`, `tools/list`, `resources/list`, and `prompts/list` return valid JSON-RPC results.
+  - `get_brain_debug_context` returns compact trace summaries without secrets.
+  - No MCP tool mutates LifeOS records or sends WhatsApp messages.
+  - Run `npm run test:mcp` and `npm run check:functions`; function count must remain at or below 12.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.
