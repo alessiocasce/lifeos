@@ -8,7 +8,7 @@ import {
   listMcpTools,
   validateMcpAuth,
 } from '../api/mcp.js';
-import { clampMcpDays, clampMcpLimit, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
+import { clampMcpDays, clampMcpLimit, compactWorkout, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
 import {
   buildAuthorizationServerMetadata,
   buildWwwAuthenticateHeader,
@@ -176,6 +176,94 @@ test('MCP sanitizer removes secret-like fields', () => {
   assertEqual(sanitized.api_key, undefined);
   assertEqual(sanitized.nested.authorization, undefined);
   assertEqual(sanitized.nested.value, 'visible');
+});
+
+test('MCP workout compactor keeps exact set-level details and aggregates', () => {
+  const workout = compactWorkout({
+    id: 'workout-1',
+    name: 'Push',
+    performed_on: '2026-06-18',
+    started_at: '2026-06-18T10:00:00.000Z',
+    ended_at: '2026-06-18T11:05:00.000Z',
+    notes: 'Good session',
+  }, [
+    {
+      id: 'set-2',
+      workout_id: 'workout-1',
+      exercise: 'Bench Press',
+      set_number: 2,
+      is_warmup: false,
+      weight: 50,
+      reps: 7,
+      rpe: 8,
+      performed_at: '2026-06-18T10:12:00.000Z',
+      notes: '',
+    },
+    {
+      id: 'set-1',
+      workout_id: 'workout-1',
+      exercise: 'Bench Press',
+      set_number: 1,
+      is_warmup: false,
+      weight: 50,
+      reps: 8,
+      rpe: 7.5,
+      performed_at: '2026-06-18T10:09:00.000Z',
+      notes: 'Clean',
+    },
+    {
+      id: 'set-0',
+      workout_id: 'workout-1',
+      exercise: 'Bench Press',
+      set_number: 0,
+      is_warmup: true,
+      weight: 20,
+      reps: 10,
+      rpe: null,
+      performed_at: '2026-06-18T10:05:00.000Z',
+      notes: 'warmup',
+    },
+  ]);
+
+  assertEqual(workout.duration_minutes, 65);
+  assertEqual(workout.set_count, 3);
+  assertEqual(workout.exercise_count, 1);
+  assertEqual(workout.sets.length, 3);
+  assertEqual(workout.sets[0].id, 'set-0');
+  assertEqual(workout.sets[1].id, 'set-1');
+  assertEqual(workout.sets[2].id, 'set-2');
+  assertEqual(workout.sets[1].weight, 50);
+  assertEqual(workout.sets[1].reps, 8);
+  assertEqual(workout.sets[1].rpe, 7.5);
+  const bench = workout.exercises[0];
+  assertEqual(bench.exercise, 'Bench Press');
+  assertEqual(bench.set_count, 3);
+  assertEqual(bench.working_set_count, 2);
+  assertEqual(bench.warmup_set_count, 1);
+  assertEqual(bench.top_weight, 50);
+  assertEqual(bench.total_reps, 25);
+  assertEqual(bench.average_reps, 8.3);
+  assertEqual(bench.average_rpe, 7.8);
+  assertEqual(bench.sets.length, 3);
+  assertEqual(bench.top_set.id, 'set-1');
+});
+
+test('MCP sanitizer preserves normal nested workout set fields', () => {
+  const sanitized = sanitizeMcpOutput({
+    workouts: [{
+      exercises: [{
+        sets: [{
+          id: 'set-1',
+          set_number: 1,
+          weight: 50,
+          reps: 8,
+          rpe: 7.5,
+        }],
+      }],
+    }],
+  });
+  assertEqual(sanitized.workouts[0].exercises[0].sets[0].weight, 50);
+  assertEqual(sanitized.workouts[0].exercises[0].sets[0].reps, 8);
 });
 
 for (const check of checks) {

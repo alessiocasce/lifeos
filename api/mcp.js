@@ -41,7 +41,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'get_recent_workouts',
-    description: 'Returns recent workouts, exercises, sets, dates, durations, and compact stats for analysis.',
+    description: 'Returns recent workouts with exact exercise sets including set_number, weight, reps, RPE, warmup flag, notes, dates, durations, and compact stats for analysis.',
     inputSchema: objectSchema({ days: numberSchema('Optional day window, default 7, max 30.'), limit: numberSchema('Optional max workouts, default 20.') }),
   },
   {
@@ -99,7 +99,7 @@ const RESOURCE_DEFINITIONS = [
   ['lifeos://today', 'Today', 'Today summary for Europe/Rome.', () => getTodaySummary],
   ['lifeos://week/summary', 'Week Summary', 'Last 7 days summary.', () => getWeekSummary],
   ['lifeos://health/7d', 'Health 7d', 'Recent health and sleep summary.', () => getHealthSummary],
-  ['lifeos://workouts/recent', 'Recent Workouts', 'Recent workout summaries.', () => getRecentWorkouts],
+  ['lifeos://workouts/recent', 'Recent Workouts', 'Recent workout summaries with exact set-level details.', () => getRecentWorkouts],
   ['lifeos://memos/open', 'Open Memos', 'Open memos and reminder status.', () => getOpenMemos],
   ['lifeos://calendar/upcoming', 'Upcoming Calendar', 'Upcoming LifeOS calendar events.', () => getUpcomingCalendar],
   ['lifeos://projects/status', 'Projects Status', 'Project and session status.', () => getProjectsStatus],

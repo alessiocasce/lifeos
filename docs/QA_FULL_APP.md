@@ -257,12 +257,15 @@ Run the focused checklists after the full flow:
 3. Trigger `/api/integrations/whatsapp/outbox` with `action=evaluate`, then `action=poll`, then `action=ack` with valid secret and allowed recipient.
 4. Confirm the outbox row moves through queued/claimed/sent without duplicate rows for the same memo due slot.
 5. Confirm ack `sent` persists a proactive assistant message into the dedicated WhatsApp Brain thread.
-6. Reply through WhatsApp inbound with `fatto`, `snooze 30`, `annulla`, and `?` across separate test memos.
-7. Confirm memo status/snooze/explanation behavior is correct and no unrelated LifeOS writes occur.
-8. Confirm Home UI remains signal-filtered and does not show outbox/admin/proactive widgets.
-9. Confirm Brain UI still opens fresh New Chat by default and does not expose the WhatsApp thread selector.
-10. Confirm mobile Brain internal-scroll layout remains intact after proactive WhatsApp thread messages exist in the backend.
-11. Run `npm run check:functions` and confirm the Vercel API route count stays at or below the Hobby limit of 12.
+6. Simulate bridge failure after poll without ack and confirm stale `claimed` rows recover after the claim timeout, or expire/fail safely.
+7. Confirm ack `sent` is accepted for `claimed -> sent` and repeated `sent -> sent`, but queued/expired/failed/cancelled rows are not silently marked sent.
+8. Reply through WhatsApp inbound with `fatto`, `snooze 30`, `annulla`, and `?` across separate test memos.
+9. Confirm stale or multiple recent proactive reminders ask for clarification before mutating any memo.
+10. Confirm memo status/snooze/explanation behavior is correct and no unrelated LifeOS writes occur.
+11. Confirm Home UI remains signal-filtered and does not show outbox/admin/proactive widgets.
+12. Confirm Brain UI still opens fresh New Chat by default and does not expose the WhatsApp thread selector.
+13. Confirm mobile Brain internal-scroll layout remains intact after proactive WhatsApp thread messages exist in the backend.
+14. Run `npm run check:functions` and confirm the Vercel API route count stays at or below the Hobby limit of 12.
 
 ## LifeOS MCP
 
@@ -275,11 +278,12 @@ Run the focused checklists after the full flow:
 7. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
 8. Confirm `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
 9. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
-10. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
-11. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
-12. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
-13. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
-14. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+10. Call `get_recent_workouts` and `lifeos://workouts/recent`; confirm exact workout set rows are present in top-level `sets[]` and per-exercise `sets[]`.
+11. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
+12. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
+13. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
+14. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
+15. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
 
 ## Consolidated Action API
 

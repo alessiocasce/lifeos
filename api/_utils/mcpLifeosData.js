@@ -21,7 +21,7 @@ export function clampMcpDays(value, defaultValue = DEFAULT_DAYS) {
 }
 
 export function sanitizeMcpOutput(value, depth = 0) {
-  if (depth > 6) return '[truncated]';
+  if (depth > 8) return '[truncated]';
   if (value == null) return value;
   if (typeof value === 'string') return value.length > 1600 ? `${value.slice(0, 1600)}...` : value;
   if (typeof value === 'number' || typeof value === 'boolean') return value;
@@ -422,33 +422,111 @@ function compactHealthLog(row) {
   };
 }
 
-function compactWorkout(workout, sets) {
+export function compactWorkout(workout, sets) {
+  const orderedSets = [...sets].map(compactWorkoutSet).sort(compareWorkoutSets);
   const exercises = new Map();
-  for (const set of sets) {
+  for (const set of orderedSets) {
     const key = set.exercise || 'Unknown';
-    const entry = exercises.get(key) ?? { exercise: key, sets: 0, top_weight: null, total_reps: 0, rpe_values: [] };
-    entry.sets += 1;
-    if (Number.isFinite(Number(set.weight))) entry.top_weight = Math.max(Number(entry.top_weight ?? 0), Number(set.weight));
-    if (Number.isFinite(Number(set.reps))) entry.total_reps += Number(set.reps);
-    if (Number.isFinite(Number(set.rpe))) entry.rpe_values.push(Number(set.rpe));
+    const entry = exercises.get(key) ?? {
+      exercise: key,
+      set_count: 0,
+      working_set_count: 0,
+      warmup_set_count: 0,
+      top_weight: null,
+      top_set: null,
+      total_reps: 0,
+      rep_values: [],
+      rpe_values: [],
+      sets: [],
+    };
+    entry.set_count += 1;
+    if (set.is_warmup) entry.warmup_set_count += 1;
+    else entry.working_set_count += 1;
+    if (isFiniteMetric(set.weight) && (entry.top_weight === null || Number(set.weight) > Number(entry.top_weight))) {
+      entry.top_weight = Number(set.weight);
+      entry.top_set = set;
+    }
+    if (isFiniteMetric(set.reps)) entry.total_reps += Number(set.reps);
+    if (isFiniteMetric(set.reps)) entry.rep_values.push(Number(set.reps));
+    if (isFiniteMetric(set.rpe)) entry.rpe_values.push(Number(set.rpe));
+    entry.sets.push(set);
     exercises.set(key, entry);
   }
+  const duration = calculateDurationMinutes(workout.started_at, workout.ended_at);
   return {
     id: workout.id,
     name: workout.name,
     performed_on: workout.performed_on,
     started_at: workout.started_at,
     ended_at: workout.ended_at,
+    duration_minutes: duration.duration_minutes,
+    ...(duration.duration_warning ? { duration_warning: duration.duration_warning } : {}),
     notes: safePreview(workout.notes, 300),
-    set_count: sets.length,
+    set_count: orderedSets.length,
+    exercise_count: exercises.size,
     exercises: [...exercises.values()].map((entry) => ({
       exercise: entry.exercise,
-      sets: entry.sets,
+      set_count: entry.set_count,
+      working_set_count: entry.working_set_count,
+      warmup_set_count: entry.warmup_set_count,
       top_weight: entry.top_weight,
+      top_set: entry.top_set,
       total_reps: entry.total_reps,
+      average_reps: average(entry.rep_values),
       average_rpe: average(entry.rpe_values),
+      sets: entry.sets.sort(compareWorkoutSets),
     })),
+    sets: orderedSets,
   };
+}
+
+function compactWorkoutSet(set) {
+  return {
+    id: set.id,
+    workout_id: set.workout_id,
+    exercise: set.exercise || 'Unknown',
+    set_number: set.set_number,
+    is_warmup: Boolean(set.is_warmup),
+    weight: set.weight,
+    reps: set.reps,
+    rpe: set.rpe,
+    performed_at: set.performed_at,
+    notes: safePreview(set.notes, 240),
+  };
+}
+
+function compareWorkoutSets(a, b) {
+  return String(a.exercise || '').localeCompare(String(b.exercise || ''))
+    || compareNullableNumber(a.set_number, b.set_number)
+    || String(a.performed_at || '').localeCompare(String(b.performed_at || ''))
+    || String(a.id || '').localeCompare(String(b.id || ''));
+}
+
+function compareNullableNumber(a, b) {
+  const left = Number(a);
+  const right = Number(b);
+  const leftFinite = Number.isFinite(left);
+  const rightFinite = Number.isFinite(right);
+  if (leftFinite && rightFinite) return left - right;
+  if (leftFinite) return -1;
+  if (rightFinite) return 1;
+  return 0;
+}
+
+function isFiniteMetric(value) {
+  if (value === null || value === undefined || value === '') return false;
+  return Number.isFinite(Number(value));
+}
+
+function calculateDurationMinutes(startedAt, endedAt) {
+  const start = new Date(startedAt);
+  const end = new Date(endedAt);
+  if (!startedAt || !endedAt || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return { duration_minutes: null };
+  }
+  const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
+  if (minutes > 12 * 60) return { duration_minutes: null, duration_warning: 'duration_out_of_range' };
+  return { duration_minutes: minutes };
 }
 
 function summarizeWorkouts(workouts) {

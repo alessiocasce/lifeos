@@ -16,8 +16,11 @@ import { buildBrainWorkingContext } from '../api/_utils/brainWorkingContext.js';
 import { shouldRetrieveBrainVault } from '../api/_utils/brainVaultEligibility.js';
 import {
   buildProactiveWorkingContextFromOutbox,
+  classifyClaimedOutboxForRecovery,
+  getOutboxRetryDelayMinutes,
   nextOutboxStatusForAck,
   normalizeProactiveMemoReply,
+  selectProactiveMemoReplyTarget,
 } from '../api/_utils/brainOutbox.js';
 import {
   buildMemoIdempotencyKey,
@@ -374,7 +377,41 @@ test('outbox ack status transitions retry then fail', () => {
   assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'failed', expired: false }), { status: 'queued', retry: true });
   assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 3, ackStatus: 'failed', expired: false }), { status: 'failed', retry: false });
   assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'sent', expired: false }), { status: 'sent', retry: false });
-  assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'failed', expired: true }), { status: 'failed', retry: false });
+  assert.deepEqual(nextOutboxStatusForAck({ currentAttempts: 1, ackStatus: 'failed', expired: true }), { status: 'expired', retry: false });
+  assert.equal(getOutboxRetryDelayMinutes(1), 2);
+  assert.equal(getOutboxRetryDelayMinutes(2), 5);
+  assert.equal(getOutboxRetryDelayMinutes(3), 0);
+});
+
+test('claimed outbox recovery classifies stale, expired, and max-attempt rows', () => {
+  const now = new Date('2026-06-18T10:00:00.000Z');
+  assert.deepEqual(classifyClaimedOutboxForRecovery({
+    status: 'claimed',
+    attempts: 1,
+    sent_at: null,
+    expires_at: '2026-06-18T11:00:00.000Z',
+  }, now), {
+    action: 'requeue',
+    reason: 'stale_claim',
+    scheduled_for: '2026-06-18T10:00:00.000Z',
+  });
+  assert.deepEqual(classifyClaimedOutboxForRecovery({
+    status: 'claimed',
+    attempts: 1,
+    sent_at: null,
+    expires_at: '2026-06-18T09:59:00.000Z',
+  }, now), { action: 'expire', reason: 'expired' });
+  assert.deepEqual(classifyClaimedOutboxForRecovery({
+    status: 'claimed',
+    attempts: 3,
+    sent_at: null,
+    expires_at: '2026-06-18T11:00:00.000Z',
+  }, now), { action: 'fail', reason: 'max_attempts' });
+  assert.deepEqual(classifyClaimedOutboxForRecovery({
+    status: 'sent',
+    attempts: 1,
+    sent_at: '2026-06-18T09:55:00.000Z',
+  }, now), { action: 'keep', reason: 'not_reclaimable' });
 });
 
 test('sent proactive outbox message metadata supplies memo working context', () => {
@@ -413,6 +450,102 @@ test('proactive memo reply intents normalize', () => {
   }
 });
 
+test('proactive memo reply selects one recent reminder target', () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-1',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const selection = selectProactiveMemoReplyTarget({
+    message: 'fatto',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(selection.type, 'target', compact(selection));
+  assert.equal(selection.intent.intent, 'done');
+  assert.equal(selection.proactive.source_id, proactiveMemoFixtures.timedMemo.id);
+});
+
+test('stale proactive memo reply asks clarification instead of selecting target', () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-old',
+      created_at: '2026-06-18T01:00:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const selection = selectProactiveMemoReplyTarget({
+    message: 'fatto',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(selection.type, 'stale', compact(selection));
+});
+
+test('multiple recent proactive memo replies require disambiguation unless title is mentioned', () => {
+  const otherMemo = {
+    ...proactiveMemoFixtures.dateOnlyMemo,
+    id: '55555555-5555-4555-8555-555555555555',
+    title: 'Fare matematica',
+  };
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-1',
+      created_at: '2026-06-18T09:50:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+    proactiveAssistantMessage({
+      id: 'message-2',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: otherMemo.id,
+      title: otherMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const ambiguous = selectProactiveMemoReplyTarget({
+    message: 'fatto',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(ambiguous.type, 'ambiguous', compact(ambiguous));
+
+  const explicit = selectProactiveMemoReplyTarget({
+    message: 'fatto matematica',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(explicit.type, 'target', compact(explicit));
+  assert.equal(explicit.proactive.source_id, otherMemo.id);
+});
+
+test('clean proactive snooze and cancel replies select the recent reminder', () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-1',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  for (const message of ['snooze 30', 'annulla']) {
+    const selection = selectProactiveMemoReplyTarget({
+      message,
+      brainChat,
+      now: new Date('2026-06-18T10:00:00.000Z'),
+    });
+    assert.equal(selection.type, 'target', `${message}: ${compact(selection)}`);
+  }
+});
+
 function test(name, fn) {
   tests.push({ name, fn });
 }
@@ -425,6 +558,43 @@ function assertSleepStartCandidate(candidate, label) {
 
 function compact(value) {
   return JSON.stringify(value, null, 2);
+}
+
+function buildProactiveBrainChat(messages) {
+  return {
+    conversationHistory: messages,
+  };
+}
+
+function proactiveAssistantMessage({ id, created_at, source_id, title, rule_key }) {
+  return {
+    id,
+    role: 'assistant',
+    content: `Promemoria: ${title}. Fatto?`,
+    created_at,
+    metadata: {
+      proactive_message: true,
+      outbox_message_id: `outbox-${id}`,
+      rule_key,
+      source_type: 'memo',
+      source_id,
+      expected_reply_type: 'memo_done_snooze_cancel',
+      working_context: {
+        language: 'it',
+        last_subject: {
+          id: source_id,
+          type: 'memo',
+          label: title,
+          source: 'proactive_whatsapp_memo',
+          source_type: 'memo',
+          source_id,
+          raw: {
+            rule_key,
+          },
+        },
+      },
+    },
+  };
 }
 
 async function main() {

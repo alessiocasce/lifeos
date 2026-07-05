@@ -48,6 +48,8 @@ Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in
 
 All tools are read-only and return compact, limited, sanitized JSON.
 
+`get_recent_workouts` and `lifeos://workouts/recent` include exact set-level data as well as aggregates. Each workout exposes top-level `sets[]` and per-exercise `sets[]` with `set_number`, `is_warmup`, `weight`, `reps`, `rpe`, `performed_at`, and safe note previews, so external clients can analyze exact series such as `50x8`, `50x7`, `50x6`.
+
 ## Resources
 
 - `lifeos://snapshot`

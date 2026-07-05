@@ -482,8 +482,10 @@ Current behavior:
 - The local bridge calls one multiplexed endpoint, `POST /api/integrations/whatsapp/outbox`, with `action=evaluate`, then `action=poll`, sends returned messages through WhatsApp, and calls the same endpoint with `action=ack`.
 - The outbox endpoint is intentionally consolidated into one serverless function to stay under Vercel Hobby function limits. Legacy `/outbox/evaluate`, `/outbox/poll`, and `/outbox/ack` paths are rewrite-compatible when `vercel.json` is active, but new bridge code should use the combined endpoint.
 - Outbox rows are idempotent by `user_id + idempotency_key`; due messages move `queued -> claimed -> sent`, and failed sends retry up to a small capped attempt count before `failed`.
+- Polling reclaims stale `claimed` rows after a short claim timeout so bridge crashes after poll do not permanently hide reminders. Expired claimed rows become `expired`, and claimed rows over the attempt cap become `failed`.
+- ACK handling is state-aware: normal sent ACKs require `claimed -> sent`, repeated `sent -> sent` is idempotent, and queued/expired/failed/cancelled rows are not silently marked sent. Failed ACKs requeue with short backoff while attempts remain.
 - Successful ack persists the proactive WhatsApp text as an assistant message in the same dedicated WhatsApp Brain thread, with `metadata.proactive_message = true` and `working_context.last_subject` pointing to the memo.
-- Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when the latest WhatsApp assistant message is a proactive memo reminder.
+- Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when recent WhatsApp context contains one unambiguous proactive memo reminder inside the reply window. Stale or multiple recent reminders ask clarification instead of mutating a memo.
 - Proactive outbound messages do not directly modify LifeOS records except outbox status. Memo completion, dismissal, or snooze happens only after a user reply.
 - V1A intentionally excludes Morning Briefing, calendar completion checks, workout/project nudges, sleep/wake missing nudges, finance nudges, PWA push, AI-generated coaching, and paid WhatsApp providers.
 
@@ -511,6 +513,7 @@ Current behavior:
 - OAuth mode supports authorization-code + PKCE S256 for the personal connector, with `lifeos.read` scope only. It uses `LIFEOS_MCP_LINK_SECRET` for the linking page and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` for stateless signed codes/access tokens. `LIFEOS_MCP_OAUTH_ENABLED=false` is the emergency rollback flag.
 - MCP is scoped to the configured personal user via `LIFEOS_ACTION_USER_ID` and service-role Supabase reads.
 - MCP tools/resources provide compact summaries for snapshots, today/week, workouts, health, open memos, upcoming calendar, projects, Brain traces/action logs, WhatsApp outbox, Vault search, and open loops.
+- MCP workout output includes exact set-level rows in both top-level `sets[]` and per-exercise `sets[]`, including set number, warmup flag, weight, reps, RPE, performed time, and safe note previews, while preserving aggregate workout/exercise summaries.
 - MCP prompts are instruction templates only; they do not embed private data directly.
 - MCP v1.1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.

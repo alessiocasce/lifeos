@@ -7,6 +7,9 @@ const MAX_OUTBOX_LIMIT = 10;
 const DEFAULT_OUTBOX_LIMIT = 3;
 const MAX_ATTEMPTS = 3;
 const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
+const DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES = 10;
+const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
+const PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS = 36;
 
 export async function enqueueOutboxMessage({
   userId = getActionUserId(),
@@ -72,6 +75,7 @@ export async function pollOutboxMessages({
   const now = new Date().toISOString();
 
   await expireStaleOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
+  await reclaimStaleClaimedOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
 
   const due = await client
     .from('brain_outbox_messages')
@@ -111,6 +115,48 @@ export async function pollOutboxMessages({
   }
 
   return claimed;
+}
+
+export async function reclaimStaleClaimedOutboxMessages({
+  client = getSupabaseAdmin(),
+  userId = getActionUserId(),
+  recipient,
+  channel = 'whatsapp',
+  now = new Date().toISOString(),
+} = {}) {
+  const safeRecipient = requiredText(recipient, 'recipient', 180);
+  const safeChannel = normalizeChannel(channel);
+  const nowDate = normalizeDate(now);
+  const cutoff = new Date(nowDate.getTime() - getClaimReclaimTimeoutMinutes() * 60000).toISOString();
+  const result = await client
+    .from('brain_outbox_messages')
+    .select(outboxSelect())
+    .eq('user_id', userId)
+    .eq('recipient', safeRecipient)
+    .eq('channel', safeChannel)
+    .eq('status', 'claimed')
+    .is('sent_at', null)
+    .or(`claimed_at.is.null,claimed_at.lte.${cutoff}`)
+    .limit(50);
+  if (result.error) throw result.error;
+
+  const reclaimed = [];
+  for (const row of result.data ?? []) {
+    const decision = classifyClaimedOutboxForRecovery(row, nowDate);
+    if (decision.action === 'keep') continue;
+    const update = await client
+      .from('brain_outbox_messages')
+      .update(buildClaimRecoveryUpdate(row, decision, nowDate))
+      .eq('id', row.id)
+      .eq('user_id', userId)
+      .eq('status', 'claimed')
+      .is('sent_at', null)
+      .select(outboxSelect())
+      .maybeSingle();
+    if (update.error) throw update.error;
+    if (update.data) reclaimed.push(update.data);
+  }
+  return reclaimed;
 }
 
 export async function ackOutboxMessage({
@@ -203,10 +249,28 @@ export async function persistSentProactiveMessageToWhatsappThread({ userId = get
 }
 
 export async function resolveProactiveMemoReply({ message, brainChat, context } = {}) {
-  const proactive = extractLatestProactiveMemoMessage(brainChat);
-  if (!proactive) return null;
-  const intent = normalizeProactiveMemoReply(message);
-  if (intent.intent === 'other') return null;
+  const selection = selectProactiveMemoReplyTarget({ message, brainChat, now: new Date() });
+  if (selection.type === 'none') return null;
+  if (selection.type === 'stale') {
+    return buildProactiveClarificationResult({
+      language: selection.language,
+      answer: selection.language === 'it'
+        ? 'Questo promemoria sembra vecchio. Quale promemoria vuoi aggiornare?'
+        : 'This reminder looks old. Which reminder do you want to update?',
+      workingContext: selection.proactive?.working_context,
+      reason: 'Proactive memo reply was outside the valid reply window.',
+    });
+  }
+  if (selection.type === 'ambiguous') {
+    return buildProactiveClarificationResult({
+      language: selection.language,
+      answer: formatProactiveMemoDisambiguation(selection.candidates, selection.language),
+      workingContext: selection.candidates?.[0]?.working_context,
+      reason: 'Multiple recent proactive memo reminders matched a short reply.',
+    });
+  }
+  const proactive = selection.proactive;
+  const intent = selection.intent;
 
   const memoId = proactive.source_id;
   if (!memoId) {
@@ -291,7 +355,13 @@ export async function resolveProactiveMemoReply({ message, brainChat, context } 
 }
 
 export function extractLatestProactiveMemoMessage(brainChat) {
+  return extractRecentProactiveMemoMessages(brainChat, { now: new Date(), includeExpired: true })[0] ?? null;
+}
+
+export function extractRecentProactiveMemoMessages(brainChat, { now = new Date(), includeExpired = false } = {}) {
   const history = Array.isArray(brainChat?.conversationHistory) ? brainChat.conversationHistory : [];
+  const nowDate = normalizeDate(now);
+  const messages = [];
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const item = history[index];
     if (item?.role !== 'assistant') continue;
@@ -299,7 +369,8 @@ export function extractLatestProactiveMemoMessage(brainChat) {
     if (!metadata.proactive_message || metadata.expected_reply_type !== MEMO_REPLY_TYPE) continue;
     const workingContext = metadata.working_context && typeof metadata.working_context === 'object' ? metadata.working_context : {};
     const subject = workingContext.last_subject && typeof workingContext.last_subject === 'object' ? workingContext.last_subject : {};
-    return {
+    const createdAt = normalizeDate(item.created_at ?? metadata.created_at ?? nowDate);
+    const message = {
       message_id: item.id,
       outbox_message_id: metadata.outbox_message_id,
       source_id: metadata.source_id || subject.id,
@@ -307,9 +378,33 @@ export function extractLatestProactiveMemoMessage(brainChat) {
       title: subject.label || metadata.memo_title || item.content || 'Memo',
       language: workingContext.language === 'en' ? 'en' : 'it',
       working_context: workingContext,
+      expected_reply_type: metadata.expected_reply_type,
+      rule_key: metadata.rule_key || subject.raw?.rule_key || null,
+      created_at: createdAt.toISOString(),
+      reply_window_hours: getProactiveReplyWindowHours(metadata.rule_key || subject.raw?.rule_key),
+      expired: isProactiveMemoReplyExpired({ createdAt, now: nowDate, ruleKey: metadata.rule_key || subject.raw?.rule_key }),
     };
+    if (includeExpired || !message.expired) messages.push(message);
   }
-  return null;
+  return messages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export function selectProactiveMemoReplyTarget({ message, brainChat, now = new Date() } = {}) {
+  const intent = normalizeProactiveMemoReply(message);
+  if (intent.intent === 'other') return { type: 'none', intent };
+  const all = extractRecentProactiveMemoMessages(brainChat, { now, includeExpired: true });
+  if (!all.length) return { type: 'none', intent };
+  const language = all[0]?.language === 'en' ? 'en' : 'it';
+  const active = dedupeProactiveMemoMessages(all.filter((item) => !item.expired));
+  if (!active.length) return { type: 'stale', intent, proactive: all[0], language };
+  if (active.length === 1) return { type: 'target', intent, proactive: active[0], language: active[0].language };
+
+  const explicitMatches = active.filter((item) => proactiveMemoTitleMatches(message, item.title));
+  if (explicitMatches.length === 1) {
+    return { type: 'target', intent, proactive: explicitMatches[0], language: explicitMatches[0].language };
+  }
+
+  return { type: 'ambiguous', intent, candidates: active.slice(0, 3), language };
 }
 
 export function normalizeProactiveMemoReply(message) {
@@ -333,9 +428,24 @@ export function normalizeProactiveMemoReply(message) {
 
 export function nextOutboxStatusForAck({ currentAttempts = 0, ackStatus, expired = false } = {}) {
   if (ackStatus === 'sent') return { status: 'sent', retry: false };
-  if (expired) return { status: 'failed', retry: false };
+  if (expired) return { status: 'expired', retry: false };
   if (Number(currentAttempts ?? 0) < MAX_ATTEMPTS) return { status: 'queued', retry: true };
   return { status: 'failed', retry: false };
+}
+
+export function getOutboxRetryDelayMinutes(currentAttempts = 0) {
+  const attempts = Math.max(0, Math.trunc(Number(currentAttempts)) || 0);
+  if (attempts <= 1) return 2;
+  if (attempts === 2) return 5;
+  return 0;
+}
+
+export function classifyClaimedOutboxForRecovery(row, now = new Date()) {
+  const nowDate = normalizeDate(now);
+  if (!row || row.status !== 'claimed' || row.sent_at) return { action: 'keep', reason: 'not_reclaimable' };
+  if (row.expires_at && new Date(row.expires_at) <= nowDate) return { action: 'expire', reason: 'expired' };
+  if (Number(row.attempts ?? 0) >= MAX_ATTEMPTS) return { action: 'fail', reason: 'max_attempts' };
+  return { action: 'requeue', reason: 'stale_claim', scheduled_for: nowDate.toISOString() };
 }
 
 export function buildProactiveWorkingContextFromOutbox(outboxMessage) {
@@ -401,8 +511,68 @@ function createProactiveReadOnlyPlan(reason) {
   };
 }
 
+function buildProactiveClarificationResult({ answer, workingContext, reason }) {
+  return {
+    answer,
+    plan: createProactiveReadOnlyPlan(reason),
+    actions: [],
+    contextSummary: null,
+    working_context: workingContext ?? null,
+    skipMemoryExtraction: true,
+  };
+}
+
+function formatProactiveMemoDisambiguation(candidates = [], language = 'it') {
+  const labels = candidates
+    .slice(0, 3)
+    .map((item) => item.title)
+    .filter(Boolean)
+    .map((title) => title.length > 70 ? `${title.slice(0, 67)}...` : title);
+  const joined = labels.length ? labels.join(', ') : (language === 'en' ? 'the recent reminders' : 'i promemoria recenti');
+  return language === 'en'
+    ? `Which reminder do you mean? ${joined}.`
+    : `A quale promemoria ti riferisci? ${joined}.`;
+}
+
+function getProactiveReplyWindowHours(ruleKey) {
+  return ruleKey === 'memo_overdue_followup'
+    ? PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS
+    : PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS;
+}
+
+function isProactiveMemoReplyExpired({ createdAt, now, ruleKey }) {
+  const created = normalizeDate(createdAt);
+  const nowDate = normalizeDate(now);
+  const windowMs = getProactiveReplyWindowHours(ruleKey) * 60 * 60000;
+  return nowDate.getTime() - created.getTime() > windowMs;
+}
+
+function dedupeProactiveMemoMessages(messages) {
+  const seen = new Set();
+  const unique = [];
+  for (const message of messages) {
+    const key = message.source_id || message.outbox_message_id || message.message_id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(message);
+  }
+  return unique;
+}
+
+function proactiveMemoTitleMatches(message, title) {
+  const text = normalizeText(message);
+  const tokens = normalizeText(title)
+    .split(' ')
+    .filter((token) => token.length >= 4);
+  if (!text || !tokens.length) return false;
+  return tokens.some((token) => text.includes(token));
+}
+
 async function markOutboxSent({ client, row, metadata = {} }) {
   if (row.status === 'sent') return row;
+  if (row.status !== 'claimed') {
+    throw new HttpError(409, `Cannot mark outbox message as sent from status ${row.status}.`);
+  }
   const now = new Date().toISOString();
   const update = await client
     .from('brain_outbox_messages')
@@ -419,7 +589,7 @@ async function markOutboxSent({ client, row, metadata = {} }) {
     })
     .eq('id', row.id)
     .eq('user_id', row.user_id)
-    .in('status', ['claimed', 'queued', 'sent'])
+    .eq('status', 'claimed')
     .select(outboxSelect())
     .single();
   if (update.error) throw update.error;
@@ -427,13 +597,21 @@ async function markOutboxSent({ client, row, metadata = {} }) {
 }
 
 async function markOutboxFailed({ client, row, error, metadata = {} }) {
-  const now = new Date().toISOString();
-  const expired = Boolean(row.expires_at && new Date(row.expires_at) <= new Date());
+  if (row.status !== 'claimed') {
+    throw new HttpError(409, `Cannot mark outbox message as failed from status ${row.status}.`);
+  }
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const expired = Boolean(row.expires_at && new Date(row.expires_at) <= nowDate);
   const next = nextOutboxStatusForAck({ currentAttempts: row.attempts, ackStatus: 'failed', expired });
+  const retryDelay = next.retry ? getOutboxRetryDelayMinutes(row.attempts) : 0;
+  const retryAfter = next.retry ? new Date(nowDate.getTime() + retryDelay * 60000).toISOString() : null;
   const update = await client
     .from('brain_outbox_messages')
     .update({
       status: next.status,
+      claimed_at: null,
+      scheduled_for: retryAfter || row.scheduled_for,
       failed_at: next.status === 'failed' ? now : null,
       last_error: optionalText(error, 500),
       ack_metadata: {
@@ -441,10 +619,13 @@ async function markOutboxFailed({ client, row, error, metadata = {} }) {
         ...compactMetadata(metadata),
         last_failed_at: now,
         retry: next.retry,
+        retry_after: retryAfter,
+        retry_delay_minutes: retryDelay || null,
       },
     })
     .eq('id', row.id)
     .eq('user_id', row.user_id)
+    .eq('status', 'claimed')
     .select(outboxSelect())
     .single();
   if (update.error) throw update.error;
@@ -462,6 +643,38 @@ async function expireStaleOutboxMessages({ client, userId, recipient, channel, n
     .not('expires_at', 'is', null)
     .lte('expires_at', now);
   if (result.error) throw result.error;
+}
+
+function buildClaimRecoveryUpdate(row, decision, nowDate) {
+  const nowIso = nowDate.toISOString();
+  const baseMetadata = {
+    ...(row.ack_metadata && typeof row.ack_metadata === 'object' ? row.ack_metadata : {}),
+    reclaimed_at: nowIso,
+    reclaimed_reason: decision.reason,
+    prior_claimed_at: row.claimed_at ?? null,
+  };
+  if (decision.action === 'expire') {
+    return {
+      status: 'expired',
+      claimed_at: null,
+      ack_metadata: baseMetadata,
+    };
+  }
+  if (decision.action === 'fail') {
+    return {
+      status: 'failed',
+      claimed_at: null,
+      failed_at: nowIso,
+      last_error: 'Claim expired after maximum delivery attempts.',
+      ack_metadata: baseMetadata,
+    };
+  }
+  return {
+    status: 'queued',
+    claimed_at: null,
+    scheduled_for: decision.scheduled_for || nowIso,
+    ack_metadata: baseMetadata,
+  };
 }
 
 async function updateMemoStatus({ memoId, status }) {
@@ -598,6 +811,17 @@ function normalizeDateTime(value, field) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) throw new HttpError(400, `${field} must be a valid datetime.`);
   return date.toISOString();
+}
+
+function normalizeDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function getClaimReclaimTimeoutMinutes() {
+  const value = Number(process.env.LIFEOS_OUTBOX_CLAIM_TIMEOUT_MINUTES ?? DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES);
+  if (!Number.isFinite(value)) return DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES;
+  return Math.min(60, Math.max(1, Math.trunc(value)));
 }
 
 function requiredText(value, field, max = 1000) {

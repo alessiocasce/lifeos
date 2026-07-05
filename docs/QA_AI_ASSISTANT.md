@@ -337,7 +337,7 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 
 ## Proactive WhatsApp Memo Outbox
 
-Run `npm run test:brain` first. It covers pure candidate generation, idempotency keys, outbox status transitions, proactive memo reply intent normalization, and proactive working-context metadata.
+Run `npm run test:brain` first. It covers pure candidate generation, idempotency keys, stale claimed outbox recovery classification, outbox status transitions/backoff, proactive memo reply intent normalization, proactive reply target selection, and proactive working-context metadata.
 
 Manual deployed QA:
 
@@ -360,7 +360,11 @@ Manual deployed QA:
 17. Confirm Brain explains the reminder and does not mark the memo done, snooze it, or dismiss it.
 18. Run evaluate twice for the same due memo and confirm duplicate outbox rows are not created.
 19. Let a timed memo expire past the v1 expiry window and confirm poll does not send it.
-20. Confirm Home and Brain UI do not change and old WhatsApp backend threads remain hidden from normal Brain UI.
+20. Simulate bridge downtime after poll but before ack. After the claim timeout, run poll again and confirm the stale `claimed` row becomes eligible again or expires/fails if appropriate.
+21. Try to ack `sent` for a queued/unclaimed row and confirm it is rejected instead of marked sent.
+22. Send `fatto` more than the proactive reply window after a reminder and confirm Brain asks which reminder to update instead of mutating the old memo.
+23. Send two recent proactive memo reminders, then reply `fatto`; confirm Brain asks which reminder unless the reply names one clearly.
+24. Confirm Home and Brain UI do not change and old WhatsApp backend threads remain hidden from normal Brain UI.
 
 ## WhatsApp Pending Action Resolution
 
