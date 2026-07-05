@@ -496,6 +496,7 @@ Current behavior:
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.
 - The route was added as a single function so the Vercel Hobby function count remains at or below 12. Run `npm run check:functions` before deployment.
 - Local validation uses `npm run test:mcp`; it does not require live Supabase, Gemini, Vercel, or WhatsApp.
+- Deployed validation uses `npm run smoke:mcp`, which reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env, calls the real deployed endpoint, and prints pass/fail results without dumping private LifeOS data or token material.
 - Future MCP v1.5 may add a read-only Brain route preview. Future v2 may add carefully confirmed write tools, but writes are intentionally excluded from v1.
 
 ## Calendar Module Current Status
@@ -943,7 +944,7 @@ Workout mobile direction:
   - `initialize`, `tools/list`, `resources/list`, and `prompts/list` return valid JSON-RPC results.
   - `get_brain_debug_context` returns compact trace summaries without secrets.
   - No MCP tool mutates LifeOS records or sends WhatsApp messages.
-  - Run `npm run test:mcp` and `npm run check:functions`; function count must remain at or below 12.
+  - Run `npm run test:mcp`, `npm run smoke:mcp`, and `npm run check:functions`; function count must remain at or below 12.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.
 - Test Workout after applying the latest `workouts`, `workout_sets`, `workout_templates`, and `workout_template_exercises` schema migration.

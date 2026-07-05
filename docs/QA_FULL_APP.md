@@ -267,13 +267,14 @@ Run the focused checklists after the full flow:
 ## LifeOS MCP
 
 1. Run `npm run test:mcp`.
-2. Run `npm run check:functions` and confirm the Vercel API route count stays at or below 12.
-3. Call `GET /api/mcp` and confirm it returns only safe capability metadata.
-4. Call `POST /api/mcp` without a token and confirm it returns `401`.
-5. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
-6. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
-7. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
-8. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+2. Run `npm run smoke:mcp` against the deployed endpoint.
+3. Run `npm run check:functions` and confirm the Vercel API route count stays at or below 12.
+4. Call `GET /api/mcp` and confirm it returns only safe capability metadata.
+5. Call `POST /api/mcp` without a token and confirm it returns `401`.
+6. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
+7. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
+8. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
+9. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
 
 ## Workout Advice Write Boundary
 

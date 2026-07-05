@@ -313,9 +313,12 @@ No schema rerun is required for MCP v1.
 3. Optional: keep `GEMINI_API_KEY` configured if `search_lifeos_vault` should use semantic Vault search.
 4. Run before deployment:
    - `npm run test:mcp`
+   - `npm run smoke:mcp` after deployment or against the deployed preview URL
    - `npm run check:functions`
 5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
 6. Confirm MCP v1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
+
+The smoke script reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env and does not print it. To test a preview deployment, run it with `LIFEOS_MCP_BASE_URL=https://your-preview-url.vercel.app`.
 
 Health:
 

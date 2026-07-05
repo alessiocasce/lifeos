@@ -65,6 +65,14 @@ Prompts do not embed private data. They tell the MCP client which tools/resource
 
 ## Curl Examples
 
+Reusable live smoke test:
+
+```bash
+npm run smoke:mcp
+```
+
+The smoke script reads `LIFEOS_MCP_TOKEN` from the process environment or `.env.local`, calls the deployed endpoint by default, and prints only pass/fail summaries. Override the target with `LIFEOS_MCP_BASE_URL=https://your-preview-url.vercel.app`.
+
 Health:
 
 ```bash
