@@ -1,5 +1,6 @@
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { localDateTime, addDays } from './date.js';
+import { normalizeTurnText } from './brainTurnArbitration.js';
 
 const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
 const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
@@ -30,6 +31,9 @@ export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, 
   if (messageReferencesPendingAction(message, activePendingAction)) {
     return { prioritize: false, reason: 'message_references_pending_action', intent };
   }
+  if (intent === 'cancel' && !messageReferencesProactiveTarget(message, selection.proactive)) {
+    return { prioritize: false, reason: 'generic_cancel_kept_for_pending_action', intent };
+  }
   return {
     prioritize: true,
     reason: selection.type === 'stale'
@@ -40,6 +44,15 @@ export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, 
     intent,
     selection_type: selection.type,
   };
+}
+
+function messageReferencesProactiveTarget(message, proactive) {
+  const text = normalizeTurnText(message);
+  if (!text || !proactive) return false;
+  const title = normalizeTurnText(proactive.title || proactive.label || '');
+  if (!title) return false;
+  const titleWords = title.split(/\s+/).filter((word) => word.length >= 4).slice(0, 5);
+  return titleWords.some((word) => text.includes(word));
 }
 
 export async function resolveProactiveMemoReply({ message, brainChat, context } = {}) {

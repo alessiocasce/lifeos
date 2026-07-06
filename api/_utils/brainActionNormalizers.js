@@ -43,14 +43,19 @@ export function normalizeBrainTime(value, suffix = '') {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
-export function normalizeCalendarEventArgs(args = {}, { sourceMessage = '' } = {}) {
+export function normalizeCalendarEventArgs(args = {}, { sourceMessage = '', allowUngroundedTimes = false } = {}) {
   const source = safeObject(args);
   const { source_user_message: embeddedSourceMessage, ...publicSource } = source;
-  const sourceFields = extractCalendarFieldsFromSourceMessage(sourceMessage || embeddedSourceMessage);
+  const effectiveSourceMessage = sourceMessage || embeddedSourceMessage;
+  const sourceFields = extractCalendarFieldsFromSourceMessage(effectiveSourceMessage);
   const rawStart = source.start_time ?? source.time;
   const rawEnd = source.end_time;
-  let startTime = normalizeBrainTime(rawStart);
-  let endTime = normalizeBrainTime(rawEnd);
+  const rejectUngroundedTimes = !allowUngroundedTimes
+    && hasVagueTimeWithoutExactTime(effectiveSourceMessage)
+    && !sourceFields.start_time
+    && !sourceFields.end_time;
+  let startTime = rejectUngroundedTimes ? null : normalizeBrainTime(rawStart);
+  let endTime = rejectUngroundedTimes ? null : normalizeBrainTime(rawEnd);
 
   if (sourceFields.start_time && (!startTime || shouldPreferSourceStartTime({ rawStart, startTime, sourceFields }))) {
     startTime = sourceFields.start_time;
@@ -165,6 +170,16 @@ export function extractCalendarEventFieldUpdate(message, pendingAction = {}) {
         confirmation_required: false,
       };
     }
+  }
+
+  const explicitStart = parseExplicitStartTime(text);
+  if (explicitStart) {
+    return {
+      relation: 'field_update',
+      args_patch: { start_time: explicitStart },
+      missing_fields: validateCalendarEventArgs({ ...normalizedArgs, start_time: explicitStart }, action.missing_fields),
+      confirmation_required: false,
+    };
   }
 
   const explicitEnd = parseExplicitEndTime(text);
@@ -292,6 +307,12 @@ function parseSingleTimeFromText(text) {
   return null;
 }
 
+function parseExplicitStartTime(text) {
+  const source = String(text ?? '');
+  const match = source.match(/\b(?:orario\s+di\s+inizio|ora\s+di\s+inizio|inizio|inizia|start(?:s)?(?:\s+at)?)\s*:?\s*(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})\s*(am|pm|di\s+sera|di\s+mattina)?\b/i);
+  return match ? normalizeBrainTime(match[1], match[2] || '') : null;
+}
+
 function parseExplicitEndTime(text) {
   const source = String(text ?? '');
   const match = source.match(/\b(?:fine|finisce|fino\s+a|fino\s+alle|ends?\s+at|until)\s*(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})\s*(am|pm|di\s+sera|di\s+mattina)?\b/i);
@@ -366,4 +387,12 @@ function normalizeText(value) {
     .replace(/\p{M}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function hasVagueTimeWithoutExactTime(value) {
+  const text = normalizeText(value);
+  if (!text) return false;
+  const hasVague = /\b(?:domattina|mattina|in mattinata|pomeriggio|sera|stasera|piu tardi|presto|tomorrow morning|morning|afternoon|evening|later|early)\b/.test(text);
+  if (!hasVague) return false;
+  return !parseTimeRangeFromText(value) && !parseSingleTimeFromText(value);
 }

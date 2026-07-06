@@ -72,6 +72,11 @@ import {
   recordBrainTurnVault,
 } from '../_utils/brainTurn.js';
 import {
+  buildOperationalContextAnswer,
+  isTrueLongTermMemoryRecallRequest,
+  looksLikeOperationalContextQuestion,
+} from '../_utils/brainTurnArbitration.js';
+import {
   addBrainTraceStep,
   finishBrainTrace,
   getDebugFlags,
@@ -506,6 +511,29 @@ export async function handleBrainChatMessage({
     }));
     const negativeWriteIntent = hasNegativeWriteIntent(messageForBrain);
     if (negativeWriteIntent) addBrainTraceStep(context.brainTrace, 'negative_write_intent_detected', { blocked: true });
+    if (looksLikeOperationalContextQuestion(messageForBrain)) {
+      const operationalAnswer = buildOperationalContextAnswer({
+        message: messageForBrain,
+        workingContext: context.workingContext,
+      });
+      if (operationalAnswer) {
+        addBrainTraceStep(context.brainTrace, 'operational_context_answered', {
+          source: 'working_context',
+          last_subject_type: context.workingContext?.last_subject?.type ?? null,
+          last_action_type: context.workingContext?.last_action_result?.action_type ?? null,
+        });
+        const plan = createReadOnlyBrainPlan('Answer operational follow-up from latest Brain working context.');
+        return sendAiSuccess(null, 200, {
+          answer: operationalAnswer,
+          plan,
+          actions: [],
+          contextSummary: null,
+          selected_skill: serializeSkillSelection(context.brainSkill),
+          brain_route: serializeBrainRoute(context.brainRoute),
+          skipMemoryExtraction: true,
+        }, context, { message: messageForBrain, source: resolvedSource });
+      }
+    }
     const brainVault = await safeLoadBrainVaultContext({
       message: messageForBrain,
       brainRoute: context.brainRoute,
@@ -549,9 +577,19 @@ export async function handleBrainChatMessage({
     }
 
     if (context.brainRoute.mode === 'memory_recall') {
+      if (!isMemoryRecallRequest(messageForBrain)) {
+        addBrainTraceStep(context.brainTrace, 'memory_recall_blocked_by_intent_contract', {
+          reason: 'not_true_long_term_memory_recall',
+        });
+        const plan = createReadOnlyBrainPlan('Memory recall was blocked because the current message is not a long-term memory question.');
+        const answer = context.workingContext?.language === 'it'
+          ? 'Non sembra una domanda sulla memoria a lungo termine. Dimmi se vuoi vedere memoria, agenda o promemoria.'
+          : 'This does not look like a long-term memory question. Tell me if you want memory, agenda, or reminders.';
+        return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message: messageForBrain, source: resolvedSource });
+      }
       const plan = createReadOnlyBrainPlan('Summarize active long-term memory.');
       const answer = formatMemoryRecallAnswer(context.brainContext);
-      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
+      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message: messageForBrain, source: resolvedSource });
     }
 
     if (context.brainRoute.mode === 'memory_forget') {
@@ -1946,7 +1984,7 @@ function isExplicitRememberRequest(message) {
 }
 
 function isMemoryRecallRequest(message) {
-  return /\b(?:what do you remember about me|what do you know about me|what does lifeos know about me|what'?s in memory|show memory|cosa ricordi di me|cosa sai di me)\b/i.test(String(message ?? ''));
+  return isTrueLongTermMemoryRecallRequest(message);
 }
 
 function isMemoryForgetRequest(message) {
@@ -2368,6 +2406,7 @@ function summarizeCommandDraftForTrace(draft, validation = {}) {
       source: draft.referent.source,
       confidence: draft.referent.confidence,
     } : null,
+    field_provenance: draft?.field_provenance ?? null,
     args_summary: summarizeArgsForTrace(args),
   });
 }

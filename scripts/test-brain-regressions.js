@@ -23,6 +23,11 @@ import {
 } from '../api/_utils/brainCommandDraft.js';
 import { buildBrainWorkingContext } from '../api/_utils/brainWorkingContext.js';
 import { shouldRetrieveBrainVault } from '../api/_utils/brainVaultEligibility.js';
+import { validateBrainRoute } from '../api/_utils/brainRouter.js';
+import {
+  buildOperationalContextAnswer,
+  isTrueLongTermMemoryRecallRequest,
+} from '../api/_utils/brainTurnArbitration.js';
 import {
   canAckOutboxMessage,
   computeClaimRecovery,
@@ -222,6 +227,51 @@ test('calendar normalizer treats Italian slash dates and plain times determinist
   assert.match(buildCalendarEventClarification({ args, missingFields: missing, language: 'it' }), /Quanto dura/);
 });
 
+test('new vague calendar command does not inherit exact time from working context', () => {
+  const validation = validateBrainCommandDraft({
+    mode: 'clarify',
+    skill: 'calendar_planner',
+    language: 'it',
+    intent_summary: 'Creare evento Parrucchiere domattina',
+    action: {
+      type: 'create_calendar_event',
+      args: {
+        title: 'Parrucchiere',
+        event_date: '2026-07-07',
+        start_time: '11:45',
+      },
+      missing_fields: ['end_time'],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    clarification_question: "Ho l'orario di inizio: 11:45. Quanto dura?",
+    confidence: 0.9,
+    reason: 'Calendar event from vague morning phrase.',
+  }, {
+    workingContext: {
+      language: 'it',
+      last_subject: {
+        type: 'memo',
+        label: 'Dentista',
+        date: '2026-09-07',
+        start_time: '11:45',
+      },
+    },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'calendar_planner' },
+    sourceMessage: 'Segna parrucchiere domattina',
+  });
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.executable, false);
+  assert.equal(validation.draft.action.args.title, 'Parrucchiere');
+  assert.equal(validation.draft.action.args.start_time, null);
+  assert.notEqual(validation.draft.action.args.start_time, '11:45');
+  assert.deepEqual(validation.draft.action.missing_fields, ['start_time', 'end_time']);
+  assert.match(validation.draft.clarification_question, /orario di inizio|inizio e fine|a che ora/i);
+  assert.equal(validation.draft.field_provenance?.working_context_blocked, true);
+});
+
 test('latest active pending action lookup normalizes dirty sleep-start metadata', () => {
   const pending = {
     id: 'pending-sleep-start',
@@ -378,6 +428,38 @@ test('calendar pending missing end_time accepts explicit end reply', async () =>
   assert.equal(resolution.pending_action.args.end_time, '12:45');
 });
 
+test('calendar pending labeled start-time correction updates start_time, not end_time', async () => {
+  const pendingAction = {
+    id: 'pending-calendar-start-correction',
+    action_type: 'create_calendar_event',
+    status: 'awaiting_fields',
+    confirmation_required: false,
+    args: {
+      title: 'Parrucchiere',
+      event_date: '2026-07-07',
+      start_time: '11:45',
+    },
+    missing_fields: ['end_time'],
+    language: 'it',
+    confidence: 0.9,
+  };
+  const update = extractCalendarEventFieldUpdate('Orario di inizio: 9.30', pendingAction);
+  assert.equal(update.args_patch.start_time, '09:30');
+  assert.equal(update.args_patch.end_time, undefined);
+  assert.deepEqual(update.missing_fields, ['end_time']);
+  const resolution = await resolvePendingActionTurn({
+    message: 'Orario di inizio: 9.30',
+    pendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, true, compact(resolution));
+  assert.equal(resolution.type, 'ask', compact(resolution));
+  assert.equal(resolution.pending_action.args.start_time, '09:30');
+  assert.equal(resolution.pending_action.args.end_time, null);
+  assert.deepEqual(resolution.pending_action.missing_fields, ['end_time']);
+  assert.match(resolution.answer, /Quanto dura|a che ora finisce/i);
+});
+
 test('calendar event validation blocks identical start and end times', () => {
   const validation = validateBrainCommandDraft({
     mode: 'action',
@@ -449,6 +531,54 @@ test('calendar pending bypasses independent memo command', async () => {
   assert.equal(resolution.bypassed, true, compact(resolution));
 });
 
+test('calendar pending bypasses new content-bearing segna command', async () => {
+  const pendingAction = {
+    ...calendarPendingMissingTime,
+    args: {
+      title: 'Parrucchiere',
+      event_date: '2026-07-07',
+      start_time: '11:45',
+    },
+    missing_fields: ['end_time'],
+  };
+  const message = 'Segna parrucchiere domani';
+  assert.equal(normalizePendingReplyIntent(message).intent, 'other');
+  const bypass = shouldBypassPendingActionForNewCommand({
+    message,
+    pendingAction,
+    context: {},
+  });
+  assert.equal(bypass.bypass, true, compact(bypass));
+  const resolution = await resolvePendingActionTurn({
+    message,
+    pendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, false, compact(resolution));
+  assert.equal(resolution.bypassed, true, compact(resolution));
+});
+
+test('calendar pending bypasses explicit memo override command', async () => {
+  const pendingAction = {
+    ...calendarPendingMissingTime,
+    args: {
+      title: 'Parrucchiere',
+      event_date: '2026-07-07',
+      start_time: '11:45',
+    },
+    missing_fields: ['end_time'],
+  };
+  const message = 'Segna memo: domani 9.30 parrucchiere';
+  assert.equal(normalizePendingReplyIntent(message).intent, 'other');
+  const resolution = await resolvePendingActionTurn({
+    message,
+    pendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, false, compact(resolution));
+  assert.equal(resolution.bypassed, true, compact(resolution));
+});
+
 test('new explicit commands bypass stale pending actions', () => {
   for (const message of pendingInterruptionFixtures.bypassNewCommands) {
     const bypass = shouldBypassPendingActionForNewCommand({
@@ -510,6 +640,89 @@ test('analysis routes still allow Brain Vault retrieval', () => {
     },
     brainSkill: { id: 'workout_coach' },
   }), true);
+});
+
+test('agenda query route invariant repairs contradictory memory_recall route', () => {
+  const route = validateBrainRoute({
+    mode: 'memory_recall',
+    primary_skill: 'memory_manager',
+    confidence: 0.8,
+    reason: 'User asks for schedule/tasks tomorrow.',
+    user_intent_summary: 'Che cosa devo fare domani? Guardami gli impegni',
+    needs_data: ['ai_memories'],
+    write_intent: false,
+    proposed_action_types: [],
+    risk_level: 'low',
+    needs_clarification: false,
+  }, {
+    message: 'Che cosa devo fare domani? Guardami gli impegni',
+  });
+  assert.equal(route.mode, 'read_only_analysis', compact(route));
+  assert.equal(route.primary_skill, 'calendar_planner');
+  assert.equal(route.write_intent, false);
+  assert.ok(route.needs_data.includes('calendar_events'), compact(route));
+  assert.ok(route.needs_data.includes('memos'), compact(route));
+  assert.equal(route.deterministic_override.route_repair.label, 'agenda_query');
+});
+
+test('operational memo follow-up is answered from working context, not memory recall', () => {
+  const route = validateBrainRoute({
+    mode: 'memory_recall',
+    primary_skill: 'memory_manager',
+    confidence: 0.75,
+    reason: 'Asks when memo was set.',
+    user_intent_summary: "Quando l'hai messo?",
+    needs_data: ['ai_memories'],
+    write_intent: false,
+    proposed_action_types: [],
+    risk_level: 'low',
+    needs_clarification: false,
+  }, {
+    message: "Quando l'hai messo?",
+  });
+  assert.equal(route.mode, 'read_only_analysis', compact(route));
+  assert.equal(route.primary_skill, 'memo_assistant');
+  assert.equal(route.deterministic_override.route_repair.label, 'operational_context_query');
+
+  const answer = buildOperationalContextAnswer({
+    message: 'Quando hai messo il memo?',
+    workingContext: {
+      language: 'it',
+      last_subject: {
+        type: 'memo',
+        label: 'aereo',
+        date: '2026-07-08',
+        start_time: '23:00',
+      },
+      last_action_result: {
+        action_type: 'create_memo',
+        created_at: '2026-07-06T12:56:00.000Z',
+      },
+    },
+  });
+  assert.match(answer, /8\/7\/2026/);
+  assert.match(answer, /23:00/);
+  assert.equal(/Here's what I remember/i.test(answer), false);
+});
+
+test('true long-term memory recall remains memory_recall', () => {
+  assert.equal(isTrueLongTermMemoryRecallRequest('Cosa ti ricordi di me?'), true);
+  const route = validateBrainRoute({
+    mode: 'memory_recall',
+    primary_skill: 'memory_manager',
+    confidence: 0.9,
+    reason: 'True memory recall.',
+    user_intent_summary: 'Cosa ti ricordi di me?',
+    needs_data: ['ai_memories'],
+    write_intent: false,
+    proposed_action_types: [],
+    risk_level: 'low',
+    needs_clarification: false,
+  }, {
+    message: 'Cosa ti ricordi di me?',
+  });
+  assert.equal(route.mode, 'memory_recall', compact(route));
+  assert.equal(route.primary_skill, 'memory_manager');
 });
 
 test('negative write intent wins over action wording', () => {
@@ -787,6 +1000,47 @@ test('stale proactive reply does not dangerously confirm unrelated pending actio
   });
   assert.equal(decision.prioritize, true, compact(decision));
   assert.equal(decision.reason, 'stale_proactive_context_needs_clarification');
+});
+
+test('generic cancel with active pending is not stolen by proactive reply arbitration', async () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-old',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const pendingAction = {
+    id: 'pending-calendar-cancel',
+    action_type: 'create_calendar_event',
+    status: 'awaiting_fields',
+    confirmation_required: false,
+    args: {
+      title: 'Parrucchiere',
+      event_date: '2026-07-07',
+      start_time: '11:45',
+    },
+    missing_fields: ['end_time'],
+    language: 'it',
+    confidence: 0.9,
+  };
+  const priority = shouldPrioritizeProactiveReplyOverPending({
+    message: 'No. Cancella tutto',
+    brainChat,
+    activePendingAction: pendingAction,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(priority.prioritize, false, compact(priority));
+  assert.equal(priority.reason, 'generic_cancel_kept_for_pending_action');
+  const resolution = await resolvePendingActionTurn({
+    message: 'No. Cancella tutto',
+    pendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, true, compact(resolution));
+  assert.equal(resolution.type, 'cancelled');
 });
 
 test('stale proactive memo reply asks clarification instead of selecting target', () => {

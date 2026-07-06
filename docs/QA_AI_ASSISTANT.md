@@ -35,8 +35,13 @@ Expected:
 - Naps/pisolini do not coerce to sleep start.
 - Simple explicit writes skip Brain Vault retrieval.
 - Proactive WhatsApp replies can win over unrelated stale pending actions when the latest assistant message is a proactive reminder.
+- Generic pending cancellations such as `No. Cancella tutto` are not stolen by proactive reply arbitration when an active pending action exists.
 - New explicit commands such as `crea promemoria domani` are not treated as proactive reminder replies.
 - Missing-source proactive replies are read-only clarifications, not write-looking actions.
+- Calendar command drafts reject ungrounded exact times copied from Working Context for standalone vague commands such as `Segna parrucchiere domattina`.
+- Calendar pending slot-fill is label-aware: `orario di inizio 9.30` updates start time, `fine 12:45` updates end time, and `durata 1 ora` computes the end time.
+- Agenda queries such as `Che cosa devo fare domani? Guardami gli impegni` route to schedule/memo data, not long-term memory recall.
+- Operational follow-ups such as `Quando l'hai messo?` answer from latest Working Context action/result, not `Here's what I remember`.
 - BrainTurn stage helpers preserve Working Context, pending-action checks, proactive-before-pending arbitration, explicit-command pending bypass, and normal route/skill/vault trace state.
 - LifeOS Context Compiler and Open Loops pure checks cover memo/calendar/project/action/outbox/pending-action loop detection, ranking, deduping, and compact Morning-Brief-ready snapshot shape through `npm run test:mcp`.
 - Outbox delivery priority sorts `high -> normal -> low`.

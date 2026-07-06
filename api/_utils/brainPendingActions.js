@@ -9,6 +9,7 @@ import {
   normalizeCalendarEventArgs,
   validateCalendarEventArgs,
 } from './brainActionNormalizers.js';
+import { looksLikeExplicitNewCommand } from './brainTurnArbitration.js';
 
 const PENDING_ACTION_TTL_HOURS = 24;
 const PENDING_CONFIRMATION_TTL_HOURS = 2;
@@ -823,7 +824,7 @@ function looksItalianSleepStart(value) {
 }
 
 function looksLikeNewExplicitIndependentCommand(normalizedMessage) {
-  return Boolean(detectExplicitIndependentCommand(normalizedMessage));
+  return Boolean(detectExplicitIndependentCommand(normalizedMessage)) || looksLikeExplicitNewCommand(normalizedMessage);
 }
 
 function detectExplicitIndependentCommand(normalizedMessage) {
@@ -840,6 +841,7 @@ function detectExplicitIndependentCommand(normalizedMessage) {
     && /\b(?:creatina|creatine|doccia|shower|skin|caffe|coffee|wake|sveglia|sonno|dormire|letto|adc|memo|promemoria|spesa|expense)\b/.test(text)) {
     return 'new_explicit_log_command';
   }
+  if (looksLikeExplicitNewCommand(text)) return 'new_explicit_command';
   return null;
 }
 

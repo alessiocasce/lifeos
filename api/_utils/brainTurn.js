@@ -1,5 +1,6 @@
 import { extractLatestPendingAction, normalizePendingReplyIntent } from './brainPendingActions.js';
 import { shouldPrioritizeProactiveReplyOverPending } from './brainProactiveReplies.js';
+import { shouldDeferProactivePriorityToPending } from './brainTurnArbitration.js';
 import { buildBrainWorkingContext } from './brainWorkingContext.js';
 import { addBrainTraceStep, createBrainTrace, safePreview } from './brainTrace.js';
 
@@ -126,6 +127,14 @@ export function checkBrainTurnPendingAction(turn) {
 export function checkBrainTurnProactivePriority(turn, { activePendingAction = turn?.pendingAction, now = undefined } = {}) {
   if (!turn || !activePendingAction || turn.source !== 'whatsapp') {
     return { prioritize: false, reason: !activePendingAction ? 'no_pending_action' : 'not_whatsapp', intent: 'other' };
+  }
+  const deferral = shouldDeferProactivePriorityToPending({
+    message: turn.message,
+    pendingReplyIntent: turn.pendingReplyIntent,
+  });
+  if (deferral.defer) {
+    recordBrainTurnStage(turn, 'proactive_reply_deferred_to_pending', deferral);
+    return { prioritize: false, reason: deferral.reason, intent: deferral.pending_reply_intent };
   }
   const proactivePriority = shouldPrioritizeProactiveReplyOverPending({
     message: turn.message,

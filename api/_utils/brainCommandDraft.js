@@ -16,6 +16,7 @@ import {
   coercePendingActionType,
   extractSleepStartTimeFromArgs,
 } from './brainPendingActions.js';
+import { hasExplicitContextReferent } from './brainTurnArbitration.js';
 
 const SUPPORTED_ACTIONS = new Set(['create_calendar_event', 'create_memo', 'create_expense', 'update_health_log', 'log_sleep_start']);
 const COMMAND_MODES = new Set(['answer', 'action', 'clarify', 'cancel', 'field_update', 'transform', 'memory', 'unsupported']);
@@ -181,30 +182,79 @@ export function validateBrainCommandDraft(commandDraft, { workingContext, brainR
 
 export function resolveCommandDraftReferences(commandDraft, workingContext, options = {}) {
   if (!commandDraft) return null;
-  const draft = normalizeCommandDraft(commandDraft, workingContext);
+  const draft = normalizeCommandDraft(commandDraft, workingContext, { sourceMessage: options.sourceMessage });
   const subject = workingContext?.last_subject;
   if (!subject || !draft.action?.type) return draft;
   if (draft.referent?.needed && !draft.referent?.resolved) return draft;
+  const referential = Boolean(draft.referent?.resolved) || hasExplicitContextReferent(options.sourceMessage);
+  if (!referential) {
+    return {
+      ...draft,
+      field_provenance: {
+        ...(draft.field_provenance ?? {}),
+        working_context_blocked: true,
+        reason: 'No explicit current-message referent; previous subject fields were not copied into this new action.',
+      },
+    };
+  }
   const args = { ...(draft.action.args ?? {}) };
+  const copied = {};
   if (draft.action.type === 'create_calendar_event') {
-    if (!args.title) args.title = subject.label;
-    if (!args.event_date && subject.date) args.event_date = subject.date;
-    if (!args.start_time && subject.start_time) args.start_time = subject.start_time;
-    if (!args.end_time && subject.end_time) args.end_time = subject.end_time;
-    if (!args.category && subject.type === 'health_event') args.category = 'Health';
-    if (!args.notes && subject.source === 'health_log_note') args.notes = `Creato da ${subject.label} salvato in Salute`;
+    if (!args.title && subject.label) {
+      args.title = subject.label;
+      copied.title = 'working_context';
+    }
+    if (!args.event_date && subject.date) {
+      args.event_date = subject.date;
+      copied.event_date = 'working_context';
+    }
+    if (!args.start_time && subject.start_time) {
+      args.start_time = subject.start_time;
+      copied.start_time = 'working_context';
+    }
+    if (!args.end_time && subject.end_time) {
+      args.end_time = subject.end_time;
+      copied.end_time = 'working_context';
+    }
+    if (!args.category && subject.type === 'health_event') {
+      args.category = 'Health';
+      copied.category = 'working_context';
+    }
+    if (!args.notes && subject.source === 'health_log_note') {
+      args.notes = `Creato da ${subject.label} salvato in Salute`;
+      copied.notes = 'working_context';
+    }
   }
   if (draft.action.type === 'create_memo') {
-    if (!args.title) args.title = subject.label;
-    if (!args.memo_date && subject.date) args.memo_date = subject.date;
-    if (!args.memo_time && subject.start_time) args.memo_time = subject.start_time;
-    if (!args.notes && subject.end_time) args.notes = `${subject.label}: ${subject.start_time || ''}-${subject.end_time}`;
+    if (!args.title && subject.label) {
+      args.title = subject.label;
+      copied.title = 'working_context';
+    }
+    if (!args.memo_date && subject.date) {
+      args.memo_date = subject.date;
+      copied.memo_date = 'working_context';
+    }
+    if (!args.memo_time && subject.start_time) {
+      args.memo_time = subject.start_time;
+      copied.memo_time = 'working_context';
+    }
+    if (!args.notes && subject.end_time) {
+      args.notes = `${subject.label}: ${subject.start_time || ''}-${subject.end_time}`;
+      copied.notes = 'working_context';
+    }
   }
   return {
     ...draft,
+    field_provenance: {
+      ...(draft.field_provenance ?? {}),
+      ...(Object.keys(copied).length ? copied : {}),
+    },
     action: {
       ...draft.action,
-      args: normalizeActionArgs(draft.action.type, args, { sourceMessage: options.sourceMessage }),
+      args: normalizeActionArgs(draft.action.type, args, {
+        sourceMessage: options.sourceMessage,
+        allowUngroundedTimes: referential,
+      }),
     },
   };
 }
@@ -295,7 +345,10 @@ function normalizeCommandDraft(raw, workingContext = null, options = {}) {
     };
   }
   if (actionType === 'create_calendar_event') {
-    actionArgs = normalizeCalendarEventArgs(rawActionArgs, { sourceMessage: options.sourceMessage });
+    actionArgs = normalizeCalendarEventArgs(rawActionArgs, {
+      sourceMessage: options.sourceMessage,
+      allowUngroundedTimes: hasExplicitContextReferent(options.sourceMessage),
+    });
   }
   let clarificationQuestion = cleanText(raw.clarification_question, 500);
   if (actionType === 'log_sleep_start' && isGenericDetailQuestion(clarificationQuestion)) clarificationQuestion = null;
@@ -330,7 +383,10 @@ function normalizeCommandDraft(raw, workingContext = null, options = {}) {
 function normalizeActionArgs(actionType, args, options = {}) {
   const source = safeObject(args);
   if (actionType === 'create_calendar_event') {
-    return normalizeCalendarEventArgs(source, { sourceMessage: options.sourceMessage });
+    return normalizeCalendarEventArgs(source, {
+      sourceMessage: options.sourceMessage,
+      allowUngroundedTimes: Boolean(options.allowUngroundedTimes),
+    });
   }
   if (actionType === 'create_memo') {
     return {

@@ -6,6 +6,10 @@ import {
   listBrainSkills,
   selectBrainSkill,
 } from './brainSkills.js';
+import {
+  getIntentContractOverride,
+  isTrueLongTermMemoryRecallRequest,
+} from './brainTurnArbitration.js';
 
 const ROUTE_MODES = new Set([
   'casual_chat',
@@ -98,6 +102,8 @@ Rules:
 - "remember to buy toothpaste" is explicit_action with memo_assistant, not long-term memory.
 - "what do you remember about me?" is memory_recall.
 - "forget the memory about noisy dashboards" is memory_forget.
+- Agenda/schedule/task questions such as "Cosa devo fare domani?", "Guardami gli impegni", or "What is on my schedule tomorrow?" are read_only_analysis, not memory_recall.
+- Operational follow-ups such as "Quando l'hai messo?", "Quando hai messo il memo?", or "When did you set it?" are read_only_analysis over recent working context, not long-term memory recall.
 - Follow-up transforms like "make it shorter", "fammi una tabella", "mettile in ordine cronologico", or "translate it to English" are follow_up_transform.
 - Product critique like "Be brutally honest: is LifeOS becoming too complicated?" is read_only_analysis with product_builder.
 - Casual app-open messages like "yo, I just opened LifeOS" are casual_chat with general_chat, not product_builder.
@@ -161,9 +167,12 @@ export function validateBrainRoute(route, {
   const negative = hasNegativeWriteIntent(message);
   const destructive = hasDestructiveActionRequest(message) || proposedActionTypes.some((type) => type.startsWith('delete') || type.startsWith('archive'));
   const vagueCalendarBlock = looksLikeVagueCalendarBlockRequest(message);
+  const intentOverride = getIntentContractOverride(message);
   let writeIntent = Boolean(route.write_intent);
   let finalMode = mode;
   let finalRisk = destructive ? 'high' : riskLevel;
+  let forcedNeedsData = null;
+  let routeRepair = null;
 
   if (negative || destructive || mode === 'follow_up_transform' || READ_ONLY_MODES.has(mode)) {
     writeIntent = false;
@@ -184,9 +193,28 @@ export function validateBrainRoute(route, {
     writeIntent = false;
     finalRisk = destructive ? 'high' : 'low';
   }
+  if (intentOverride) {
+    finalMode = intentOverride.mode;
+    primarySkill = intentOverride.primary_skill;
+    writeIntent = false;
+    finalRisk = intentOverride.risk_level;
+    forcedNeedsData = intentOverride.needs_data;
+    routeRepair = intentOverride;
+  } else if (mode === 'memory_recall' && !isTrueLongTermMemoryRecallRequest(message)) {
+    finalMode = 'read_only_analysis';
+    primarySkill = fallback.primary_skill === 'memory_manager' ? 'general_chat' : fallback.primary_skill;
+    writeIntent = false;
+    finalRisk = 'low';
+    routeRepair = {
+      label: 'memory_recall_rejected',
+      reason: 'Memory recall requires an explicit long-term memory question.',
+    };
+  }
 
-  const needsClarification = Boolean(route.needs_clarification) || finalMode === 'clarification';
-  const needsData = normalizeNeedsData(route.needs_data, primarySkill, finalMode);
+  const needsClarification = routeRepair
+    ? finalMode === 'clarification'
+    : Boolean(route.needs_clarification) || finalMode === 'clarification';
+  const needsData = forcedNeedsData || normalizeNeedsData(route.needs_data, primarySkill, finalMode);
   const clarificationQuestion = vagueCalendarBlock
     ? specificCalendarClarification(message)
     : cleanText(route.clarification_question, 300)
@@ -212,10 +240,11 @@ export function validateBrainRoute(route, {
       : null,
     memory_candidate: memoryCandidate,
     source: 'ai_router',
-    deterministic_override: negative || destructive || finalMode !== mode ? {
+    deterministic_override: negative || destructive || finalMode !== mode || routeRepair ? {
       negative_write_intent: negative,
       destructive_request: destructive,
       original_mode: mode,
+      route_repair: routeRepair,
     } : null,
   };
 }
@@ -227,8 +256,16 @@ export function fallbackBrainRoute({ message = '', classification = null, brainC
   let writeIntent = mode === 'explicit_action';
   let needsClarification = mode === 'clarification';
   let clarificationQuestion = null;
+  const intentOverride = getIntentContractOverride(message);
 
-  if (looksLikeVagueCalendarBlockRequest(message)) {
+  if (intentOverride) {
+    mode = intentOverride.mode;
+    primarySkill = intentOverride.primary_skill;
+    writeIntent = false;
+    needsClarification = false;
+  }
+
+  if (!intentOverride && looksLikeVagueCalendarBlockRequest(message)) {
     mode = 'clarification';
     primarySkill = 'calendar_planner';
     writeIntent = false;
@@ -236,7 +273,7 @@ export function fallbackBrainRoute({ message = '', classification = null, brainC
     clarificationQuestion = specificCalendarClarification(message);
   }
 
-  if (!needsClarification && looksLikeAmbiguousFragment(message)) {
+  if (!intentOverride && !needsClarification && looksLikeAmbiguousFragment(message)) {
     mode = 'clarification';
     primarySkill = looksLikeReminderFragment(message) ? 'memo_assistant' : 'calendar_planner';
     writeIntent = false;
@@ -258,7 +295,7 @@ export function fallbackBrainRoute({ message = '', classification = null, brainC
     confidence: selected.confidence ?? 0.45,
     reason,
     user_intent_summary: String(message ?? '').trim().slice(0, 500),
-    needs_data: normalizeNeedsData([], primarySkill, mode),
+    needs_data: intentOverride?.needs_data || normalizeNeedsData([], primarySkill, mode),
     write_intent: writeIntent,
     proposed_action_types: writeIntent ? inferFallbackActions(message, primarySkill) : [],
     risk_level: hasDestructiveActionRequest(message) ? 'high' : 'low',
