@@ -38,6 +38,7 @@ Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in
 - `get_lifeos_snapshot`
 - `get_lifeos_context`
 - `get_recent_workouts`
+- `get_workout_intelligence`
 - `get_health_summary`
 - `get_open_memos`
 - `get_upcoming_calendar`
@@ -55,6 +56,8 @@ All tools are read-only and return compact, limited, sanitized JSON.
 `get_open_loops` uses the same shared engine and returns ranked loop objects with `type`, `severity`, source table/type/id, due/date, reason, suggested next action, and whether the loop is eligible for future proactive handling or Home display.
 
 `get_recent_workouts` and `lifeos://workouts/recent` include exact set-level data as well as aggregates. Each workout exposes top-level `sets[]` and per-exercise `sets[]` with `set_number`, `is_warmup`, `weight`, `reps`, `rpe`, `performed_at`, and safe note previews, so external clients can analyze exact series such as `50x8`, `50x7`, `50x6`.
+
+`get_workout_intelligence` and `lifeos://workouts/intelligence` turn exact sets into cautious analysis: latest session summary, per-exercise progression, top sets, volume/estimated-1RM trends, plateau flags, next target suggestions, and sleep/recovery caveats when health data exists. Treat targets as training suggestions with confidence, not certainty.
 
 Workout responses include truncation metadata:
 
@@ -74,6 +77,7 @@ If `sets_truncated` is true, ask for a narrower workout window.
 - `lifeos://week/summary`
 - `lifeos://health/7d`
 - `lifeos://workouts/recent`
+- `lifeos://workouts/intelligence`
 - `lifeos://memos/open`
 - `lifeos://calendar/upcoming`
 - `lifeos://projects/status`
@@ -137,6 +141,15 @@ curl -X POST https://lifeos-ruby-gamma.vercel.app/api/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_MCP_TOKEN" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_recent_workouts","arguments":{"days":7}}}'
+```
+
+Workout intelligence:
+
+```bash
+curl -X POST https://lifeos-ruby-gamma.vercel.app/api/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $MCP_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"get_workout_intelligence","arguments":{"days":30}}}'
 ```
 
 Read a resource:

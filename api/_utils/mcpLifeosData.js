@@ -3,6 +3,7 @@ import { safePreview, sanitizeTraceValue } from './brainTrace.js';
 import { searchBrainVault } from './brainVault.js';
 import { getSupabaseAdmin } from './supabaseAdmin.js';
 import { compileLifeOSContext } from './lifeosContextCompiler.js';
+import { buildWorkoutIntelligence } from './workoutIntelligence.js';
 
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 7;
@@ -159,6 +160,54 @@ export async function getRecentWorkouts({ userId, days = DEFAULT_DAYS, limit = 2
     range: { start, end, days: normalizedDays },
     ...truncation,
     workouts: workouts.map((workout) => compactWorkout(workout, setsByWorkout.get(workout.id) ?? [])),
+  });
+}
+
+export async function getWorkoutIntelligence({ userId, days = 30, limit = 30 } = {}) {
+  const normalizedDays = clampMcpDays(days, 30);
+  const maxRows = clampMcpLimit(limit, 30, 50);
+  const end = localDate();
+  const start = addDays(end, -(normalizedDays - 1));
+  const client = getSupabaseAdmin();
+  const [workouts, healthLogs] = await Promise.all([
+    selectMany(
+      client
+        .from('workouts')
+        .select(workoutSelect())
+        .eq('user_id', userId)
+        .gte('performed_on', start)
+        .lte('performed_on', end)
+        .order('performed_on', { ascending: false })
+        .order('started_at', { ascending: false })
+        .limit(maxRows),
+    ),
+    selectMany(
+      client
+        .from('health_logs')
+        .select(healthSelect())
+        .eq('user_id', userId)
+        .gte('logged_on', start)
+        .lte('logged_on', end)
+        .order('logged_on', { ascending: false })
+        .limit(normalizedDays + 2),
+    ),
+  ]);
+  const workoutIds = workouts.map((row) => row.id).filter(Boolean);
+  const sets = workoutIds.length
+    ? await selectMany(client.from('workout_sets').select(workoutSetSelect()).eq('user_id', userId).in('workout_id', workoutIds).order('performed_at', { ascending: true }).limit(WORKOUT_SET_QUERY_LIMIT))
+    : [];
+  const truncation = getWorkoutSetTruncationInfo(sets.length, WORKOUT_SET_QUERY_LIMIT);
+
+  return sanitizeMcpOutput({
+    range: { start, end, days: normalizedDays },
+    ...truncation,
+    intelligence: buildWorkoutIntelligence({
+      workouts,
+      sets,
+      healthLogs,
+      days: normalizedDays,
+      maxExercises: 14,
+    }),
   });
 }
 

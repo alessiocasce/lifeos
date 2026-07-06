@@ -19,6 +19,7 @@ import {
   getWeekSummary,
   getWhatsappOutboxRecent,
   getWhatsappProactiveDebug,
+  getWorkoutIntelligence,
   searchVaultForMcp,
 } from './_utils/mcpLifeosData.js';
 
@@ -50,6 +51,11 @@ const TOOL_DEFINITIONS = [
     name: 'get_recent_workouts',
     description: 'Returns recent workouts with exact exercise sets including set_number, weight, reps, RPE, warmup flag, notes, dates, durations, and compact stats for analysis.',
     inputSchema: objectSchema({ days: numberSchema('Optional day window, default 7, max 30.'), limit: numberSchema('Optional max workouts, default 20.') }),
+  },
+  {
+    name: 'get_workout_intelligence',
+    description: 'Analyzes recent exact workout sets for latest-session summary, per-exercise progression, cautious next targets, plateaus, and sleep/recovery caveats when health data exists.',
+    inputSchema: objectSchema({ days: numberSchema('Optional day window, default 30, max 30.'), limit: numberSchema('Optional max workouts, default 30.') }),
   },
   {
     name: 'get_health_summary',
@@ -113,6 +119,7 @@ const RESOURCE_DEFINITIONS = [
   ['lifeos://week/summary', 'Week Summary', 'Last 7 days summary.', () => getWeekSummary],
   ['lifeos://health/7d', 'Health 7d', 'Recent health and sleep summary.', () => getHealthSummary],
   ['lifeos://workouts/recent', 'Recent Workouts', 'Recent workout summaries with exact set-level details.', () => getRecentWorkouts],
+  ['lifeos://workouts/intelligence', 'Workout Intelligence', 'Progression, next-target, plateau, and recovery analysis from exact workout sets.', () => getWorkoutIntelligence],
   ['lifeos://memos/open', 'Open Memos', 'Open memos and reminder status.', () => getOpenMemos],
   ['lifeos://calendar/upcoming', 'Upcoming Calendar', 'Upcoming LifeOS calendar events.', () => getUpcomingCalendar],
   ['lifeos://projects/status', 'Projects Status', 'Project and session status.', () => getProjectsStatus],
@@ -154,8 +161,8 @@ const PROMPT_DEFINITIONS = [
   {
     name: 'lifeos_workout_analysis',
     description: 'Analyze recent workouts and recovery context to suggest the next training move.',
-    suggestedCalls: ['get_recent_workouts', 'get_health_summary'],
-    instruction: 'Compare recent training to sleep/recovery. Recommend the next training focus while respecting logged recovery.',
+    suggestedCalls: ['get_workout_intelligence', 'get_recent_workouts', 'get_health_summary'],
+    instruction: 'Use workout intelligence first, then exact recent workouts and health if needed. Recommend the next training focus while respecting logged recovery and avoiding fake certainty.',
     outputStyle: 'Direct training recommendation with rationale.',
   },
   {
@@ -343,6 +350,9 @@ async function callMcpTool(params, context) {
       break;
     case 'get_recent_workouts':
       data = await getRecentWorkouts({ userId, days: clampMcpDays(args.days), limit: clampMcpLimit(args.limit, 20, 50) });
+      break;
+    case 'get_workout_intelligence':
+      data = await getWorkoutIntelligence({ userId, days: clampMcpDays(args.days, 30), limit: clampMcpLimit(args.limit, 30, 50) });
       break;
     case 'get_health_summary':
       data = await getHealthSummary({ userId, days: clampMcpDays(args.days) });

@@ -541,6 +541,7 @@ Current behavior:
 - MCP is scoped to the configured personal user via `LIFEOS_ACTION_USER_ID` and service-role Supabase reads.
 - MCP tools/resources provide compact summaries for snapshots, today/week, workouts, health, open memos, upcoming calendar, projects, Brain traces/action logs, WhatsApp outbox, Vault search, and open loops.
 - MCP workout output includes exact set-level rows in both top-level `sets[]` and per-exercise `sets[]`, including set number, warmup flag, weight, reps, RPE, performed time, and safe note previews, while preserving aggregate workout/exercise summaries. Workout responses include `sets_truncated`, `set_limit`, and `returned_set_count`.
+- Workout Intelligence v1 exposes read-only `get_workout_intelligence` and `lifeos://workouts/intelligence`. It analyzes exact working sets into latest-session summaries, per-exercise progression, cautious next targets, plateau flags, and sleep/recovery caveats when health data exists. Warmups are excluded from top working-set targets. Brain workout context uses the same helper through the workout coach read path.
 - MCP includes read-only proactive WhatsApp debug access through `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug`, exposing outbox status counts, safe ACK/retry summaries, and proactive traces without mutating records.
 - MCP prompts are instruction templates only; they do not embed private data directly.
 - MCP v1.1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.

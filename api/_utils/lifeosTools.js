@@ -24,6 +24,7 @@ import {
   requiredNumber,
   requiredText,
 } from './validation.js';
+import { buildWorkoutIntelligence } from './workoutIntelligence.js';
 
 const VALID_TABLES = new Set([
   'expenses',
@@ -133,6 +134,7 @@ export async function readLifeOSContext(plan) {
     summaries: {},
     examples: {},
   };
+  let healthLogsForWorkoutIntelligence = [];
 
   if (tables.includes('expenses')) {
     const rows = await queryDateRange(client.from('expenses').select('vendor, category, amount, spent_on, notes').eq('user_id', userId), 'spent_on', window)
@@ -151,6 +153,7 @@ export async function readLifeOSContext(plan) {
       .limit(limitForRange(plan.range, 365));
     if (rows.error) throw rows.error;
     const logs = rows.data ?? [];
+    healthLogsForWorkoutIntelligence = logs;
     context.coverage.health_logs = logs.length;
     context.summaries.health_logs = summarizeHealth(logs);
     context.examples.health_logs = logs.slice(0, exampleLimit(plan.range)).map(formatHealthExample);
@@ -165,6 +168,8 @@ export async function readLifeOSContext(plan) {
       ended_at,
       notes,
       workout_sets (
+        id,
+        workout_id,
         exercise,
         set_number,
         is_warmup,
@@ -181,6 +186,13 @@ export async function readLifeOSContext(plan) {
     const workouts = rows.data ?? [];
     context.coverage.workouts = workouts.length;
     context.summaries.workouts = summarizeWorkouts(workouts);
+    context.summaries.workout_intelligence = buildWorkoutIntelligence({
+      workouts,
+      healthLogs: healthLogsForWorkoutIntelligence,
+      days: rangeDayCount(plan.range),
+      maxExercises: 8,
+      maxTopSets: 6,
+    });
     context.examples.workouts = workouts.slice(0, exampleLimit(plan.range)).map((workout) => ({
       ...workout,
       workout_sets: (workout.workout_sets ?? []).slice(0, 16),
@@ -860,6 +872,16 @@ function limitForRange(range, max) {
   if (range === 'all') return Math.min(max, 500);
   if (['3m', '6m', '12m'].includes(range)) return Math.min(max, 300);
   return Math.min(max, 120);
+}
+
+function rangeDayCount(range) {
+  if (range === 'today' || range === 'tomorrow') return 1;
+  if (range === '7d') return 7;
+  if (range === '30d') return 30;
+  if (range === '3m') return 90;
+  if (range === '6m') return 180;
+  if (range === '12m') return 365;
+  return 30;
 }
 
 function exampleLimit(range) {

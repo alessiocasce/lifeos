@@ -538,11 +538,12 @@ MCP is an external read-only context/debug layer. It is not the in-app Brain and
 3. Ask: `Analizza i workout di petto precedente, dimmi prestazioni passate di panca piana e come provare a migliorare oggi`.
 4. Confirm analysis only and no calendar rows.
 5. Ask: `Analizza i workout degli ultimi giorni e dimmi cosa dovrei allenare oggi. Io pensavo di allenare petto ma ho paura di cedere con le spalle`.
-6. Confirm analysis only and no `Azioni create` section.
-7. Ask: `Programma petto oggi dalle 17 alle 18`.
-8. Confirm explicit scheduling can create a calendar event.
-9. Ask: `create chest workout in calendar today 5pm to 6pm`.
-10. Confirm explicit calendar wording remains write-capable.
+6. Confirm Brain uses workout intelligence signals where available: exact working sets, progression/plateau/next target, and sleep/recovery caveat only when health data exists.
+7. Confirm analysis only and no `Azioni create` section.
+8. Ask: `Programma petto oggi dalle 17 alle 18`.
+9. Confirm explicit scheduling can create a calendar event.
+10. Ask: `create chest workout in calendar today 5pm to 6pm`.
+11. Confirm explicit calendar wording remains write-capable.
 
 ## Action History
 

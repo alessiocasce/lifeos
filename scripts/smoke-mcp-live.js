@@ -10,6 +10,7 @@ const TOKEN = process.env.LIFEOS_MCP_TOKEN || readEnvLocalValue('LIFEOS_MCP_TOKE
 const EXPECTED_TOOLS = [
   'get_lifeos_snapshot',
   'get_recent_workouts',
+  'get_workout_intelligence',
   'get_health_summary',
   'get_open_memos',
   'get_upcoming_calendar',
@@ -27,6 +28,7 @@ const EXPECTED_RESOURCES = [
   'lifeos://week/summary',
   'lifeos://health/7d',
   'lifeos://workouts/recent',
+  'lifeos://workouts/intelligence',
   'lifeos://memos/open',
   'lifeos://calendar/upcoming',
   'lifeos://projects/status',
@@ -147,6 +149,17 @@ test('get_recent_workouts returns MCP text and structured content', async () => 
   assertNoSecretLikeKeys(parsed);
 });
 
+test('get_workout_intelligence returns progression shape', async () => {
+  const result = await callTool('get_workout_intelligence', { days: 30, limit: 30 });
+  assertEqual(result.content?.[0]?.type, 'text');
+  const parsed = parseToolText(result);
+  assert(parsed.intelligence, 'workout intelligence result missing intelligence');
+  assert(parsed.intelligence.data_quality, 'workout intelligence missing data_quality');
+  assert(Array.isArray(parsed.intelligence.exercise_progression), 'workout intelligence missing exercise_progression');
+  assert(parsed.intelligence.recovery, 'workout intelligence missing recovery');
+  assertNoSecretLikeKeys(parsed);
+});
+
 test('get_lifeos_snapshot returns compact sections', async () => {
   const result = await callTool('get_lifeos_snapshot', { days: 7 });
   const parsed = parseToolText(result);
@@ -179,6 +192,15 @@ test('resources/read lifeos://workouts/recent returns JSON content', async () =>
   assertEqual(content?.uri, 'lifeos://workouts/recent');
   assertEqual(content?.mimeType, 'application/json');
   JSON.parse(content.text);
+});
+
+test('resources/read lifeos://workouts/intelligence returns JSON content', async () => {
+  const body = await rpc('resources/read', { uri: 'lifeos://workouts/intelligence' });
+  const content = body.result.contents?.[0];
+  assertEqual(content?.uri, 'lifeos://workouts/intelligence');
+  assertEqual(content?.mimeType, 'application/json');
+  const parsed = JSON.parse(content.text);
+  assert(parsed.intelligence, 'resource missing workout intelligence');
 });
 
 test('prompts/get lifeos_brain_bug_analysis returns prompt messages', async () => {

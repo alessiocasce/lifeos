@@ -49,7 +49,7 @@ const SKILL_DEFINITIONS = [
       'The user asks how to improve a lift or session today.',
       'The user discusses fatigue, recovery, or exercise selection in a workout context.',
     ],
-    dataTables: ['workouts', 'workout_sets'],
+    dataTables: ['workouts', 'workout_sets', 'health_logs'],
     allowedActions: [],
     forbiddenActions: ['create_calendar_event', 'create_calendar_events', 'create_memo', 'update_health_log'],
     responseRules: [

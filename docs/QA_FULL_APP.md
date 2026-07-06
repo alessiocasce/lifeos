@@ -291,11 +291,13 @@ Before live QA, run `npm run test:brain` and confirm the outbox state machine, p
 10. Call `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug`; confirm status counts and safe ACK/retry summaries are visible.
 11. Call `get_recent_workouts` and `lifeos://workouts/recent`; confirm exact workout set rows are present in top-level `sets[]` and per-exercise `sets[]`.
 12. Confirm workout responses include `sets_truncated`, `set_limit`, and `returned_set_count`.
-13. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
-14. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
-15. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
-16. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
-17. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+13. Call `get_workout_intelligence` and `lifeos://workouts/intelligence`; confirm it returns latest session, per-exercise progression, next targets, and recovery status without writes.
+14. Confirm warmup sets are not used as top working-set targets.
+15. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
+16. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
+17. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
+18. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
+19. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
 
 ## Consolidated Action API
 

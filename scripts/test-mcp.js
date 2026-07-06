@@ -10,6 +10,7 @@ import {
 } from '../api/mcp.js';
 import { clampMcpDays, clampMcpLimit, compactWorkout, getWorkoutSetTruncationInfo, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
 import { buildLifeOSContext, buildOpenLoops, rankOpenLoops } from '../api/_utils/lifeosContextCompiler.js';
+import { buildWorkoutIntelligence } from '../api/_utils/workoutIntelligence.js';
 import {
   buildAuthorizationServerMetadata,
   buildWwwAuthenticateHeader,
@@ -46,6 +47,7 @@ test('tools/list includes expected tools', () => {
     'get_lifeos_snapshot',
     'get_lifeos_context',
     'get_recent_workouts',
+    'get_workout_intelligence',
     'get_health_summary',
     'get_open_memos',
     'get_brain_debug_context',
@@ -66,6 +68,7 @@ test('resources/list includes expected resources', () => {
     'lifeos://snapshot',
     'lifeos://context/today',
     'lifeos://today',
+    'lifeos://workouts/intelligence',
     'lifeos://brain/debug',
     'lifeos://whatsapp/outbox/recent',
     'lifeos://whatsapp/proactive-debug',
@@ -331,6 +334,63 @@ test('MCP workout truncation flags are explicit', () => {
   assertEqual(getWorkoutSetTruncationInfo(600, 600).sets_truncated, true);
   assertEqual(getWorkoutSetTruncationInfo(600, 600).set_limit, 600);
   assertEqual(getWorkoutSetTruncationInfo(600, 600).returned_set_count, 600);
+});
+
+test('Workout intelligence analyzes exact sets without treating warmups as top sets', () => {
+  const intelligence = buildWorkoutIntelligence({
+    workouts: [
+      { id: 'w2', name: 'Push B', performed_on: '2026-06-20', started_at: '2026-06-20T10:00:00.000Z', workout_sets: [] },
+      { id: 'w1', name: 'Push A', performed_on: '2026-06-13', started_at: '2026-06-13T10:00:00.000Z', workout_sets: [] },
+    ],
+    sets: [
+      { id: 'warm-heavy', workout_id: 'w2', exercise: 'Bench Press', set_number: 0, is_warmup: true, weight: 80, reps: 1, rpe: null },
+      { id: 'work-latest', workout_id: 'w2', exercise: 'Bench Press', set_number: 1, is_warmup: false, weight: 50, reps: 8, rpe: 8 },
+      { id: 'work-prev', workout_id: 'w1', exercise: 'Bench Press', set_number: 1, is_warmup: false, weight: 50, reps: 7, rpe: 8 },
+    ],
+    healthLogs: [{ logged_on: '2026-06-20', sleep_hours: 7.2 }],
+    days: 14,
+  });
+
+  assertEqual(intelligence.data_quality.workout_count, 2);
+  assertEqual(intelligence.data_quality.working_set_count, 2);
+  const bench = intelligence.exercise_progression.find((entry) => entry.exercise === 'Bench Press');
+  assert(bench, 'missing Bench Press progression');
+  assertEqual(bench.latest_top_set.id, 'work-latest');
+  assertEqual(bench.latest_top_set.weight, 50);
+  assertEqual(bench.estimated_1rm_trend, 'up');
+  assertEqual(bench.next_target.type, 'reps');
+  assertEqual(intelligence.recovery.status, 'normal');
+});
+
+test('Workout intelligence does not invent targets when data is missing', () => {
+  const intelligence = buildWorkoutIntelligence({
+    workouts: [{ id: 'w1', name: 'Pull', performed_on: '2026-06-20', workout_sets: [] }],
+    sets: [{ id: 'set-1', workout_id: 'w1', exercise: 'Pull-up', set_number: 1, is_warmup: false, weight: null, reps: 8, rpe: 8 }],
+    healthLogs: [],
+  });
+  const pullup = intelligence.exercise_progression.find((entry) => entry.exercise === 'Pull-up');
+  assertEqual(pullup.next_target.type, 'repeat_baseline');
+  assertEqual(pullup.next_target.confidence, 'low');
+  assertEqual(intelligence.recovery.status, 'unknown');
+  assertEqual(intelligence.recovery.caveat, null);
+});
+
+test('Workout intelligence adds recovery caution only from logged sleep data', () => {
+  const noSleep = buildWorkoutIntelligence({
+    workouts: [{ id: 'w1', name: 'Legs', performed_on: '2026-06-20', workout_sets: [] }],
+    sets: [{ id: 'set-1', workout_id: 'w1', exercise: 'Squat', set_number: 1, is_warmup: false, weight: 80, reps: 5 }],
+    healthLogs: [{ logged_on: '2026-06-20', energy: 3 }],
+  });
+  assertEqual(noSleep.recovery.status, 'unknown');
+  assertEqual(noSleep.recovery.caveat, null);
+
+  const lowSleep = buildWorkoutIntelligence({
+    workouts: [{ id: 'w1', name: 'Legs', performed_on: '2026-06-20', workout_sets: [] }],
+    sets: [{ id: 'set-1', workout_id: 'w1', exercise: 'Squat', set_number: 1, is_warmup: false, weight: 80, reps: 5 }],
+    healthLogs: [{ logged_on: '2026-06-20', sleep_hours: 4.8 }],
+  });
+  assertEqual(lowSleep.recovery.status, 'caution');
+  assert(lowSleep.next_session.suggestion.includes('conservative'), 'expected conservative next-session caveat');
 });
 
 test('MCP sanitizer preserves normal nested workout set fields', () => {
