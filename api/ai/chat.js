@@ -27,6 +27,7 @@ import {
   serializeWorkingContextForMetadata,
 } from '../_utils/brainWorkingContext.js';
 import { runBrainCommandDraftStage } from '../_utils/brainCommandDraftStage.js';
+import { runBrainPlannerStage } from '../_utils/brainPlannerStage.js';
 import {
   formatBrainSkillForPrompt,
   getBrainSkill,
@@ -660,190 +661,51 @@ export async function handleBrainChatMessage({
       return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
     }
 
-    if (context.brainRoute.mode === 'clarification' || context.brainRoute.needs_clarification) {
-      const plan = createClarificationBrainPlan(context.brainRoute);
-      const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-      return sendAiSuccess(null, 200, {
-        answer,
-        plan: { ...plan, clarifyingQuestion: answer },
-        actions: [],
-        contextSummary: null,
-        selected_skill: serializeSkillSelection(context.brainSkill),
-        brain_route: serializeBrainRoute(context.brainRoute),
-        skipMemoryExtraction: true,
-      }, context, { message, source });
-    }
-
-    if (context.brainRoute.mode === 'casual_chat') {
-      const plan = createReadOnlyBrainPlan(context.brainRoute.reason || classification.reason);
-      const answer = await answerWithGemini(message, plan, null, [], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
-      return sendAiSuccess(null, 200, { answer, plan, actions: [], contextSummary: null, selected_skill: serializeSkillSelection(context.brainSkill), brain_route: serializeBrainRoute(context.brainRoute), skipMemoryExtraction: true }, context, { message, source });
-    }
-
-    if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isFiniteRecurringCalendarRequest(message)) {
-      const plan = createFiniteRecurringCalendarSyntheticPlan();
-      if (!isBrainActionAllowedForPlan(message, plan, context)) {
-        const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-        return sendAiSuccess(null, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
-      }
-      const actions = [];
-      let answer = '';
-      try {
-        const writeResult = await executeFiniteRecurringCalendarPlan(message, plan);
-        actions.push(...writeResult.actions);
-        answer = writeResult.answer;
-        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
-      } catch (error) {
-        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'finite_recurring_calendar_events', error });
-        await safeLogAiError({ context, message, source, plan, writePath: 'finite_recurring_calendar_events', error, diagnostics });
-        attachDebugDiagnostics(error, diagnostics);
-        throw error;
-      }
-    }
-
-    if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isObviousDayScheduleRequest(message)) {
-      const plan = createDayScheduleSyntheticPlan(message);
-      if (!isBrainActionAllowedForPlan(message, plan, context)) {
-        const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-        return sendAiSuccess(null, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
-      }
-      try {
-        const writeResult = await executeDaySchedulePlan(message, plan);
-        return sendAiSuccess(null, 200, {
-          answer: writeResult.answer,
-          plan,
-          actions: writeResult.actions,
-          contextSummary: null,
-        }, context, { message, source });
-      } catch (error) {
-        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'day_schedule_events_preplanner', error });
-        await safeLogAiError({ context, message, source, plan, writePath: 'day_schedule_events_preplanner', error, diagnostics });
-        const friendlyError = friendlyDayScheduleError(error);
-        attachDebugDiagnostics(friendlyError, diagnostics);
-        throw friendlyError;
-      }
-    }
-
-    if (!negativeWriteIntent && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isObviousExplicitMultiEventCalendarRequest(message)) {
-      const plan = createExplicitCalendarSyntheticPlan(message);
-      if (!isBrainActionAllowedForPlan(message, plan, context)) {
-        const answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-        return sendAiSuccess(null, 200, { answer, plan: createClarificationBrainPlan({ ...context.brainRoute, clarification_question: answer }), actions: [], contextSummary: null }, context, { message, source });
-      }
-      const actions = [];
-      let answer = '';
-      try {
-        const writeResult = await executeExplicitCalendarPlan(message, plan);
-        actions.push(...writeResult.actions);
-        answer = writeResult.answer;
-        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: null }, context, { message, source });
-      } catch (error) {
-        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events_preplanner', error });
-        await safeLogAiError({ context, message, source, plan, writePath: 'explicit_calendar_events_preplanner', error, diagnostics });
-        attachDebugDiagnostics(error, diagnostics);
-        throw error;
-      }
-    }
-
-    let plan;
-    try {
-      plan = await planMessage(message, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
-    } catch (error) {
-      const diagnostics = logAiPlannerFailure({ context, message, error });
-      attachDebugDiagnostics(error, diagnostics);
-      throw error;
-    }
-    plan = enforceWorkoutAdviceReadOnly(message, plan);
-    plan = enforceBrainWriteRestraint(message, plan, classification, context.brainRoute, context.brainSkill);
-    plan = mergeBrainRouteIntoPlan(plan, context.brainRoute, context.brainSkill);
-    context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
+    const plannerStageResult = await runBrainPlannerStage({
+      turn: context,
       message,
+      source,
       classification,
-      plan,
-      brainContext: context.brainContext,
-      brainChat: context.brainChat,
+      negativeWriteIntent,
+      createReadOnlyBrainPlan,
+      createClarificationBrainPlan,
+      getSafeClarificationQuestion,
+      answerWithAI: answerWithGemini,
+      generatePlannerPlan: async (...args) => {
+        try {
+          return await planMessage(...args);
+        } catch (error) {
+          const diagnostics = logAiPlannerFailure({ context, message, error });
+          attachDebugDiagnostics(error, diagnostics);
+          throw error;
+        }
+      },
+      enforceWorkoutAdviceReadOnly,
+      enforceBrainWriteRestraint,
+      mergeBrainRouteIntoPlan,
+      selectBrainSkillFromRoute,
+      enforceBrainSkillWritePermission,
+      readLifeOSContext,
+      executeWriteIntent,
+      isWorkoutAdviceOnlyRequest,
+      appendWorkoutReadOnlyConfirmation,
+      isFiniteRecurringCalendarRequest,
+      createFiniteRecurringCalendarSyntheticPlan,
+      executeFiniteRecurringCalendarPlan,
+      isObviousDayScheduleRequest,
+      createDayScheduleSyntheticPlan,
+      executeDaySchedulePlan,
+      isObviousExplicitMultiEventCalendarRequest,
+      createExplicitCalendarSyntheticPlan,
+      executeExplicitCalendarPlan,
+      isDaySchedulePlannerGuard,
+      isExplicitMultiEventCalendarRequest,
+      friendlyDayScheduleError,
+      logAiWriteFailure,
+      safeLogAiError,
+      attachDebugDiagnostics,
     });
-    plan = enforceBrainSkillWritePermission(message, plan, context.brainSkill, context.brainRoute);
-    const actions = [];
-    let lifeosContext = null;
-    let answer = '';
-    const workoutAdviceOnly = isWorkoutAdviceOnlyRequest(message);
-    const dayScheduleRequest = !negativeWriteIntent && !workoutAdviceOnly && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isDaySchedulePlannerGuard(message, plan);
-    const explicitMultiEventRequest = !negativeWriteIntent && !workoutAdviceOnly && context.brainRoute.mode === 'explicit_action' && context.brainRoute.write_intent && isExplicitMultiEventCalendarRequest(message, plan);
-
-    if (plan.intent === 'clarify') {
-      answer = getSafeClarificationQuestion({ message, plan, brainRoute: context.brainRoute, brainSkill: context.brainSkill, negative: negativeWriteIntent });
-      return sendAiSuccess(null, 200, { answer, plan, actions }, context, { message, source });
-    }
-
-    if (dayScheduleRequest) {
-      try {
-        const writeResult = await executeDaySchedulePlan(message, plan);
-        actions.push(...writeResult.actions);
-        answer = writeResult.answer;
-        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
-      } catch (error) {
-        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'day_schedule_events', error });
-        await safeLogAiError({ context, message, source, plan, writePath: 'day_schedule_events', error, diagnostics });
-        const friendlyError = friendlyDayScheduleError(error);
-        attachDebugDiagnostics(friendlyError, diagnostics);
-        throw friendlyError;
-      }
-    }
-
-    if (explicitMultiEventRequest) {
-      try {
-        const writeResult = await executeExplicitCalendarPlan(message, plan);
-        actions.push(...writeResult.actions);
-        answer = writeResult.answer;
-        return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
-      } catch (error) {
-        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: 'explicit_calendar_events', error });
-        await safeLogAiError({ context, message, source, plan, writePath: 'explicit_calendar_events', error, diagnostics });
-        attachDebugDiagnostics(error, diagnostics);
-        throw error;
-      }
-    }
-
-    if (plan.needsRead || ['analyze', 'analyze_and_plan', 'blocked_destructive'].includes(plan.intent)) {
-      lifeosContext = await readLifeOSContext(plan);
-    }
-
-    if (plan.intent === 'blocked_destructive') {
-      answer = await answerWithGemini(message, plan, lifeosContext, [
-        { type: 'blocked_destructive', message: 'Deletion and destructive updates are not enabled for the AI assistant yet.' },
-      ], context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
-      return sendAiSuccess(null, 200, { answer, plan, actions: [{ type: 'blocked_destructive' }], contextSummary: lifeosContext }, context, { message, source });
-    }
-
-    if (plan.intent === 'unsupported') {
-      answer = 'I cannot do that in this version of the LifeOS assistant.';
-      return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
-    }
-
-    if (plan.needsWrite) {
-      let writeResult;
-      try {
-        writeResult = await executeWriteIntent(plan, message, lifeosContext, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute);
-      } catch (error) {
-        const diagnostics = logAiWriteFailure({ context, message, plan, writePath: plan.intent, error });
-        await safeLogAiError({ context, message, source, plan, writePath: plan.intent, error, diagnostics });
-        attachDebugDiagnostics(error, diagnostics);
-        throw error;
-      }
-      actions.push(...writeResult.actions);
-      if (writeResult.context) lifeosContext = writeResult.context;
-      if (writeResult.answer) answer = writeResult.answer;
-    }
-
-    if (!answer) {
-      answer = await answerWithGemini(message, plan, lifeosContext, actions, context.brainContext, context.brainChat, context.brainSkill, context.brainRoute, context.brainVault);
-    }
-    if (workoutAdviceOnly) {
-      answer = appendWorkoutReadOnlyConfirmation(answer, message);
-    }
-
-    return sendAiSuccess(null, 200, { answer, plan, actions, contextSummary: lifeosContext }, context, { message, source });
+    return sendAiSuccess(null, 200, plannerStageResult, context, { message, source });
   } catch (error) {
     await safePersistBrainError(context, error);
     throw error;
@@ -1732,15 +1594,6 @@ function getSafeClarificationQuestion({ message, plan = {}, brainRoute = null, b
     return 'What amount, vendor, category, and date should I use for the expense?';
   }
   return routeQuestion || 'What exact details should I use?';
-}
-
-function isBrainActionAllowedForPlan(message, plan, context) {
-  return canExecuteBrainAction({
-    route: context?.brainRoute,
-    skill: context?.brainSkill?.skill,
-    plan,
-    message,
-  }).allowed;
 }
 
 function mergeBrainRouteIntoPlan(plan = {}, brainRoute, skillSelection) {

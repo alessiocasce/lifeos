@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-06
 Current branch: `main`
-Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, and backend LifeOS tool guards.
+Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, planner stage, and backend LifeOS tool guards.
 
 ## Project Goal
 
@@ -317,6 +317,8 @@ Architecture:
 - Brain Turn Arbitration helpers live in `api/_utils/brainTurnArbitration.js`. They provide deterministic signals for explicit new commands, Working Context referents, agenda queries, operational follow-ups, true long-term memory recall, pending-vs-proactive priority, and memo-vs-calendar write-domain policy.
 - `api/ai/chat.js` still owns the main planner/execution pipeline, but early deterministic routing now consults the BrainTurn Contract. Pending actions, proactive replies, operational follow-ups, memory recall, Vault retrieval, and command drafts are blocked when the contract says that subsystem would steal the turn.
 - The AI Command Draft lifecycle is extracted into `api/_utils/brainCommandDraftStage.js`. The stage decides whether command draft should run, extracts with Gemini, applies deterministic reference/domain/field policy, validates, creates pending clarification state, or executes through the existing safe write path.
+- Brain Stage v3 extracts the legacy planner/read-only/action path into `api/_utils/brainPlannerStage.js`. The stage handles route clarification, casual/read-only answers, synthetic multi-event calendar paths, Gemini planner output, read context loading, safe write execution handoff, and planner trace steps.
+- Planner Stage validates every planner write against the BrainTurn Contract, route write intent, selected skill permissions, negative write intent, and destructive-action blocks. If the contract says the turn is read-only, operational, memory recall, follow-up transform, casual, or has no current-message write source, the planner output is repaired to read-only/clarification before any LifeOS tool can run.
 - Brain has a pending-action / slot-filling layer for multi-turn writes. Candidate actions are AI-extracted into `ai_chat_messages.metadata.pending_action`, then deterministic backend validation handles confirmation, cancellation, missing fields, expiration, and execution.
 - Pending-action resolution runs before normal AI routing, skill selection, command draft extraction, planner writes, and casual fallback for both app Brain and WhatsApp Brain.
 - Short confirmation/cancellation/clarification replies such as `Sì`, `si`, `ok`, `confermo`, `fallo`, `yes`, `no`, `non farlo`, and `?` are normalized only when an active pending action exists, then resolve or explain that pending action before any new route is attempted.
@@ -348,6 +350,7 @@ Architecture:
 - Brain Vault documents can be saved by explicit follow-up commands such as `save this to vault`, and eligible long-form Brain answers are auto-saved invisibly.
 - Brain Vault semantic retrieval runs after AI semantic routing for relevant analysis/action/product/workout/project/life-review requests and injects top matching saved report chunks into Brain prompts as advisory context.
 - Simple explicit writes such as habit logs, sleep-start logs, memos, calendar creates, and expenses skip Brain Vault retrieval unless the current message also asks for analysis/advice/report context.
+- Brain Vault and Working Context are advisory inputs only. Planner Stage explicitly prevents either one from creating write permission when the current message/contract is read-only.
 - Vault context is stored in `ai_chat_messages.metadata.vault_context` for debugging and never creates write permission.
 - Vault context does not replace structured LifeOS tables and cannot authorize calendar, memo, health, expense, project, or workout writes.
 - Brain Vault embeddings are Gemini-native. The core model is `gemini-embedding-2`, configurable only through optional `GEMINI_EMBEDDING_MODEL`, with fixed 1536-dimension vectors stored in `ai_vault_chunks.embedding`.
@@ -475,7 +478,7 @@ Current behavior:
 - `npm run test:brain` runs `scripts/test-brain-regressions.js`.
 - Fixtures live in `tests/brain/fixtures.js`; notes live in `tests/brain/README.md`.
 - The harness uses pure utilities and does not require Vercel, browser automation, WhatsApp, Gemini, or live Supabase writes.
-- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, BrainTurn Contract path selection, command-draft stage policy, memo-vs-calendar domain repair, calendar command draft AM/PM repair, calendar duration/end-time clarification, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
+- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, BrainTurn Contract path selection, command-draft stage policy, planner-stage write blocking, memo-vs-calendar domain repair, calendar command draft AM/PM repair, calendar duration/end-time clarification, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
 - Run it before and after changes to Brain, WhatsApp inbound/outbox, proactive memo rules, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
 - Live WhatsApp thread continuity, real tool execution, provider behavior, and RLS still require the manual QA checklists.
 

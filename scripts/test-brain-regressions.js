@@ -35,6 +35,10 @@ import {
   serializeBrainTurnContract,
 } from '../api/_utils/brainTurnContract.js';
 import {
+  runBrainPlannerStage,
+  validatePlannerPlanAgainstTurnContract,
+} from '../api/_utils/brainPlannerStage.js';
+import {
   canAckOutboxMessage,
   computeClaimRecovery,
   computeRetryBackoff,
@@ -62,6 +66,7 @@ import {
   recordBrainTurnSkill,
   recordBrainTurnVault,
 } from '../api/_utils/brainTurn.js';
+import { getBrainSkill } from '../api/_utils/brainSkills.js';
 import {
   buildMemoIdempotencyKey,
   buildMemoProactiveCandidates,
@@ -772,6 +777,164 @@ test('BrainTurnContract classifies representative winning paths', () => {
   const trace = serializeBrainTurnContract(agenda);
   assert.equal(trace.winning_path, 'read_only_query');
   assert.equal(JSON.stringify(trace).includes('SUPABASE'), false);
+});
+
+test('PlannerStage contract blocks writes for read-only and negative turns', () => {
+  const cases = [
+    {
+      name: 'negative write intent wins',
+      message: "don't put this in calendar, but I might train chest tomorrow",
+      route: testRoute({ mode: 'casual_chat', skill: 'general_chat', write: false }),
+      skill: 'general_chat',
+      negative: true,
+      plan: writePlan('create_calendar_event'),
+    },
+    {
+      name: 'workout advice is read-only',
+      message: 'Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi',
+      route: testRoute({ mode: 'read_only_analysis', skill: 'workout_coach', write: false, needs: ['workouts', 'workout_sets'] }),
+      skill: 'workout_coach',
+      plan: writePlan('create_calendar_event'),
+    },
+    {
+      name: 'agenda query is read-only',
+      message: 'Che cosa devo fare domani? Guardami gli impegni',
+      route: testRoute({ mode: 'read_only_analysis', skill: 'calendar_planner', write: false, needs: ['calendar_events', 'memos'] }),
+      skill: 'calendar_planner',
+      plan: writePlan('create_memo'),
+    },
+    {
+      name: 'casual chat is read-only',
+      message: 'yo, just opened LifeOS',
+      route: testRoute({ mode: 'casual_chat', skill: 'general_chat', write: false }),
+      skill: 'general_chat',
+      plan: writePlan('create_memo'),
+    },
+    {
+      name: 'product analysis is read-only',
+      message: 'Be brutally honest: is LifeOS becoming too complicated?',
+      route: testRoute({ mode: 'read_only_analysis', skill: 'product_builder', write: false, needs: ['projects'] }),
+      skill: 'product_builder',
+      plan: writePlan('create_memo'),
+    },
+    {
+      name: 'Vault context cannot grant write permission',
+      message: 'Analyze my LifeOS architecture with saved reports',
+      route: testRoute({ mode: 'read_only_analysis', skill: 'product_builder', write: false, needs: ['projects'] }),
+      skill: 'product_builder',
+      plan: writePlan('create_calendar_event'),
+      vault: { attempted: true, results: [{ id: 'vault-1' }] },
+    },
+    {
+      name: 'Working Context cannot grant write permission',
+      message: 'ok interesting',
+      route: testRoute({ mode: 'casual_chat', skill: 'general_chat', write: false }),
+      skill: 'general_chat',
+      plan: writePlan('create_memo'),
+      workingContext: {
+        language: 'it',
+        last_subject: { type: 'memo', label: 'Aereo', date: '2026-07-08', start_time: '23:00' },
+      },
+    },
+  ];
+
+  for (const item of cases) {
+    const turn = buildPlannerTestTurn(item);
+    const validation = validatePlannerPlanAgainstTurnContract({
+      plan: item.plan,
+      message: item.message,
+      turn,
+      brainRoute: turn.brainRoute,
+      brainSkill: turn.brainSkill,
+      negativeWriteIntent: Boolean(item.negative),
+    });
+    assert.equal(validation.writeBlocked, true, `${item.name}: ${compact(validation)}`);
+    assert.equal(validation.plan.needsWrite, false, item.name);
+    assert.notEqual(validation.plan.intent, item.plan.intent, item.name);
+  }
+});
+
+test('PlannerStage allows explicit current-message writes that pass route and skill permission', () => {
+  const memoTurn = buildPlannerTestTurn({
+    message: 'Ricordami parrucchiere domani alle 9.30',
+    route: testRoute({ mode: 'explicit_action', skill: 'memo_assistant', write: true, actions: ['create_memo'] }),
+    skill: 'memo_assistant',
+  });
+  const memo = validatePlannerPlanAgainstTurnContract({
+    plan: writePlan('create_memo', { title: 'Parrucchiere', memo_date: '2026-07-07', memo_time: '09:30' }),
+    message: memoTurn.message,
+    turn: memoTurn,
+    brainRoute: memoTurn.brainRoute,
+    brainSkill: memoTurn.brainSkill,
+  });
+  assert.equal(memo.writeBlocked, false, compact(memo));
+  assert.equal(memo.plan.needsWrite, true);
+
+  const calendarTurn = buildPlannerTestTurn({
+    message: 'Fissa parrucchiere domani alle 9.30',
+    route: testRoute({ mode: 'explicit_action', skill: 'calendar_planner', write: true, actions: ['create_calendar_event'] }),
+    skill: 'calendar_planner',
+  });
+  const calendar = validatePlannerPlanAgainstTurnContract({
+    plan: writePlan('create_calendar_event', { title: 'Parrucchiere', event_date: '2026-07-07', start_time: '09:30' }),
+    message: calendarTurn.message,
+    turn: calendarTurn,
+    brainRoute: calendarTurn.brainRoute,
+    brainSkill: calendarTurn.brainSkill,
+  });
+  assert.equal(calendar.writeBlocked, false, compact(calendar));
+  assert.equal(calendar.plan.needsWrite, true);
+});
+
+test('PlannerStage records sanitized contract write-block trace', async () => {
+  const turn = buildPlannerTestTurn({
+    message: 'Che cosa devo fare domani? Guardami gli impegni',
+    route: testRoute({ mode: 'read_only_analysis', skill: 'calendar_planner', write: false, needs: ['calendar_events', 'memos'] }),
+    skill: 'calendar_planner',
+  });
+  const result = await runBrainPlannerStage({
+    turn,
+    message: turn.message,
+    source: 'whatsapp',
+    classification: { kind: 'read_only_analysis', reason: 'Agenda query.' },
+    negativeWriteIntent: false,
+    createReadOnlyBrainPlan: (reason) => ({ intent: 'analyze', needsRead: false, needsWrite: false, tables: [], args: {}, reason }),
+    createClarificationBrainPlan: (route) => ({ intent: 'clarify', needsRead: false, needsWrite: false, tables: [], args: {}, clarifyingQuestion: route?.clarification_question ?? 'What details?', reason: route?.reason }),
+    getSafeClarificationQuestion: () => 'What exact details should I use?',
+    answerWithAI: async () => 'Agenda letta senza scrivere nulla.',
+    generatePlannerPlan: async () => writePlan('create_memo', { title: 'Bad planner write' }),
+    enforceWorkoutAdviceReadOnly: (_message, plan) => plan,
+    enforceBrainWriteRestraint: (_message, plan) => plan,
+    mergeBrainRouteIntoPlan: (plan) => plan,
+    selectBrainSkillFromRoute: () => turn.brainSkill,
+    enforceBrainSkillWritePermission: (_message, plan) => plan,
+    readLifeOSContext: async () => ({ memos: [], calendar_events: [] }),
+    executeWriteIntent: async () => {
+      throw new Error('write should not execute');
+    },
+    isWorkoutAdviceOnlyRequest: () => false,
+    appendWorkoutReadOnlyConfirmation: (answer) => answer,
+    isFiniteRecurringCalendarRequest: () => false,
+    createFiniteRecurringCalendarSyntheticPlan: () => writePlan('create_calendar_events'),
+    executeFiniteRecurringCalendarPlan: async () => ({ actions: [] }),
+    isObviousDayScheduleRequest: () => false,
+    createDayScheduleSyntheticPlan: () => writePlan('create_calendar_events'),
+    executeDaySchedulePlan: async () => ({ actions: [] }),
+    isObviousExplicitMultiEventCalendarRequest: () => false,
+    createExplicitCalendarSyntheticPlan: () => writePlan('create_calendar_events'),
+    executeExplicitCalendarPlan: async () => ({ actions: [] }),
+    isDaySchedulePlannerGuard: () => false,
+    isExplicitMultiEventCalendarRequest: () => false,
+    friendlyDayScheduleError: (error) => error,
+    logAiWriteFailure: () => ({}),
+    safeLogAiError: async () => {},
+    attachDebugDiagnostics: () => {},
+  });
+  assert.equal(result.actions.length, 0, compact(result));
+  assert.equal(result.plan.needsWrite, false, compact(result.plan));
+  const steps = turn.brainTrace.decision_path.map((item) => item.step);
+  assert.ok(steps.includes('planner_write_blocked_by_contract'), compact(turn.brainTrace.decision_path));
+  assert.equal(JSON.stringify(turn.brainTrace).includes('Authorization'), false);
 });
 
 test('agenda query route invariant repairs contradictory memory_recall route', () => {
@@ -1497,6 +1660,80 @@ test('Europe/Rome local date helpers produce stable UTC windows', () => {
 
 function test(name, fn) {
   tests.push({ name, fn });
+}
+
+function testRoute({ mode = 'read_only_analysis', skill = 'general_chat', write = false, needs = [], actions = [] } = {}) {
+  return {
+    mode,
+    primary_skill: skill,
+    confidence: 0.9,
+    reason: `${mode} test route.`,
+    user_intent_summary: '',
+    needs_data: needs,
+    write_intent: Boolean(write),
+    proposed_action_types: write ? actions : [],
+    risk_level: 'low',
+    needs_clarification: false,
+  };
+}
+
+function writePlan(intent, args = {}) {
+  return {
+    intent,
+    needsRead: false,
+    needsWrite: true,
+    range: null,
+    tables: tableForTestPlan(intent),
+    args,
+    clarifyingQuestion: null,
+    riskLevel: 'low',
+    reason: 'Fake planner attempted a write.',
+  };
+}
+
+function tableForTestPlan(intent) {
+  if (intent === 'create_memo') return ['memos'];
+  if (intent === 'create_calendar_event' || intent === 'create_calendar_events') return ['calendar_events'];
+  if (intent === 'create_expense') return ['expenses'];
+  if (intent === 'update_health_log' || intent === 'log_sleep_start') return ['health_logs'];
+  return [];
+}
+
+function buildPlannerTestTurn({ message, route, skill, negative = false, vault = null, workingContext = null } = {}) {
+  const brainSkill = {
+    skill: getBrainSkill(skill || route?.primary_skill || 'general_chat'),
+    confidence: 0.9,
+    reason: 'test skill',
+    matchedSignals: [],
+  };
+  const classification = route?.mode === 'read_only_analysis'
+    ? { kind: 'read_only_analysis', reason: 'test read-only' }
+    : route?.mode === 'explicit_action'
+      ? { kind: 'explicit_action', reason: 'test explicit action' }
+      : { kind: 'casual', reason: 'test casual' };
+  const contract = buildBrainTurnContract({
+    message,
+    source: 'whatsapp',
+    workingContext,
+    classification,
+    route,
+  });
+  return {
+    message,
+    source: 'whatsapp',
+    brainRoute: route,
+    brainSkill,
+    brainTurnContract: contract,
+    brainTrace: {
+      decision_path: [],
+      _start_time: Date.now(),
+    },
+    brainContext: { memories: [], insights: [] },
+    brainChat: { conversationHistory: [], workingContext },
+    brainVault: vault,
+    workingContext: workingContext ?? { language: 'it' },
+    negativeWriteIntent: negative,
+  };
 }
 
 function assertSleepStartCandidate(candidate, label) {

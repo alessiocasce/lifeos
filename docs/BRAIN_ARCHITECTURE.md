@@ -20,10 +20,11 @@ Current order:
 8. Re-evaluate BrainTurn Contract with route context.
 9. Optionally retrieve Vault context.
 10. Run Command Draft Stage.
-11. Fall back to pending-action candidate extraction, memory handling, follow-up transforms, planner, read-only answers, or casual chat.
-12. Persist sanitized response metadata and `brain_trace`.
+11. Run memory/save/follow-up special branches that are still explicit in `chat.js`.
+12. Run Planner Stage for route clarification, casual/read-only answers, planner output, read context, synthetic calendar plans, and safe write execution handoff.
+13. Persist sanitized response metadata and `brain_trace`.
 
-`api/ai/chat.js` still owns planner execution and final persistence. Do not move more of it casually; extract one stage at a time with regression coverage.
+`api/ai/chat.js` still owns auth, thread/context setup, memory branches, Vault-save follow-ups, final persistence, and low-level LifeOS write helpers. Do not move more of it casually; extract one stage at a time with regression coverage.
 
 ## BrainTurn Contract
 
@@ -58,6 +59,42 @@ Every contract evaluation is recorded in `brain_trace` as `brain_turn_contract_e
 - executes through the existing safe write path only when allowed.
 
 The stage must respect `BrainTurnContract.field_policy`. Command draft is not allowed to copy exact Working Context dates/times into standalone new commands.
+
+## Planner Stage
+
+`api/_utils/brainPlannerStage.js` owns the legacy planner/read-only/action path after Command Draft.
+
+The stage handles:
+
+- route clarification responses;
+- casual chat responses;
+- synthetic finite recurring/day-schedule/multi-event calendar paths;
+- Gemini planner generation through injected `planMessage`;
+- planner plan repair/validation;
+- read-only LifeOS context loading;
+- safe LifeOS write execution handoff;
+- final read-only answer generation.
+
+Planner Stage validates every write-capable plan against:
+
+- BrainTurn Contract write source and `winning_path`;
+- `brainRoute.mode` and `brainRoute.write_intent`;
+- selected skill allowed/forbidden actions;
+- negative current-message write intent;
+- destructive/high-risk action blocks.
+
+If a route is read-only, casual, memory recall, operational context, follow-up transform, or has `source_of_write_intent = none`, planner output is repaired to read-only analysis or clarification before any LifeOS tool can run. Vault and Working Context may inform the answer, but they never grant write permission.
+
+Important trace steps:
+
+- `planner_stage_started`
+- `planner_plan_generated`
+- `planner_plan_validated`
+- `planner_plan_repaired`
+- `planner_write_blocked_by_contract`
+- `planner_action_executed`
+- `planner_read_only_answered`
+- `planner_stage_completed`
 
 ## Field Provenance
 
@@ -103,7 +140,8 @@ npm run test:brain
 ```
 
 The harness covers BrainTurn Contract paths, command-draft stage policy, memo/calendar policy, pending/proactive arbitration, operational follow-ups, route repair, Vault skipping, and the existing sleep/calendar/proactive regressions.
+It also covers Planner Stage contract enforcement: read-only/agenda/workout/product/casual turns cannot write even if a fake planner proposes a write, while explicit current-message memo/calendar writes still pass route and skill permission.
 
 ## Next Extraction
 
-The next useful extraction is the planner/read-only answer stage after Command Draft. Do not extract it until the planner safety tests cover explicit write intent, negative intent, route repair, and selected skill permissions.
+The next useful extraction is the remaining memory/Vault-save/follow-up special branch group, or a lower-level LifeOS tool execution adapter. Do not extract either until tests cover explicit memory writes/forget, Vault save follow-ups, action logging, and final persistence.

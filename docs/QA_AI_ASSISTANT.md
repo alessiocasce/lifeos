@@ -41,6 +41,8 @@ Expected:
 - Calendar command drafts reject ungrounded exact times copied from Working Context for standalone vague commands such as `Segna parrucchiere domattina`.
 - BrainTurn Contract classifies one winning path per turn and blocks subsystem steals: pending action, proactive reply, operational context, agenda query, explicit command, true memory recall, or casual/read-only path.
 - Command Draft Stage owns extraction, reference repair, field policy, pending clarification creation, and safe execution handoff without letting `api/ai/chat.js` branch around those rules.
+- Planner Stage owns the legacy planner/read-only/action path after Command Draft and repairs or blocks planner writes when the BrainTurn Contract, route, skill, or negative intent says the turn is read-only.
+- Fake planner-write tests prove agenda, workout, product, casual, Vault-backed, and Working-Context-backed read-only turns do not execute CRUD actions even when a planner plan proposes one.
 - Generic `segna X domani/alle...` prefers memo/reminder unless the user uses explicit calendar words such as `fissa`, `blocca`, `calendario`, `evento`, or `appuntamento`.
 - Command Draft field provenance records rejected ungrounded calendar times and blocked Working Context exact fields in sanitized trace metadata.
 - Calendar pending slot-fill is label-aware: `orario di inizio 9.30` updates start time, `fine 12:45` updates end time, and `durata 1 ora` computes the end time.
@@ -276,6 +278,12 @@ Expected:
 42. Confirm the answer uses tomorrow calendar/memo data and never starts with `Here's what I remember`.
 43. After creating a memo, ask `Quando l'hai messo?`.
 44. Confirm Brain answers from latest Working Context or asks which memo/event you mean; it must not dump long-term memory.
+45. Ask `Dumbbell bench press, dimmi prestazioni passate e come migliorare oggi`.
+46. Confirm Brain gives read-only workout advice and trace contains Planner Stage validation, with no calendar/memo action.
+47. Ask `Be brutally honest: is LifeOS becoming too complicated?`.
+48. Confirm Brain uses product/read-only analysis and creates no LifeOS CRUD record.
+49. Send `don't put this in calendar, but I might train chest tomorrow`.
+50. Confirm no calendar event or memo is created and trace includes `planner_write_blocked_by_contract` if the planner attempted a write.
 31. Immediately after a fresh pending confirmation, reply `sì`.
 32. Confirm Brain still resolves the pending action instead of treating `sì` as a new command.
 33. After a sleep-start confirmation, send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
