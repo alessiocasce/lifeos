@@ -37,6 +37,7 @@ Expected:
 - Proactive WhatsApp replies can win over unrelated stale pending actions when the latest assistant message is a proactive reminder.
 - New explicit commands such as `crea promemoria domani` are not treated as proactive reminder replies.
 - Missing-source proactive replies are read-only clarifications, not write-looking actions.
+- BrainTurn stage helpers preserve Working Context, pending-action checks, proactive-before-pending arbitration, explicit-command pending bypass, and normal route/skill/vault trace state.
 - Outbox delivery priority sorts `high -> normal -> low`.
 - WhatsApp sender aliases canonicalize `@lid` and `@c.us` identities for stable threads/outbox rows.
 - Negative write intent wins over action wording.

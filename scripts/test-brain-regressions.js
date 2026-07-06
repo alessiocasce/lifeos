@@ -30,6 +30,19 @@ import {
   shouldPrioritizeProactiveReplyOverPending,
 } from '../api/_utils/brainProactiveReplies.js';
 import {
+  attachBrainChatToTurn,
+  buildBrainTurnWorkingContext,
+  checkBrainTurnPendingAction,
+  checkBrainTurnProactivePriority,
+  createBrainTurn,
+  markBrainTurnProactiveBypassedPending,
+  recordBrainTurnClassification,
+  recordBrainTurnPendingResolution,
+  recordBrainTurnRoute,
+  recordBrainTurnSkill,
+  recordBrainTurnVault,
+} from '../api/_utils/brainTurn.js';
+import {
   buildMemoIdempotencyKey,
   buildMemoProactiveCandidates,
   buildMemoProactiveCandidatesFromContext,
@@ -710,6 +723,121 @@ test('missing-source proactive memo reply is read-only clarification', async () 
   assert.deepEqual(result.actions, []);
 });
 
+test('BrainTurn records working context and active pending action stage', () => {
+  const turn = createBrainTurn({
+    message: 'ok',
+    source: 'whatsapp',
+    responseMode: 'whatsapp',
+    requestId: 'turn-pending',
+    clientRequestId: 'whatsapp:test:turn-pending',
+    channelMetadata: { whatsapp_sender: '111780936298528@lid', whatsapp_message_id: 'message-turn-pending' },
+  });
+  attachBrainChatToTurn(turn, {
+    thread: { id: 'thread-1' },
+    userMessage: { id: 'user-message-1' },
+    source: 'whatsapp',
+    conversationHistory: [
+      pendingAssistantMessage({ id: 'pending-message-1', pendingAction: { id: 'pending-1', ...staleSleepPendingAction } }),
+    ],
+  });
+  const workingContext = buildBrainTurnWorkingContext(turn);
+  const { activePendingAction, pendingReplyIntent } = checkBrainTurnPendingAction(turn);
+  assert.equal(turn.brainChat.workingContext, workingContext);
+  assert.equal(activePendingAction.action_type, 'log_sleep_start');
+  assert.equal(pendingReplyIntent.intent, 'confirm');
+  assert.equal(turn.brainTrace.pending_action.found, true);
+  assert.equal(turn.brainTrace.pending_reply_intent, 'confirm');
+  assert.equal(turn.brainTrace.decision_path.some((step) => step.step === 'working_context_built'), true);
+});
+
+test('BrainTurn proactive priority stage can bypass unrelated pending action', () => {
+  const turn = createBrainTurn({
+    message: 'fatto',
+    source: 'whatsapp',
+    responseMode: 'whatsapp',
+    requestId: 'turn-proactive',
+  });
+  attachBrainChatToTurn(turn, {
+    thread: { id: 'thread-2' },
+    userMessage: { id: 'user-message-2' },
+    source: 'whatsapp',
+    conversationHistory: [
+      pendingAssistantMessage({ id: 'pending-message-2', pendingAction: { id: 'pending-2', ...staleSleepPendingAction } }),
+      proactiveAssistantMessage({
+        id: 'message-1',
+        created_at: '2026-06-18T09:55:00.000Z',
+        source_id: proactiveMemoFixtures.timedMemo.id,
+        title: proactiveMemoFixtures.timedMemo.title,
+        rule_key: 'timed_memo_due',
+      }),
+    ],
+  });
+  buildBrainTurnWorkingContext(turn);
+  const { activePendingAction } = checkBrainTurnPendingAction(turn);
+  const priority = checkBrainTurnProactivePriority(turn, {
+    activePendingAction,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(priority.prioritize, true, compact(priority));
+  markBrainTurnProactiveBypassedPending(turn, { activePendingAction, priority });
+  assert.equal(turn.brainTrace.pending_resolution, 'not_handled');
+  assert.equal(turn.brainTrace.pending_action_bypass.reason, 'proactive_reply_latest_proactive_reply_intent');
+});
+
+test('BrainTurn records explicit-command pending bypass without handling old pending', async () => {
+  const turn = createBrainTurn({
+    message: 'Ricordami di fare matematica tra 10 minuti',
+    source: 'whatsapp',
+    responseMode: 'whatsapp',
+    requestId: 'turn-new-command',
+  });
+  attachBrainChatToTurn(turn, {
+    thread: { id: 'thread-3' },
+    userMessage: { id: 'user-message-3' },
+    source: 'whatsapp',
+    conversationHistory: [
+      pendingAssistantMessage({ id: 'pending-message-3', pendingAction: { id: 'pending-3', ...staleSleepPendingAction } }),
+    ],
+  });
+  buildBrainTurnWorkingContext(turn);
+  const { activePendingAction } = checkBrainTurnPendingAction(turn);
+  const resolution = await resolvePendingActionTurn({
+    message: turn.message,
+    pendingAction: activePendingAction,
+    context: turn,
+  });
+  recordBrainTurnPendingResolution(turn, resolution, activePendingAction, 'not_handled');
+  assert.equal(resolution.handled, false, compact(resolution));
+  assert.equal(resolution.bypassed, true, compact(resolution));
+  assert.equal(turn.brainTrace.pending_resolution, 'not_handled');
+  assert.equal(turn.brainTrace.pending_action_bypass.bypass, true);
+});
+
+test('BrainTurn records normal route stages for non-pending app chat', () => {
+  const turn = createBrainTurn({
+    message: 'Come sto andando questa settimana?',
+    source: 'app',
+    responseMode: 'app',
+    requestId: 'turn-normal',
+  });
+  attachBrainChatToTurn(turn, {
+    thread: { id: 'thread-4' },
+    userMessage: { id: 'user-message-4' },
+    source: 'app',
+    conversationHistory: [],
+  });
+  buildBrainTurnWorkingContext(turn);
+  const { activePendingAction } = checkBrainTurnPendingAction(turn);
+  recordBrainTurnClassification(turn, { language: 'it', looks_like_write: false });
+  recordBrainTurnRoute(turn, { mode: 'read_only_analysis', primary_skill: 'life_review', confidence: 0.8, write_intent: false });
+  recordBrainTurnSkill(turn, { skill: { id: 'life_review' }, confidence: 0.8, reason: 'weekly review' });
+  recordBrainTurnVault(turn, { attempted: true, results: [{ document_id: 'doc-1' }] }, { documentCount: 1 });
+  assert.equal(activePendingAction, null);
+  assert.equal(turn.brainTrace.route, 'read_only_analysis');
+  assert.equal(turn.brainTrace.selected_skill, 'life_review');
+  assert.equal(turn.brainTrace.vault.documents, 1);
+});
+
 test('WhatsApp sender aliases canonicalize allowlisted identities', () => {
   const previousAllowed = process.env.LIFEOS_WHATSAPP_ALLOWED_SENDERS;
   const previousAliases = process.env.LIFEOS_WHATSAPP_SENDER_ALIASES;
@@ -813,6 +941,22 @@ function proactiveAssistantMessage({ id, created_at, source_id, title, rule_key 
             rule_key,
           },
         },
+      },
+    },
+  };
+}
+
+function pendingAssistantMessage({ id, pendingAction }) {
+  return {
+    id,
+    role: 'assistant',
+    content: pendingAction?.confirmation_question || pendingAction?.summary || 'Pending action',
+    created_at: '2026-06-18T09:50:00.000Z',
+    metadata: {
+      pending_action: pendingAction,
+      working_context: {
+        language: pendingAction?.language === 'en' ? 'en' : 'it',
+        active_pending_action: pendingAction,
       },
     },
   };

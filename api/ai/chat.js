@@ -13,17 +13,14 @@ import {
 } from '../_utils/brain.js';
 import {
   buildPendingActionFromCandidate,
-  extractLatestPendingAction,
   extractPendingActionCandidateWithAI,
   formatPendingActionCompletedAnswer,
   formatPendingActionQuestion,
   markPendingActionCompleted,
-  normalizePendingReplyIntent,
   resolvePendingActionTurn,
   validatePendingActionCandidate,
 } from '../_utils/brainPendingActions.js';
 import {
-  buildBrainWorkingContext,
   buildCommandContextForPrompt,
   buildSubjectFromActionResult,
   buildSubjectFromPendingAction,
@@ -59,10 +56,23 @@ import {
   serializeVaultContextForMetadata,
 } from '../_utils/brainVault.js';
 import { shouldRetrieveBrainVault } from '../_utils/brainVaultEligibility.js';
-import { resolveProactiveWhatsappReply, shouldPrioritizeProactiveReplyOverPending } from '../_utils/brainProactiveReplies.js';
+import { resolveProactiveWhatsappReply } from '../_utils/brainProactiveReplies.js';
+import {
+  attachBrainChatToTurn,
+  attachBrainContextToTurn,
+  buildBrainTurnWorkingContext,
+  checkBrainTurnPendingAction,
+  checkBrainTurnProactivePriority,
+  createBrainTurn,
+  markBrainTurnProactiveBypassedPending,
+  recordBrainTurnClassification,
+  recordBrainTurnPendingResolution,
+  recordBrainTurnRoute,
+  recordBrainTurnSkill,
+  recordBrainTurnVault,
+} from '../_utils/brainTurn.js';
 import {
   addBrainTraceStep,
-  createBrainTrace,
   finishBrainTrace,
   getDebugFlags,
   safePreview,
@@ -401,33 +411,19 @@ export async function handleBrainChatMessage({
   debugFlags = null,
   endpointTrace = null,
 } = {}) {
-  const context = {
-    requestId: requestId || `brain-${Date.now()}`,
-    clientRequestId: normalizeClientRequestId(clientRequestId),
-    channelMetadata: channelMetadata && typeof channelMetadata === 'object' ? channelMetadata : null,
-    responseMode: responseMode || null,
-    debugFlags: debugFlags && typeof debugFlags === 'object' ? debugFlags : { enabled: false, requested: false, full: false },
-  };
   const normalizedMessage = String(message ?? '').trim();
   if (!normalizedMessage) throw new HttpError(400, 'message is required.');
   if (normalizedMessage.length > 4000) throw new HttpError(400, 'message must be 4000 characters or fewer.');
   const resolvedSource = normalizeAssistantSource(source);
-  context.brainTrace = createBrainTrace({
+  const context = createBrainTurn({
+    message: normalizedMessage,
     source: resolvedSource,
-    responseMode: context.responseMode || resolvedSource,
-    clientRequestId: context.clientRequestId,
-    userText: normalizedMessage,
-    channelMetadata: context.channelMetadata,
-    endpoint: endpointTrace,
-    full: context.debugFlags.full,
-  });
-  addBrainTraceStep(context.brainTrace, 'inbound_received', {
-    source: resolvedSource,
-    response_mode: context.responseMode || resolvedSource,
-    client_request_id: context.clientRequestId,
-    user_text_preview: safePreview(normalizedMessage),
-    whatsapp_sender: context.channelMetadata?.whatsapp_sender,
-    whatsapp_message_id: context.channelMetadata?.whatsapp_message_id,
+    responseMode,
+    requestId,
+    clientRequestId: normalizeClientRequestId(clientRequestId),
+    channelMetadata,
+    debugFlags,
+    endpointTrace,
   });
   const messageForBrain = normalizedMessage;
   try {
@@ -444,107 +440,34 @@ export async function handleBrainChatMessage({
       return maybeAttachDebug(existingResponse, context, trace);
     }
 
-    context.brainChat = await safeBeginBrainChat({
+    attachBrainChatToTurn(context, await safeBeginBrainChat({
       threadId,
       source: resolvedSource,
       message: messageForBrain,
       requestId: context.requestId,
       clientRequestId: context.clientRequestId,
       channelMetadata: context.channelMetadata,
-    });
-    context.brainTrace.thread_id = context.brainChat?.thread?.id ?? null;
-    context.brainTrace.user_message_id = context.brainChat?.userMessage?.id ?? null;
-    addBrainTraceStep(context.brainTrace, 'thread_resolved', {
-      thread_id: context.brainChat?.thread?.id,
-      user_message_id: context.brainChat?.userMessage?.id,
-      history_count: context.brainChat?.conversationHistory?.length ?? 0,
-      source: context.brainChat?.source,
-    });
-    context.brainContext = await safeLoadBrainContext(context);
-    addBrainTraceStep(context.brainTrace, 'memory_context_loaded', {
-      memories: context.brainContext?.memories?.length ?? 0,
-      insights: context.brainContext?.insights?.length ?? 0,
-    });
-    context.workingContext = buildBrainWorkingContext({
-      brainChat: context.brainChat,
-      currentMessage: messageForBrain,
-      lifeosContext: null,
-    });
-    context.brainTrace.language = context.workingContext?.language || 'unknown';
-    context.brainTrace.working_context = {
-      used: Boolean(context.workingContext),
-      last_subject_type: context.workingContext?.last_subject?.type ?? null,
-      last_subject_label: context.workingContext?.last_subject?.label ?? null,
-      last_action_type: context.workingContext?.last_action_result?.action_type ?? null,
-      referents: Array.isArray(context.workingContext?.referents) ? context.workingContext.referents.length : 0,
-    };
-    addBrainTraceStep(context.brainTrace, 'working_context_built', context.brainTrace.working_context);
-    if (context.brainChat) {
-      context.brainChat.workingContext = context.workingContext;
-      context.brainChat.responseMode = context.responseMode;
-      context.brainChat.channelMetadata = context.channelMetadata;
-    }
-    const activePendingAction = extractLatestPendingAction(context.brainChat);
-    const pendingReplyIntent = activePendingAction ? normalizePendingReplyIntent(messageForBrain) : null;
-    context.brainTrace.pending_action = activePendingAction ? {
-      found: true,
-      id: activePendingAction.id,
-      type: activePendingAction.action_type,
-      status: activePendingAction.status,
-      source_message_id: activePendingAction.source_user_message_id,
-      missing_fields: activePendingAction.missing_fields,
-    } : { found: false };
-    context.brainTrace.pending_reply_intent = pendingReplyIntent?.intent ?? null;
-    addBrainTraceStep(context.brainTrace, 'pending_action_checked', {
-      pending_action: context.brainTrace.pending_action,
-      pending_reply_intent: context.brainTrace.pending_reply_intent,
-    });
+    }));
+    attachBrainContextToTurn(context, await safeLoadBrainContext(context));
+    buildBrainTurnWorkingContext(context);
+    const { activePendingAction } = checkBrainTurnPendingAction(context);
     if (activePendingAction && resolvedSource === 'whatsapp') {
-      const proactivePriority = shouldPrioritizeProactiveReplyOverPending({
-        message: messageForBrain,
-        brainChat: context.brainChat,
-        activePendingAction,
-      });
+      const proactivePriority = checkBrainTurnProactivePriority(context, { activePendingAction });
       if (proactivePriority.prioritize) {
-        context.brainTrace.proactive_reply_priority = proactivePriority;
-        addBrainTraceStep(context.brainTrace, 'proactive_reply_prioritized_before_pending', proactivePriority);
         const proactiveResult = await maybeResolveProactiveWhatsappReply({
           message: messageForBrain,
           resolvedSource,
           context,
         });
         if (proactiveResult) {
-          context.brainTrace.pending_resolution = 'not_handled';
-          context.brainTrace.pending_action_bypass = {
-            bypass: true,
-            reason: `proactive_reply_${proactivePriority.reason}`,
-            confidence: 0.9,
-            pending_action_type: activePendingAction.action_type,
-          };
+          markBrainTurnProactiveBypassedPending(context, { activePendingAction, priority: proactivePriority });
           return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
         }
       }
     }
     if (activePendingAction) {
       const pendingResolution = await resolvePendingActionTurn({ message: messageForBrain, pendingAction: activePendingAction, context });
-      context.brainTrace.pending_resolution = pendingResolution?.handled
-        ? pendingResolutionTraceName(pendingResolution.type)
-        : 'not_handled';
-      if (pendingResolution?.bypassed) {
-        context.brainTrace.pending_action_bypass = {
-          bypass: true,
-          reason: pendingResolution.reason || pendingResolution.pending_action_bypass?.reason || 'new_command',
-          confidence: pendingResolution.confidence ?? pendingResolution.pending_action_bypass?.confidence ?? null,
-          pending_action_type: pendingResolution.pending_action?.action_type ?? activePendingAction.action_type,
-        };
-      }
-      addBrainTraceStep(context.brainTrace, 'pending_action_resolved', {
-        handled: Boolean(pendingResolution.handled),
-        bypassed: Boolean(pendingResolution.bypassed),
-        type: pendingResolution.type ?? null,
-        pending_resolution: context.brainTrace.pending_resolution,
-        pending_action_bypass: context.brainTrace.pending_action_bypass ?? null,
-      });
+      recordBrainTurnPendingResolution(context, pendingResolution, activePendingAction, pendingResolutionTraceName(pendingResolution?.type));
       if (pendingResolution.handled) {
         const result = await handlePendingActionResolution({
           resolution: pendingResolution,
@@ -566,52 +489,30 @@ export async function handleBrainChatMessage({
     }
 
     const classification = classifyBrainMessage(messageForBrain, context.brainChat);
-    context.brainClassification = classification;
-    addBrainTraceStep(context.brainTrace, 'deterministic_classification', classification);
-    context.brainRoute = await safeRouteBrainMessage({
+    recordBrainTurnClassification(context, classification);
+    recordBrainTurnRoute(context, await safeRouteBrainMessage({
       message: messageForBrain,
       source: resolvedSource,
       brainChat: context.brainChat,
       brainContext: context.brainContext,
       classification,
       context,
-    });
-    context.brainTrace.route = context.brainRoute?.mode ?? null;
-    addBrainTraceStep(context.brainTrace, 'route_selected', {
-      mode: context.brainRoute?.mode,
-      primary_skill: context.brainRoute?.primary_skill,
-      confidence: context.brainRoute?.confidence,
-      write_intent: context.brainRoute?.write_intent,
-      proposed_action_types: context.brainRoute?.proposed_action_types,
-      needs_data: context.brainRoute?.needs_data,
-    });
-    context.brainSkill = selectBrainSkillFromRoute(context.brainRoute, {
+    }));
+    recordBrainTurnSkill(context, selectBrainSkillFromRoute(context.brainRoute, {
       message: messageForBrain,
       classification,
       brainContext: context.brainContext,
       brainChat: context.brainChat,
-    });
-    context.brainTrace.selected_skill = context.brainSkill?.skill?.id ?? context.brainSkill?.id ?? null;
-    addBrainTraceStep(context.brainTrace, 'skill_selected', {
-      skill: context.brainTrace.selected_skill,
-      confidence: context.brainSkill?.confidence,
-      reason: context.brainSkill?.reason,
-    });
+    }));
     const negativeWriteIntent = hasNegativeWriteIntent(messageForBrain);
     if (negativeWriteIntent) addBrainTraceStep(context.brainTrace, 'negative_write_intent_detected', { blocked: true });
-    context.brainVault = await safeLoadBrainVaultContext({
+    const brainVault = await safeLoadBrainVaultContext({
       message: messageForBrain,
       brainRoute: context.brainRoute,
       brainSkill: context.brainSkill,
       context,
     });
-    context.brainTrace.vault = {
-      attempted: Boolean(context.brainVault?.attempted),
-      used: Number(context.brainVault?.results?.length ?? 0) > 0,
-      chunks: context.brainVault?.results?.length ?? 0,
-      documents: uniqueVaultDocumentCount(context.brainVault?.results),
-    };
-    addBrainTraceStep(context.brainTrace, 'vault_context_loaded', context.brainTrace.vault);
+    recordBrainTurnVault(context, brainVault, { documentCount: uniqueVaultDocumentCount(brainVault?.results) });
 
     const commandDraftResult = await maybeHandleCommandDraft({ message: messageForBrain, context, classification, source: resolvedSource });
     if (commandDraftResult) {
