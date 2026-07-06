@@ -30,6 +30,35 @@ export function looksLikeExplicitNewCommand(message) {
   return hasContent;
 }
 
+export function isExplicitMemoCommand(message) {
+  const text = normalizeTurnText(message);
+  if (!text) return false;
+  return /\b(?:segna\s+memo|crea\s+memo|memo\s*:|promemoria|ricordami|ricordamelo|remind me|create reminder|remember to)\b/.test(text);
+}
+
+export function isExplicitCalendarCommand(message) {
+  const text = normalizeTurnText(message);
+  if (!text) return false;
+  return /\b(?:calendario|calendar|evento|event|appuntamento|appointment|fissa|blocca|metti\s+in\s+calendario|mettimelo\s+in\s+calendario|schedule|time block|blocco)\b/.test(text);
+}
+
+export function inferWriteDomainFromMessage(message) {
+  const text = normalizeTurnText(message);
+  if (!text) return null;
+  if (isExplicitMemoCommand(text)) return 'memo';
+  if (isExplicitCalendarCommand(text)) return 'calendar';
+  if (/\b(?:dentista|doctor|medico|visita|visit)\b/.test(text)) return null;
+  if (/\b(?:segna|segnami|segnalo|salva|metti|aggiungi|crea|create|add|save)\b/.test(text)
+    && /\b(?:domani|oggi|stasera|mattina|domattina|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica|today|tomorrow|\d{1,2}(?::|\.)\d{2}|\d{1,2}\s*(?:am|pm)|\d{1,2}\/\d{1,2})\b/.test(text)) {
+    return 'memo';
+  }
+  return null;
+}
+
+export function shouldPreferMemoOverCalendar(message) {
+  return inferWriteDomainFromMessage(message) === 'memo';
+}
+
 export function looksLikeAgendaQuery(message) {
   const text = normalizeTurnText(message);
   if (!text) return false;
@@ -132,6 +161,14 @@ export function buildOperationalContextAnswer({ message, workingContext } = {}) 
   if (date) return `${capitalize(label)} is set for ${date}.${createdText ? ` ${createdText}` : ''}`;
   if (time) return `${capitalize(label)} is set for ${time}.${createdText ? ` ${createdText}` : ''}`;
   return `The latest item is ${label}.${createdText ? ` ${createdText}` : ''}`;
+}
+
+export function buildOperationalContextClarification({ message, workingContext } = {}) {
+  if (!looksLikeOperationalContextQuestion(message)) return null;
+  const language = workingContext?.language === 'it' ? 'it' : 'en';
+  return language === 'it'
+    ? 'A quale promemoria o evento ti riferisci?'
+    : 'Which reminder or event do you mean?';
 }
 
 function formatItalianDate(value) {

@@ -1,8 +1,8 @@
 # LifeOS Project Context
 
-Last updated: 2026-07-05
+Last updated: 2026-07-06
 Current branch: `main`
-Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with controlled server-side LifeOS tools.
+Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, and backend LifeOS tool guards.
 
 ## Project Goal
 
@@ -60,6 +60,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Action API docs live in `docs/ACTION_API.md`.
 - AI Assistant QA lives in `docs/QA_AI_ASSISTANT.md`.
+- Brain pipeline handoff lives in `docs/BRAIN_ARCHITECTURE.md`.
 - PWA/iPhone Home Screen QA lives in `docs/QA_PWA.md`.
 - Focused Workout QA, including warmup behavior, lives in `docs/QA_WORKOUT.md`.
 - Tab files live in `src/tabs/`:
@@ -311,9 +312,11 @@ Architecture:
 - Selected skill metadata is stored in existing `ai_chat_messages.metadata.selected_skill`, included in `/api/ai/chat` responses, and shown as a subtle badge on assistant messages.
 - Brain route metadata is stored in existing `ai_chat_messages.metadata.brain_route`, included in `/api/ai/chat` responses, and included in sanitized AI action logs when actions are created.
 - Brain stores compact structured trace metadata in `ai_chat_messages.metadata.brain_trace` on assistant messages when possible. Trace debugging records decision metadata and ids, not hidden reasoning or secrets.
-- BrainTurn Pipeline Foundation v1 lives in `api/_utils/brainTurn.js`. It centralizes per-turn state and trace updates for inbound metadata, thread/history attachment, memory context, Working Context, pending-action checks, proactive-before-pending arbitration, route/skill/vault trace stages, and pending-resolution trace state.
-- Brain Turn Arbitration v1 lives in `api/_utils/brainTurnArbitration.js`. It provides deterministic intent-contract helpers for explicit new commands, Working Context referents, agenda queries, operational follow-ups, true long-term memory recall, and pending-vs-proactive priority.
-- `api/ai/chat.js` still owns the main planner/execution pipeline, but the early deterministic stages now operate through the BrainTurn object so future Brain work can extract stages without changing product behavior.
+- BrainTurn Pipeline Foundation lives in `api/_utils/brainTurn.js`. It centralizes per-turn state and trace updates for inbound metadata, thread/history attachment, memory context, Working Context, pending-action checks, proactive-before-pending arbitration, route/skill/vault trace stages, and pending-resolution trace state.
+- Brain Stage v2 adds a formal BrainTurn Contract in `api/_utils/brainTurnContract.js`. Each turn gets one explicit `winning_path`, `intent_type`, write-intent source, allowed context sources, disallowed subsystem steals, route override, and field policy before pending/proactive/operational/route/command-draft paths can handle the message.
+- Brain Turn Arbitration helpers live in `api/_utils/brainTurnArbitration.js`. They provide deterministic signals for explicit new commands, Working Context referents, agenda queries, operational follow-ups, true long-term memory recall, pending-vs-proactive priority, and memo-vs-calendar write-domain policy.
+- `api/ai/chat.js` still owns the main planner/execution pipeline, but early deterministic routing now consults the BrainTurn Contract. Pending actions, proactive replies, operational follow-ups, memory recall, Vault retrieval, and command drafts are blocked when the contract says that subsystem would steal the turn.
+- The AI Command Draft lifecycle is extracted into `api/_utils/brainCommandDraftStage.js`. The stage decides whether command draft should run, extracts with Gemini, applies deterministic reference/domain/field policy, validates, creates pending clarification state, or executes through the existing safe write path.
 - Brain has a pending-action / slot-filling layer for multi-turn writes. Candidate actions are AI-extracted into `ai_chat_messages.metadata.pending_action`, then deterministic backend validation handles confirmation, cancellation, missing fields, expiration, and execution.
 - Pending-action resolution runs before normal AI routing, skill selection, command draft extraction, planner writes, and casual fallback for both app Brain and WhatsApp Brain.
 - Short confirmation/cancellation/clarification replies such as `Sì`, `si`, `ok`, `confermo`, `fallo`, `yes`, `no`, `non farlo`, and `?` are normalized only when an active pending action exists, then resolve or explain that pending action before any new route is attempted.
@@ -334,6 +337,8 @@ Architecture:
 - Working Context exact fields such as date/start/end time are copied into a new Command Draft only when the current message has an explicit referent such as `lo`, `quello`, `stesso`, `anche`, `aggiungilo`, or a resolved draft referent. New standalone commands do not inherit old exact times.
 - Brain uses an AI Command Draft protocol for referential/action-like turns. Gemini extracts a strict JSON command draft; deterministic backend code resolves references, validates safety/date/time/schema/action permissions, and executes only supported tools.
 - Command Draft output is not trusted for calendar time semantics. Backend normalization repairs common AI mistakes against the original source text, including `11.45am` -> `11:45`, `11.45pm` -> `23:45`, and Italian `DD/MM/YY` dates such as `7/9/26` -> `2026-09-07`.
+- Command Draft field provenance is runtime metadata only. Calendar drafts record whether exact date/time fields were grounded in the current message, inferred by AI, defaulted, copied from Working Context, or rejected as ungrounded. This provenance is stored in sanitized `brain_trace.command_draft`, not in schema.
+- Memo-vs-calendar policy is conservative: `segna memo:`, `promemoria`, and `ricordami` create memos; `fissa`, `blocca`, `metti in calendario`, `evento`, `appuntamento`, `calendar`, and `schedule` create calendar events. Generic `segna X domani/alle...` defaults to a memo/reminder, not a calendar event, unless calendar wording is explicit.
 - Calendar draft validation recomputes missing fields by action semantics. Vague phrases such as `domattina` or `mattina` do not justify an exact AI-inferred time unless the current message explicitly refers to a previous time. If a calendar event has `start_time` but no `end_time`, Brain asks for duration/end time instead of asking for the exact start time again.
 - Calendar pending slot-fill is label-aware. Replies such as `orario di inizio 9.30`, `inizio 9.30`, or `start 9:30` update `start_time`; `fine 12:45`, `finisce 12:45`, or `until 12:45` update `end_time`; `durata 1 ora`, `un'ora`, or `45 minuti` compute duration/end time.
 - Referential commands rely on `last_subject` and recent structured subjects, not a phrase-specific deterministic router. If the referent is missing or ambiguous, Brain asks a specific clarification in the conversation language.
@@ -470,7 +475,7 @@ Current behavior:
 - `npm run test:brain` runs `scripts/test-brain-regressions.js`.
 - Fixtures live in `tests/brain/fixtures.js`; notes live in `tests/brain/README.md`.
 - The harness uses pure utilities and does not require Vercel, browser automation, WhatsApp, Gemini, or live Supabase writes.
-- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, calendar command draft AM/PM repair, calendar duration/end-time clarification, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
+- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, BrainTurn Contract path selection, command-draft stage policy, memo-vs-calendar domain repair, calendar command draft AM/PM repair, calendar duration/end-time clarification, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
 - Run it before and after changes to Brain, WhatsApp inbound/outbox, proactive memo rules, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
 - Live WhatsApp thread continuity, real tool execution, provider behavior, and RLS still require the manual QA checklists.
 

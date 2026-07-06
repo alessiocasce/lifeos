@@ -3,6 +3,7 @@ import { addDays, localDate } from './date.js';
 import { optionalDate } from './validation.js';
 import {
   buildCalendarEventClarification,
+  inferCalendarArgProvenance,
   normalizeBrainTime,
   normalizeCalendarEventArgs,
   validateCalendarEventArgs,
@@ -16,7 +17,10 @@ import {
   coercePendingActionType,
   extractSleepStartTimeFromArgs,
 } from './brainPendingActions.js';
-import { hasExplicitContextReferent } from './brainTurnArbitration.js';
+import {
+  hasExplicitContextReferent,
+  inferWriteDomainFromMessage,
+} from './brainTurnArbitration.js';
 
 const SUPPORTED_ACTIONS = new Set(['create_calendar_event', 'create_memo', 'create_expense', 'update_health_log', 'log_sleep_start']);
 const COMMAND_MODES = new Set(['answer', 'action', 'clarify', 'cancel', 'field_update', 'transform', 'memory', 'unsupported']);
@@ -65,6 +69,8 @@ Rules:
 - If a supported action is complete, mode "action".
 - If a supported action is missing fields, mode "clarify".
 - Calendar event time parsing must preserve AM/PM. 11.45am means 11:45, while 11.45pm means 23:45.
+- Generic "segna X domani/alle..." without calendar/event/appuntamento/fissa/blocca wording should prefer a memo/reminder, not a calendar event.
+- "segna memo:", "promemoria", and "ricordami" are memo/reminder intent. "fissa", "blocca", "metti in calendario", "evento", "appuntamento", "calendar", and "schedule" are calendar intent.
 - If a calendar event has start_time but no end_time, missing_fields must be ["end_time"] and the clarification must ask for duration or end time, not for the start time again.
 - Use the conversation language from workingContext unless the current user message clearly switches language.
 - Going to sleep / bedtime / inizio sonno / vado a dormire / sto andando a letto / sleep start messages map to action.type "log_sleep_start" with args.time in HH:MM. Do not map them to a generic Health note.
@@ -98,7 +104,7 @@ User: Segna che sto andando a dormire ora alle 3.41am
 Output: mode action, skill health_coach, action.type log_sleep_start, args time "03:41", missing_fields [], confirmation_required false or true depending safety.
 `;
 
-export async function extractBrainCommandDraftWithAI({ message, brainRoute, brainSkill, workingContext, lifeosContext = null } = {}) {
+export async function extractBrainCommandDraftWithAI({ message, brainRoute, brainSkill, workingContext, lifeosContext = null, turnContract = null } = {}) {
   const raw = await generateGeminiJson({
     system: COMMAND_DRAFT_SYSTEM,
     prompt: JSON.stringify({
@@ -121,11 +127,18 @@ export async function extractBrainCommandDraftWithAI({ message, brainRoute, brai
     invalidMessage: 'Gemini returned an invalid Brain command draft.',
     repair: true,
   });
-  return normalizeCommandDraft(raw, workingContext, { sourceMessage: message });
+  return normalizeCommandDraft(raw, workingContext, { sourceMessage: message, turnContract });
 }
 
-export function validateBrainCommandDraft(commandDraft, { workingContext, brainRoute, brainSkill, sourceMessage } = {}) {
-  const draft = resolveCommandDraftReferences(normalizeCommandDraft(commandDraft, workingContext, { sourceMessage }), workingContext, { sourceMessage });
+export function validateBrainCommandDraft(commandDraft, { workingContext, brainRoute, brainSkill, sourceMessage, turnContract = null } = {}) {
+  const draft = applyCommandDraftDomainPolicy(
+    resolveCommandDraftReferences(
+      normalizeCommandDraft(commandDraft, workingContext, { sourceMessage, turnContract }),
+      workingContext,
+      { sourceMessage, turnContract },
+    ),
+    { sourceMessage, turnContract },
+  );
   if (!draft) return { ok: false, reason: 'No command draft.' };
   if (draft.mode === 'cancel') return { ok: true, draft, executable: false, cancelled: true };
   if (['answer', 'transform', 'memory', 'unsupported'].includes(draft.mode)) return { ok: true, draft, executable: false };
@@ -146,7 +159,7 @@ export function validateBrainCommandDraft(commandDraft, { workingContext, brainR
       executable: false,
     };
   }
-  const args = normalizeActionArgs(actionType, draft.action.args, { sourceMessage });
+  const args = normalizeActionArgs(actionType, draft.action.args, { sourceMessage, turnContract });
   const missing = normalizeMissingFields(actionType, args, draft.action.missing_fields);
   const normalized = {
     ...draft,
@@ -182,11 +195,14 @@ export function validateBrainCommandDraft(commandDraft, { workingContext, brainR
 
 export function resolveCommandDraftReferences(commandDraft, workingContext, options = {}) {
   if (!commandDraft) return null;
-  const draft = normalizeCommandDraft(commandDraft, workingContext, { sourceMessage: options.sourceMessage });
+  const draft = normalizeCommandDraft(commandDraft, workingContext, { sourceMessage: options.sourceMessage, turnContract: options.turnContract });
   const subject = workingContext?.last_subject;
   if (!subject || !draft.action?.type) return draft;
   if (draft.referent?.needed && !draft.referent?.resolved) return draft;
-  const referential = Boolean(draft.referent?.resolved) || hasExplicitContextReferent(options.sourceMessage);
+  const fieldPolicy = getFieldPolicy(options.turnContract, options.sourceMessage);
+  const referential = Boolean(draft.referent?.resolved)
+    || Boolean(fieldPolicy.allow_working_context_exact_fields)
+    || hasExplicitContextReferent(options.sourceMessage);
   if (!referential) {
     return {
       ...draft,
@@ -253,14 +269,58 @@ export function resolveCommandDraftReferences(commandDraft, workingContext, opti
       ...draft.action,
       args: normalizeActionArgs(draft.action.type, args, {
         sourceMessage: options.sourceMessage,
+        turnContract: options.turnContract,
         allowUngroundedTimes: referential,
       }),
     },
   };
 }
 
+function applyCommandDraftDomainPolicy(commandDraft, { sourceMessage = '', turnContract = null } = {}) {
+  const draft = commandDraft;
+  if (!draft?.action?.type) return draft;
+  const domain = turnContract?.write_domain || inferWriteDomainFromMessage(sourceMessage);
+  if (domain !== 'memo' || draft.action.type !== 'create_calendar_event') return draft;
+  const args = safeObject(draft.action.args);
+  const memoArgs = {
+    title: args.title,
+    memo_date: args.event_date || args.date,
+    memo_time: args.start_time,
+    notes: args.notes,
+  };
+  const provenance = {};
+  const existing = safeObject(draft.field_provenance);
+  if (existing.title) provenance.title = existing.title;
+  if (existing.event_date) provenance.memo_date = existing.event_date;
+  if (existing.start_time) provenance.memo_time = existing.start_time;
+  provenance.domain_repair = 'generic_segna_prefers_memo';
+  return {
+    ...draft,
+    skill: draft.skill === 'calendar_planner' ? 'memo_assistant' : draft.skill,
+    intent_summary: draft.intent_summary || 'Create memo reminder.',
+    field_provenance: {
+      ...existing,
+      ...provenance,
+    },
+    action: {
+      ...draft.action,
+      type: 'create_memo',
+      args: normalizeActionArgs('create_memo', memoArgs, { sourceMessage, turnContract }),
+      missing_fields: Array.isArray(draft.action.missing_fields)
+        ? draft.action.missing_fields
+            .map((field) => (field === 'event_date' || field === 'date' ? 'memo_date' : field))
+            .map((field) => (field === 'start_time' || field === 'time' ? 'memo_time' : field))
+            .filter((field) => !['end_time', 'duration', 'duration_minutes'].includes(field))
+        : [],
+      confirmation_required: false,
+    },
+    clarification_question: null,
+    reason: [draft.reason, 'Domain policy repaired generic segna calendar draft to memo.'].filter(Boolean).join(' '),
+  };
+}
+
 export function commandDraftToPendingAction(commandDraft, context = {}) {
-  const draft = normalizeCommandDraft(commandDraft, context?.workingContext, { sourceMessage: context?.message });
+  const draft = normalizeCommandDraft(commandDraft, context?.workingContext, { sourceMessage: context?.message, turnContract: context?.brainTurnContract });
   if (!draft?.action?.type || !SUPPORTED_ACTIONS.has(draft.action.type)) return null;
   return {
     id: context?.requestId || `command-${Date.now()}`,
@@ -336,6 +396,7 @@ function normalizeCommandDraft(raw, workingContext = null, options = {}) {
     source_user_message: null,
   });
   let actionArgs = rawActionArgs;
+  let fieldProvenance = {};
   if (actionType === 'log_sleep_start') {
     const time = extractSleepStartTimeFromArgs(rawActionArgs);
     actionArgs = {
@@ -345,9 +406,16 @@ function normalizeCommandDraft(raw, workingContext = null, options = {}) {
     };
   }
   if (actionType === 'create_calendar_event') {
+    const fieldPolicy = getFieldPolicy(options.turnContract, options.sourceMessage);
     actionArgs = normalizeCalendarEventArgs(rawActionArgs, {
       sourceMessage: options.sourceMessage,
-      allowUngroundedTimes: hasExplicitContextReferent(options.sourceMessage),
+      allowUngroundedTimes: Boolean(fieldPolicy.allow_ai_inferred_exact_times),
+    });
+    fieldProvenance = inferCalendarArgProvenance({
+      rawArgs: rawActionArgs,
+      normalizedArgs: actionArgs,
+      sourceMessage: options.sourceMessage,
+      allowUngroundedTimes: Boolean(fieldPolicy.allow_ai_inferred_exact_times),
     });
   }
   let clarificationQuestion = cleanText(raw.clarification_question, 500);
@@ -374,18 +442,39 @@ function normalizeCommandDraft(raw, workingContext = null, options = {}) {
       reason: cleanText(raw.referent.reason, 300),
     } : { needed: false, resolved: false, source: null, confidence: 0, reason: null },
     action,
+    field_provenance: fieldProvenance,
     clarification_question: clarificationQuestion,
     confidence: clampNumber(raw.confidence, 0, 1, 0),
     reason: cleanText(raw.reason, 500),
   };
 }
 
+function getFieldPolicy(turnContract, sourceMessage = '') {
+  const existing = turnContract?.field_policy && typeof turnContract.field_policy === 'object'
+    ? turnContract.field_policy
+    : null;
+  if (existing) return existing;
+  const referential = hasExplicitContextReferent(sourceMessage);
+  const normalized = normalizeText(sourceMessage);
+  const vague = /\b(?:domattina|mattina|in mattinata|pomeriggio|sera|stasera|piu tardi|presto|tomorrow morning|morning|afternoon|evening|later|early)\b/.test(normalized)
+    && !/\b\d{1,2}(?::|\.)[0-5]\d\s*(?:am|pm)?\b/.test(normalized)
+    && !/\b(?:alle|at)\s*\d{1,2}\s*(?:am|pm)?\b/.test(normalized)
+    && !/\b\d{1,2}\s*(?:am|pm)\b/.test(normalized);
+  return {
+    allow_working_context_exact_fields: referential,
+    allow_ai_inferred_exact_times: !vague,
+    require_current_message_grounding: !referential,
+    allow_pending_slot_fill: false,
+  };
+}
+
 function normalizeActionArgs(actionType, args, options = {}) {
   const source = safeObject(args);
   if (actionType === 'create_calendar_event') {
+    const fieldPolicy = getFieldPolicy(options.turnContract, options.sourceMessage);
     return normalizeCalendarEventArgs(source, {
       sourceMessage: options.sourceMessage,
-      allowUngroundedTimes: Boolean(options.allowUngroundedTimes),
+      allowUngroundedTimes: Boolean(options.allowUngroundedTimes || fieldPolicy.allow_ai_inferred_exact_times),
     });
   }
   if (actionType === 'create_memo') {
@@ -481,6 +570,7 @@ function questionForMissing(draft, workingContext) {
   }
   if (draft?.action?.type === 'create_memo') {
     if (missing.includes('title')) return language === 'it' ? 'Che promemoria devo creare?' : 'What reminder should I create?';
+    if (missing.includes('time') && draft.action.args?.memo_date) return language === 'it' ? 'A che ora devo ricordartelo?' : 'What time should I remind you?';
     if (missing.includes('date') || missing.includes('time')) return language === 'it' ? 'Che giorno e orario devo usare?' : 'What date and time should I use?';
   }
   if (draft?.action?.type === 'log_sleep_start') {

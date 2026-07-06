@@ -39,6 +39,10 @@ Expected:
 - New explicit commands such as `crea promemoria domani` are not treated as proactive reminder replies.
 - Missing-source proactive replies are read-only clarifications, not write-looking actions.
 - Calendar command drafts reject ungrounded exact times copied from Working Context for standalone vague commands such as `Segna parrucchiere domattina`.
+- BrainTurn Contract classifies one winning path per turn and blocks subsystem steals: pending action, proactive reply, operational context, agenda query, explicit command, true memory recall, or casual/read-only path.
+- Command Draft Stage owns extraction, reference repair, field policy, pending clarification creation, and safe execution handoff without letting `api/ai/chat.js` branch around those rules.
+- Generic `segna X domani/alle...` prefers memo/reminder unless the user uses explicit calendar words such as `fissa`, `blocca`, `calendario`, `evento`, or `appuntamento`.
+- Command Draft field provenance records rejected ungrounded calendar times and blocked Working Context exact fields in sanitized trace metadata.
 - Calendar pending slot-fill is label-aware: `orario di inizio 9.30` updates start time, `fine 12:45` updates end time, and `durata 1 ora` computes the end time.
 - Agenda queries such as `Che cosa devo fare domani? Guardami gli impegni` route to schedule/memo data, not long-term memory recall.
 - Operational follow-ups such as `Quando l'hai messo?` answer from latest Working Context action/result, not `Here's what I remember`.
@@ -258,6 +262,20 @@ Expected:
 28. Confirm Brain does not execute the pending calendar action and answers the workout question or asks whether to ignore the pending action.
 29. Create a sleep-start confirmation, do not answer it, then later send `Ricordami di fare matematica tra 10 minuti`.
 30. Confirm Brain creates or clarifies the memo/reminder and does not repeat the old sleep-start confirmation.
+31. After an old calendar pending action exists, send `Segna parrucchiere domani`.
+32. Confirm Brain treats it as a new explicit command, not as confirmation of the old pending action.
+33. Send `Segna memo: domani 9.30 parrucchiere`.
+34. Confirm Brain creates a memo/reminder and does not continue the old calendar pending action.
+35. Send `Segna parrucchiere domattina` after any prior memo/event with exact time.
+36. Confirm Brain does not borrow the prior exact time; it asks a memo-specific exact-time clarification or safely creates only a memo if exact time is present.
+37. Send `Fissa parrucchiere domani 9.30`.
+38. Confirm Brain treats this as a calendar event and asks for duration/end time if missing.
+39. With a calendar pending action missing end time, reply `Orario di inizio: 9.30`.
+40. Confirm Brain updates `start_time` to `09:30`, keeps `end_time` missing, and does not set end time to the same value.
+41. Ask `Che cosa devo fare domani? Guardami gli impegni`.
+42. Confirm the answer uses tomorrow calendar/memo data and never starts with `Here's what I remember`.
+43. After creating a memo, ask `Quando l'hai messo?`.
+44. Confirm Brain answers from latest Working Context or asks which memo/event you mean; it must not dump long-term memory.
 31. Immediately after a fresh pending confirmation, reply `sì`.
 32. Confirm Brain still resolves the pending action instead of treating `sì` as a new command.
 33. After a sleep-start confirmation, send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.

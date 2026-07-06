@@ -1,6 +1,7 @@
 import { extractLatestPendingAction, normalizePendingReplyIntent } from './brainPendingActions.js';
 import { shouldPrioritizeProactiveReplyOverPending } from './brainProactiveReplies.js';
 import { shouldDeferProactivePriorityToPending } from './brainTurnArbitration.js';
+import { buildBrainTurnContract, contractDisallows, serializeBrainTurnContract } from './brainTurnContract.js';
 import { buildBrainWorkingContext } from './brainWorkingContext.js';
 import { addBrainTraceStep, createBrainTrace, safePreview } from './brainTrace.js';
 
@@ -124,9 +125,38 @@ export function checkBrainTurnPendingAction(turn) {
   return { activePendingAction, pendingReplyIntent };
 }
 
+export function evaluateBrainTurnContract(turn, options = {}) {
+  if (!turn) return null;
+  const contract = buildBrainTurnContract({
+    message: turn.message,
+    source: turn.source,
+    brainChat: turn.brainChat,
+    workingContext: turn.workingContext,
+    pendingAction: turn.pendingAction,
+    pendingReplyIntent: turn.pendingReplyIntent,
+    classification: options.classification ?? turn.brainClassification,
+    route: options.route ?? turn.brainRoute,
+    now: options.now,
+  });
+  turn.brainTurnContract = contract;
+  turn.brainTrace.brain_turn_contract = serializeBrainTurnContract(contract);
+  recordBrainTurnStage(turn, 'brain_turn_contract_evaluated', turn.brainTrace.brain_turn_contract);
+  return contract;
+}
+
 export function checkBrainTurnProactivePriority(turn, { activePendingAction = turn?.pendingAction, now = undefined } = {}) {
   if (!turn || !activePendingAction || turn.source !== 'whatsapp') {
     return { prioritize: false, reason: !activePendingAction ? 'no_pending_action' : 'not_whatsapp', intent: 'other' };
+  }
+  if (contractDisallows(turn.brainTurnContract, 'proactive_reply')) {
+    const blocked = {
+      prioritize: false,
+      reason: 'blocked_by_brain_turn_contract',
+      intent: turn.brainTurnContract?.intent_type ?? 'other',
+      winning_path: turn.brainTurnContract?.winning_path,
+    };
+    recordBrainTurnStage(turn, 'proactive_reply_blocked_by_contract', blocked);
+    return blocked;
   }
   const deferral = shouldDeferProactivePriorityToPending({
     message: turn.message,

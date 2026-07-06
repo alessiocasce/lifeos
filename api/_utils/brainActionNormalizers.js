@@ -80,6 +80,41 @@ export function normalizeCalendarEventArgs(args = {}, { sourceMessage = '', allo
   };
 }
 
+export function inferCalendarArgProvenance({ rawArgs = {}, normalizedArgs = {}, sourceMessage = '', allowUngroundedTimes = false } = {}) {
+  const source = safeObject(rawArgs);
+  const normalized = safeObject(normalizedArgs);
+  const sourceFields = extractCalendarFieldsFromSourceMessage(sourceMessage);
+  const rejectedUngrounded = !allowUngroundedTimes
+    && hasVagueTimeWithoutExactTime(sourceMessage)
+    && !sourceFields.start_time
+    && !sourceFields.end_time;
+  const provenance = {};
+
+  if (normalized.title) provenance.title = source.title || source.name ? 'ai_inferred' : 'unknown';
+  if (normalized.event_date) {
+    provenance.event_date = sourceFields.event_date && sourceFields.event_date === normalized.event_date
+      ? 'current_message'
+      : 'ai_inferred';
+  }
+  const rawStart = source.start_time ?? source.time;
+  if (normalized.start_time) {
+    provenance.start_time = sourceFields.start_time && sourceFields.start_time === normalized.start_time
+      ? 'current_message'
+      : 'ai_inferred';
+  } else if (rawStart && rejectedUngrounded) {
+    provenance.start_time = 'rejected_ungrounded';
+  }
+  if (normalized.end_time) {
+    provenance.end_time = sourceFields.end_time && sourceFields.end_time === normalized.end_time
+      ? 'current_message'
+      : 'ai_inferred';
+  } else if (source.end_time && rejectedUngrounded) {
+    provenance.end_time = 'rejected_ungrounded';
+  }
+  if (normalized.duration_minutes) provenance.duration_minutes = source.duration_minutes || source.duration ? 'ai_inferred' : 'default';
+  return provenance;
+}
+
 export function validateCalendarEventArgs(args = {}, currentMissing = []) {
   const missing = new Set(
     (Array.isArray(currentMissing) ? currentMissing : [])

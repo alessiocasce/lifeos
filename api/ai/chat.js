@@ -26,14 +26,7 @@ import {
   buildSubjectFromPendingAction,
   serializeWorkingContextForMetadata,
 } from '../_utils/brainWorkingContext.js';
-import {
-  commandDraftToPendingAction,
-  commandDraftToPlannerPlan,
-  extractBrainCommandDraftWithAI,
-  formatCommandDraftClarification,
-  shouldUseCommandDraft,
-  validateBrainCommandDraft,
-} from '../_utils/brainCommandDraft.js';
+import { runBrainCommandDraftStage } from '../_utils/brainCommandDraftStage.js';
 import {
   formatBrainSkillForPrompt,
   getBrainSkill,
@@ -64,6 +57,7 @@ import {
   checkBrainTurnPendingAction,
   checkBrainTurnProactivePriority,
   createBrainTurn,
+  evaluateBrainTurnContract,
   markBrainTurnProactiveBypassedPending,
   recordBrainTurnClassification,
   recordBrainTurnPendingResolution,
@@ -73,8 +67,8 @@ import {
 } from '../_utils/brainTurn.js';
 import {
   buildOperationalContextAnswer,
+  buildOperationalContextClarification,
   isTrueLongTermMemoryRecallRequest,
-  looksLikeOperationalContextQuestion,
 } from '../_utils/brainTurnArbitration.js';
 import {
   addBrainTraceStep,
@@ -456,6 +450,7 @@ export async function handleBrainChatMessage({
     attachBrainContextToTurn(context, await safeLoadBrainContext(context));
     buildBrainTurnWorkingContext(context);
     const { activePendingAction } = checkBrainTurnPendingAction(context);
+    const turnContract = evaluateBrainTurnContract(context);
     if (activePendingAction && resolvedSource === 'whatsapp') {
       const proactivePriority = checkBrainTurnProactivePriority(context, { activePendingAction });
       if (proactivePriority.prioritize) {
@@ -470,7 +465,7 @@ export async function handleBrainChatMessage({
         }
       }
     }
-    if (activePendingAction) {
+    if (activePendingAction && !turnContract?.disallowed_steals?.includes('pending_action')) {
       const pendingResolution = await resolvePendingActionTurn({ message: messageForBrain, pendingAction: activePendingAction, context });
       recordBrainTurnPendingResolution(context, pendingResolution, activePendingAction, pendingResolutionTraceName(pendingResolution?.type));
       if (pendingResolution.handled) {
@@ -482,15 +477,56 @@ export async function handleBrainChatMessage({
         });
         return sendAiSuccess(null, 200, result, context, { message: messageForBrain, source: resolvedSource });
       }
+    } else if (activePendingAction) {
+      addBrainTraceStep(context.brainTrace, 'pending_action_blocked_by_contract', {
+        winning_path: turnContract?.winning_path,
+        intent_type: turnContract?.intent_type,
+        reason: 'BrainTurnContract disallowed pending action for this turn.',
+      });
     }
 
-    const proactiveResult = await maybeResolveProactiveWhatsappReply({
-      message: messageForBrain,
-      resolvedSource,
-      context,
-    });
-    if (proactiveResult) {
-      return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
+    if (!turnContract?.disallowed_steals?.includes('proactive_reply')) {
+      const proactiveResult = await maybeResolveProactiveWhatsappReply({
+        message: messageForBrain,
+        resolvedSource,
+        context,
+      });
+      if (proactiveResult) {
+        return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
+      }
+    } else {
+      addBrainTraceStep(context.brainTrace, 'proactive_reply_blocked_by_contract', {
+        winning_path: turnContract?.winning_path,
+        intent_type: turnContract?.intent_type,
+      });
+    }
+
+    if (turnContract?.winning_path === 'operational_context') {
+      const operationalAnswer = buildOperationalContextAnswer({
+        message: messageForBrain,
+        workingContext: context.workingContext,
+      });
+      const answer = operationalAnswer || buildOperationalContextClarification({
+        message: messageForBrain,
+        workingContext: context.workingContext,
+      });
+      if (answer) {
+        addBrainTraceStep(context.brainTrace, 'operational_context_answered', {
+          source: operationalAnswer ? 'working_context' : 'clarification',
+          last_subject_type: context.workingContext?.last_subject?.type ?? null,
+          last_action_type: context.workingContext?.last_action_result?.action_type ?? null,
+        });
+        const plan = createReadOnlyBrainPlan(operationalAnswer
+          ? 'Answer operational follow-up from latest Brain working context.'
+          : 'Clarify operational follow-up because no latest subject is available.');
+        return sendAiSuccess(null, 200, {
+          answer,
+          plan,
+          actions: [],
+          contextSummary: null,
+          skipMemoryExtraction: true,
+        }, context, { message: messageForBrain, source: resolvedSource });
+      }
     }
 
     const classification = classifyBrainMessage(messageForBrain, context.brainChat);
@@ -503,6 +539,7 @@ export async function handleBrainChatMessage({
       classification,
       context,
     }));
+    evaluateBrainTurnContract(context, { classification, route: context.brainRoute });
     recordBrainTurnSkill(context, selectBrainSkillFromRoute(context.brainRoute, {
       message: messageForBrain,
       classification,
@@ -511,29 +548,6 @@ export async function handleBrainChatMessage({
     }));
     const negativeWriteIntent = hasNegativeWriteIntent(messageForBrain);
     if (negativeWriteIntent) addBrainTraceStep(context.brainTrace, 'negative_write_intent_detected', { blocked: true });
-    if (looksLikeOperationalContextQuestion(messageForBrain)) {
-      const operationalAnswer = buildOperationalContextAnswer({
-        message: messageForBrain,
-        workingContext: context.workingContext,
-      });
-      if (operationalAnswer) {
-        addBrainTraceStep(context.brainTrace, 'operational_context_answered', {
-          source: 'working_context',
-          last_subject_type: context.workingContext?.last_subject?.type ?? null,
-          last_action_type: context.workingContext?.last_action_result?.action_type ?? null,
-        });
-        const plan = createReadOnlyBrainPlan('Answer operational follow-up from latest Brain working context.');
-        return sendAiSuccess(null, 200, {
-          answer: operationalAnswer,
-          plan,
-          actions: [],
-          contextSummary: null,
-          selected_skill: serializeSkillSelection(context.brainSkill),
-          brain_route: serializeBrainRoute(context.brainRoute),
-          skipMemoryExtraction: true,
-        }, context, { message: messageForBrain, source: resolvedSource });
-      }
-    }
     const brainVault = await safeLoadBrainVaultContext({
       message: messageForBrain,
       brainRoute: context.brainRoute,
@@ -974,159 +988,17 @@ async function maybeCreatePendingActionCandidate({ message, context, classificat
 }
 
 async function maybeHandleCommandDraft({ message, context, classification, source }) {
-  if (!shouldUseCommandDraft({
+  return runBrainCommandDraftStage({
+    turn: context,
     message,
-    brainRoute: context.brainRoute,
-    brainSkill: context.brainSkill,
-    workingContext: context.workingContext,
-  })) {
-    addBrainTraceStep(context?.brainTrace, 'command_draft_skipped', {
-      route: context?.brainRoute?.mode,
-      skill: context?.brainSkill?.skill?.id || context?.brainSkill?.id,
-    });
-    return null;
-  }
-
-  let commandDraft;
-  try {
-    addBrainTraceStep(context?.brainTrace, 'command_draft_extraction_started', {
-      route: context?.brainRoute?.mode,
-      skill: context?.brainSkill?.skill?.id || context?.brainSkill?.id,
-    });
-    commandDraft = await extractBrainCommandDraftWithAI({
-      message,
-      brainRoute: context.brainRoute,
-      brainSkill: context.brainSkill,
-      workingContext: context.workingContext,
-      lifeosContext: null,
-    });
-  } catch (error) {
-    console.error('[LifeOS Brain command draft warning]', JSON.stringify({
-      requestId: context?.requestId,
-      stage: 'command_draft_extraction',
-      error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
-    }));
-    addBrainTraceStep(context?.brainTrace, 'command_draft_extraction_failed', {
-      error_code: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
-    });
-    return null;
-  }
-
-  const validation = validateBrainCommandDraft(commandDraft, {
-    workingContext: context.workingContext,
-    brainRoute: context.brainRoute,
-    brainSkill: context.brainSkill,
-    sourceMessage: message,
+    classification,
+    source,
+    createReadOnlyBrainPlan,
+    createClarificationBrainPlan,
+    getSafeClarificationQuestion,
+    executeCommandDraftAction,
   });
-  if (!validation?.ok || !validation.draft) return null;
-  const draft = validation.draft;
-  context.commandDraft = draft;
-  context.brainTrace.command_draft = summarizeCommandDraftForTrace(draft, validation);
-  addBrainTraceStep(context?.brainTrace, 'command_draft_validated', context.brainTrace.command_draft);
-
-  if (validation.cancelled) {
-    addBrainTraceStep(context?.brainTrace, 'command_draft_cancelled', { mode: draft.mode });
-    const answer = draft.language === 'it' ? 'Ricevuto. Non ho creato nulla.' : 'Got it. I did not create anything.';
-    return {
-      answer,
-      plan: createReadOnlyBrainPlan('Command draft cancelled by current user message.'),
-      actions: [],
-      contextSummary: null,
-      skipMemoryExtraction: true,
-    };
-  }
-
-  if (draft.mode === 'unsupported') {
-    addBrainTraceStep(context?.brainTrace, 'command_draft_unsupported', { reason: draft.reason });
-    const answer = draft.language === 'it'
-      ? 'Non posso farlo direttamente in questa versione. Posso creare un nuovo evento o promemoria collegato, se vuoi.'
-      : 'I cannot do that directly in this version. I can create a related event or reminder if you want.';
-    return {
-      answer,
-      plan: createReadOnlyBrainPlan(draft.reason || 'Command draft unsupported.'),
-      actions: [],
-      contextSummary: null,
-      skipMemoryExtraction: true,
-    };
-  }
-
-  if (draft.mode === 'clarify' || !validation.executable || draft.action?.confirmation_required) {
-    const pendingAction = commandDraftToPendingAction(draft, {
-      ...context,
-      message,
-      workingContext: context.workingContext,
-    });
-    if (pendingAction && draft.action?.type && draft.mode !== 'unsupported') {
-      context.pendingActionForResponse = pendingAction;
-      context.brainTrace.pending_action = {
-        found: true,
-        id: pendingAction.id,
-        type: pendingAction.action_type,
-        status: pendingAction.status,
-        missing_fields: pendingAction.missing_fields,
-      };
-    }
-    addBrainTraceStep(context?.brainTrace, 'command_draft_clarification', {
-      executable: Boolean(validation.executable),
-      confirmation_required: Boolean(draft.action?.confirmation_required),
-      pending_action: context.brainTrace.pending_action,
-      clarification_question: safePreview(formatCommandDraftClarification(draft, context.workingContext), 180),
-    });
-    return {
-      answer: formatCommandDraftClarification(draft, context.workingContext),
-      plan: createClarificationBrainPlan({
-        ...context.brainRoute,
-        clarification_question: formatCommandDraftClarification(draft, context.workingContext),
-        reason: draft.reason || 'Command draft needs clarification.',
-      }),
-      actions: [],
-      contextSummary: null,
-      ...(pendingAction ? { pending_action: pendingAction } : {}),
-      skipMemoryExtraction: true,
-    };
-  }
-
-  if (draft.mode !== 'action') return null;
-
-  const plan = commandDraftToPlannerPlan(draft);
-  const skill = getBrainSkill(skillIdForPendingAction(plan.intent));
-  const route = {
-    mode: 'explicit_action',
-    primary_skill: skill.id,
-    write_intent: true,
-    proposed_action_types: [plan.intent],
-    risk_level: plan.riskLevel || 'low',
-  };
-  const permission = canExecuteBrainAction({ route, skill, plan, message });
-  if (!permission.allowed) {
-    addBrainTraceStep(context?.brainTrace, 'command_draft_blocked', {
-      reason: permission.reason,
-      action_type: plan.intent,
-    });
-    const answer = getSafeClarificationQuestion({ message, plan, brainRoute: route, brainSkill: { skill } });
-    return {
-      answer,
-      plan: createClarificationBrainPlan({ ...route, clarification_question: answer }),
-      actions: [],
-      contextSummary: null,
-      skipMemoryExtraction: true,
-    };
-  }
-
-  const writeResult = await executeCommandDraftAction({ draft, plan, route, skill, message, context, source });
-  addBrainTraceStep(context?.brainTrace, 'command_draft_executed', {
-    action_type: plan.intent,
-    action_count: writeResult.actions?.length ?? 0,
-  });
-  return {
-    answer: writeResult.answer,
-    plan,
-    actions: writeResult.actions ?? [],
-    contextSummary: null,
-    skipMemoryExtraction: true,
-  };
 }
-
 async function executeCommandDraftAction({ draft, plan, route, skill, message, context }) {
   if (plan.intent === 'log_sleep_start') {
     const result = await logSleepStart({
@@ -1458,6 +1330,9 @@ async function safeRouteBrainMessage({ message, source, brainChat, brainContext,
 
 async function safeLoadBrainVaultContext({ message, brainRoute, brainSkill, context }) {
   try {
+    if (context?.brainTurnContract?.disallowed_steals?.includes('vault')) {
+      return { attempted: false, results: [], formatted: 'No relevant Brain Vault reports were retrieved.', reason: 'blocked_by_brain_turn_contract' };
+    }
     if (!shouldRetrieveBrainVault({ brainRoute, brainSkill })) {
       return { attempted: false, results: [], formatted: 'No relevant Brain Vault reports were retrieved.' };
     }
@@ -2389,42 +2264,6 @@ function logBrainTraceIfEnabled(context, trace = context?.finishedBrainTrace) {
     latency_ms: trace.latency_ms,
   };
   console.log('BRAIN_TRACE', JSON.stringify(sanitizeTraceValue(compact)));
-}
-
-function summarizeCommandDraftForTrace(draft, validation = {}) {
-  const args = draft?.action?.args && typeof draft.action.args === 'object' ? draft.action.args : {};
-  return sanitizeTraceValue({
-    mode: draft?.mode,
-    type: draft?.action?.type ?? null,
-    confidence: draft?.confidence ?? null,
-    missing_fields: validation?.missing_fields ?? draft?.action?.missing_fields ?? [],
-    executable: Boolean(validation?.executable),
-    confirmation_required: Boolean(draft?.action?.confirmation_required),
-    referent: draft?.referent ? {
-      needed: Boolean(draft.referent.needed),
-      resolved: Boolean(draft.referent.resolved),
-      source: draft.referent.source,
-      confidence: draft.referent.confidence,
-    } : null,
-    field_provenance: draft?.field_provenance ?? null,
-    args_summary: summarizeArgsForTrace(args),
-  });
-}
-
-function summarizeArgsForTrace(args) {
-  if (!args || typeof args !== 'object') return {};
-  const output = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (value === undefined || value === null || value === '') continue;
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      output[key] = safePreview(String(value), 80);
-    } else if (Array.isArray(value)) {
-      output[key] = { type: 'array', count: value.length };
-    } else if (typeof value === 'object') {
-      output[key] = { type: 'object', keys: Object.keys(value).slice(0, 8) };
-    }
-  }
-  return sanitizeTraceValue(output);
 }
 
 function actionsToTraceTools(actions) {

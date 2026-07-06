@@ -26,8 +26,14 @@ import { shouldRetrieveBrainVault } from '../api/_utils/brainVaultEligibility.js
 import { validateBrainRoute } from '../api/_utils/brainRouter.js';
 import {
   buildOperationalContextAnswer,
+  buildOperationalContextClarification,
+  inferWriteDomainFromMessage,
   isTrueLongTermMemoryRecallRequest,
 } from '../api/_utils/brainTurnArbitration.js';
+import {
+  buildBrainTurnContract,
+  serializeBrainTurnContract,
+} from '../api/_utils/brainTurnContract.js';
 import {
   canAckOutboxMessage,
   computeClaimRecovery,
@@ -227,7 +233,7 @@ test('calendar normalizer treats Italian slash dates and plain times determinist
   assert.match(buildCalendarEventClarification({ args, missingFields: missing, language: 'it' }), /Quanto dura/);
 });
 
-test('new vague calendar command does not inherit exact time from working context', () => {
+test('new vague generic segna command prefers memo and does not inherit exact time from working context', () => {
   const validation = validateBrainCommandDraft({
     mode: 'clarify',
     skill: 'calendar_planner',
@@ -264,12 +270,14 @@ test('new vague calendar command does not inherit exact time from working contex
 
   assert.equal(validation.ok, true);
   assert.equal(validation.executable, false);
+  assert.equal(validation.draft.action.type, 'create_memo');
   assert.equal(validation.draft.action.args.title, 'Parrucchiere');
-  assert.equal(validation.draft.action.args.start_time, null);
-  assert.notEqual(validation.draft.action.args.start_time, '11:45');
-  assert.deepEqual(validation.draft.action.missing_fields, ['start_time', 'end_time']);
-  assert.match(validation.draft.clarification_question, /orario di inizio|inizio e fine|a che ora/i);
+  assert.equal(validation.draft.action.args.memo_time, null);
+  assert.notEqual(validation.draft.action.args.memo_time, '11:45');
+  assert.deepEqual(validation.draft.action.missing_fields, ['time']);
+  assert.match(validation.draft.clarification_question, /che ora|orario|ricordartelo/i);
   assert.equal(validation.draft.field_provenance?.working_context_blocked, true);
+  assert.equal(validation.draft.field_provenance?.domain_repair, 'generic_segna_prefers_memo');
 });
 
 test('latest active pending action lookup normalizes dirty sleep-start metadata', () => {
@@ -517,8 +525,73 @@ test('create_memo missing time keeps memo-specific clarification', () => {
   });
   assert.equal(validation.ok, true);
   assert.equal(validation.executable, false);
-  assert.match(formatCommandDraftClarification(validation.draft, { language: 'it' }), /giorno e orario|orario/i);
+  assert.match(formatCommandDraftClarification(validation.draft, { language: 'it' }), /giorno e orario|orario|che ora/i);
   assert.equal(/quanto dura|fine|end_time/i.test(formatCommandDraftClarification(validation.draft, { language: 'it' })), false);
+});
+
+test('generic segna with date/time prefers memo while explicit calendar wording stays calendar', () => {
+  assert.equal(inferWriteDomainFromMessage('Segna parrucchiere domani 9.30'), 'memo');
+  assert.equal(inferWriteDomainFromMessage('Ricordami parrucchiere domani alle 9.30'), 'memo');
+  assert.equal(inferWriteDomainFromMessage('Fissa parrucchiere domani 9.30'), 'calendar');
+  assert.equal(inferWriteDomainFromMessage('Blocca parrucchiere domani 9.30'), 'calendar');
+  assert.equal(inferWriteDomainFromMessage('Metti in calendario parrucchiere domani 9.30'), 'calendar');
+
+  const generic = validateBrainCommandDraft({
+    mode: 'action',
+    skill: 'calendar_planner',
+    language: 'it',
+    intent_summary: 'Parrucchiere domani',
+    action: {
+      type: 'create_calendar_event',
+      args: {
+        title: 'Parrucchiere',
+        event_date: '2026-07-07',
+        start_time: '09:30',
+      },
+      missing_fields: ['end_time'],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    confidence: 0.9,
+    reason: 'AI guessed calendar.',
+  }, {
+    workingContext: { language: 'it' },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'calendar_planner' },
+    sourceMessage: 'Segna parrucchiere domani 9.30',
+  });
+  assert.equal(generic.draft.action.type, 'create_memo', compact(generic));
+  assert.equal(generic.draft.action.args.memo_time, '09:30');
+  assert.deepEqual(generic.draft.action.missing_fields, []);
+  assert.equal(generic.draft.field_provenance.domain_repair, 'generic_segna_prefers_memo');
+
+  const calendar = validateBrainCommandDraft({
+    mode: 'clarify',
+    skill: 'calendar_planner',
+    language: 'it',
+    intent_summary: 'Fissare parrucchiere domani',
+    action: {
+      type: 'create_calendar_event',
+      args: {
+        title: 'Parrucchiere',
+        event_date: '2026-07-07',
+        start_time: '09:30',
+      },
+      missing_fields: ['end_time'],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    confidence: 0.9,
+    reason: 'Explicit calendar wording.',
+  }, {
+    workingContext: { language: 'it' },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'calendar_planner' },
+    sourceMessage: 'Fissa parrucchiere domani 9.30',
+  });
+  assert.equal(calendar.draft.action.type, 'create_calendar_event', compact(calendar));
+  assert.deepEqual(calendar.draft.action.missing_fields, ['end_time']);
+  assert.match(calendar.draft.clarification_question, /Quanto dura|a che ora finisce/i);
 });
 
 test('calendar pending bypasses independent memo command', async () => {
@@ -642,6 +715,65 @@ test('analysis routes still allow Brain Vault retrieval', () => {
   }), true);
 });
 
+test('BrainTurnContract classifies representative winning paths', () => {
+  const explicit = buildBrainTurnContract({ message: 'Segna parrucchiere domattina', source: 'whatsapp' });
+  assert.equal(explicit.winning_path, 'explicit_command', compact(explicit));
+  assert.equal(explicit.intent_type, 'new_write');
+  assert.equal(explicit.source_of_write_intent, 'current_message');
+  assert.equal(explicit.field_policy.allow_working_context_exact_fields, false);
+  assert.equal(explicit.field_policy.allow_ai_inferred_exact_times, false);
+  assert.ok(explicit.disallowed_steals.includes('working_context_fields'));
+
+  const pendingCancel = buildBrainTurnContract({
+    message: 'No. Cancella tutto',
+    source: 'whatsapp',
+    pendingAction: calendarPendingMissingTime,
+    pendingReplyIntent: normalizePendingReplyIntent('No. Cancella tutto'),
+  });
+  assert.equal(pendingCancel.winning_path, 'pending_action', compact(pendingCancel));
+  assert.equal(pendingCancel.intent_type, 'pending_cancellation');
+  assert.ok(pendingCancel.disallowed_steals.includes('proactive_reply'));
+
+  const pendingBypass = buildBrainTurnContract({
+    message: 'Segna memo: domani 9.30 parrucchiere',
+    source: 'whatsapp',
+    pendingAction: calendarPendingMissingTime,
+    pendingReplyIntent: normalizePendingReplyIntent('Segna memo: domani 9.30 parrucchiere'),
+  });
+  assert.equal(pendingBypass.winning_path, 'explicit_command', compact(pendingBypass));
+  assert.ok(pendingBypass.disallowed_steals.includes('pending_action'));
+
+  const pendingConfirm = buildBrainTurnContract({
+    message: 'sì',
+    source: 'whatsapp',
+    pendingAction: calendarPendingMissingTime,
+    pendingReplyIntent: normalizePendingReplyIntent('sì'),
+  });
+  assert.equal(pendingConfirm.winning_path, 'pending_action', compact(pendingConfirm));
+  assert.equal(pendingConfirm.intent_type, 'pending_confirmation');
+
+  const agenda = buildBrainTurnContract({ message: 'Che cosa devo fare domani? Guardami gli impegni' });
+  assert.equal(agenda.winning_path, 'read_only_query', compact(agenda));
+  assert.equal(agenda.intent_type, 'agenda_query');
+  assert.ok(agenda.disallowed_steals.includes('memory_recall'));
+  assert.ok(agenda.disallowed_steals.includes('vault'));
+  assert.equal(agenda.route_override.mode, 'read_only_analysis');
+
+  const operational = buildBrainTurnContract({ message: "Quando l'hai messo?" });
+  assert.equal(operational.winning_path, 'operational_context', compact(operational));
+  assert.equal(operational.intent_type, 'operational_follow_up');
+  assert.ok(operational.disallowed_steals.includes('memory_recall'));
+
+  const memory = buildBrainTurnContract({ message: 'Cosa ti ricordi di me?' });
+  assert.equal(memory.winning_path, 'memory_recall', compact(memory));
+  assert.equal(memory.intent_type, 'true_memory_recall');
+  assert.equal(memory.field_policy.require_current_message_grounding, false);
+
+  const trace = serializeBrainTurnContract(agenda);
+  assert.equal(trace.winning_path, 'read_only_query');
+  assert.equal(JSON.stringify(trace).includes('SUPABASE'), false);
+});
+
 test('agenda query route invariant repairs contradictory memory_recall route', () => {
   const route = validateBrainRoute({
     mode: 'memory_recall',
@@ -703,6 +835,12 @@ test('operational memo follow-up is answered from working context, not memory re
   assert.match(answer, /8\/7\/2026/);
   assert.match(answer, /23:00/);
   assert.equal(/Here's what I remember/i.test(answer), false);
+
+  const clarification = buildOperationalContextClarification({
+    message: "Quando l'hai messo?",
+    workingContext: { language: 'it' },
+  });
+  assert.match(clarification, /quale promemoria|evento/i);
 });
 
 test('true long-term memory recall remains memory_recall', () => {

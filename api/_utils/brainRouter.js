@@ -8,6 +8,7 @@ import {
 } from './brainSkills.js';
 import {
   getIntentContractOverride,
+  inferWriteDomainFromMessage,
   isTrueLongTermMemoryRecallRequest,
 } from './brainTurnArbitration.js';
 
@@ -168,11 +169,13 @@ export function validateBrainRoute(route, {
   const destructive = hasDestructiveActionRequest(message) || proposedActionTypes.some((type) => type.startsWith('delete') || type.startsWith('archive'));
   const vagueCalendarBlock = looksLikeVagueCalendarBlockRequest(message);
   const intentOverride = getIntentContractOverride(message);
+  const writeDomain = inferWriteDomainFromMessage(message);
   let writeIntent = Boolean(route.write_intent);
   let finalMode = mode;
   let finalRisk = destructive ? 'high' : riskLevel;
   let forcedNeedsData = null;
   let routeRepair = null;
+  let finalProposedActionTypes = proposedActionTypes;
 
   if (negative || destructive || mode === 'follow_up_transform' || READ_ONLY_MODES.has(mode)) {
     writeIntent = false;
@@ -192,6 +195,18 @@ export function validateBrainRoute(route, {
     primarySkill = 'calendar_planner';
     writeIntent = false;
     finalRisk = destructive ? 'high' : 'low';
+  }
+  if (!intentOverride && writeDomain === 'memo' && (primarySkill === 'calendar_planner' || proposedActionTypes.includes('create_calendar_event'))) {
+    primarySkill = 'memo_assistant';
+    finalProposedActionTypes = finalMode === 'explicit_action' || writeIntent ? ['create_memo'] : [];
+    routeRepair = {
+      label: 'memo_over_calendar_policy',
+      reason: 'Generic segna/reminder-like wording prefers memo unless calendar language is explicit.',
+    };
+  }
+  if (!intentOverride && writeDomain === 'calendar') {
+    primarySkill = 'calendar_planner';
+    if (writeIntent || finalMode === 'explicit_action') finalProposedActionTypes = ['create_calendar_event'];
   }
   if (intentOverride) {
     finalMode = intentOverride.mode;
@@ -231,7 +246,7 @@ export function validateBrainRoute(route, {
     user_intent_summary: cleanText(route.user_intent_summary, 500) || fallback.user_intent_summary || '',
     needs_data: needsData,
     write_intent: writeIntent,
-    proposed_action_types: writeIntent ? proposedActionTypes : [],
+    proposed_action_types: writeIntent ? finalProposedActionTypes : [],
     risk_level: finalRisk,
     needs_clarification: needsClarification,
     clarification_question: needsClarification ? clarificationQuestion : null,
@@ -257,12 +272,19 @@ export function fallbackBrainRoute({ message = '', classification = null, brainC
   let needsClarification = mode === 'clarification';
   let clarificationQuestion = null;
   const intentOverride = getIntentContractOverride(message);
+  const writeDomain = inferWriteDomainFromMessage(message);
 
   if (intentOverride) {
     mode = intentOverride.mode;
     primarySkill = intentOverride.primary_skill;
     writeIntent = false;
     needsClarification = false;
+  }
+  if (!intentOverride && writeDomain === 'memo' && primarySkill === 'calendar_planner') {
+    primarySkill = 'memo_assistant';
+  }
+  if (!intentOverride && writeDomain === 'calendar') {
+    primarySkill = 'calendar_planner';
   }
 
   if (!intentOverride && looksLikeVagueCalendarBlockRequest(message)) {
