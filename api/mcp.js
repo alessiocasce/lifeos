@@ -6,6 +6,7 @@ import {
   clampMcpLimit,
   getBrainDebugContext,
   getHealthSummary,
+  getLifeosContextSnapshot,
   getLifeosSnapshot,
   getOpenLoops,
   getOpenMemos,
@@ -39,6 +40,11 @@ const TOOL_DEFINITIONS = [
     name: 'get_lifeos_snapshot',
     description: 'Returns a compact high-signal overview of today, week, sleep/health, open memos, upcoming calendar, workout/project status, recent Brain issues, and open loops.',
     inputSchema: objectSchema({ days: numberSchema('Optional day window, default 7, max 30.') }),
+  },
+  {
+    name: 'get_lifeos_context',
+    description: 'Returns the shared LifeOS Context Compiler snapshot: today, next days, health/workout/project state, Brain/outbox issues, and ranked open loops for Brain/MCP/Morning Brief use.',
+    inputSchema: objectSchema({ days: numberSchema('Optional day window, default 7, max 30.'), limit: numberSchema('Optional max open loops, default 30.') }),
   },
   {
     name: 'get_recent_workouts',
@@ -102,6 +108,7 @@ const TOOL_DEFINITIONS = [
 
 const RESOURCE_DEFINITIONS = [
   ['lifeos://snapshot', 'LifeOS Snapshot', 'Compact full LifeOS overview.', () => getLifeosSnapshot],
+  ['lifeos://context/today', 'LifeOS Context', 'Shared compact world snapshot from the LifeOS Context Compiler.', () => getLifeosContextSnapshot],
   ['lifeos://today', 'Today', 'Today summary for Europe/Rome.', () => getTodaySummary],
   ['lifeos://week/summary', 'Week Summary', 'Last 7 days summary.', () => getWeekSummary],
   ['lifeos://health/7d', 'Health 7d', 'Recent health and sleep summary.', () => getHealthSummary],
@@ -126,14 +133,14 @@ const PROMPT_DEFINITIONS = [
   {
     name: 'lifeos_morning_brief',
     description: 'Use LifeOS context to create a focused morning plan.',
-    suggestedCalls: ['get_lifeos_snapshot', 'get_open_memos', 'get_upcoming_calendar'],
-    instruction: 'Call the snapshot/today/memo/calendar tools first. Produce a concise plan for today with the highest-signal commitments, sleep/recovery note, and one next action.',
+    suggestedCalls: ['get_lifeos_context', 'get_open_loops'],
+    instruction: 'Call the shared LifeOS context and open-loops tools first. Produce a concise plan for today with the highest-signal commitments, sleep/recovery note, and one next action.',
     outputStyle: 'Short sections: Today, Watch, One move.',
   },
   {
     name: 'lifeos_evening_review',
     description: 'Review today\'s logs, completed/open items, memos, workout, sleep prep, and tomorrow carryover.',
-    suggestedCalls: ['lifeos://today', 'get_open_loops'],
+    suggestedCalls: ['get_lifeos_context', 'lifeos://today'],
     instruction: 'Read today and open loops. Summarize what happened, what remains open, and what should carry to tomorrow. Do not invent data.',
     outputStyle: 'Compact review with carryover bullets.',
   },
@@ -161,7 +168,7 @@ const PROMPT_DEFINITIONS = [
   {
     name: 'lifeos_project_execution_review',
     description: 'Analyze project/Ops work, sessions, output/proof, stale projects, and next actions.',
-    suggestedCalls: ['get_projects_status', 'get_open_loops'],
+    suggestedCalls: ['get_lifeos_context', 'get_projects_status'],
     instruction: 'Review active projects and recent sessions. Identify stale work, proof gaps, and the next concrete Ops block.',
     outputStyle: 'Ops-focused, concise, one recommended next session.',
   },
@@ -330,6 +337,9 @@ async function callMcpTool(params, context) {
   switch (name) {
     case 'get_lifeos_snapshot':
       data = await getLifeosSnapshot({ userId, days: clampMcpDays(args.days) });
+      break;
+    case 'get_lifeos_context':
+      data = await getLifeosContextSnapshot({ userId, days: clampMcpDays(args.days), limit: clampMcpLimit(args.limit, 30, 80) });
       break;
     case 'get_recent_workouts':
       data = await getRecentWorkouts({ userId, days: clampMcpDays(args.days), limit: clampMcpLimit(args.limit, 20, 50) });

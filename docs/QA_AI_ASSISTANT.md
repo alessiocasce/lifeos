@@ -38,6 +38,7 @@ Expected:
 - New explicit commands such as `crea promemoria domani` are not treated as proactive reminder replies.
 - Missing-source proactive replies are read-only clarifications, not write-looking actions.
 - BrainTurn stage helpers preserve Working Context, pending-action checks, proactive-before-pending arbitration, explicit-command pending bypass, and normal route/skill/vault trace state.
+- LifeOS Context Compiler and Open Loops pure checks cover memo/calendar/project/action/outbox/pending-action loop detection, ranking, deduping, and compact Morning-Brief-ready snapshot shape through `npm run test:mcp`.
 - Outbox delivery priority sorts `high -> normal -> low`.
 - WhatsApp sender aliases canonicalize `@lid` and `@c.us` identities for stable threads/outbox rows.
 - Negative write intent wins over action wording.

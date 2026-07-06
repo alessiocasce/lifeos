@@ -440,6 +440,20 @@ Current behavior:
 - `x-lifeos-debug: true` on `/api/ai/chat` or `/api/integrations/whatsapp/inbound` includes `debug.brain_trace` in the JSON response. The WhatsApp reply string itself remains clean.
 - Unauthorized WhatsApp requests do not create Brain messages; debug logging for rejected endpoint checks is minimal and sanitized.
 
+## LifeOS Context Compiler And Open Loops
+
+LifeOS Context Compiler v1 lives in `api/_utils/lifeosContextCompiler.js`.
+
+Current behavior:
+
+- The compiler produces a compact structured world snapshot for backend consumers such as MCP, Brain, future Morning Briefing, future Home/Open Loops UI, and future Evening Review.
+- The snapshot includes today, next few days, open memos, upcoming calendar, project staleness/carryover, health/sleep status, latest workout/recovery hints, failed actions, active pending Brain actions, WhatsApp outbox issues, and ranked open loops.
+- Open loops are typed objects with source table/type/id, severity, due/date, reason, suggested next action, proactive eligibility, Home visibility, and compact metadata.
+- Detected loop families currently include overdue/due/unscheduled memos, upcoming calendar prep candidates, stale active projects, open project sessions, project carryover without proof, failed Brain/action writes, claimed/failed/due WhatsApp outbox rows, active pending Brain actions, low-sleep recovery gaps, and high-confidence workout gaps.
+- The compiler is read-only and does not enqueue messages, write records, or call Gemini.
+- MCP `get_open_loops` now delegates to this shared engine, and `get_lifeos_context` / `lifeos://context/today` expose the compact snapshot for external read-only clients.
+- Morning Briefing should use this compiler as its deterministic context source, then apply a separate deterministic send policy. The compiler itself must not decide to text the user.
+
 ## Brain Regression Harness
 
 Brain Regression Harness v1 adds a lightweight local test layer for deterministic Brain protocol behavior.

@@ -2,6 +2,7 @@ import { addDays, localDate, localRangeToUtcWindow, startOfLocalDayUtcIso } from
 import { safePreview, sanitizeTraceValue } from './brainTrace.js';
 import { searchBrainVault } from './brainVault.js';
 import { getSupabaseAdmin } from './supabaseAdmin.js';
+import { compileLifeOSContext } from './lifeosContextCompiler.js';
 
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 7;
@@ -75,6 +76,14 @@ export async function getLifeosSnapshot({ userId, days = DEFAULT_DAYS } = {}) {
     whatsapp_outbox: outbox,
     open_loops: await getOpenLoops({ userId, days: normalizedDays, limit: 20 }),
   });
+}
+
+export async function getLifeosContextSnapshot({ userId, days = DEFAULT_DAYS, limit = 30 } = {}) {
+  return sanitizeMcpOutput(await compileLifeOSContext({
+    userId,
+    days: clampMcpDays(days),
+    limit: clampMcpLimit(limit, 30, 80),
+  }));
 }
 
 export async function getTodaySummary({ userId } = {}) {
@@ -355,45 +364,12 @@ export async function getRecentVaultDocuments({ userId, limit = 10 } = {}) {
 }
 
 export async function getOpenLoops({ userId, days = DEFAULT_DAYS, limit = 30 } = {}) {
-  const maxRows = clampMcpLimit(limit, 30, 80);
-  const today = localDate();
-  const future = addDays(today, clampMcpDays(days));
-  const [memos, events, projects, actions, outbox, brain] = await Promise.all([
-    getOpenMemos({ userId, limit: maxRows }),
-    getUpcomingCalendar({ userId, days, limit: Math.min(maxRows, 30) }),
-    getProjectsStatus({ userId, limit: Math.min(maxRows, 30) }),
-    getRecentActionLogs({ userId, limit: Math.min(maxRows, 30) }),
-    getWhatsappOutboxRecent({ userId, limit: Math.min(maxRows, 30) }),
-    getBrainDebugContext({ userId, limit: 10 }),
-  ]);
-
-  const loops = [];
-  for (const memo of memos.memos ?? []) {
-    loops.push({ type: 'memo', id: memo.id, label: memo.title, date: memo.memo_date, time: memo.memo_time, status: memo.status });
-  }
-  for (const event of events.events ?? []) {
-    loops.push({ type: 'calendar_event', id: event.id, label: event.title, date: event.event_date, time: event.start_time, status: event.status });
-  }
-  for (const project of projects.projects ?? []) {
-    if (project.status === 'active' && !project.last_session_at) {
-      loops.push({ type: 'stale_project', id: project.id, label: project.name, status: project.status });
-    }
-  }
-  for (const log of actions.logs ?? []) {
-    if (log.status !== 'success') loops.push({ type: 'failed_action', id: log.id, label: log.action_type, status: log.status, error: log.error_message });
-  }
-  for (const message of outbox.messages ?? []) {
-    if (['failed', 'queued', 'claimed'].includes(message.status)) {
-      loops.push({ type: 'whatsapp_outbox', id: message.id, label: message.rule_key, status: message.status, scheduled_for: message.scheduled_for });
-    }
-  }
-  for (const trace of brain.traces ?? []) {
-    if (trace.pending_action?.found) {
-      loops.push({ type: 'brain_pending_action', id: trace.message_id, label: trace.pending_action.type, status: trace.pending_action.status });
-    }
-  }
-
-  return sanitizeMcpOutput({ range: { today, future }, loops: loops.slice(0, maxRows) });
+  const context = await compileLifeOSContext({
+    userId,
+    days: clampMcpDays(days),
+    limit: clampMcpLimit(limit, 30, 80),
+  });
+  return sanitizeMcpOutput(context.open_loops);
 }
 
 function healthSelect() {

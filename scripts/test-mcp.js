@@ -9,6 +9,7 @@ import {
   validateMcpAuth,
 } from '../api/mcp.js';
 import { clampMcpDays, clampMcpLimit, compactWorkout, getWorkoutSetTruncationInfo, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
+import { buildLifeOSContext, buildOpenLoops, rankOpenLoops } from '../api/_utils/lifeosContextCompiler.js';
 import {
   buildAuthorizationServerMetadata,
   buildWwwAuthenticateHeader,
@@ -43,6 +44,7 @@ test('tools/list includes expected tools', () => {
   const tools = listMcpTools().map((tool) => tool.name);
   for (const name of [
     'get_lifeos_snapshot',
+    'get_lifeos_context',
     'get_recent_workouts',
     'get_health_summary',
     'get_open_memos',
@@ -62,6 +64,7 @@ test('resources/list includes expected resources', () => {
   const resources = listMcpResources().map((resource) => resource.uri);
   for (const uri of [
     'lifeos://snapshot',
+    'lifeos://context/today',
     'lifeos://today',
     'lifeos://brain/debug',
     'lifeos://whatsapp/outbox/recent',
@@ -178,6 +181,79 @@ test('MCP sanitizer removes secret-like fields', () => {
   assertEqual(sanitized.api_key, undefined);
   assertEqual(sanitized.nested.authorization, undefined);
   assertEqual(sanitized.nested.value, 'visible');
+});
+
+test('LifeOS open loops engine detects and ranks structured loops', () => {
+  const rows = buildContextFixtureRows();
+  const result = buildOpenLoops({
+    rows,
+    now: new Date('2026-06-18T08:00:00.000Z'),
+    days: 7,
+    limit: 20,
+  });
+  const types = result.loops.map((loop) => loop.type);
+  for (const type of [
+    'failed_action',
+    'whatsapp_outbox_issue',
+    'overdue_memo',
+    'due_today_memo',
+    'calendar_prep',
+    'stale_project',
+    'project_session_carryover',
+    'brain_pending_action',
+    'recovery_gap',
+    'workout_gap',
+  ]) {
+    assert(types.includes(type), `missing loop type ${type}`);
+  }
+  assertEqual(result.loops[0].severity, 'high');
+  assert(result.severity_counts.high >= 3, 'expected multiple high severity loops');
+  const overdue = result.loops.find((loop) => loop.type === 'overdue_memo');
+  assertEqual(overdue.can_be_proactive, true);
+  assertEqual(overdue.source_table, 'memos');
+});
+
+test('LifeOS open loops engine dedupes repeated pending action rows', () => {
+  const rows = buildContextFixtureRows();
+  rows.brainMessages.push({
+    ...rows.brainMessages[0],
+    id: 'brain-message-duplicate',
+    created_at: '2026-06-18T07:55:00.000Z',
+  });
+  const result = buildOpenLoops({
+    rows,
+    now: new Date('2026-06-18T08:00:00.000Z'),
+    days: 7,
+    limit: 20,
+  });
+  assertEqual(result.loops.filter((loop) => loop.type === 'brain_pending_action').length, 1);
+});
+
+test('LifeOS context compiler produces compact Morning-Brief-ready shape', () => {
+  const snapshot = buildLifeOSContext({
+    rows: buildContextFixtureRows(),
+    now: new Date('2026-06-18T08:00:00.000Z'),
+    days: 7,
+    limit: 20,
+  });
+  assertEqual(snapshot.scope.today, '2026-06-18');
+  assertEqual(snapshot.today.date, '2026-06-18');
+  assert(snapshot.open_loops.loops.length > 0, 'expected ranked open loops');
+  assert(snapshot.memos.overdue_count >= 1, 'expected overdue memo count');
+  assert(snapshot.projects.stale_count >= 1, 'expected stale project count');
+  assertEqual(snapshot.health.sleep_status, 'low');
+  assertEqual(snapshot.whatsapp.counts_by_status.failed, 1);
+});
+
+test('LifeOS open loop ranking prefers high severity before low severity', () => {
+  const ranked = rankOpenLoops([
+    { type: 'unscheduled_memo', title: 'Low', severity: 'low', id: 'low' },
+    { type: 'failed_action', title: 'High', severity: 'high', id: 'high' },
+    { type: 'calendar_prep', title: 'Medium', severity: 'medium', id: 'medium' },
+  ]);
+  assertEqual(ranked[0].id, 'high');
+  assertEqual(ranked[1].id, 'medium');
+  assertEqual(ranked[2].id, 'low');
 });
 
 test('MCP workout compactor keeps exact set-level details and aggregates', () => {
@@ -300,4 +376,139 @@ function assertEqual(actual, expected) {
   if (actual !== expected) {
     throw new Error(`expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
+}
+
+function buildContextFixtureRows() {
+  return {
+    memos: [
+      {
+        id: 'memo-overdue',
+        title: 'Pagare bolletta',
+        memo_date: '2026-06-17',
+        memo_time: '09:30',
+        status: 'open',
+        notes: 'Da fare',
+      },
+      {
+        id: 'memo-today',
+        title: 'Fare matematica',
+        memo_date: '2026-06-18',
+        memo_time: '10:00',
+        status: 'open',
+        notes: '',
+      },
+      {
+        id: 'memo-unscheduled',
+        title: 'Idea senza data',
+        memo_date: null,
+        memo_time: null,
+        status: 'open',
+        notes: '',
+      },
+    ],
+    calendarEvents: [
+      {
+        id: 'event-prep',
+        title: 'Lezione matematica',
+        event_date: '2026-06-18',
+        start_time: '11:00',
+        end_time: '12:00',
+        category: 'Study',
+        location: 'Online',
+        status: 'planned',
+        notes: 'Prepara esercizi',
+      },
+    ],
+    projects: [
+      {
+        id: 'project-stale',
+        name: 'LifeOS',
+        status: 'active',
+        goal_type: 'hours',
+        target_value: 20,
+        current_value: 4,
+        unit_label: 'h',
+        started_on: '2026-06-01',
+        notes: '',
+        created_at: '2026-06-01T08:00:00.000Z',
+        updated_at: '2026-06-02T08:00:00.000Z',
+      },
+    ],
+    projectSessions: [
+      {
+        id: 'session-carry',
+        project_id: 'project-stale',
+        started_at: '2026-06-09T08:00:00.000Z',
+        ended_at: '2026-06-09T09:00:00.000Z',
+        duration_minutes: 60,
+        target_output: 'Finish MCP context',
+        proof_of_work: '',
+      },
+    ],
+    healthLogs: [
+      {
+        id: 'health-today',
+        logged_on: '2026-06-18',
+        sleep_hours: 5,
+        sleep_start: '03:00',
+        wake_time: '08:00',
+        energy: 4,
+        coffee: 1,
+        mood: 5,
+        notes: '',
+      },
+    ],
+    workouts: [
+      {
+        id: 'workout-old',
+        name: 'Push',
+        performed_on: '2026-06-10',
+        started_at: '2026-06-10T10:00:00.000Z',
+        ended_at: '2026-06-10T11:00:00.000Z',
+      },
+    ],
+    actionLogs: [
+      {
+        id: 'action-failed',
+        request_id: 'request-1',
+        source: 'whatsapp',
+        action_type: 'create_memo',
+        status: 'error',
+        error_message: 'Safe test failure',
+        created_at: '2026-06-18T07:30:00.000Z',
+      },
+    ],
+    outboxMessages: [
+      {
+        id: 'outbox-failed',
+        channel: 'whatsapp',
+        recipient: '111@lid',
+        status: 'failed',
+        priority: 'normal',
+        rule_key: 'timed_memo_due',
+        source_type: 'memo',
+        source_id: 'memo-overdue',
+        scheduled_for: '2026-06-18T07:00:00.000Z',
+        claimed_at: null,
+        attempts: 3,
+        last_error: 'bridge failed',
+      },
+    ],
+    brainMessages: [
+      {
+        id: 'brain-message-1',
+        thread_id: 'thread-1',
+        created_at: '2026-06-18T07:45:00.000Z',
+        metadata: {
+          pending_action: {
+            id: 'pending-1',
+            action_type: 'create_calendar_event',
+            status: 'awaiting_fields',
+            summary: 'Bloccare studio',
+            missing_fields: ['start_time'],
+          },
+        },
+      },
+    ],
+  };
 }
