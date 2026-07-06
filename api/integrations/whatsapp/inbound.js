@@ -9,7 +9,7 @@ import {
 } from '../../_utils/http.js';
 import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { handleBrainChatMessage } from '../../ai/chat.js';
-import { requireWhatsappBridgeSecret, validateWhatsappSender } from '../../_utils/whatsappBridge.js';
+import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender } from '../../_utils/whatsappBridge.js';
 
 const MAX_WHATSAPP_BODY_LENGTH = 4000;
 
@@ -29,14 +29,17 @@ export default async function handler(req, res) {
     endpointTrace.secret_validated = true;
 
     const payload = normalizeWhatsappPayload(await readJsonBody(req));
-    endpointTrace.whatsapp_sender = payload.from;
+    const senderInfo = describeWhatsappSender(payload.from);
+    endpointTrace.whatsapp_sender = senderInfo.canonical || payload.from;
+    endpointTrace.whatsapp_raw_sender = senderInfo.raw;
+    endpointTrace.whatsapp_sender_aliased = senderInfo.aliased;
     endpointTrace.whatsapp_message_id = payload.message_id;
     endpointTrace.is_group = payload.is_group;
-    validateWhatsappSender(payload.from, payload.is_group);
+    const canonicalSender = validateWhatsappSender(payload.from, payload.is_group);
     endpointTrace.sender_allowed = true;
     endpointTrace.endpoint_validation_result = 'accepted';
 
-    const clientRequestId = buildWhatsappClientRequestId(payload, context.requestId);
+    const clientRequestId = buildWhatsappClientRequestId({ ...payload, from: canonicalSender }, context.requestId);
     const result = await handleBrainChatMessage({
       message: payload.body,
       source: 'whatsapp',
@@ -48,7 +51,8 @@ export default async function handler(req, res) {
       channelMetadata: {
         source: 'whatsapp',
         channel: 'whatsapp',
-        whatsapp_sender: payload.from,
+        whatsapp_sender: canonicalSender,
+        whatsapp_raw_sender: payload.from,
         whatsapp_author: payload.author,
         whatsapp_message_id: payload.message_id,
         whatsapp_timestamp: payload.timestamp,
@@ -74,6 +78,8 @@ export default async function handler(req, res) {
         secret_validated: endpointTrace.secret_validated,
         sender_allowed: endpointTrace.sender_allowed,
         whatsapp_sender: endpointTrace.whatsapp_sender,
+        whatsapp_raw_sender: endpointTrace.whatsapp_raw_sender,
+        whatsapp_sender_aliased: endpointTrace.whatsapp_sender_aliased,
         status: error?.status ?? 500,
         error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
       })));

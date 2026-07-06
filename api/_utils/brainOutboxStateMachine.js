@@ -1,5 +1,6 @@
 export const OUTBOX_STATUSES = ['queued', 'claimed', 'sent', 'failed', 'cancelled', 'expired'];
 export const OUTBOX_ACK_STATUSES = ['sent', 'failed'];
+export const OUTBOX_PRIORITIES = ['low', 'normal', 'high'];
 export const MAX_OUTBOX_ATTEMPTS = 3;
 export const DEFAULT_CLAIM_RECLAIM_TIMEOUT_MINUTES = 10;
 
@@ -13,6 +14,32 @@ export function normalizeOutboxStatus(value) {
 export function normalizeAckStatus(value) {
   const text = String(value ?? '').trim().toLowerCase();
   return OUTBOX_ACK_STATUSES.includes(text) ? text : null;
+}
+
+export function normalizeOutboxPriority(value) {
+  const text = String(value ?? 'normal').trim().toLowerCase();
+  return OUTBOX_PRIORITIES.includes(text) ? text : 'normal';
+}
+
+export function getOutboxPriorityRank(value) {
+  const priority = String(value ?? '').trim().toLowerCase();
+  if (priority === 'high') return 3;
+  if (priority === 'normal') return 2;
+  if (priority === 'low') return 1;
+  return 0;
+}
+
+export function compareOutboxRowsForDelivery(left, right) {
+  const priorityDelta = getOutboxPriorityRank(right?.priority) - getOutboxPriorityRank(left?.priority);
+  if (priorityDelta) return priorityDelta;
+  return String(left?.scheduled_for ?? '').localeCompare(String(right?.scheduled_for ?? ''))
+    || String(left?.created_at ?? '').localeCompare(String(right?.created_at ?? ''))
+    || String(left?.id ?? '').localeCompare(String(right?.id ?? ''));
+}
+
+export function sortOutboxRowsForDelivery(rows = [], limit = rows.length) {
+  const safeLimit = Math.max(0, Math.trunc(Number(limit)) || 0);
+  return [...rows].sort(compareOutboxRowsForDelivery).slice(0, safeLimit || rows.length);
 }
 
 export function canAckOutboxMessage({ row, ackStatus } = {}) {

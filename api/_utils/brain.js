@@ -1,5 +1,6 @@
 import { generateGeminiJson } from './gemini.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
+import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
 
 const MEMORY_CATEGORIES = new Set([
   'preference',
@@ -78,7 +79,8 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
   const safeChannelMetadata = channelMetadata && typeof channelMetadata === 'object' ? sanitizeMetadata(channelMetadata) : {};
-  const whatsappSender = normalizedSource === 'whatsapp' ? cleanText(safeChannelMetadata.whatsapp_sender, 160) : null;
+  const whatsappSender = normalizedSource === 'whatsapp' ? cleanText(canonicalizeWhatsappSender(safeChannelMetadata.whatsapp_sender), 160) : null;
+  const whatsappRawSender = normalizedSource === 'whatsapp' ? cleanText(safeChannelMetadata.whatsapp_raw_sender, 160) : null;
   let thread = null;
 
   if (isUuid(threadId)) {
@@ -94,21 +96,10 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
   }
 
   if (!thread && normalizedSource === 'whatsapp' && whatsappSender) {
-    const result = await client
-      .from('ai_chat_threads')
-      .select('id, title, status, metadata, created_at, updated_at, last_message_at')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .contains('metadata', {
-        source: 'whatsapp',
-        whatsapp_sender: whatsappSender,
-      })
-      .order('last_message_at', { ascending: false, nullsFirst: false })
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (result.error) throw result.error;
-    thread = result.data;
+    thread = await findWhatsappThreadBySenderAliases({ client, userId, sender: whatsappSender });
+    if (thread && thread.metadata?.whatsapp_sender !== whatsappSender) {
+      thread = await updateWhatsappThreadSenderMetadata({ client, userId, thread, canonicalSender: whatsappSender, rawSender: thread.metadata?.whatsapp_sender || whatsappRawSender });
+    }
   }
 
   if (!thread && !threadId && normalizedSource === 'app') {
@@ -137,6 +128,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
           source: normalizedSource,
           ...(normalizedSource === 'whatsapp' ? {
             whatsapp_sender: whatsappSender,
+            ...(whatsappRawSender && whatsappRawSender !== whatsappSender ? { whatsapp_raw_sender: whatsappRawSender } : {}),
             channel: 'whatsapp',
           } : {}),
         },
@@ -181,6 +173,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
         ...(normalizedSource === 'whatsapp' ? {
           channel: 'whatsapp',
           whatsapp_sender: whatsappSender,
+          ...(whatsappRawSender && whatsappRawSender !== whatsappSender ? { whatsapp_raw_sender: whatsappRawSender } : {}),
           whatsapp_message_id: cleanText(safeChannelMetadata.whatsapp_message_id, 160),
           whatsapp_timestamp: safeChannelMetadata.whatsapp_timestamp ?? null,
         } : {}),
@@ -209,25 +202,17 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
 }
 
 export async function findOrCreateWhatsappBrainThread({ sender } = {}) {
-  const whatsappSender = cleanText(sender, 160);
+  const whatsappSender = cleanText(canonicalizeWhatsappSender(sender), 160);
   if (!whatsappSender) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
-  const existing = await client
-    .from('ai_chat_threads')
-    .select('id, title, status, metadata, created_at, updated_at, last_message_at')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .contains('metadata', {
-      source: 'whatsapp',
-      whatsapp_sender: whatsappSender,
-    })
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (existing.error) throw existing.error;
-  if (existing.data) return existing.data;
+  const existing = await findWhatsappThreadBySenderAliases({ client, userId, sender: whatsappSender });
+  if (existing) {
+    if (existing.metadata?.whatsapp_sender !== whatsappSender) {
+      return updateWhatsappThreadSenderMetadata({ client, userId, thread: existing, canonicalSender: whatsappSender, rawSender: existing.metadata?.whatsapp_sender });
+    }
+    return existing;
+  }
 
   const created = await client
     .from('ai_chat_threads')
@@ -246,6 +231,49 @@ export async function findOrCreateWhatsappBrainThread({ sender } = {}) {
     .single();
   if (created.error) throw created.error;
   return created.data;
+}
+
+async function findWhatsappThreadBySenderAliases({ client, userId, sender }) {
+  const aliases = getWhatsappSenderAliasesForCanonical(sender).map((value) => cleanText(value, 160)).filter(Boolean);
+  for (const whatsappSender of aliases) {
+    const result = await client
+      .from('ai_chat_threads')
+      .select('id, title, status, metadata, created_at, updated_at, last_message_at')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .contains('metadata', {
+        source: 'whatsapp',
+        whatsapp_sender: whatsappSender,
+      })
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    if (result.data) return result.data;
+  }
+  return null;
+}
+
+async function updateWhatsappThreadSenderMetadata({ client, userId, thread, canonicalSender, rawSender }) {
+  const metadata = thread.metadata && typeof thread.metadata === 'object' ? thread.metadata : {};
+  const result = await client
+    .from('ai_chat_threads')
+    .update({
+      metadata: {
+        ...metadata,
+        source: 'whatsapp',
+        channel: 'whatsapp',
+        whatsapp_sender: canonicalSender,
+        ...(rawSender && rawSender !== canonicalSender ? { whatsapp_raw_sender: rawSender } : {}),
+      },
+    })
+    .eq('id', thread.id)
+    .eq('user_id', userId)
+    .select('id, title, status, metadata, created_at, updated_at, last_message_at')
+    .single();
+  if (result.error) throw result.error;
+  return result.data;
 }
 
 export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace, extraMetadata }) {
@@ -268,7 +296,8 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
         source,
         ...(source === 'whatsapp' ? {
           channel: 'whatsapp',
-          whatsapp_sender: cleanText(channelMetadata.whatsapp_sender, 160),
+          whatsapp_sender: cleanText(canonicalizeWhatsappSender(channelMetadata.whatsapp_sender), 160),
+          ...(channelMetadata.whatsapp_raw_sender ? { whatsapp_raw_sender: cleanText(channelMetadata.whatsapp_raw_sender, 160) } : {}),
           whatsapp_message_id: cleanText(channelMetadata.whatsapp_message_id, 160),
         } : {}),
         planner_intent: plan?.intent ?? null,

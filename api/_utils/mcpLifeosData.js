@@ -1,4 +1,4 @@
-import { addDays, localDate } from './date.js';
+import { addDays, localDate, localRangeToUtcWindow, startOfLocalDayUtcIso } from './date.js';
 import { safePreview, sanitizeTraceValue } from './brainTrace.js';
 import { searchBrainVault } from './brainVault.js';
 import { getSupabaseAdmin } from './supabaseAdmin.js';
@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from './supabaseAdmin.js';
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 7;
 const MAX_LIMIT = 100;
+const WORKOUT_SET_QUERY_LIMIT = 600;
 const SECRET_KEY_PATTERN = /(authorization|bearer|token|secret|password|service[_-]?role|api[_-]?key|gemini|supabase)/i;
 
 export function clampMcpLimit(value, defaultValue = 20, maxValue = MAX_LIMIT) {
@@ -84,7 +85,7 @@ export async function getTodaySummary({ userId } = {}) {
     selectMany(client.from('workouts').select(workoutSelect()).eq('user_id', userId).eq('performed_on', today).order('started_at', { ascending: false }).limit(10)),
     selectMany(client.from('memos').select(memoSelect()).eq('user_id', userId).eq('memo_date', today).neq('status', 'done').order('memo_time', { ascending: true }).limit(20)),
     selectMany(client.from('calendar_events').select(calendarSelect()).eq('user_id', userId).eq('event_date', today).neq('status', 'cancelled').order('start_time', { ascending: true }).limit(20)),
-    selectMany(client.from('project_sessions').select(projectSessionSelect()).eq('user_id', userId).gte('started_at', `${today}T00:00:00`).order('started_at', { ascending: false }).limit(20)),
+    selectMany(client.from('project_sessions').select(projectSessionSelect()).eq('user_id', userId).gte('started_at', startOfLocalDayUtcIso(today)).order('started_at', { ascending: false }).limit(20)),
   ]);
 
   return sanitizeMcpOutput({
@@ -102,10 +103,11 @@ export async function getWeekSummary({ userId, days = DEFAULT_DAYS } = {}) {
   const normalizedDays = clampMcpDays(days);
   const end = localDate();
   const start = addDays(end, -(normalizedDays - 1));
+  const sessionWindow = localRangeToUtcWindow({ startDate: start, endDate: end });
   const [health, workouts, sessions, memosDone] = await Promise.all([
     getHealthSummary({ userId, days: normalizedDays }),
     getRecentWorkouts({ userId, days: normalizedDays, limit: 30 }),
-    selectMany(getSupabaseAdmin().from('project_sessions').select(projectSessionSelect()).eq('user_id', userId).gte('started_at', `${start}T00:00:00`).order('started_at', { ascending: false }).limit(100)),
+    selectMany(getSupabaseAdmin().from('project_sessions').select(projectSessionSelect()).eq('user_id', userId).gte('started_at', sessionWindow.start).lte('started_at', sessionWindow.end).order('started_at', { ascending: false }).limit(100)),
     selectMany(getSupabaseAdmin().from('memos').select(memoSelect()).eq('user_id', userId).eq('status', 'done').gte('memo_date', start).lte('memo_date', end).limit(50)),
   ]);
 
@@ -139,14 +141,26 @@ export async function getRecentWorkouts({ userId, days = DEFAULT_DAYS, limit = 2
   );
   const workoutIds = workouts.map((row) => row.id).filter(Boolean);
   const sets = workoutIds.length
-    ? await selectMany(client.from('workout_sets').select(workoutSetSelect()).eq('user_id', userId).in('workout_id', workoutIds).order('performed_at', { ascending: true }).limit(600))
+    ? await selectMany(client.from('workout_sets').select(workoutSetSelect()).eq('user_id', userId).in('workout_id', workoutIds).order('performed_at', { ascending: true }).limit(WORKOUT_SET_QUERY_LIMIT))
     : [];
   const setsByWorkout = groupBy(sets, 'workout_id');
+  const truncation = getWorkoutSetTruncationInfo(sets.length, WORKOUT_SET_QUERY_LIMIT);
 
   return sanitizeMcpOutput({
     range: { start, end, days: normalizedDays },
+    ...truncation,
     workouts: workouts.map((workout) => compactWorkout(workout, setsByWorkout.get(workout.id) ?? [])),
   });
+}
+
+export function getWorkoutSetTruncationInfo(returnedSetCount, setLimit = WORKOUT_SET_QUERY_LIMIT) {
+  const returned = Math.max(0, Math.trunc(Number(returnedSetCount)) || 0);
+  const limit = Math.max(1, Math.trunc(Number(setLimit)) || WORKOUT_SET_QUERY_LIMIT);
+  return {
+    sets_truncated: returned >= limit,
+    set_limit: limit,
+    returned_set_count: returned,
+  };
 }
 
 export async function getHealthSummary({ userId, days = DEFAULT_DAYS } = {}) {
@@ -278,6 +292,23 @@ export async function getWhatsappOutboxRecent({ userId, limit = 20 } = {}) {
       .limit(clampMcpLimit(limit, 20, 80)),
   );
   return sanitizeMcpOutput({ messages: rows.map(compactOutboxMessage) });
+}
+
+export async function getWhatsappProactiveDebug({ userId, limit = 30 } = {}) {
+  const rows = await selectMany(
+    getSupabaseAdmin()
+      .from('brain_outbox_messages')
+      .select('id, channel, recipient, body, status, priority, rule_key, source_type, source_id, scheduled_for, expires_at, claimed_at, sent_at, failed_at, attempts, last_error, ack_metadata, metadata, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('channel', 'whatsapp')
+      .order('created_at', { ascending: false })
+      .limit(clampMcpLimit(limit, 30, 100)),
+  );
+  return sanitizeMcpOutput({
+    generated_at: new Date().toISOString(),
+    counts_by_status: countBy(rows, 'status'),
+    messages: rows.map(compactProactiveDebugOutboxMessage),
+  });
 }
 
 export async function searchVaultForMcp({ userId, query, limit = 5 } = {}) {
@@ -664,6 +695,52 @@ function compactOutboxMessage(row) {
   };
 }
 
+function compactProactiveDebugOutboxMessage(row) {
+  const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  return {
+    id: row.id,
+    channel: row.channel,
+    recipient: row.recipient,
+    canonical_recipient: metadata.whatsapp_recipient_canonical || row.recipient,
+    raw_recipient: metadata.whatsapp_recipient_raw || null,
+    body_preview: safePreview(row.body, 120),
+    status: row.status,
+    priority: row.priority,
+    rule_key: row.rule_key,
+    source_type: row.source_type,
+    source_id: row.source_id,
+    scheduled_for: row.scheduled_for,
+    expires_at: row.expires_at,
+    claimed_at: row.claimed_at,
+    sent_at: row.sent_at,
+    failed_at: row.failed_at,
+    attempts: row.attempts,
+    last_error: safePreview(row.last_error, 240),
+    ack_metadata: sanitizeTraceValue(summarizeAckMetadata(row.ack_metadata)),
+    proactive_trace: sanitizeTraceValue(metadata.proactive_trace ?? null),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function summarizeAckMetadata(value) {
+  const metadata = value && typeof value === 'object' ? value : {};
+  return {
+    bridge_id: metadata.bridge_id ?? null,
+    provider_message_id: metadata.provider_message_id ? '[present]' : null,
+    outbox_ack_transition: metadata.outbox_ack_transition ?? null,
+    outbox_claim_transition: metadata.outbox_claim_transition ?? null,
+    outbox_reclaim_transition: metadata.outbox_reclaim_transition ?? null,
+    claimed_at: metadata.claimed_at ?? null,
+    acked_at: metadata.acked_at ?? null,
+    last_failed_at: metadata.last_failed_at ?? null,
+    retry: metadata.retry ?? null,
+    retry_after: metadata.retry_after ?? null,
+    retry_delay_minutes: metadata.retry_delay_minutes ?? null,
+    assistant_message_id: metadata.assistant_message_id ?? null,
+  };
+}
+
 function compactVaultDocument(row) {
   return {
     id: row.id,
@@ -690,6 +767,14 @@ function groupBy(rows, key) {
     map.set(value, list);
   }
   return map;
+}
+
+function countBy(rows, key) {
+  return rows.reduce((counts, row) => {
+    const value = row?.[key] || 'unknown';
+    counts[value] = (counts[value] || 0) + 1;
+    return counts;
+  }, {});
 }
 
 function sumNumbers(values) {

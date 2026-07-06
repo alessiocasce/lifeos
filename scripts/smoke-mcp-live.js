@@ -16,6 +16,7 @@ const EXPECTED_TOOLS = [
   'get_projects_status',
   'get_brain_debug_context',
   'get_whatsapp_outbox_recent',
+  'get_whatsapp_proactive_debug',
   'search_lifeos_vault',
   'get_open_loops',
 ];
@@ -32,6 +33,7 @@ const EXPECTED_RESOURCES = [
   'lifeos://brain/debug',
   'lifeos://brain/recent-actions',
   'lifeos://whatsapp/outbox/recent',
+  'lifeos://whatsapp/proactive-debug',
   'lifeos://vault/recent',
 ];
 
@@ -130,6 +132,17 @@ test('get_recent_workouts returns MCP text and structured content', async () => 
   assertEqual(result.content?.[0]?.type, 'text');
   const parsed = parseToolText(result);
   assert(Array.isArray(parsed.workouts), 'workouts result missing workouts array');
+  assert(Object.hasOwn(parsed, 'sets_truncated'), 'workouts result missing sets_truncated flag');
+  assert(Object.hasOwn(parsed, 'set_limit'), 'workouts result missing set_limit');
+  assert(Object.hasOwn(parsed, 'returned_set_count'), 'workouts result missing returned_set_count');
+  const workoutWithSets = parsed.workouts.find((workout) => Array.isArray(workout.sets) && workout.sets.length);
+  if (workoutWithSets) {
+    const firstSet = workoutWithSets.sets[0];
+    for (const key of ['id', 'workout_id', 'exercise', 'set_number', 'is_warmup', 'weight', 'reps', 'rpe', 'performed_at', 'notes']) {
+      assert(Object.hasOwn(firstSet, key), `workout set missing ${key}`);
+    }
+    assert(workoutWithSets.exercises?.some((exercise) => Array.isArray(exercise.sets)), 'exercise-level set details missing');
+  }
   assert(result.structuredContent, 'missing structuredContent');
   assertNoSecretLikeKeys(parsed);
 });

@@ -14,47 +14,30 @@ const DATE_ONLY_CHECK_TIME = '09:00';
 export const proactiveRuleRegistry = [
   {
     family: 'memo',
-    buildCandidates: buildMemoProactiveCandidates,
+    loadContext: loadMemoProactiveContext,
+    buildCandidates: buildMemoProactiveCandidatesFromContext,
   },
 ];
 
 export async function evaluateProactiveCandidates({ userId = getActionUserId(), now = new Date(), recipient } = {}) {
-  const client = getSupabaseAdmin();
   const nowDate = normalizeDate(now);
-  const memoWindowStart = localDateFromInstant(new Date(nowDate.getTime() - OVERDUE_EXPIRY_HOURS * 60 * 60000));
-  const memoWindowEnd = localDateFromInstant(nowDate);
-
-  const memosResult = await client
-    .from('memos')
-    .select(MEMO_SELECT)
-    .eq('user_id', userId)
-    .eq('status', 'open')
-    .not('memo_date', 'is', null)
-    .gte('memo_date', memoWindowStart)
-    .lte('memo_date', memoWindowEnd)
-    .order('memo_date', { ascending: true })
-    .order('memo_time', { ascending: true, nullsFirst: true });
-  if (memosResult.error) throw memosResult.error;
-
   const candidates = [];
   const skipped = [];
-  for (const memo of memosResult.data ?? []) {
-    for (const rule of proactiveRuleRegistry) {
-      const ruleCandidates = rule.family === 'memo'
-        ? rule.buildCandidates({ memo, now: nowDate, recipient })
-        : [];
-      for (const candidate of ruleCandidates) {
-        const validation = validateProactiveCandidate(candidate);
-        if (!validation.ok) {
-          skipped.push({ candidate, reason: validation.reason });
-          continue;
-        }
-        const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate });
-        if (suppression.suppressed) {
-          skipped.push({ candidate, reason: suppression.reason });
-        } else {
-          candidates.push(candidate);
-        }
+
+  for (const ruleFamily of proactiveRuleRegistry) {
+    const ruleContext = await ruleFamily.loadContext({ userId, now: nowDate, recipient });
+    const familyCandidates = ruleFamily.buildCandidates({ context: ruleContext, userId, now: nowDate, recipient });
+    for (const candidate of familyCandidates) {
+      const validation = validateProactiveCandidate(candidate);
+      if (!validation.ok) {
+        skipped.push({ candidate, reason: validation.reason, family: ruleFamily.family });
+        continue;
+      }
+      const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate });
+      if (suppression.suppressed) {
+        skipped.push({ candidate, reason: suppression.reason, family: ruleFamily.family });
+      } else {
+        candidates.push(candidate);
       }
     }
   }
@@ -64,9 +47,12 @@ export async function evaluateProactiveCandidates({ userId = getActionUserId(), 
 
 export function validateProactiveCandidate(candidate) {
   if (!candidate || typeof candidate !== 'object') return { ok: false, reason: 'invalid_candidate' };
-  const required = ['channel', 'recipient', 'body', 'priority', 'rule_key', 'source_type', 'source_id', 'idempotency_key', 'scheduled_for'];
+  const required = ['channel', 'recipient', 'body', 'priority', 'rule_key', 'source_type', 'idempotency_key', 'scheduled_for'];
   for (const field of required) {
     if (!cleanText(candidate[field], field === 'body' ? 1500 : 240)) return { ok: false, reason: `missing_${field}` };
+  }
+  if (!cleanText(candidate.source_id, 240) && candidate.metadata?.source_required !== false) {
+    return { ok: false, reason: 'missing_source_id' };
   }
   if (candidate.channel !== 'whatsapp') return { ok: false, reason: 'unsupported_channel' };
   if (!['low', 'normal', 'high'].includes(candidate.priority)) return { ok: false, reason: 'invalid_priority' };
@@ -154,6 +140,28 @@ export function buildMemoProactiveCandidates({ memo, now = new Date(), recipient
   return candidates;
 }
 
+export async function loadMemoProactiveContext({ userId = getActionUserId(), now = new Date() } = {}) {
+  const nowDate = normalizeDate(now);
+  const memoWindowStart = localDateFromInstant(new Date(nowDate.getTime() - OVERDUE_EXPIRY_HOURS * 60 * 60000));
+  const memoWindowEnd = localDateFromInstant(nowDate);
+  const memosResult = await getSupabaseAdmin()
+    .from('memos')
+    .select(MEMO_SELECT)
+    .eq('user_id', userId)
+    .eq('status', 'open')
+    .not('memo_date', 'is', null)
+    .gte('memo_date', memoWindowStart)
+    .lte('memo_date', memoWindowEnd)
+    .order('memo_date', { ascending: true })
+    .order('memo_time', { ascending: true, nullsFirst: true });
+  if (memosResult.error) throw memosResult.error;
+  return { family: 'memo', memos: memosResult.data ?? [] };
+}
+
+export function buildMemoProactiveCandidatesFromContext({ context, now = new Date(), recipient } = {}) {
+  return (context?.memos ?? []).flatMap((memo) => buildMemoProactiveCandidates({ memo, now, recipient }));
+}
+
 export async function shouldSuppressProactiveCandidate({ userId = getActionUserId(), candidate, now = new Date() } = {}) {
   const nowDate = normalizeDate(now);
   if (!candidate?.recipient) return { suppressed: true, reason: 'missing_recipient' };
@@ -189,42 +197,99 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
     if (!priorDue.data) return { suppressed: true, reason: 'prior_due_reminder_missing' };
   }
 
-  const config = await loadRuleConfig({ userId, ruleKey: candidate.rule_key, channel: candidate.channel });
+  const config = await loadProactiveRuleConfig({ userId, ruleKey: candidate.rule_key, channel: candidate.channel });
+  const globalPreferences = await loadProactiveGlobalPreferences({ userId, channel: candidate.channel });
   if (!config.enabled) return { suppressed: true, reason: 'rule_disabled' };
+  if (!globalPreferences.enabled) return { suppressed: true, reason: 'global_proactive_disabled' };
   const isExactDue = Boolean(candidate.metadata?.exact_due_reminder || candidate.metadata?.quiet_hours_bypass);
   if (!isExactDue && isWithinQuietHours(nowDate, config.quiet_hours_start, config.quiet_hours_end)) {
     return { suppressed: true, reason: 'quiet_hours' };
   }
 
+  const preferences = mergeAttentionPreferences(config, globalPreferences);
+  const attentionBudget = await getAttentionBudget({
+    userId,
+    channel: candidate.channel,
+    now: nowDate,
+    minGapMinutes: preferences.min_gap_minutes,
+  });
+  const attention = shouldSpendAttention({ candidate, preferences, attentionBudget, now: nowDate });
+  if (!attention.allowed) return { suppressed: true, reason: attention.reason };
+
+  return { suppressed: false, reason: null };
+}
+
+export async function loadProactiveRuleConfig({ userId = getActionUserId(), ruleKey, channel = 'whatsapp' } = {}) {
+  const result = await getSupabaseAdmin()
+    .from('brain_proactive_rules')
+    .select('enabled, quiet_hours_start, quiet_hours_end, max_per_day, min_gap_minutes, config')
+    .eq('user_id', userId)
+    .eq('rule_key', ruleKey)
+    .eq('channel', channel)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return normalizeRuleConfig(result.data);
+}
+
+export async function loadProactiveGlobalPreferences({ userId = getActionUserId(), channel = 'whatsapp' } = {}) {
+  const result = await getSupabaseAdmin()
+    .from('brain_proactive_rules')
+    .select('enabled, quiet_hours_start, quiet_hours_end, max_per_day, min_gap_minutes, config')
+    .eq('user_id', userId)
+    .eq('rule_key', 'global')
+    .eq('channel', channel)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return normalizeRuleConfig(result.data);
+}
+
+export async function getAttentionBudget({ userId = getActionUserId(), channel = 'whatsapp', now = new Date(), minGapMinutes = DEFAULT_MIN_GAP_MINUTES } = {}) {
+  const nowDate = normalizeDate(now);
+  const client = getSupabaseAdmin();
   const dayStart = startOfLocalDayUtcIso(nowDate);
   const daily = await client
     .from('brain_outbox_messages')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('channel', candidate.channel)
+    .eq('channel', channel)
     .gte('created_at', dayStart)
-    .in('status', ['queued', 'claimed', 'sent']);
+    .in('status', ['queued', 'claimed', 'sent', 'failed', 'expired']);
   if (daily.error) throw daily.error;
-  if (Number(daily.count ?? 0) >= Number(config.max_per_day ?? DEFAULT_MAX_PER_DAY)) {
-    return { suppressed: true, reason: 'daily_cap' };
-  }
 
-  if (!isExactDue && Number(config.min_gap_minutes ?? DEFAULT_MIN_GAP_MINUTES) > 0) {
-    const since = new Date(nowDate.getTime() - Number(config.min_gap_minutes) * 60000).toISOString();
-    const recent = await client
+  let recent = null;
+  if (Number(minGapMinutes ?? 0) > 0) {
+    const since = new Date(nowDate.getTime() - Number(minGapMinutes) * 60000).toISOString();
+    const recentResult = await client
       .from('brain_outbox_messages')
-      .select('id')
+      .select('id, rule_key, created_at, status')
       .eq('user_id', userId)
-      .eq('channel', candidate.channel)
+      .eq('channel', channel)
       .gte('created_at', since)
       .in('status', ['queued', 'claimed', 'sent'])
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (recent.error) throw recent.error;
-    if (recent.data) return { suppressed: true, reason: 'min_gap' };
+    if (recentResult.error) throw recentResult.error;
+    recent = recentResult.data ?? null;
   }
 
-  return { suppressed: false, reason: null };
+  return {
+    daily_count: Number(daily.count ?? 0),
+    recent_message: recent,
+    min_gap_minutes: Number(minGapMinutes ?? 0),
+  };
+}
+
+export function shouldSpendAttention({ candidate, preferences, attentionBudget } = {}) {
+  const maxPerDay = Number(preferences?.max_per_day ?? DEFAULT_MAX_PER_DAY);
+  if (Number.isFinite(maxPerDay) && maxPerDay > 0 && Number(attentionBudget?.daily_count ?? 0) >= maxPerDay) {
+    return { allowed: false, reason: 'daily_cap' };
+  }
+  const isExactDue = Boolean(candidate?.metadata?.exact_due_reminder || candidate?.metadata?.quiet_hours_bypass);
+  if (!isExactDue && attentionBudget?.recent_message) {
+    return { allowed: false, reason: 'min_gap' };
+  }
+  return { allowed: true, reason: null };
 }
 
 export function normalizeMemoForProactive(memo) {
@@ -316,22 +381,26 @@ function buildMemoCandidate({ memo, recipient, ruleKey, priority, scheduledFor, 
   };
 }
 
-async function loadRuleConfig({ userId, ruleKey, channel = 'whatsapp' }) {
-  const result = await getSupabaseAdmin()
-    .from('brain_proactive_rules')
-    .select('enabled, quiet_hours_start, quiet_hours_end, max_per_day, min_gap_minutes, config')
-    .eq('user_id', userId)
-    .eq('rule_key', ruleKey)
-    .eq('channel', channel)
-    .maybeSingle();
-  if (result.error) throw result.error;
+function normalizeRuleConfig(row) {
   return {
-    enabled: result.data?.enabled ?? true,
-    quiet_hours_start: normalizeTimeString(result.data?.quiet_hours_start) || DEFAULT_QUIET_START,
-    quiet_hours_end: normalizeTimeString(result.data?.quiet_hours_end) || DEFAULT_QUIET_END,
-    max_per_day: Number.isFinite(Number(result.data?.max_per_day)) ? Number(result.data.max_per_day) : DEFAULT_MAX_PER_DAY,
-    min_gap_minutes: Number.isFinite(Number(result.data?.min_gap_minutes)) ? Number(result.data.min_gap_minutes) : DEFAULT_MIN_GAP_MINUTES,
-    config: result.data?.config && typeof result.data.config === 'object' ? result.data.config : {},
+    enabled: row?.enabled ?? true,
+    quiet_hours_start: normalizeTimeString(row?.quiet_hours_start) || DEFAULT_QUIET_START,
+    quiet_hours_end: normalizeTimeString(row?.quiet_hours_end) || DEFAULT_QUIET_END,
+    max_per_day: Number.isFinite(Number(row?.max_per_day)) ? Number(row.max_per_day) : DEFAULT_MAX_PER_DAY,
+    min_gap_minutes: Number.isFinite(Number(row?.min_gap_minutes)) ? Number(row.min_gap_minutes) : DEFAULT_MIN_GAP_MINUTES,
+    config: row?.config && typeof row.config === 'object' ? row.config : {},
+  };
+}
+
+function mergeAttentionPreferences(ruleConfig, globalConfig) {
+  const ruleMax = Number(ruleConfig?.max_per_day ?? DEFAULT_MAX_PER_DAY);
+  const globalMax = Number(globalConfig?.max_per_day ?? DEFAULT_MAX_PER_DAY);
+  const ruleGap = Number(ruleConfig?.min_gap_minutes ?? DEFAULT_MIN_GAP_MINUTES);
+  const globalGap = Number(globalConfig?.min_gap_minutes ?? DEFAULT_MIN_GAP_MINUTES);
+  return {
+    enabled: Boolean(ruleConfig?.enabled && globalConfig?.enabled),
+    max_per_day: Math.min(ruleMax, globalMax),
+    min_gap_minutes: Math.max(ruleGap, globalGap),
   };
 }
 

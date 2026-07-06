@@ -20,6 +20,28 @@ export async function resolveProactiveWhatsappReply({ message, brainChat, contex
   };
 }
 
+export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, activePendingAction, now = new Date() } = {}) {
+  if (!activePendingAction) return { prioritize: false, reason: 'no_pending_action', intent: 'other' };
+  const selection = selectProactiveMemoReplyTarget({ message, brainChat, now });
+  const intent = selection.intent?.intent ?? 'other';
+  if (intent === 'other' || selection.type === 'none') {
+    return { prioritize: false, reason: 'no_proactive_reply_intent', intent };
+  }
+  if (messageReferencesPendingAction(message, activePendingAction)) {
+    return { prioritize: false, reason: 'message_references_pending_action', intent };
+  }
+  return {
+    prioritize: true,
+    reason: selection.type === 'stale'
+      ? 'stale_proactive_context_needs_clarification'
+      : selection.type === 'ambiguous'
+        ? 'ambiguous_proactive_context_needs_clarification'
+        : 'latest_proactive_reply_intent',
+    intent,
+    selection_type: selection.type,
+  };
+}
+
 export async function resolveProactiveMemoReply({ message, brainChat, context } = {}) {
   const selection = selectProactiveMemoReplyTarget({ message, brainChat, now: new Date() });
   if (selection.type === 'none') return null;
@@ -53,13 +75,12 @@ export async function resolveProactiveMemoReply({ message, brainChat, context } 
 
   const memoId = proactive.source_id;
   if (!memoId) {
-    return buildProactiveReplyResult({
+    return buildProactiveClarificationResult({
       answer: proactive.language === 'it'
-        ? 'Mi manca il riferimento al promemoria. Apri Memos per aggiornarlo.'
-        : 'I am missing the reminder reference. Open Memos to update it.',
-      actionType: 'proactive_memo_unresolved',
-      data: { reason: 'missing_source_id' },
+        ? 'Mi manca il riferimento al promemoria. Quale promemoria vuoi aggiornare?'
+        : 'I am missing the reminder reference. Which reminder do you want to update?',
       workingContext: proactive.working_context,
+      reason: 'Proactive memo reply was missing source_id.',
       trace: { reason: 'missing_source_id', selection_type: selection.type },
     });
   }
@@ -188,6 +209,7 @@ export function extractRecentProactiveMemoMessages(brainChat, { now = new Date()
 export function selectProactiveMemoReplyTarget({ message, brainChat, now = new Date() } = {}) {
   const intent = normalizeProactiveMemoReply(message);
   if (intent.intent === 'other') return { type: 'none', intent };
+  if (looksLikeIndependentProactiveCommand(message)) return { type: 'none', intent, reason: 'independent_command' };
   const all = extractRecentProactiveMemoMessages(brainChat, { now, includeExpired: true });
   if (!all.length) return { type: 'none', intent };
   const language = all[0]?.language === 'en' ? 'en' : 'it';
@@ -223,6 +245,12 @@ export function normalizeProactiveMemoReply(message) {
     return { intent: 'done', confidence: 0.9, normalized: text };
   }
   return { intent: 'other', confidence: 0.2, normalized: text };
+}
+
+export function looksLikeIndependentProactiveCommand(message) {
+  const text = normalizeText(message);
+  if (!text) return false;
+  return /\b(?:ricordami|remind me|crea(?:re)?\s+(?:memo|promemoria)|create\s+(?:memo|reminder)|segna|segnami|log|save|blocca|schedule|aggiungi\s+evento|create\s+event|ho speso|spent|ho preso|took|sto andando a dormire|vado a dormire|sleep start)\b/.test(text);
 }
 
 export function buildProactiveWorkingContextFromOutbox(outboxMessage) {
@@ -352,6 +380,31 @@ function proactiveMemoTitleMatches(message, title) {
     .filter((token) => token.length >= 4);
   if (!text || !tokens.length) return false;
   return tokens.some((token) => text.includes(token));
+}
+
+function messageReferencesPendingAction(message, pendingAction) {
+  const text = normalizeText(message);
+  if (!text) return false;
+  const source = [
+    pendingAction?.summary,
+    pendingAction?.confirmation_question,
+    pendingAction?.source_user_message,
+    pendingAction?.args?.title,
+    pendingAction?.args?.memo_title,
+    pendingAction?.args?.event_title,
+    pendingAction?.args?.activity,
+    pendingAction?.args?.health_field,
+    pendingAction?.args?.time,
+    pendingAction?.args?.start_time,
+    pendingAction?.args?.end_time,
+  ].filter(Boolean).join(' ');
+  const tokens = normalizeText(source)
+    .split(' ')
+    .filter((token) => token.length >= 4 || /^\d{1,2}:?\d{2}$/.test(token));
+  if (!tokens.length) return false;
+  const unique = [...new Set(tokens)];
+  const matches = unique.filter((token) => text.includes(token));
+  return matches.length >= Math.min(2, unique.length) || (text.length > 12 && matches.some((token) => token.length >= 6));
 }
 
 async function updateMemoStatus({ memoId, status }) {

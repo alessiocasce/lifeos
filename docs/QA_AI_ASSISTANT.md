@@ -34,6 +34,11 @@ Expected:
 - `?`, `cosa?`, `non ho capito`, and `what?` normalize to clarification.
 - Naps/pisolini do not coerce to sleep start.
 - Simple explicit writes skip Brain Vault retrieval.
+- Proactive WhatsApp replies can win over unrelated stale pending actions when the latest assistant message is a proactive reminder.
+- New explicit commands such as `crea promemoria domani` are not treated as proactive reminder replies.
+- Missing-source proactive replies are read-only clarifications, not write-looking actions.
+- Outbox delivery priority sorts `high -> normal -> low`.
+- WhatsApp sender aliases canonicalize `@lid` and `@c.us` identities for stable threads/outbox rows.
 - Negative write intent wins over action wording.
 - Working Context exposes enough prior-subject date/time data for `aggiungilo anche al calendario`.
 
@@ -436,6 +441,9 @@ MCP is an external read-only context/debug layer. It is not the in-app Brain and
 8. Confirm `GET /api/mcp` returns only safe health/capability metadata.
 9. Confirm missing or invalid auth returns `401` for private POST operations and includes OAuth protected-resource metadata when OAuth is enabled.
 10. Confirm ChatGPT Connector OAuth discovery/linking does not add write-capable tools or expose private data on the authorization page.
+11. Call MCP tool `get_whatsapp_proactive_debug`.
+12. Confirm it returns read-only outbox counts, recent statuses, rule keys, source ids, ACK/retry summaries, and safe error previews.
+13. Confirm it does not enqueue, ACK, send WhatsApp messages, or mutate records.
 
 ## API Security
 

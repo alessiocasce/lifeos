@@ -17,8 +17,9 @@ export function requireWhatsappBridgeSecret(req) {
 }
 
 export function validateWhatsappSender(sender, isGroup = false) {
-  const normalized = cleanText(sender, 180);
-  if (!normalized) throw new HttpError(400, 'recipient is required.');
+  const raw = normalizeWhatsappSenderId(sender);
+  if (!raw) throw new HttpError(400, 'recipient is required.');
+  const canonical = canonicalizeWhatsappSender(raw);
 
   const allowedSenders = getAllowedWhatsappSenders();
   if (!allowedSenders.size) {
@@ -29,22 +30,74 @@ export function validateWhatsappSender(sender, isGroup = false) {
       throw new HttpError(403, 'WhatsApp group messages require an explicit allowed sender.');
     }
     console.warn('[LifeOS WhatsApp] LIFEOS_WHATSAPP_ALLOWED_SENDERS is not configured; development sender allowed.');
-    return normalized;
+    return canonical;
   }
 
-  if (!allowedSenders.has(normalized)) {
+  const allowedCanonicalSenders = getAllowedCanonicalWhatsappSenders();
+  if (!allowedSenders.has(raw) && !allowedCanonicalSenders.has(canonical)) {
     throw new HttpError(403, 'Sender is not allowed.');
   }
-  return normalized;
+  return canonical;
 }
 
-export function getAllowedWhatsappSenders() {
+export function getAllowedWhatsappSenders(env = process.env) {
   return new Set(
-    String(process.env.LIFEOS_WHATSAPP_ALLOWED_SENDERS ?? '')
+    String(env.LIFEOS_WHATSAPP_ALLOWED_SENDERS ?? '')
       .split(',')
-      .map((item) => item.trim())
+      .map((item) => normalizeWhatsappSenderId(item))
       .filter(Boolean),
   );
+}
+
+export function getAllowedCanonicalWhatsappSenders(env = process.env) {
+  return new Set([...getAllowedWhatsappSenders(env)].map((sender) => canonicalizeWhatsappSender(sender, env)));
+}
+
+export function normalizeWhatsappSenderId(raw) {
+  return cleanText(raw, 180);
+}
+
+export function canonicalizeWhatsappSender(raw, env = process.env) {
+  const normalized = normalizeWhatsappSenderId(raw);
+  if (!normalized) return null;
+  return getWhatsappSenderAliasMap(env).get(normalized) || normalized;
+}
+
+export function getWhatsappSenderAliasMap(env = process.env) {
+  const aliases = new Map();
+  const config = String(env.LIFEOS_WHATSAPP_SENDER_ALIASES ?? '').trim();
+  if (!config) return aliases;
+  for (const group of config.split(';')) {
+    const [canonicalRaw, aliasRaw = ''] = group.split('=');
+    const canonical = normalizeWhatsappSenderId(canonicalRaw);
+    if (!canonical) continue;
+    aliases.set(canonical, canonical);
+    for (const alias of aliasRaw.split(',')) {
+      const normalizedAlias = normalizeWhatsappSenderId(alias);
+      if (normalizedAlias) aliases.set(normalizedAlias, canonical);
+    }
+  }
+  return aliases;
+}
+
+export function getWhatsappSenderAliasesForCanonical(canonicalRaw, env = process.env) {
+  const canonical = canonicalizeWhatsappSender(canonicalRaw, env);
+  if (!canonical) return [];
+  const aliases = [canonical];
+  for (const [alias, mappedCanonical] of getWhatsappSenderAliasMap(env)) {
+    if (mappedCanonical === canonical) aliases.push(alias);
+  }
+  return [...new Set(aliases)];
+}
+
+export function describeWhatsappSender(raw, env = process.env) {
+  const normalized = normalizeWhatsappSenderId(raw);
+  const canonical = canonicalizeWhatsappSender(normalized, env);
+  return {
+    raw: normalized,
+    canonical,
+    aliased: Boolean(normalized && canonical && normalized !== canonical),
+  };
 }
 
 export function cleanWhatsappText(value, maxLength = 180) {

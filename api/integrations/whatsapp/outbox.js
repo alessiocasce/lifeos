@@ -9,7 +9,7 @@ import {
 } from '../../_utils/http.js';
 import { getActionUserId } from '../../_utils/supabaseAdmin.js';
 import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
-import { requireWhatsappBridgeSecret, validateWhatsappSender, cleanWhatsappText } from '../../_utils/whatsappBridge.js';
+import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender, cleanWhatsappText } from '../../_utils/whatsappBridge.js';
 import { evaluateProactiveCandidates } from '../../_utils/brainProactiveRules.js';
 import { ackOutboxMessage, enqueueOutboxMessage, pollOutboxMessages } from '../../_utils/brainOutbox.js';
 
@@ -24,17 +24,19 @@ export default async function handler(req, res) {
     requireWhatsappBridgeSecret(req);
     const body = await readJsonBody(req);
     const action = getOutboxAction(req, body);
-    const recipient = validateWhatsappSender(body.recipient ?? body.to ?? body.from, Boolean(body.is_group ?? body.isGroup));
+    const rawRecipient = body.recipient ?? body.to ?? body.from;
+    const recipient = validateWhatsappSender(rawRecipient, Boolean(body.is_group ?? body.isGroup));
+    const recipientInfo = describeWhatsappSender(rawRecipient);
     const bridgeId = cleanWhatsappText(body.bridge_id ?? body.bridgeId, 120);
 
     if (action === 'evaluate') {
-      return handleEvaluate({ res, context, debugFlags, recipient, bridgeId });
+      return handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId });
     }
     if (action === 'poll') {
-      return handlePoll({ res, context, debugFlags, body, recipient, bridgeId });
+      return handlePoll({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId });
     }
     if (action === 'ack') {
-      return handleAck({ res, context, debugFlags, body, recipient, bridgeId });
+      return handleAck({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId });
     }
 
     throw new HttpError(400, 'Unsupported outbox action.');
@@ -43,7 +45,7 @@ export default async function handler(req, res) {
   }
 }
 
-async function handleEvaluate({ res, context, debugFlags, recipient, bridgeId }) {
+async function handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId }) {
   const userId = getActionUserId();
   const evaluation = await evaluateProactiveCandidates({ userId, recipient });
   const queued = [];
@@ -53,6 +55,8 @@ async function handleEvaluate({ res, context, debugFlags, recipient, bridgeId })
     const metadata = {
       ...candidate.metadata,
       bridge_id: bridgeId,
+      whatsapp_recipient_raw: recipientInfo.raw,
+      whatsapp_recipient_canonical: recipient,
       proactive_trace: {
         ...(candidate.metadata?.proactive_trace ?? {}),
         decision: 'queued',
@@ -98,7 +102,7 @@ async function handleEvaluate({ res, context, debugFlags, recipient, bridgeId })
   });
 }
 
-async function handlePoll({ res, context, debugFlags, body, recipient, bridgeId }) {
+async function handlePoll({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId }) {
   const messages = await pollOutboxMessages({
     recipient,
     bridgeId,
@@ -114,6 +118,8 @@ async function handlePoll({ res, context, debugFlags, body, recipient, bridgeId 
         outbox_claimed_count: messages.diagnostics?.outbox_claimed_count ?? messages.length,
         outbox_reclaimed_count: messages.diagnostics?.outbox_reclaimed_count ?? null,
         outbox_expired_count: messages.diagnostics?.outbox_expired_count ?? null,
+        whatsapp_recipient_raw: recipientInfo.raw,
+        whatsapp_recipient_canonical: recipient,
         claimed: sanitizeTraceValue(messages.map((item) => ({
           id: item.id,
           rule_key: item.rule_key,
@@ -126,7 +132,7 @@ async function handlePoll({ res, context, debugFlags, body, recipient, bridgeId 
   });
 }
 
-async function handleAck({ res, context, debugFlags, body, recipient, bridgeId }) {
+async function handleAck({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId }) {
   const row = await ackOutboxMessage({
     recipient,
     messageId: body.message_id ?? body.messageId ?? body.id,
@@ -134,6 +140,8 @@ async function handleAck({ res, context, debugFlags, body, recipient, bridgeId }
     error: body.error,
     metadata: {
       bridge_id: bridgeId,
+      whatsapp_recipient_raw: recipientInfo.raw,
+      whatsapp_recipient_canonical: recipient,
       provider_message_id: cleanWhatsappText(body.provider_message_id ?? body.providerMessageId, 180),
       dry_run: Boolean(body.dry_run ?? body.dryRun),
     },
@@ -155,6 +163,8 @@ async function handleAck({ res, context, debugFlags, body, recipient, bridgeId }
           failed_at: row.failed_at,
           last_error: row.last_error,
           outbox_ack_transition: row.ack_metadata?.outbox_ack_transition ?? null,
+          whatsapp_recipient_raw: recipientInfo.raw,
+          whatsapp_recipient_canonical: recipient,
           ack_metadata: row.ack_metadata,
         }),
       },

@@ -2,6 +2,7 @@ import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { findOrCreateWhatsappBrainThread, persistBrainAssistantMessage } from './brain.js';
 import { buildProactiveWorkingContextFromOutbox } from './brainProactiveReplies.js';
+import { canonicalizeWhatsappSender } from './whatsappBridge.js';
 import {
   buildAckMetadataPatch,
   buildClaimMetadataPatch,
@@ -12,6 +13,8 @@ import {
   getClaimReclaimTimeoutMinutes,
   nextOutboxStatusForAck,
   normalizeAckStatus,
+  normalizeOutboxPriority,
+  sortOutboxRowsForDelivery,
 } from './brainOutboxStateMachine.js';
 
 const MAX_OUTBOX_LIMIT = 10;
@@ -42,7 +45,7 @@ export async function enqueueOutboxMessage({
   const payload = {
     user_id: userId,
     channel: normalizeChannel(channel),
-    recipient: requiredText(recipient, 'recipient', 180),
+    recipient: requiredText(canonicalizeWhatsappSender(recipient), 'recipient', 180),
     body: requiredText(body, 'body', 1500),
     priority: normalizePriority(priority),
     rule_key: requiredText(ruleKey, 'ruleKey', 80),
@@ -83,30 +86,33 @@ export async function pollOutboxMessages({
   userId = getActionUserId(),
 } = {}) {
   const safeRecipient = requiredText(recipient, 'recipient', 180);
+  const canonicalRecipient = requiredText(canonicalizeWhatsappSender(safeRecipient), 'recipient', 180);
+  const recipients = recipientVariants(safeRecipient);
   const safeChannel = normalizeChannel(channel);
   const safeLimit = Math.min(MAX_OUTBOX_LIMIT, Math.max(1, Math.trunc(Number(limit)) || DEFAULT_OUTBOX_LIMIT));
   const client = getSupabaseAdmin();
   const now = new Date().toISOString();
 
-  const expiredCount = await expireStaleOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
-  const reclaimed = await reclaimStaleClaimedOutboxMessages({ client, userId, recipient: safeRecipient, channel: safeChannel, now });
+  const expiredCount = await expireStaleOutboxMessages({ client, userId, recipient: canonicalRecipient, channel: safeChannel, now, recipients });
+  const reclaimed = await reclaimStaleClaimedOutboxMessages({ client, userId, recipient: canonicalRecipient, channel: safeChannel, now, recipients });
+  const fetchLimit = Math.min(50, Math.max(safeLimit * 4, safeLimit));
 
   const due = await client
     .from('brain_outbox_messages')
     .select(outboxSelect())
     .eq('user_id', userId)
-    .eq('recipient', safeRecipient)
+    .in('recipient', recipients)
     .eq('channel', safeChannel)
     .eq('status', 'queued')
     .lte('scheduled_for', now)
     .or(`expires_at.is.null,expires_at.gt.${now}`)
-    .order('priority', { ascending: false })
     .order('scheduled_for', { ascending: true })
-    .limit(safeLimit);
+    .order('created_at', { ascending: true })
+    .limit(fetchLimit);
   if (due.error) throw due.error;
 
   const claimed = [];
-  for (const row of due.data ?? []) {
+  for (const row of sortOutboxRowsForDelivery(due.data ?? [], safeLimit)) {
     const update = await client
       .from('brain_outbox_messages')
       .update({
@@ -143,10 +149,12 @@ export async function reclaimStaleClaimedOutboxMessages({
   client = getSupabaseAdmin(),
   userId = getActionUserId(),
   recipient,
+  recipients = null,
   channel = 'whatsapp',
   now = new Date().toISOString(),
 } = {}) {
   const safeRecipient = requiredText(recipient, 'recipient', 180);
+  const recipientList = Array.isArray(recipients) && recipients.length ? recipients : recipientVariants(safeRecipient);
   const safeChannel = normalizeChannel(channel);
   const nowDate = normalizeDate(now);
   const cutoff = new Date(nowDate.getTime() - getClaimReclaimTimeoutMinutes() * 60000).toISOString();
@@ -154,7 +162,7 @@ export async function reclaimStaleClaimedOutboxMessages({
     .from('brain_outbox_messages')
     .select(outboxSelect())
     .eq('user_id', userId)
-    .eq('recipient', safeRecipient)
+    .in('recipient', recipientList)
     .eq('channel', safeChannel)
     .eq('status', 'claimed')
     .is('sent_at', null)
@@ -193,6 +201,8 @@ export async function ackOutboxMessage({
   const safeStatus = normalizeAckStatus(status);
   if (!safeStatus) throw new HttpError(400, 'status must be sent or failed.');
   const safeRecipient = requiredText(recipient, 'recipient', 180);
+  const canonicalRecipient = requiredText(canonicalizeWhatsappSender(safeRecipient), 'recipient', 180);
+  const recipients = recipientVariants(safeRecipient);
   const safeChannel = normalizeChannel(channel);
   const id = requiredText(messageId, 'message_id', 80);
   const client = getSupabaseAdmin();
@@ -202,7 +212,7 @@ export async function ackOutboxMessage({
     .select(outboxSelect())
     .eq('id', id)
     .eq('user_id', userId)
-    .eq('recipient', safeRecipient)
+    .in('recipient', recipients)
     .eq('channel', safeChannel)
     .maybeSingle();
   if (current.error) throw current.error;
@@ -212,7 +222,7 @@ export async function ackOutboxMessage({
     const sent = await markOutboxSent({ client, row: current.data, metadata });
     const persisted = await persistSentProactiveMessageToWhatsappThread({
       userId,
-      recipient: safeRecipient,
+      recipient: canonicalRecipient,
       outboxMessage: sent,
     });
     if (persisted?.id && !sent.ack_metadata?.assistant_message_id) {
@@ -240,14 +250,17 @@ export async function ackOutboxMessage({
 export async function persistSentProactiveMessageToWhatsappThread({ userId = getActionUserId(), recipient, outboxMessage } = {}) {
   if (!outboxMessage?.id || outboxMessage.status !== 'sent') return null;
   if (outboxMessage.ack_metadata?.assistant_message_id) return null;
-  const thread = await findOrCreateWhatsappBrainThread({ sender: recipient });
+  const canonicalRecipient = requiredText(canonicalizeWhatsappSender(recipient), 'recipient', 180);
+  const thread = await findOrCreateWhatsappBrainThread({ sender: canonicalRecipient });
   if (!thread?.id) return null;
+  const existing = await findExistingProactiveAssistantMessage({ userId, threadId: thread.id, outboxMessageId: outboxMessage.id });
+  if (existing) return existing;
   const metadata = outboxMessage.metadata && typeof outboxMessage.metadata === 'object' ? outboxMessage.metadata : {};
   const chat = {
     thread,
     source: 'whatsapp',
     channelMetadata: {
-      whatsapp_sender: recipient,
+      whatsapp_sender: canonicalRecipient,
       whatsapp_message_id: `outbox:${outboxMessage.id}`,
     },
     assistantPersisted: false,
@@ -269,6 +282,24 @@ export async function persistSentProactiveMessageToWhatsappThread({ userId = get
       expected_reply_type: metadata.expected_reply_type || MEMO_REPLY_TYPE,
     },
   });
+}
+
+async function findExistingProactiveAssistantMessage({ userId, threadId, outboxMessageId }) {
+  const result = await getSupabaseAdmin()
+    .from('ai_chat_messages')
+    .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
+    .eq('user_id', userId)
+    .eq('thread_id', threadId)
+    .eq('role', 'assistant')
+    .contains('metadata', {
+      proactive_message: true,
+      outbox_message_id: outboxMessageId,
+    })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return result.data ?? null;
 }
 
 async function markOutboxSent({ client, row, metadata = {} }) {
@@ -335,12 +366,13 @@ async function markOutboxFailed({ client, row, error, metadata = {} }) {
   return update.data;
 }
 
-async function expireStaleOutboxMessages({ client, userId, recipient, channel, now }) {
+async function expireStaleOutboxMessages({ client, userId, recipient, recipients = null, channel, now }) {
+  const recipientList = Array.isArray(recipients) && recipients.length ? recipients : recipientVariants(recipient);
   const result = await client
     .from('brain_outbox_messages')
     .update({ status: 'expired' })
     .eq('user_id', userId)
-    .eq('recipient', recipient)
+    .in('recipient', recipientList)
     .eq('channel', channel)
     .eq('status', 'queued')
     .not('expires_at', 'is', null)
@@ -393,8 +425,7 @@ function normalizeChannel(value) {
 }
 
 function normalizePriority(value) {
-  const text = String(value ?? 'normal').trim().toLowerCase();
-  return ['low', 'normal', 'high'].includes(text) ? text : 'normal';
+  return normalizeOutboxPriority(value);
 }
 
 function normalizeDateTime(value, field) {
@@ -417,6 +448,12 @@ function requiredText(value, field, max = 1000) {
 function optionalText(value, max = 1000) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text ? text.slice(0, max) : null;
+}
+
+function recipientVariants(value) {
+  const raw = requiredText(value, 'recipient', 180);
+  const canonical = requiredText(canonicalizeWhatsappSender(raw), 'recipient', 180);
+  return [...new Set([canonical, raw].filter(Boolean))];
 }
 
 function compactMetadata(value) {

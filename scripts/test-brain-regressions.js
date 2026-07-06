@@ -19,19 +19,32 @@ import {
   computeClaimRecovery,
   computeRetryBackoff,
   nextOutboxStatusForAck,
+  sortOutboxRowsForDelivery,
 } from '../api/_utils/brainOutboxStateMachine.js';
 import {
   buildProactiveWorkingContextFromOutbox,
+  looksLikeIndependentProactiveCommand,
   normalizeProactiveMemoReply,
+  resolveProactiveMemoReply,
   selectProactiveMemoReplyTarget,
+  shouldPrioritizeProactiveReplyOverPending,
 } from '../api/_utils/brainProactiveReplies.js';
 import {
   buildMemoIdempotencyKey,
   buildMemoProactiveCandidates,
+  buildMemoProactiveCandidatesFromContext,
   isWithinQuietHours,
   localDateTimeToUtcDate,
+  proactiveRuleRegistry,
+  shouldSpendAttention,
   validateProactiveCandidate,
 } from '../api/_utils/brainProactiveRules.js';
+import { localDateRangeToUtcIso, localRangeToUtcWindow, startOfLocalDayUtcIso } from '../api/_utils/date.js';
+import {
+  canonicalizeWhatsappSender,
+  getAllowedCanonicalWhatsappSenders,
+  validateWhatsappSender,
+} from '../api/_utils/whatsappBridge.js';
 import { hasNegativeWriteIntent } from '../api/ai/chat.js';
 import {
   dirtySleepStartPendingActions,
@@ -404,6 +417,22 @@ test('outbox state machine allows only safe ACK transitions', () => {
   assert.equal(canAckOutboxMessage({ row: { id: '1', status: 'claimed' }, ackStatus: 'failed' }).allowed, true);
 });
 
+test('outbox delivery ordering uses priority rank before schedule time', () => {
+  const ordered = sortOutboxRowsForDelivery([
+    { id: 'low-old', priority: 'low', scheduled_for: '2026-06-18T08:00:00.000Z', created_at: '2026-06-18T07:00:00.000Z' },
+    { id: 'normal-mid', priority: 'normal', scheduled_for: '2026-06-18T07:00:00.000Z', created_at: '2026-06-18T06:00:00.000Z' },
+    { id: 'high-late', priority: 'high', scheduled_for: '2026-06-18T10:00:00.000Z', created_at: '2026-06-18T09:00:00.000Z' },
+    { id: 'unknown', priority: 'urgent', scheduled_for: '2026-06-18T05:00:00.000Z', created_at: '2026-06-18T04:00:00.000Z' },
+  ], 3);
+  assert.deepEqual(ordered.map((row) => row.id), ['high-late', 'normal-mid', 'low-old']);
+
+  const samePriority = sortOutboxRowsForDelivery([
+    { id: 'later', priority: 'normal', scheduled_for: '2026-06-18T09:00:00.000Z', created_at: '2026-06-18T08:30:00.000Z' },
+    { id: 'earlier', priority: 'normal', scheduled_for: '2026-06-18T08:00:00.000Z', created_at: '2026-06-18T08:30:00.000Z' },
+  ]);
+  assert.deepEqual(samePriority.map((row) => row.id), ['earlier', 'later']);
+});
+
 test('claimed outbox recovery classifies stale, expired, and max-attempt rows', () => {
   const now = new Date('2026-06-18T10:00:00.000Z');
   assert.deepEqual(computeClaimRecovery({
@@ -491,6 +520,54 @@ test('proactive memo reply selects one recent reminder target', () => {
   assert.equal(selection.proactive.source_id, proactiveMemoFixtures.timedMemo.id);
 });
 
+test('proactive reminder replies can win over unrelated pending actions', () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-1',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const decision = shouldPrioritizeProactiveReplyOverPending({
+    message: 'fatto',
+    brainChat,
+    activePendingAction: staleSleepPendingAction,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(decision.prioritize, true, compact(decision));
+  assert.equal(decision.intent, 'done');
+
+  const noProactive = shouldPrioritizeProactiveReplyOverPending({
+    message: 'ok',
+    brainChat: buildProactiveBrainChat([]),
+    activePendingAction: staleSleepPendingAction,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(noProactive.prioritize, false, compact(noProactive));
+});
+
+test('stale proactive reply does not dangerously confirm unrelated pending action', () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-old',
+      created_at: '2026-06-18T01:00:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const decision = shouldPrioritizeProactiveReplyOverPending({
+    message: 'ok',
+    brainChat,
+    activePendingAction: staleSleepPendingAction,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(decision.prioritize, true, compact(decision));
+  assert.equal(decision.reason, 'stale_proactive_context_needs_clarification');
+});
+
 test('stale proactive memo reply asks clarification instead of selecting target', () => {
   const brainChat = buildProactiveBrainChat([
     proactiveAssistantMessage({
@@ -507,6 +584,26 @@ test('stale proactive memo reply asks clarification instead of selecting target'
     now: new Date('2026-06-18T10:00:00.000Z'),
   });
   assert.equal(selection.type, 'stale', compact(selection));
+});
+
+test('new explicit commands are not treated as proactive memo replies', () => {
+  assert.equal(looksLikeIndependentProactiveCommand('crea promemoria domani di chiamare Luca'), true);
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-1',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: proactiveMemoFixtures.timedMemo.id,
+      title: proactiveMemoFixtures.timedMemo.title,
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const selection = selectProactiveMemoReplyTarget({
+    message: 'crea promemoria domani di chiamare Luca',
+    brainChat,
+    now: new Date('2026-06-18T10:00:00.000Z'),
+  });
+  assert.equal(selection.type, 'none', compact(selection));
+  assert.equal(selection.reason, 'independent_command');
 });
 
 test('multiple recent proactive memo replies require disambiguation unless title is mentioned', () => {
@@ -593,6 +690,83 @@ test('proactive explain targets the reminder and random messages fall through', 
   assert.equal(random.type, 'none', compact(random));
 });
 
+test('missing-source proactive memo reply is read-only clarification', async () => {
+  const brainChat = buildProactiveBrainChat([
+    proactiveAssistantMessage({
+      id: 'message-missing-source',
+      created_at: '2026-06-18T09:55:00.000Z',
+      source_id: null,
+      title: 'Promemoria senza source id',
+      rule_key: 'timed_memo_due',
+    }),
+  ]);
+  const result = await resolveProactiveMemoReply({
+    message: 'fatto',
+    brainChat,
+    context: {},
+  });
+  assert.ok(result, compact(result));
+  assert.equal(result.plan.needsWrite, false, compact(result));
+  assert.deepEqual(result.actions, []);
+});
+
+test('WhatsApp sender aliases canonicalize allowlisted identities', () => {
+  const previousAllowed = process.env.LIFEOS_WHATSAPP_ALLOWED_SENDERS;
+  const previousAliases = process.env.LIFEOS_WHATSAPP_SENDER_ALIASES;
+  try {
+    process.env.LIFEOS_WHATSAPP_ALLOWED_SENDERS = '39XXXXXXXXXX@c.us';
+    process.env.LIFEOS_WHATSAPP_SENDER_ALIASES = '39XXXXXXXXXX@c.us=111780936298528@lid';
+    assert.equal(canonicalizeWhatsappSender('111780936298528@lid'), '39XXXXXXXXXX@c.us');
+    assert.equal(getAllowedCanonicalWhatsappSenders().has('39XXXXXXXXXX@c.us'), true);
+    assert.equal(validateWhatsappSender('111780936298528@lid'), '39XXXXXXXXXX@c.us');
+    assert.throws(() => validateWhatsappSender('unknown@lid'), /Sender is not allowed/);
+  } finally {
+    restoreEnv('LIFEOS_WHATSAPP_ALLOWED_SENDERS', previousAllowed);
+    restoreEnv('LIFEOS_WHATSAPP_SENDER_ALIASES', previousAliases);
+  }
+});
+
+test('memo proactive registry emits current memo candidates through family contract', () => {
+  assert.equal(proactiveRuleRegistry.some((rule) => rule.family === 'memo' && typeof rule.loadContext === 'function' && typeof rule.buildCandidates === 'function'), true);
+  const dueAt = localDateTimeToUtcDate('2026-06-18', '09:30');
+  const candidates = buildMemoProactiveCandidatesFromContext({
+    context: { memos: [proactiveMemoFixtures.timedMemo] },
+    now: new Date(dueAt.getTime() + 5 * 60000),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  assert.equal(candidates.some((candidate) => candidate.rule_key === 'timed_memo_due'), true, compact(candidates));
+});
+
+test('attention budget suppresses daily cap and min-gap messages', () => {
+  const candidate = {
+    metadata: { exact_due_reminder: false },
+  };
+  assert.deepEqual(shouldSpendAttention({
+    candidate,
+    preferences: { max_per_day: 2, min_gap_minutes: 60 },
+    attentionBudget: { daily_count: 2, recent_message: null },
+  }), { allowed: false, reason: 'daily_cap' });
+  assert.deepEqual(shouldSpendAttention({
+    candidate,
+    preferences: { max_per_day: 6, min_gap_minutes: 60 },
+    attentionBudget: { daily_count: 1, recent_message: { id: 'recent' } },
+  }), { allowed: false, reason: 'min_gap' });
+  assert.deepEqual(shouldSpendAttention({
+    candidate: { metadata: { exact_due_reminder: true } },
+    preferences: { max_per_day: 6, min_gap_minutes: 60 },
+    attentionBudget: { daily_count: 1, recent_message: { id: 'recent' } },
+  }), { allowed: true, reason: null });
+});
+
+test('Europe/Rome local date helpers produce stable UTC windows', () => {
+  const normal = localDateRangeToUtcIso({ date: '2026-06-18' });
+  assert.equal(normal.start, '2026-06-17T22:00:00.000Z');
+  assert.equal(normal.end, '2026-06-18T21:59:59.999Z');
+  assert.equal(startOfLocalDayUtcIso('2026-01-18'), '2026-01-17T23:00:00.000Z');
+  const range = localRangeToUtcWindow({ startDate: '2026-03-29', endDate: '2026-03-29' });
+  assert.ok(new Date(range.start) < new Date(range.end), compact(range));
+});
+
 function test(name, fn) {
   tests.push({ name, fn });
 }
@@ -642,6 +816,11 @@ function proactiveAssistantMessage({ id, created_at, source_id, title, rule_key 
       },
     },
   };
+}
+
+function restoreEnv(key, value) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
 }
 
 async function main() {

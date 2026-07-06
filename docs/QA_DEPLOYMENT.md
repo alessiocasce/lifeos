@@ -11,6 +11,7 @@ Core Brain/automation env vars include:
 - `GEMINI_API_KEY`
 - `LIFEOS_WHATSAPP_BRIDGE_SECRET`
 - `LIFEOS_WHATSAPP_ALLOWED_SENDERS`
+- optional `LIFEOS_WHATSAPP_SENDER_ALIASES`
 - optional `LIFEOS_BRAIN_DEBUG`
 - optional `LIFEOS_BRAIN_DEBUG_FULL`
 - local bridge optional `WHATSAPP_OUTBOX_POLL_SECONDS=60`
@@ -184,8 +185,14 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 5. Confirm `.env`, `.wwebjs_auth/`, and `.wwebjs_cache/` are not committed.
 6. Run the local bridge, scan the QR code, and keep the PC awake.
 7. If the PC sleeps or the process stops, confirm WhatsApp inbound stops until the bridge is restarted.
-8. For 24/7 operation, move the bridge to an always-on PC, Raspberry Pi, or VPS.
-9. Manually test the deployed endpoint:
+8. For 24/7 operation, the current production path is the Oracle VM bridge managed by PM2, not Docker:
+   - `pm2 status`
+   - `pm2 logs lifeos-whatsapp-bridge`
+   - `pm2 restart lifeos-whatsapp-bridge`
+   - `pm2 save`
+9. Vercel backend deploys do not require a PM2 bridge restart unless bridge code or bridge env vars changed.
+10. If WhatsApp exposes both `@lid` and `@c.us` ids, set `LIFEOS_WHATSAPP_SENDER_ALIASES` in Vercel, for example `39XXXXXXXXXX@c.us=111780936298528@lid`. Keep `LIFEOS_WHATSAPP_ALLOWED_SENDERS` on the canonical sender.
+11. Manually test the deployed endpoint:
 
 ```bash
 curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \
@@ -210,7 +217,7 @@ Expected:
 - Non-text message types are rejected safely
 - Brain app UI still opens fresh New Chat and does not show the WhatsApp backend thread selector
 
-10. To debug the same endpoint, add `x-lifeos-debug: true`:
+12. To debug the same endpoint, add `x-lifeos-debug: true`:
 
 ```bash
 curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \
@@ -233,7 +240,7 @@ Expected:
 - JSON includes `debug.brain_trace`
 - The debug trace is not included inside the WhatsApp `reply` text
 
-11. To debug an actual live WhatsApp message, inspect Vercel `BRAIN_TRACE` logs if enabled, Supabase `ai_chat_messages.metadata.brain_trace`, and matching `client_request_id` or WhatsApp `message_id`.
+13. To debug an actual live WhatsApp message, inspect Vercel `BRAIN_TRACE` logs if enabled, Supabase `ai_chat_messages.metadata.brain_trace`, and matching `client_request_id` or WhatsApp `message_id`.
 
 ## Proactive WhatsApp Memo Outbox Deployment
 
@@ -286,9 +293,20 @@ Expected:
 
 - Evaluate queues due timed memos and reports skipped duplicates/suppression in debug.
 - Poll returns only due, unexpired, queued messages and marks them claimed.
+- Poll sorts due messages by priority rank: `high`, then `normal`, then `low`.
 - Ack `sent` marks the row sent and persists the proactive message into the dedicated WhatsApp Brain thread.
 - Ack `failed` retries while attempts are below the v1 cap, then marks failed.
 - Replies to the proactive WhatsApp message use the existing inbound endpoint and same WhatsApp sender id.
+- Repeated sent ACKs must not create duplicate proactive assistant messages for the same outbox id.
+- Short replies to recent proactive reminders should resolve the proactive reminder before unrelated old pending actions.
+
+Opt-in backend smoke:
+
+```bash
+LIFEOS_RUN_LIVE_OUTBOX_SMOKE=true npm run smoke:whatsapp:outbox
+```
+
+This script requires `LIFEOS_BASE_URL`, `LIFEOS_WHATSAPP_BRIDGE_SECRET`, and `LIFEOS_WHATSAPP_TEST_RECIPIENT`. It is not part of default tests because it can claim live outbox rows.
 
 Troubleshooting:
 
@@ -320,6 +338,7 @@ No schema rerun is required for MCP v1.1. The Action API is consolidated into on
    - `npm run smoke:mcp` after deployment or against the deployed preview URL
    - `npm run smoke:mcp:oauth` after deployment or against the deployed preview URL
    - `npm run check:functions`
+   - `npm run smoke:whatsapp:outbox` only with explicit live opt-in when testing outbox lifecycle
 5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
 6. Confirm MCP v1.1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
 7. Confirm ChatGPT OAuth metadata advertises direct `api/mcp.js` URLs, not root OAuth paths, for authorize/token.
@@ -397,6 +416,9 @@ Expected:
 - Root `/oauth/authorize` is compatibility only; direct API OAuth URLs are the source of truth.
 - Unknown methods/tools/resources return JSON-RPC errors.
 - `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
+- `tools/list` includes `get_whatsapp_proactive_debug`.
+- `resources/list` includes `lifeos://whatsapp/proactive-debug`.
+- `get_recent_workouts` includes exact set rows plus `sets_truncated`, `set_limit`, and `returned_set_count`.
 - Responses include compact summaries only.
 - No API keys, bearer tokens, Supabase service keys, Gemini keys, WhatsApp secrets, or auth headers appear in responses.
 

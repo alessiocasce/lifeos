@@ -59,7 +59,7 @@ import {
   serializeVaultContextForMetadata,
 } from '../_utils/brainVault.js';
 import { shouldRetrieveBrainVault } from '../_utils/brainVaultEligibility.js';
-import { resolveProactiveWhatsappReply } from '../_utils/brainProactiveReplies.js';
+import { resolveProactiveWhatsappReply, shouldPrioritizeProactiveReplyOverPending } from '../_utils/brainProactiveReplies.js';
 import {
   addBrainTraceStep,
   createBrainTrace,
@@ -499,6 +499,32 @@ export async function handleBrainChatMessage({
       pending_action: context.brainTrace.pending_action,
       pending_reply_intent: context.brainTrace.pending_reply_intent,
     });
+    if (activePendingAction && resolvedSource === 'whatsapp') {
+      const proactivePriority = shouldPrioritizeProactiveReplyOverPending({
+        message: messageForBrain,
+        brainChat: context.brainChat,
+        activePendingAction,
+      });
+      if (proactivePriority.prioritize) {
+        context.brainTrace.proactive_reply_priority = proactivePriority;
+        addBrainTraceStep(context.brainTrace, 'proactive_reply_prioritized_before_pending', proactivePriority);
+        const proactiveResult = await maybeResolveProactiveWhatsappReply({
+          message: messageForBrain,
+          resolvedSource,
+          context,
+        });
+        if (proactiveResult) {
+          context.brainTrace.pending_resolution = 'not_handled';
+          context.brainTrace.pending_action_bypass = {
+            bypass: true,
+            reason: `proactive_reply_${proactivePriority.reason}`,
+            confidence: 0.9,
+            pending_action_type: activePendingAction.action_type,
+          };
+          return sendAiSuccess(null, 200, proactiveResult, context, { message: messageForBrain, source: resolvedSource });
+        }
+      }
+    }
     if (activePendingAction) {
       const pendingResolution = await resolvePendingActionTurn({ message: messageForBrain, pendingAction: activePendingAction, context });
       context.brainTrace.pending_resolution = pendingResolution?.handled

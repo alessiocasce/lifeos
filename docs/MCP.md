@@ -43,12 +43,23 @@ Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in
 - `get_projects_status`
 - `get_brain_debug_context`
 - `get_whatsapp_outbox_recent`
+- `get_whatsapp_proactive_debug`
 - `search_lifeos_vault`
 - `get_open_loops`
 
 All tools are read-only and return compact, limited, sanitized JSON.
 
 `get_recent_workouts` and `lifeos://workouts/recent` include exact set-level data as well as aggregates. Each workout exposes top-level `sets[]` and per-exercise `sets[]` with `set_number`, `is_warmup`, `weight`, `reps`, `rpe`, `performed_at`, and safe note previews, so external clients can analyze exact series such as `50x8`, `50x7`, `50x6`.
+
+Workout responses include truncation metadata:
+
+- `sets_truncated`
+- `set_limit`
+- `returned_set_count`
+
+If `sets_truncated` is true, ask for a narrower workout window.
+
+`get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug` expose read-only outbox diagnostics: status counts, rule keys, source ids, timestamps, retry/claim/ACK metadata summaries, and safe error previews. They are intended for debugging the Oracle PM2 bridge and proactive reminder lifecycle.
 
 ## Resources
 
@@ -63,6 +74,7 @@ All tools are read-only and return compact, limited, sanitized JSON.
 - `lifeos://brain/debug`
 - `lifeos://brain/recent-actions`
 - `lifeos://whatsapp/outbox/recent`
+- `lifeos://whatsapp/proactive-debug`
 - `lifeos://vault/recent`
 
 ## Prompts

@@ -40,6 +40,14 @@ WHATSAPP_OUTBOX_POLL_SECONDS=60
 
 The bridge only needs the LifeOS base URL, shared WhatsApp bridge secret, and sender whitelist. Do not put Supabase service keys, Gemini keys, or other LifeOS server secrets in the bridge.
 
+On Vercel, `LIFEOS_WHATSAPP_ALLOWED_SENDERS` should use the canonical sender id. If WhatsApp exposes both `@lid` and `@c.us`, configure backend aliases, for example:
+
+```env
+LIFEOS_WHATSAPP_SENDER_ALIASES=39XXXXXXXXXX@c.us=111780936298528@lid
+```
+
+The backend accepts either id, then uses the canonical sender for Brain threads and outbox rows. Use bridge logs to copy the exact sender ids.
+
 ## Proactive Outbox Loop
 
 Proactive WhatsApp v1A is memo-only. The bridge should poll LifeOS instead of expecting server push:
@@ -52,3 +60,18 @@ Proactive WhatsApp v1A is memo-only. The bridge should poll LifeOS instead of ex
 In `DRY_RUN`, print outbound messages instead of sending them. Do not ack as `sent` unless intentionally testing the ack endpoint.
 
 Local session folders such as `.wwebjs_auth/` and `.wwebjs_cache/` must stay uncommitted.
+
+## Oracle VM / PM2 Runtime
+
+The current production bridge runs on an Oracle VM with PM2, not Docker.
+
+Useful commands:
+
+```bash
+pm2 status
+pm2 logs lifeos-whatsapp-bridge
+pm2 restart lifeos-whatsapp-bridge
+pm2 save
+```
+
+Deploying the Vercel backend does not require restarting PM2 unless bridge code or bridge env vars changed.

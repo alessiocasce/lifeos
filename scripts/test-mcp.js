@@ -8,7 +8,7 @@ import {
   listMcpTools,
   validateMcpAuth,
 } from '../api/mcp.js';
-import { clampMcpDays, clampMcpLimit, compactWorkout, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
+import { clampMcpDays, clampMcpLimit, compactWorkout, getWorkoutSetTruncationInfo, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
 import {
   buildAuthorizationServerMetadata,
   buildWwwAuthenticateHeader,
@@ -47,6 +47,7 @@ test('tools/list includes expected tools', () => {
     'get_health_summary',
     'get_open_memos',
     'get_brain_debug_context',
+    'get_whatsapp_proactive_debug',
     'search_lifeos_vault',
   ]) {
     assert(tools.includes(name), `missing tool ${name}`);
@@ -64,6 +65,7 @@ test('resources/list includes expected resources', () => {
     'lifeos://today',
     'lifeos://brain/debug',
     'lifeos://whatsapp/outbox/recent',
+    'lifeos://whatsapp/proactive-debug',
     'lifeos://vault/recent',
   ]) {
     assert(resources.includes(uri), `missing resource ${uri}`);
@@ -246,6 +248,13 @@ test('MCP workout compactor keeps exact set-level details and aggregates', () =>
   assertEqual(bench.average_rpe, 7.8);
   assertEqual(bench.sets.length, 3);
   assertEqual(bench.top_set.id, 'set-1');
+});
+
+test('MCP workout truncation flags are explicit', () => {
+  assertEqual(getWorkoutSetTruncationInfo(12, 600).sets_truncated, false);
+  assertEqual(getWorkoutSetTruncationInfo(600, 600).sets_truncated, true);
+  assertEqual(getWorkoutSetTruncationInfo(600, 600).set_limit, 600);
+  assertEqual(getWorkoutSetTruncationInfo(600, 600).returned_set_count, 600);
 });
 
 test('MCP sanitizer preserves normal nested workout set fields', () => {

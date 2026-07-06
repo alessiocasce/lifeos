@@ -17,6 +17,7 @@ import {
   getUpcomingCalendar,
   getWeekSummary,
   getWhatsappOutboxRecent,
+  getWhatsappProactiveDebug,
   searchVaultForMcp,
 } from './_utils/mcpLifeosData.js';
 
@@ -75,6 +76,11 @@ const TOOL_DEFINITIONS = [
     inputSchema: objectSchema({ limit: numberSchema('Optional max messages, default 20.') }),
   },
   {
+    name: 'get_whatsapp_proactive_debug',
+    description: 'Returns read-only proactive WhatsApp diagnostics: recent outbox status counts, delivery transitions, ACK metadata summary, rule keys, source ids, and safe error previews.',
+    inputSchema: objectSchema({ limit: numberSchema('Optional max messages, default 30.') }),
+  },
+  {
     name: 'search_lifeos_vault',
     description: 'Searches Brain Vault reports/chunks for relevant long-term context.',
     inputSchema: {
@@ -106,6 +112,7 @@ const RESOURCE_DEFINITIONS = [
   ['lifeos://brain/debug', 'Brain Debug', 'Recent Brain trace summaries.', () => getBrainDebugContext],
   ['lifeos://brain/recent-actions', 'Recent Brain Actions', 'Recent AI action log summaries.', () => getRecentActionLogs],
   ['lifeos://whatsapp/outbox/recent', 'WhatsApp Outbox Recent', 'Recent proactive WhatsApp outbox messages.', () => getWhatsappOutboxRecent],
+  ['lifeos://whatsapp/proactive-debug', 'WhatsApp Proactive Debug', 'Read-only proactive outbox diagnostics and status counts.', () => getWhatsappProactiveDebug],
   ['lifeos://vault/recent', 'Vault Recent', 'Recent active Brain Vault documents.', () => getRecentVaultDocuments],
 ].map(([uri, name, description, getReader]) => ({
   uri,
@@ -147,8 +154,8 @@ const PROMPT_DEFINITIONS = [
   {
     name: 'lifeos_brain_bug_analysis',
     description: 'Use Brain traces/action logs/outbox status to locate likely Brain bugs.',
-    suggestedCalls: ['get_brain_debug_context', 'get_whatsapp_outbox_recent'],
-    instruction: 'Inspect recent traces and action/outbox failures. Classify likely failure layer: WhatsApp thread, pending action, reply normalization, command draft, routing, Vault, tool execution, schema/env, or formatting.',
+    suggestedCalls: ['get_brain_debug_context', 'get_whatsapp_outbox_recent', 'get_whatsapp_proactive_debug'],
+    instruction: 'Inspect recent traces and action/outbox failures. Use proactive debug when WhatsApp delivery or reminders are involved. Classify likely failure layer: WhatsApp thread, pending action, reply normalization, command draft, routing, Vault, tool execution, schema/env, bridge/outbox, or formatting.',
     outputStyle: 'Findings first, then likely cause and next debug step.',
   },
   {
@@ -344,6 +351,9 @@ async function callMcpTool(params, context) {
       break;
     case 'get_whatsapp_outbox_recent':
       data = await getWhatsappOutboxRecent({ userId, limit: clampMcpLimit(args.limit, 20, 80) });
+      break;
+    case 'get_whatsapp_proactive_debug':
+      data = await getWhatsappProactiveDebug({ userId, limit: clampMcpLimit(args.limit, 30, 100) });
       break;
     case 'search_lifeos_vault':
       data = await searchVaultForMcp({ userId, query: args.query, limit: clampMcpLimit(args.limit, 5, 10) });

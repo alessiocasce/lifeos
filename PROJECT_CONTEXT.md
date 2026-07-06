@@ -461,6 +461,7 @@ Current behavior:
 - Vercel exposes `POST /api/integrations/whatsapp/inbound` for the bridge.
 - The endpoint requires `x-lifeos-whatsapp-secret` to match server-only `LIFEOS_WHATSAPP_BRIDGE_SECRET`.
 - The endpoint requires the sender to be listed in `LIFEOS_WHATSAPP_ALLOWED_SENDERS` in production.
+- Sender ids can be canonicalized through server-only `LIFEOS_WHATSAPP_SENDER_ALIASES`, for example `39XXXXXXXXXX@c.us=111780936298528@lid`. Allowed-sender validation accepts aliases but stores the canonical sender for thread/outbox continuity.
 - The endpoint validates text-only message payloads, rejects empty/oversized bodies, rejects unsupported message types, and keeps group behavior closed unless explicitly whitelisted.
 - The local bridge only needs `LIFEOS_BASE_URL`, `LIFEOS_WHATSAPP_BRIDGE_SECRET`, and its own allowed sender config. It must not know Supabase service keys, Gemini keys, or database credentials.
 - WhatsApp messages use `source = "whatsapp"` and include sanitized sender/message id metadata.
@@ -469,6 +470,7 @@ Current behavior:
 - WhatsApp inbound can return `debug.brain_trace` in JSON when called with `x-lifeos-debug: true`; the bridge should keep that out of the WhatsApp reply text.
 - Pending actions, confirmation/cancellation normalization, structured sleep-start logging, Working Context, Command Draft referent resolution, memory commands, follow-up transforms, Brain Vault retrieval/auto-save, and deterministic tool guards remain active for WhatsApp.
 - Proactive WhatsApp v1A uses bridge polling for timed memo delivery. WhatsApp Business Cloud API, Meta templates, media/voice, open group chat support, and broad proactive coaching are future work.
+- The production bridge currently runs on an Oracle VM under PM2, not Docker. Vercel backend deploys do not require a bridge restart unless bridge code or bridge env vars changed.
 
 ## Proactive WhatsApp Current Status
 
@@ -484,11 +486,14 @@ Current behavior:
 - Outbox rows are idempotent by `user_id + idempotency_key`; due messages move `queued -> claimed -> sent`, and failed sends retry up to a small capped attempt count before `failed`.
 - Outbox lifecycle decisions are centralized in `api/_utils/brainOutboxStateMachine.js`; Supabase reads/writes stay in `api/_utils/brainOutbox.js`.
 - Polling reclaims stale `claimed` rows after a short claim timeout so bridge crashes after poll do not permanently hide reminders. Expired claimed rows become `expired`, and claimed rows over the attempt cap become `failed`.
+- Polling sorts due rows by priority rank (`high`, `normal`, `low`) after a small oversampled fetch instead of relying on lexicographic text ordering.
 - ACK handling is state-aware: normal sent ACKs require `claimed -> sent`, repeated `sent -> sent` is idempotent, and queued/expired/failed/cancelled rows are not silently marked sent. Failed ACKs requeue with short backoff while attempts remain.
-- Successful ack persists the proactive WhatsApp text as an assistant message in the same dedicated WhatsApp Brain thread, with `metadata.proactive_message = true` and `working_context.last_subject` pointing to the memo.
+- Successful ack persists the proactive WhatsApp text as an assistant message in the same dedicated WhatsApp Brain thread, with `metadata.proactive_message = true` and `working_context.last_subject` pointing to the memo. Persistence is idempotent by outbox message id.
 - Proactive reply resolution lives in `api/_utils/brainProactiveReplies.js` behind `resolveProactiveWhatsappReply()`. It currently routes only memo replies but is structured for future proactive families.
 - Replies such as `fatto`, `done`, `snooze 30`, `domani alle 10`, `annulla`, or `?` are resolved only when recent WhatsApp context contains one unambiguous proactive memo reminder inside the reply window. Stale or multiple recent reminders ask clarification instead of mutating a memo.
-- `api/_utils/brainProactiveRules.js` exposes a small `proactiveRuleRegistry` and candidate validator so future rule families can plug in without changing the evaluator contract.
+- Short proactive replies can be prioritized before unrelated pending actions when the latest WhatsApp assistant message is proactive. New explicit commands bypass proactive context and route normally.
+- `api/_utils/brainProactiveRules.js` exposes a small `proactiveRuleRegistry`, candidate validator, rule config loader, and attention-budget helpers so future rule families can plug in without changing the evaluator contract.
+- The existing `brain_proactive_rules` table is the foundation for rule preferences and a global attention budget. A `global` rule row can cap daily proactive messages or min-gap behavior across future families.
 - `docs/WHATSAPP_PROACTIVE_ARCHITECTURE.md` documents the outbox lifecycle, reply resolution rules, and future extension points.
 - Proactive outbound messages do not directly modify LifeOS records except outbox status. Memo completion, dismissal, or snooze happens only after a user reply.
 - V1A intentionally excludes Morning Briefing, calendar completion checks, workout/project nudges, sleep/wake missing nudges, finance nudges, PWA push, AI-generated coaching, and paid WhatsApp providers.
@@ -517,7 +522,8 @@ Current behavior:
 - OAuth mode supports authorization-code + PKCE S256 for the personal connector, with `lifeos.read` scope only. It uses `LIFEOS_MCP_LINK_SECRET` for the linking page and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` for stateless signed codes/access tokens. `LIFEOS_MCP_OAUTH_ENABLED=false` is the emergency rollback flag.
 - MCP is scoped to the configured personal user via `LIFEOS_ACTION_USER_ID` and service-role Supabase reads.
 - MCP tools/resources provide compact summaries for snapshots, today/week, workouts, health, open memos, upcoming calendar, projects, Brain traces/action logs, WhatsApp outbox, Vault search, and open loops.
-- MCP workout output includes exact set-level rows in both top-level `sets[]` and per-exercise `sets[]`, including set number, warmup flag, weight, reps, RPE, performed time, and safe note previews, while preserving aggregate workout/exercise summaries.
+- MCP workout output includes exact set-level rows in both top-level `sets[]` and per-exercise `sets[]`, including set number, warmup flag, weight, reps, RPE, performed time, and safe note previews, while preserving aggregate workout/exercise summaries. Workout responses include `sets_truncated`, `set_limit`, and `returned_set_count`.
+- MCP includes read-only proactive WhatsApp debug access through `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug`, exposing outbox status counts, safe ACK/retry summaries, and proactive traces without mutating records.
 - MCP prompts are instruction templates only; they do not embed private data directly.
 - MCP v1.1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.

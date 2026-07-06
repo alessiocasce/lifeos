@@ -6,8 +6,10 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 
 1. Run `npm run test:brain`.
 2. Confirm the Brain regression harness passes without live Gemini, WhatsApp, browser automation, or Supabase writes.
-3. Run `npm run build`.
-4. Run `git diff --check`.
+3. Run `npm run test:mcp`.
+4. Run `npm run check:functions` and confirm the function count is at or below 12.
+5. Run `npm run build`.
+6. Run `git diff --check`.
 
 ## Auth Gate
 
@@ -247,8 +249,9 @@ Run the focused checklists after the full flow:
 7. Confirm WhatsApp integration does not change Home UI, does not add Money/Finance, and does not add AI Recent Writes to Home.
 8. Confirm app Brain chat still works normally through `/api/ai/chat`.
 9. Confirm the WhatsApp flow supports pending-action and working-context behavior, such as nap -> `si` -> `aggiungilo anche al calendario`.
-10. Send `Segna che sto andando a dormire ora alle 3.41am`, then `Sì` if confirmation is requested, and confirm sleep start is saved once without a repeated confirmation loop.
-11. Confirm wrong bridge secret returns `401` and unallowed sender returns `403`.
+10. If `@lid` and `@c.us` ids both appear in bridge logs, configure `LIFEOS_WHATSAPP_SENDER_ALIASES` and confirm both ids map to the same backend Brain thread.
+11. Send `Segna che sto andando a dormire ora alle 3.41am`, then `Sì` if confirmation is requested, and confirm sleep start is saved once without a repeated confirmation loop.
+12. Confirm wrong bridge secret returns `401` and unallowed sender returns `403`.
 
 ## Proactive WhatsApp Memo Outbox
 
@@ -261,13 +264,16 @@ Before live QA, run `npm run test:brain` and confirm the outbox state machine, p
 5. Confirm ack `sent` persists a proactive assistant message into the dedicated WhatsApp Brain thread.
 6. Simulate bridge failure after poll without ack and confirm stale `claimed` rows recover after the claim timeout, or expire/fail safely.
 7. Confirm ack `sent` is accepted for `claimed -> sent` and repeated `sent -> sent`, but queued/expired/failed/cancelled rows are not silently marked sent.
-8. Reply through WhatsApp inbound with `fatto`, `snooze 30`, `annulla`, and `?` across separate test memos.
-9. Confirm stale or multiple recent proactive reminders ask for clarification before mutating any memo.
-10. Confirm memo status/snooze/explanation behavior is correct and no unrelated LifeOS writes occur.
-11. Confirm Home UI remains signal-filtered and does not show outbox/admin/proactive widgets.
-12. Confirm Brain UI still opens fresh New Chat by default and does not expose the WhatsApp thread selector.
-13. Confirm mobile Brain internal-scroll layout remains intact after proactive WhatsApp thread messages exist in the backend.
-14. Run `npm run check:functions` and confirm the Vercel API route count stays at or below the Hobby limit of 12.
+8. Confirm poll returns due messages by priority rank: high first, then normal, then low.
+9. Confirm repeated sent ACK does not duplicate the proactive assistant message for the same outbox id.
+10. Reply through WhatsApp inbound with `fatto`, `snooze 30`, `annulla`, and `?` across separate test memos.
+11. Confirm stale or multiple recent proactive reminders ask for clarification before mutating any memo.
+12. Confirm short replies to a recent proactive memo win over unrelated old pending actions.
+13. Confirm memo status/snooze/explanation behavior is correct and no unrelated LifeOS writes occur.
+14. Confirm Home UI remains signal-filtered and does not show outbox/admin/proactive widgets.
+15. Confirm Brain UI still opens fresh New Chat by default and does not expose the WhatsApp thread selector.
+16. Confirm mobile Brain internal-scroll layout remains intact after proactive WhatsApp thread messages exist in the backend.
+17. Run `npm run check:functions` and confirm the Vercel API route count stays at or below the Hobby limit of 12.
 
 ## LifeOS MCP
 
@@ -280,12 +286,14 @@ Before live QA, run `npm run test:brain` and confirm the outbox state machine, p
 7. Call `initialize`, `tools/list`, `resources/list`, and `prompts/list` with `LIFEOS_MCP_TOKEN` and confirm valid JSON-RPC responses.
 8. Confirm `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
 9. Call `get_brain_debug_context` and confirm it returns compact traces without secrets.
-10. Call `get_recent_workouts` and `lifeos://workouts/recent`; confirm exact workout set rows are present in top-level `sets[]` and per-exercise `sets[]`.
-11. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
-12. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
-13. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
-14. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
-15. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
+10. Call `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug`; confirm status counts and safe ACK/retry summaries are visible.
+11. Call `get_recent_workouts` and `lifeos://workouts/recent`; confirm exact workout set rows are present in top-level `sets[]` and per-exercise `sets[]`.
+12. Confirm workout responses include `sets_truncated`, `set_limit`, and `returned_set_count`.
+13. Confirm `GET /api/mcp?mcp_oauth=authorize` with missing params shows MCP authorization error HTML, not the SPA.
+14. Confirm ChatGPT Connector linking reaches the LifeOS authorization page and accepts only the link secret.
+15. Confirm OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`; root `/oauth/authorize` is compatibility only.
+16. Confirm MCP does not change Home UI, Brain New Chat behavior, WhatsApp inbound/outbox behavior, or mobile Brain internal scrolling.
+17. Confirm MCP tools are read-only and do not create LifeOS records or send WhatsApp messages.
 
 ## Consolidated Action API
 
