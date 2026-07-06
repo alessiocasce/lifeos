@@ -330,6 +330,8 @@ Architecture:
 - Brain has Working Context metadata in `ai_chat_messages.metadata.working_context`. It stores the current conversation language, latest operational subject, latest successful action result, and recent referents without exposing raw metadata in the UI.
 - Working Context lets Brain resolve unambiguous follow-ups such as `aggiungilo anche al calendario`, `usa lo stesso orario`, `mettilo anche nei memo`, and `la data e il tempo che hai gia usato` against the latest structured subject.
 - Brain uses an AI Command Draft protocol for referential/action-like turns. Gemini extracts a strict JSON command draft; deterministic backend code resolves references, validates safety/date/time/schema/action permissions, and executes only supported tools.
+- Command Draft output is not trusted for calendar time semantics. Backend normalization repairs common AI mistakes against the original source text, including `11.45am` -> `11:45`, `11.45pm` -> `23:45`, and Italian `DD/MM/YY` dates such as `7/9/26` -> `2026-09-07`.
+- Calendar draft validation recomputes missing fields by action semantics. If a calendar event has `start_time` but no `end_time`, Brain asks for duration/end time instead of asking for the exact start time again, and follow-up replies such as `durata 1 ora`, `un'ora`, `45 minuti`, `fine 12:45`, or `fino alle 12:45` fill the stored event.
 - Referential commands rely on `last_subject` and recent structured subjects, not a phrase-specific deterministic router. If the referent is missing or ambiguous, Brain asks a specific clarification in the conversation language.
 - Working Context is advisory context for understanding only. It never authorizes writes by itself and does not override negative intent, destructive blocks, pending-action expiry/status, or supported-tool validation.
 - Brain Vault v1 stores long-form markdown-like Brain reports and saved assistant answers in Supabase.
@@ -361,7 +363,7 @@ Architecture:
 - All backend default dates and relative `today`/`tomorrow` references use Europe/Rome local time through the shared date helper.
 - AI-created expense categories normalize to canonical display casing when possible, such as `subscriptions` to `Subscriptions`.
 - AI-created calendar events normalize case-insensitive preferred categories such as `work`, `errands`, `personal`, or `social` to the UI category names when possible.
-- AI and Action API calendar creates normalize common AM/PM and messy Gemini time fields such as `from 12:45pm`, `12:45pm to 2:15pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`.
+- AI and Action API calendar creates normalize common AM/PM and messy Gemini time fields such as `from 12:45pm`, `12:45pm to 2:15pm`, `2:15 pm`, `9am`, and contextual ranges like `3:45 to 5:30 pm` into stored `HH:MM`. Single-time command drafts use a single-time parser, not a fake time range, so ambiguous morning times are not promoted to PM by accident.
 - Explicit multi-event calendar prompts are routed through a dedicated extraction/create path instead of the single-event tool. `create_calendar_event` is for one event only.
 - Obvious explicit multi-event calendar schedules bypass the general Gemini planner before it runs because Gemini may return an array of single-event planner objects while the general planner schema expects one object.
 - Explicit multi-event calendar creation does not require read/analysis context and returns a deterministic created/skipped summary.
@@ -463,7 +465,7 @@ Current behavior:
 - `npm run test:brain` runs `scripts/test-brain-regressions.js`.
 - Fixtures live in `tests/brain/fixtures.js`; notes live in `tests/brain/README.md`.
 - The harness uses pure utilities and does not require Vercel, browser automation, WhatsApp, Gemini, or live Supabase writes.
-- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
+- Covered checks include dirty sleep-start pending action normalization, command-draft sleep-start coercion, calendar command draft AM/PM repair, calendar duration/end-time clarification, stale `missing_fields` cleanup, pending reply confirmation/cancellation/clarification normalization, executable pending confirmation resolution, nap-not-sleep-start protection, simple explicit writes skipping Vault retrieval, negative write guard behavior, Working Context referent date/time preservation, the outbox state machine, proactive reply target selection, proactive candidate validation, and pure Proactive WhatsApp memo outbox behavior.
 - Run it before and after changes to Brain, WhatsApp inbound/outbox, proactive memo rules, pending actions, command drafts, working context, Vault retrieval gates, or sleep/wake command handling.
 - Live WhatsApp thread continuity, real tool execution, provider behavior, and RLS still require the manual QA checklists.
 

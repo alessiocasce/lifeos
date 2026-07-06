@@ -11,7 +11,16 @@ import {
   shouldBypassPendingActionForNewCommand,
   validatePendingActionCandidate,
 } from '../api/_utils/brainPendingActions.js';
-import { validateBrainCommandDraft } from '../api/_utils/brainCommandDraft.js';
+import {
+  buildCalendarEventClarification,
+  extractCalendarEventFieldUpdate,
+  normalizeCalendarEventArgs,
+  validateCalendarEventArgs,
+} from '../api/_utils/brainActionNormalizers.js';
+import {
+  formatCommandDraftClarification,
+  validateBrainCommandDraft,
+} from '../api/_utils/brainCommandDraft.js';
 import { buildBrainWorkingContext } from '../api/_utils/brainWorkingContext.js';
 import { shouldRetrieveBrainVault } from '../api/_utils/brainVaultEligibility.js';
 import {
@@ -131,6 +140,88 @@ test('command draft sleep-start semantics coerce to log_sleep_start', () => {
   assert.equal(/che dettaglio/i.test(validation.draft.clarification_question || ''), false);
 });
 
+test('calendar command draft repairs AM time from source message and asks for duration', () => {
+  const sourceMessage = 'Segna dentista 7/9/26 11.45am';
+  const validation = validateBrainCommandDraft({
+    mode: 'clarify',
+    skill: 'calendar_planner',
+    language: 'it',
+    intent_summary: 'Creare evento Dentista',
+    action: {
+      type: 'create_calendar_event',
+      args: {
+        title: 'Dentista',
+        event_date: '7/9/26',
+        start_time: '23:45',
+      },
+      missing_fields: ['end_time'],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    clarification_question: "Mi manca solo l'orario esatto. Quale uso?",
+    confidence: 0.9,
+    reason: 'Explicit calendar event.',
+  }, {
+    workingContext: { language: 'it' },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'calendar_planner' },
+    sourceMessage,
+  });
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.executable, false);
+  assert.equal(validation.draft.action.args.event_date, '2026-09-07');
+  assert.equal(validation.draft.action.args.start_time, '11:45');
+  assert.deepEqual(validation.draft.action.missing_fields, ['end_time']);
+  assert.match(validation.draft.clarification_question, /Quanto dura|a che ora finisce/i);
+  assert.equal(/orario esatto/i.test(validation.draft.clarification_question), false);
+});
+
+test('calendar command draft preserves PM time from source message', () => {
+  const validation = validateBrainCommandDraft({
+    mode: 'clarify',
+    skill: 'calendar_planner',
+    language: 'it',
+    intent_summary: 'Creare evento Dentista',
+    action: {
+      type: 'create_calendar_event',
+      args: {
+        title: 'Dentista',
+        event_date: '7/9/26',
+        start_time: '11.45pm',
+      },
+      missing_fields: ['end_time'],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    confidence: 0.9,
+    reason: 'Explicit calendar event.',
+  }, {
+    workingContext: { language: 'it' },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'calendar_planner' },
+    sourceMessage: 'Segna dentista 7/9/26 11.45pm',
+  });
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.draft.action.args.event_date, '2026-09-07');
+  assert.equal(validation.draft.action.args.start_time, '23:45');
+  assert.deepEqual(validation.draft.action.missing_fields, ['end_time']);
+});
+
+test('calendar normalizer treats Italian slash dates and plain times deterministically', () => {
+  const args = normalizeCalendarEventArgs({
+    title: 'Dentista',
+    date: '7/9/26',
+    start_time: '11.45',
+  });
+  const missing = validateCalendarEventArgs(args, []);
+  assert.equal(args.event_date, '2026-09-07');
+  assert.equal(args.start_time, '11:45');
+  assert.deepEqual(missing, ['end_time']);
+  assert.match(buildCalendarEventClarification({ args, missingFields: missing, language: 'it' }), /Quanto dura/);
+});
+
 test('latest active pending action lookup normalizes dirty sleep-start metadata', () => {
   const pending = {
     id: 'pending-sleep-start',
@@ -229,6 +320,123 @@ test('calendar pending accepts exact time slot fill', () => {
     pendingAction: calendarPendingMissingTime,
     context: {},
   }).bypass, false);
+});
+
+test('calendar pending missing end_time accepts duration reply', async () => {
+  const pendingAction = {
+    id: 'pending-calendar-duration',
+    action_type: 'create_calendar_event',
+    status: 'awaiting_fields',
+    confirmation_required: false,
+    args: {
+      title: 'Dentista',
+      event_date: '2026-09-07',
+      start_time: '11:45',
+    },
+    missing_fields: ['end_time'],
+    confirmation_question: "Mi manca solo l'orario esatto. Quale uso?",
+    language: 'it',
+    confidence: 0.9,
+  };
+  assert.equal(isPotentialPendingSlotFill({ message: 'durata 1 ora', pendingAction }), true);
+  const resolution = await resolvePendingActionTurn({
+    message: 'durata 1 ora',
+    pendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, true, compact(resolution));
+  assert.equal(resolution.type, 'execute', compact(resolution));
+  assert.equal(resolution.pending_action.args.start_time, '11:45');
+  assert.equal(resolution.pending_action.args.end_time, '12:45');
+  assert.deepEqual(resolution.pending_action.missing_fields, []);
+});
+
+test('calendar pending missing end_time accepts explicit end reply', async () => {
+  const pendingAction = {
+    id: 'pending-calendar-end',
+    action_type: 'create_calendar_event',
+    status: 'awaiting_fields',
+    confirmation_required: false,
+    args: {
+      title: 'Dentista',
+      event_date: '2026-09-07',
+      start_time: '11:45',
+    },
+    missing_fields: ['end_time'],
+    language: 'it',
+    confidence: 0.9,
+  };
+  assert.deepEqual(extractCalendarEventFieldUpdate('fine 12:45', pendingAction).args_patch, { end_time: '12:45' });
+  const resolution = await resolvePendingActionTurn({
+    message: 'fine 12:45',
+    pendingAction,
+    context: {},
+  });
+  assert.equal(resolution.handled, true, compact(resolution));
+  assert.equal(resolution.type, 'execute', compact(resolution));
+  assert.equal(resolution.pending_action.args.start_time, '11:45');
+  assert.equal(resolution.pending_action.args.end_time, '12:45');
+});
+
+test('calendar event validation blocks identical start and end times', () => {
+  const validation = validateBrainCommandDraft({
+    mode: 'action',
+    skill: 'calendar_planner',
+    language: 'it',
+    intent_summary: 'Creare evento Dentista',
+    action: {
+      type: 'create_calendar_event',
+      args: {
+        title: 'Dentista',
+        event_date: '2026-09-07',
+        start_time: '11:45',
+        end_time: '11:45',
+      },
+      missing_fields: [],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    confidence: 0.9,
+    reason: 'Explicit calendar event.',
+  }, {
+    workingContext: { language: 'it' },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'calendar_planner' },
+  });
+  assert.equal(validation.ok, true);
+  assert.equal(validation.executable, false, compact(validation));
+  assert.deepEqual(validation.draft.action.missing_fields, ['end_time']);
+  assert.match(validation.draft.clarification_question, /fine deve essere dopo|deve essere dopo/i);
+});
+
+test('create_memo missing time keeps memo-specific clarification', () => {
+  const validation = validateBrainCommandDraft({
+    mode: 'clarify',
+    skill: 'memo_assistant',
+    language: 'it',
+    intent_summary: 'Creare promemoria antibiotico',
+    action: {
+      type: 'create_memo',
+      args: {
+        title: 'Prendere antibiotico',
+        memo_date: '2026-09-07',
+        vague_time: 'dopo cena',
+      },
+      missing_fields: ['time'],
+      confirmation_required: false,
+      risk_level: 'low',
+    },
+    confidence: 0.9,
+    reason: 'Reminder with vague time.',
+  }, {
+    workingContext: { language: 'it' },
+    brainRoute: { mode: 'explicit_action', write_intent: true },
+    brainSkill: { id: 'memo_assistant' },
+  });
+  assert.equal(validation.ok, true);
+  assert.equal(validation.executable, false);
+  assert.match(formatCommandDraftClarification(validation.draft, { language: 'it' }), /giorno e orario|orario/i);
+  assert.equal(/quanto dura|fine|end_time/i.test(formatCommandDraftClarification(validation.draft, { language: 'it' })), false);
 });
 
 test('calendar pending bypasses independent memo command', async () => {

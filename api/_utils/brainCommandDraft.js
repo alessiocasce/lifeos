@@ -1,6 +1,12 @@
 import { generateGeminiJson } from './gemini.js';
 import { addDays, localDate } from './date.js';
-import { normalizeTimeRange, optionalDate } from './validation.js';
+import { optionalDate } from './validation.js';
+import {
+  buildCalendarEventClarification,
+  normalizeBrainTime,
+  normalizeCalendarEventArgs,
+  validateCalendarEventArgs,
+} from './brainActionNormalizers.js';
 import {
   buildCommandContextForPrompt,
   formatReferentClarification,
@@ -57,6 +63,8 @@ Rules:
 - If message is an explicit memory command, mode "memory".
 - If a supported action is complete, mode "action".
 - If a supported action is missing fields, mode "clarify".
+- Calendar event time parsing must preserve AM/PM. 11.45am means 11:45, while 11.45pm means 23:45.
+- If a calendar event has start_time but no end_time, missing_fields must be ["end_time"] and the clarification must ask for duration or end time, not for the start time again.
 - Use the conversation language from workingContext unless the current user message clearly switches language.
 - Going to sleep / bedtime / inizio sonno / vado a dormire / sto andando a letto / sleep start messages map to action.type "log_sleep_start" with args.time in HH:MM. Do not map them to a generic Health note.
 
@@ -112,11 +120,11 @@ export async function extractBrainCommandDraftWithAI({ message, brainRoute, brai
     invalidMessage: 'Gemini returned an invalid Brain command draft.',
     repair: true,
   });
-  return normalizeCommandDraft(raw, workingContext);
+  return normalizeCommandDraft(raw, workingContext, { sourceMessage: message });
 }
 
-export function validateBrainCommandDraft(commandDraft, { workingContext, brainRoute, brainSkill } = {}) {
-  const draft = resolveCommandDraftReferences(normalizeCommandDraft(commandDraft, workingContext), workingContext);
+export function validateBrainCommandDraft(commandDraft, { workingContext, brainRoute, brainSkill, sourceMessage } = {}) {
+  const draft = resolveCommandDraftReferences(normalizeCommandDraft(commandDraft, workingContext, { sourceMessage }), workingContext, { sourceMessage });
   if (!draft) return { ok: false, reason: 'No command draft.' };
   if (draft.mode === 'cancel') return { ok: true, draft, executable: false, cancelled: true };
   if (['answer', 'transform', 'memory', 'unsupported'].includes(draft.mode)) return { ok: true, draft, executable: false };
@@ -137,7 +145,7 @@ export function validateBrainCommandDraft(commandDraft, { workingContext, brainR
       executable: false,
     };
   }
-  const args = normalizeActionArgs(actionType, draft.action.args);
+  const args = normalizeActionArgs(actionType, draft.action.args, { sourceMessage });
   const missing = normalizeMissingFields(actionType, args, draft.action.missing_fields);
   const normalized = {
     ...draft,
@@ -149,12 +157,13 @@ export function validateBrainCommandDraft(commandDraft, { workingContext, brainR
     },
   };
   if (missing.length) {
+    const clarificationQuestion = questionForMissing({ ...normalized, action: { ...normalized.action, missing_fields: missing } }, workingContext);
     return {
       ok: true,
       draft: {
         ...normalized,
         mode: 'clarify',
-        clarification_question: normalized.clarification_question || questionForMissing(normalized, workingContext),
+        clarification_question: clarificationQuestion || normalized.clarification_question,
       },
       executable: false,
       missing_fields: missing,
@@ -170,7 +179,7 @@ export function validateBrainCommandDraft(commandDraft, { workingContext, brainR
   };
 }
 
-export function resolveCommandDraftReferences(commandDraft, workingContext) {
+export function resolveCommandDraftReferences(commandDraft, workingContext, options = {}) {
   if (!commandDraft) return null;
   const draft = normalizeCommandDraft(commandDraft, workingContext);
   const subject = workingContext?.last_subject;
@@ -195,13 +204,13 @@ export function resolveCommandDraftReferences(commandDraft, workingContext) {
     ...draft,
     action: {
       ...draft.action,
-      args,
+      args: normalizeActionArgs(draft.action.type, args, { sourceMessage: options.sourceMessage }),
     },
   };
 }
 
 export function commandDraftToPendingAction(commandDraft, context = {}) {
-  const draft = normalizeCommandDraft(commandDraft, context?.workingContext);
+  const draft = normalizeCommandDraft(commandDraft, context?.workingContext, { sourceMessage: context?.message });
   if (!draft?.action?.type || !SUPPORTED_ACTIONS.has(draft.action.type)) return null;
   return {
     id: context?.requestId || `command-${Date.now()}`,
@@ -243,6 +252,10 @@ export function commandDraftToPlannerPlan(commandDraft) {
 
 export function formatCommandDraftClarification(commandDraft, workingContext) {
   const draft = normalizeCommandDraft(commandDraft, workingContext);
+  const missing = draft?.action?.missing_fields ?? [];
+  if (draft?.action?.type === 'create_calendar_event' || missing.length) {
+    return questionForMissing(draft, workingContext) || draft?.clarification_question;
+  }
   if (draft?.clarification_question) return draft.clarification_question;
   return questionForMissing(draft, workingContext);
 }
@@ -260,7 +273,7 @@ export function shouldUseCommandDraft({ message, brainRoute, brainSkill, working
   return actionLike && ['health_coach', 'calendar_planner', 'memo_assistant', 'finance_analyst', 'project_ops_coach'].includes(skillId);
 }
 
-function normalizeCommandDraft(raw, workingContext = null) {
+function normalizeCommandDraft(raw, workingContext = null, options = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const mode = COMMAND_MODES.has(raw.mode) ? raw.mode : 'unsupported';
   const language = raw.language === 'en' || raw.language === 'it'
@@ -280,6 +293,9 @@ function normalizeCommandDraft(raw, workingContext = null) {
       ...(time ? { time } : {}),
       logged_on: rawActionArgs.logged_on ?? rawActionArgs.date,
     };
+  }
+  if (actionType === 'create_calendar_event') {
+    actionArgs = normalizeCalendarEventArgs(rawActionArgs, { sourceMessage: options.sourceMessage });
   }
   let clarificationQuestion = cleanText(raw.clarification_question, 500);
   if (actionType === 'log_sleep_start' && isGenericDetailQuestion(clarificationQuestion)) clarificationQuestion = null;
@@ -311,18 +327,10 @@ function normalizeCommandDraft(raw, workingContext = null) {
   };
 }
 
-function normalizeActionArgs(actionType, args) {
+function normalizeActionArgs(actionType, args, options = {}) {
   const source = safeObject(args);
   if (actionType === 'create_calendar_event') {
-    return {
-      ...source,
-      title: cleanText(source.title, 180),
-      event_date: normalizeDateValue(source.event_date || source.date),
-      start_time: normalizeSimpleTime(source.start_time),
-      end_time: normalizeSimpleTime(source.end_time),
-      category: cleanText(source.category, 80),
-      notes: cleanText(source.notes, 1000),
-    };
+    return normalizeCalendarEventArgs(source, { sourceMessage: options.sourceMessage });
   }
   if (actionType === 'create_memo') {
     return {
@@ -366,10 +374,7 @@ function normalizeActionArgs(actionType, args) {
 function normalizeMissingFields(actionType, args, currentMissing = []) {
   const missing = new Set((Array.isArray(currentMissing) ? currentMissing : []).map(cleanField).filter(Boolean));
   if (actionType === 'create_calendar_event') {
-    if (!args.title) missing.add('title');
-    if (!args.event_date) missing.add('date');
-    if (!args.start_time) missing.add('start_time');
-    if (!args.end_time) missing.add('end_time');
+    return validateCalendarEventArgs(args, [...missing]);
   }
   if (actionType === 'create_memo') {
     if (!args.title) missing.add('title');
@@ -411,10 +416,12 @@ function questionForMissing(draft, workingContext) {
   }
   if (draft?.referent?.needed && !draft?.referent?.resolved) return formatReferentClarification({ workingContext, language });
   if (draft?.action?.type === 'create_calendar_event') {
-    if (missing.includes('start_time') || missing.includes('end_time')) {
-      return language === 'it' ? "Mi manca solo l'orario esatto. Quale uso?" : 'I only need the exact time. What should I use?';
-    }
-    if (missing.includes('date')) return language === 'it' ? 'Che data devo usare?' : 'What date should I use?';
+    const question = buildCalendarEventClarification({
+      args: draft.action.args,
+      missingFields: missing,
+      language,
+    });
+    if (question) return question;
   }
   if (draft?.action?.type === 'create_memo') {
     if (missing.includes('title')) return language === 'it' ? 'Che promemoria devo creare?' : 'What reminder should I create?';
@@ -454,13 +461,7 @@ function normalizeDateValue(value) {
 }
 
 function normalizeSimpleTime(value) {
-  if (value === undefined || value === null || value === '') return null;
-  try {
-    const { startTime } = normalizeTimeRange({ start_time: value, end_time: '23:59' }, 'start_time', 'end_time');
-    return startTime;
-  } catch {
-    return null;
-  }
+  return normalizeBrainTime(value);
 }
 
 function safeObject(value) {

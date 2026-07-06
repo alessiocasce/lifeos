@@ -978,6 +978,7 @@ async function maybeHandleCommandDraft({ message, context, classification, sourc
     workingContext: context.workingContext,
     brainRoute: context.brainRoute,
     brainSkill: context.brainSkill,
+    sourceMessage: message,
   });
   if (!validation?.ok || !validation.draft) return null;
   const draft = validation.draft;

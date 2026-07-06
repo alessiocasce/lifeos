@@ -234,13 +234,20 @@ Expected:
 16. Confirm Brain asks for exact time/duration and does not create an event yet.
 17. Reply `18-19:30`.
 18. Confirm Brain creates the calendar event or asks one final confirmation only if needed; it must not restart generic conversation.
-19. Send `antibiotico dopo cena`.
-20. Confirm Brain asks for exact reminder date/time and creates no memo yet.
-21. Reply `stasera alle 21:30`.
-22. Confirm Brain creates the memo using the stored title and supplied date/time.
-23. Send `ricordami sta cosa domani`.
-24. Confirm Brain asks what reminder content to use, preserving the known `tomorrow` date.
-25. Reply `di caricare le AirPods`.
+19. Send `Segna dentista 7/9/26 11.45am`.
+20. Confirm Brain normalizes the date to `2026-09-07`, keeps start time `11:45`, and asks for duration/end time, not `Mi manca solo l'orario esatto`.
+21. Reply `durata 1 ora`.
+22. Confirm Brain creates the event from `11:45` to `12:45`.
+23. Repeat with `Segna dentista 7/9/26 11.45pm` and confirm start time is `23:45`.
+24. Repeat the AM prompt and reply `fine 12:45`; confirm Brain uses `12:45` as `end_time`, not a new start time.
+25. Confirm Brain never creates a calendar event with identical start/end times; it asks for a valid end time or duration instead.
+26. Send `antibiotico dopo cena`.
+27. Confirm Brain asks for exact reminder date/time and creates no memo yet.
+28. Reply `stasera alle 21:30`.
+29. Confirm Brain creates the memo using the stored title and supplied date/time.
+30. Send `ricordami sta cosa domani`.
+31. Confirm Brain asks what reminder content to use, preserving the known `tomorrow` date.
+32. Reply `di caricare le AirPods`.
 26. Confirm Brain creates a date-only memo if supported or asks only for the missing time; it must not lose the `tomorrow` date.
 27. After a pending calendar clarification, send `comunque come sto andando con i workout?`.
 28. Confirm Brain does not execute the pending calendar action and answers the workout question or asks whether to ignore the pending action.

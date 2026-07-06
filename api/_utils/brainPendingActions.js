@@ -1,6 +1,14 @@
 import { generateGeminiJson } from './gemini.js';
 import { addDays, localDate, localTime } from './date.js';
-import { normalizeTimeRange, optionalDate } from './validation.js';
+import { optionalDate } from './validation.js';
+import {
+  buildCalendarEventClarification,
+  extractCalendarEventFieldUpdate,
+  isCalendarEventSlotFillMessage,
+  normalizeBrainTime,
+  normalizeCalendarEventArgs,
+  validateCalendarEventArgs,
+} from './brainActionNormalizers.js';
 
 const PENDING_ACTION_TTL_HOURS = 24;
 const PENDING_CONFIRMATION_TTL_HOURS = 2;
@@ -298,6 +306,7 @@ export function isPotentialPendingSlotFill({ message, pendingAction, workingCont
   const needsTime = ['time', 'start_time', 'end_time', 'memo_time'].some((field) => missing.has(field));
   const needsDate = missing.has('date') || missing.has('memo_date') || missing.has('event_date');
   const needsTitle = missing.has('title');
+  if (action.action_type === 'create_calendar_event' && isCalendarEventSlotFillMessage(message, action)) return true;
   if (needsTime && looksLikeTimeSlotFill(normalized)) return true;
   if (needsDate && looksLikeDateSlotFill(normalized)) return true;
   if ((needsDate || needsTime) && looksLikeDateTimeSlotFill(normalized)) return true;
@@ -355,7 +364,9 @@ export function validatePendingActionCandidate(candidate, context = {}) {
     status: terminalStatus ? action.status : status,
     args: normalizedArgs,
     missing_fields: missing,
-    confirmation_question: action.confirmation_question || questionForMissing(action, missing),
+    confirmation_question: missing.length
+      ? questionForMissing({ ...action, args: normalizedArgs }, missing)
+      : (action.confirmation_question || questionForMissing({ ...action, args: normalizedArgs }, missing)),
   };
   return {
     ok: true,
@@ -403,6 +414,14 @@ export function markPendingActionCancelled(pendingAction) {
 export function formatPendingActionQuestion(pendingAction) {
   if (pendingAction?.confirmation_question) return pendingAction.confirmation_question;
   const language = pendingAction?.language === 'it' ? 'it' : 'en';
+  if (pendingAction?.action_type === 'create_calendar_event' && pendingAction?.missing_fields?.length) {
+    const question = buildCalendarEventClarification({
+      args: pendingAction.args,
+      missingFields: pendingAction.missing_fields,
+      language,
+    });
+    if (question) return question;
+  }
   if (pendingAction?.action_type === 'log_sleep_start' && !pendingAction?.missing_fields?.length) {
     const time = pendingAction.args?.time || pendingAction.args?.sleep_start || pendingAction.summary;
     return language === 'it'
@@ -475,6 +494,8 @@ export function formatPendingActionCancelledAnswer(pendingAction) {
 }
 
 async function extractPendingActionFieldUpdateWithAI({ message, pendingAction, context } = {}) {
+  const localUpdate = localFieldUpdateFallback(message, pendingAction, context?.workingContext);
+  if (localUpdate.relation !== 'unrelated') return localUpdate;
   try {
     const raw = await generateGeminiJson({
       system: PENDING_ACTION_SLOT_FILL_SYSTEM,
@@ -497,7 +518,7 @@ async function extractPendingActionFieldUpdateWithAI({ message, pendingAction, c
     });
     const update = normalizeFieldUpdate(raw);
     if (update.relation !== 'unrelated') return update;
-    return localFieldUpdateFallback(message, pendingAction, context?.workingContext);
+    return localUpdate;
   } catch {
     return localFieldUpdateFallback(message, pendingAction, context?.workingContext);
   }
@@ -536,6 +557,8 @@ function localFieldUpdateFallback(message, pendingAction, workingContext = null)
       return { relation: 'field_update', args_patch: patch, missing_fields: [], confirmation_required: false };
     }
   }
+  const calendarUpdate = extractCalendarEventFieldUpdate(text, pendingAction);
+  if (calendarUpdate) return calendarUpdate;
   const timeRange = text.match(/\b(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})\s*(?:-|–|to|alle|a)\s*(\d{1,2}(?::|\.)(?:[0-5]\d)|\d{1,2})(?:\s*(am|pm|di sera))?\b/i);
   if (timeRange) {
     const start = normalizeSimpleTime(timeRange[1], timeRange[3]);
@@ -635,7 +658,10 @@ function normalizePendingAction(value) {
   }
   if (!actionType || actionType === 'unsupported') return null;
   const language = value.language === 'it' || looksItalianSleepStart(`${rawSummary} ${sourceUserMessage}`) ? 'it' : 'en';
-  const normalizedArgs = normalizePendingArgs(actionType, args);
+  const argsForNormalization = actionType === 'create_calendar_event'
+    ? { ...args, source_user_message: sourceUserMessage }
+    : args;
+  const normalizedArgs = normalizePendingArgs(actionType, argsForNormalization);
   const missingFields = normalizeMissingFields(
     actionType,
     normalizedArgs,
@@ -697,21 +723,7 @@ function normalizePendingArgs(actionType, args) {
     };
   }
   if (actionType === 'create_calendar_event') {
-    const date = source.event_date || source.date;
-    let startTime = source.start_time;
-    let endTime = source.end_time;
-    if (startTime && !endTime && source.duration_minutes) {
-      endTime = addMinutesToTime(normalizeSimpleTime(startTime), Number(source.duration_minutes));
-    }
-    return {
-      ...source,
-      title: cleanText(source.title ?? source.name, 160),
-      event_date: normalizeDateValue(date),
-      start_time: normalizeSimpleTime(startTime),
-      end_time: normalizeSimpleTime(endTime),
-      category: cleanText(source.category, 80),
-      notes: cleanText(source.notes, 1000),
-    };
+    return normalizeCalendarEventArgs(source, { sourceMessage: source.source_user_message });
   }
   if (actionType === 'create_memo') {
     const date = source.memo_date || source.date;
@@ -746,10 +758,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
     if (!args.time) missing.add('time');
   }
   if (actionType === 'create_calendar_event') {
-    if (!args.title) missing.add('title');
-    if (!args.event_date) missing.add('date');
-    if (!args.start_time) missing.add('start_time');
-    if (!args.end_time) missing.add('end_time');
+    return validateCalendarEventArgs(args, [...missing]);
   }
   if (actionType === 'create_memo') {
     if (!args.title) missing.add('title');
@@ -778,12 +787,12 @@ function questionForMissing(action, missing) {
   if (!missing.length) return action.confirmation_question || formatPendingActionQuestion(action);
   const language = action.language === 'it' ? 'it' : 'en';
   if (action.action_type === 'create_calendar_event') {
-    if (missing.includes('start_time') || missing.includes('end_time')) {
-      return language === 'it'
-        ? 'Che orario esatto devo usare? Per esempio 14:30-15:30.'
-        : 'What exact time should I use? For example 14:30-15:30.';
-    }
-    if (missing.includes('date')) return language === 'it' ? 'Che giorno devo usare?' : 'What date should I use?';
+    const question = buildCalendarEventClarification({
+      args: action.args,
+      missingFields: missing,
+      language,
+    });
+    if (question) return question;
   }
   if (action.action_type === 'create_memo') {
     if (missing.includes('title')) return language === 'it' ? 'Che promemoria devo creare?' : 'What reminder should I create?';
@@ -883,31 +892,7 @@ function normalizeDateValue(value) {
 }
 
 function normalizeSimpleTime(value, suffix = '') {
-  if (value === undefined || value === null || value === '') return null;
-  let text = String(value).trim().toLowerCase().replace('.', ':');
-  if (suffix) text = `${text} ${suffix}`;
-  try {
-    const { startTime } = normalizeTimeRange({ start_time: text, end_time: '23:59' }, 'start_time', 'end_time');
-    return startTime;
-  } catch {
-    const match = text.match(/^(\d{1,2})(?::([0-5]\d))?\s*(am|pm|di sera)?$/);
-    if (!match) return null;
-    let hour = Number(match[1]);
-    const minute = Number(match[2] ?? 0);
-    const period = match[3] || '';
-    if ((period === 'pm' || period === 'di sera') && hour < 12) hour += 12;
-    if (period === 'am' && hour === 12) hour = 0;
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }
-}
-
-function addMinutesToTime(time, minutes) {
-  if (!time || !Number.isFinite(Number(minutes))) return null;
-  const [hour, minute] = time.split(':').map(Number);
-  const total = hour * 60 + minute + Number(minutes);
-  if (total <= 0 || total >= 24 * 60) return null;
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  return normalizeBrainTime(value, suffix);
 }
 
 function isExpired(action, now = Date.now()) {

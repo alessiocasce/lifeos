@@ -212,19 +212,21 @@ Run the focused checklists after the full flow:
 38. Confirm ambiguous fragments such as `gym tomorrow 5` ask clarification and create no action.
 39. Confirm `blocca domani un'ora per sistemare il Vault dopo pranzo` asks for exact time and creates no event.
 40. Reply `14:30-15:30` and confirm Brain creates the stored Vault calendar block instead of asking the generic clarification again.
-41. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, confirm Brain asks to save `Pisolino 19:40-22:00`, then reply `si` and confirm it saves to Health notes without touching sleep start/wake time/sleep hours.
-42. Repeat the nap prompt and reply `si ma non segnarlo`; confirm no write occurs and the pending action is cancelled.
-43. Send `antibiotico dopo cena`, confirm Brain asks for exact reminder date/time, then reply `stasera alle 21:30` and confirm a memo is created.
-44. After a pending calendar clarification, send `comunque come sto andando con i workout?` and confirm Brain does not execute the pending action accidentally.
-45. Confirm retrying a pending action confirmation does not create duplicate records.
-46. Send `Segna che sto andando a dormire ora alle 3.41am`, then reply `si` if confirmation is asked; confirm sleep start saves and Brain never asks generic `Che dettaglio devo usare?`.
-47. Create a sleep-start confirmation, leave it unanswered, then send `Ricordami di fare matematica tra 10 minuti`; confirm Brain handles the memo/reminder and does not repeat the old sleep confirmation.
-48. After a sleep-start confirmation, send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`; confirm Brain does not mutate the pending sleep-start time or question.
-49. Confirm simple explicit writes such as Creatine or sleep-start logs skip Vault retrieval in trace.
-50. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
-51. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
-52. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
-53. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
+41. Send `Segna dentista 7/9/26 11.45am` and confirm Brain keeps `11:45`, not `23:45`.
+42. Confirm Brain asks for duration/end time, then reply `durata 1 ora` or `fine 12:45` and confirm it creates `11:45-12:45`.
+43. Send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, confirm Brain asks to save `Pisolino 19:40-22:00`, then reply `si` and confirm it saves to Health notes without touching sleep start/wake time/sleep hours.
+44. Repeat the nap prompt and reply `si ma non segnarlo`; confirm no write occurs and the pending action is cancelled.
+45. Send `antibiotico dopo cena`, confirm Brain asks for exact reminder date/time, then reply `stasera alle 21:30` and confirm a memo is created.
+46. After a pending calendar clarification, send `comunque come sto andando con i workout?` and confirm Brain does not execute the pending action accidentally.
+47. Confirm retrying a pending action confirmation does not create duplicate records.
+48. Send `Segna che sto andando a dormire ora alle 3.41am`, then reply `si` if confirmation is asked; confirm sleep start saves and Brain never asks generic `Che dettaglio devo usare?`.
+49. Create a sleep-start confirmation, leave it unanswered, then send `Ricordami di fare matematica tra 10 minuti`; confirm Brain handles the memo/reminder and does not repeat the old sleep confirmation.
+50. After a sleep-start confirmation, send `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`; confirm Brain does not mutate the pending sleep-start time or question.
+51. Confirm simple explicit writes such as Creatine or sleep-start logs skip Vault retrieval in trace.
+52. After saving a nap/Health note, send `aggiungilo anche al calendario` and confirm Brain uses the same stored date/time without asking again.
+53. Send `crea anche un memo con lo stesso orario` and confirm Brain uses the last operational subject's date/time or asks only for truly missing fields.
+54. In a new empty chat, send `aggiungilo anche al calendario` and confirm Brain asks what should be added.
+55. With two plausible recent subjects, confirm Brain asks a specific disambiguation question before writing.
 54. Confirm Working Context metadata is not exposed in the normal Brain UI.
 55. Confirm Italian command clarifications and completions stay in Italian.
 56. Confirm Recent Actions remains clean when a route blocks writes, asks clarification, or stores a pending action.
