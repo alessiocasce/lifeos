@@ -1,6 +1,6 @@
 # LifeOS Brain Architecture
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 
 This doc describes the current backend Brain pipeline as implemented in code. `PROJECT_CONTEXT.md` remains the high-level handoff, but `api/` is the source of truth.
 
@@ -131,6 +131,25 @@ This policy is enforced in both route repair and command-draft validation. If th
 
 Agenda, memo, calendar, workout, and operational follow-up questions must not dump long-term memory.
 
+## Proactive Reply Dispatch
+
+`api/_utils/brainProactiveReplies.js` is the shared deterministic proactive reply entrypoint for WhatsApp. It selects the latest proactive assistant message by `metadata.expected_reply_type` and dispatches without Gemini/planner guessing.
+
+Current reply types:
+
+- `memo_done_snooze_cancel`: mark memo done, dismiss, snooze, explain, or ask clarification.
+- `accountability`: log missing Health check-ins for wake time, previous-night sleep start, or Shower/Creatine/Skin habits.
+
+Accountability replies are intentionally narrow:
+
+- `si`, `fatto`, `fatta`, `presa`, `done` can log the targeted habit.
+- `9.30` can update the targeted wake time or previous-night sleep start.
+- `ora` updates wake time to current Europe/Rome time.
+- `piu tardi` can enqueue a snoozed accountability outbox row.
+- `non ancora`, `non so`, `boh`, or `non ho dormito` acknowledge without writing.
+
+These replies must not route through Planner Stage, create memos/calendar events, call Vault, or dump memory. Generic pending cancellations still beat proactive reply priority unless the user clearly references the proactive target.
+
 ## Tests
 
 Run:
@@ -141,6 +160,7 @@ npm run test:brain
 
 The harness covers BrainTurn Contract paths, command-draft stage policy, memo/calendar policy, pending/proactive arbitration, operational follow-ups, route repair, Vault skipping, and the existing sleep/calendar/proactive regressions.
 It also covers Planner Stage contract enforcement: read-only/agenda/workout/product/casual turns cannot write even if a fake planner proposes a write, while explicit current-message memo/calendar writes still pass route and skill permission.
+Proactive coverage includes memo reminders and Proactive Accountability v1 candidate/reply behavior without live WhatsApp, Gemini, or Supabase writes.
 
 ## Next Extraction
 

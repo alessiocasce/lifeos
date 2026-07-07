@@ -1,29 +1,43 @@
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { localDateTime, addDays } from './date.js';
 import { normalizeTurnText } from './brainTurnArbitration.js';
+import {
+  ACCOUNTABILITY_REPLY_TYPE,
+  buildAccountabilityWorkingContextFromOutbox,
+  normalizeProactiveAccountabilityReply,
+  resolveProactiveAccountabilityReply,
+  selectProactiveAccountabilityReplyTarget,
+} from './brainProactiveAccountability.js';
 
 const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
 const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
 const PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS = 36;
 
 export async function resolveProactiveWhatsappReply({ message, brainChat, context } = {}) {
-  const memoResult = await resolveProactiveMemoReply({ message, brainChat, context });
-  if (!memoResult) return null;
+  const target = selectProactiveReplyTarget({ message, brainChat, now: new Date() });
+  let result = null;
+  if (target.reply_type === ACCOUNTABILITY_REPLY_TYPE) {
+    result = await resolveProactiveAccountabilityReply({ message, brainChat, context });
+  } else if (target.reply_type === MEMO_REPLY_TYPE) {
+    result = await resolveProactiveMemoReply({ message, brainChat, context });
+  }
+  if (!result) return null;
   return {
-    ...memoResult,
+    ...result,
     proactive_reply_trace: {
       handled: true,
-      action_type: memoResult.proactive_reply_trace?.action_type ?? memoResult.actions?.[0]?.type ?? null,
-      reason: memoResult.plan?.reasoning ?? null,
-      stale: memoResult.proactive_reply_trace?.stale ?? false,
-      ambiguous: memoResult.proactive_reply_trace?.ambiguous ?? false,
+      expected_reply_type: result.proactive_reply_trace?.expected_reply_type ?? target.reply_type ?? null,
+      action_type: result.proactive_reply_trace?.action_type ?? result.actions?.[0]?.type ?? null,
+      reason: result.plan?.reasoning ?? null,
+      stale: result.proactive_reply_trace?.stale ?? false,
+      ambiguous: result.proactive_reply_trace?.ambiguous ?? false,
     },
   };
 }
 
 export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, activePendingAction, now = new Date() } = {}) {
   if (!activePendingAction) return { prioritize: false, reason: 'no_pending_action', intent: 'other' };
-  const selection = selectProactiveMemoReplyTarget({ message, brainChat, now });
+  const selection = selectProactiveReplyTarget({ message, brainChat, now });
   const intent = selection.intent?.intent ?? 'other';
   if (intent === 'other' || selection.type === 'none') {
     return { prioritize: false, reason: 'no_proactive_reply_intent', intent };
@@ -43,7 +57,26 @@ export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, 
         : 'latest_proactive_reply_intent',
     intent,
     selection_type: selection.type,
+    reply_type: selection.reply_type ?? null,
   };
+}
+
+export function selectProactiveReplyTarget({ message, brainChat, now = new Date() } = {}) {
+  const latestType = getLatestProactiveReplyType(brainChat);
+  if (latestType === ACCOUNTABILITY_REPLY_TYPE) {
+    const accountability = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
+    if (accountability.type !== 'none') return { ...accountability, reply_type: ACCOUNTABILITY_REPLY_TYPE };
+  }
+  if (latestType === MEMO_REPLY_TYPE) {
+    const memo = selectProactiveMemoReplyTarget({ message, brainChat, now });
+    if (memo.type !== 'none') return { ...memo, reply_type: MEMO_REPLY_TYPE };
+  }
+
+  const memo = selectProactiveMemoReplyTarget({ message, brainChat, now });
+  if (memo.type !== 'none') return { ...memo, reply_type: MEMO_REPLY_TYPE };
+  const accountability = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
+  if (accountability.type !== 'none') return { ...accountability, reply_type: ACCOUNTABILITY_REPLY_TYPE };
+  return { type: 'none', intent: { intent: 'other', confidence: 0 }, reply_type: null };
 }
 
 function messageReferencesProactiveTarget(message, proactive) {
@@ -260,6 +293,8 @@ export function normalizeProactiveMemoReply(message) {
   return { intent: 'other', confidence: 0.2, normalized: text };
 }
 
+export { normalizeProactiveAccountabilityReply, selectProactiveAccountabilityReplyTarget };
+
 export function looksLikeIndependentProactiveCommand(message) {
   const text = normalizeText(message);
   if (!text) return false;
@@ -268,6 +303,9 @@ export function looksLikeIndependentProactiveCommand(message) {
 
 export function buildProactiveWorkingContextFromOutbox(outboxMessage) {
   const metadata = outboxMessage?.metadata && typeof outboxMessage.metadata === 'object' ? outboxMessage.metadata : {};
+  if (metadata.expected_reply_type === ACCOUNTABILITY_REPLY_TYPE || outboxMessage?.source_type === 'accountability') {
+    return buildAccountabilityWorkingContextFromOutbox(outboxMessage);
+  }
   const memo = metadata.memo && typeof metadata.memo === 'object' ? metadata.memo : {};
   const language = metadata.language === 'en' ? 'en' : 'it';
   return {
@@ -418,6 +456,19 @@ function messageReferencesPendingAction(message, pendingAction) {
   const unique = [...new Set(tokens)];
   const matches = unique.filter((token) => text.includes(token));
   return matches.length >= Math.min(2, unique.length) || (text.length > 12 && matches.some((token) => token.length >= 6));
+}
+
+function getLatestProactiveReplyType(brainChat) {
+  const history = Array.isArray(brainChat?.conversationHistory) ? brainChat.conversationHistory : [];
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const item = history[index];
+    if (item?.role !== 'assistant') continue;
+    const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+    if (!metadata.proactive_message) continue;
+    if (metadata.expected_reply_type === ACCOUNTABILITY_REPLY_TYPE) return ACCOUNTABILITY_REPLY_TYPE;
+    if (metadata.expected_reply_type === MEMO_REPLY_TYPE) return MEMO_REPLY_TYPE;
+  }
+  return null;
 }
 
 async function updateMemoStatus({ memoId, status }) {

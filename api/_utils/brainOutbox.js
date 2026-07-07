@@ -280,6 +280,8 @@ export async function persistSentProactiveMessageToWhatsappThread({ userId = get
       source_type: outboxMessage.source_type,
       source_id: outboxMessage.source_id,
       expected_reply_type: metadata.expected_reply_type || MEMO_REPLY_TYPE,
+      ...(metadata.language ? { language: metadata.language } : {}),
+      ...(metadata.accountability && typeof metadata.accountability === 'object' ? { accountability: metadata.accountability } : {}),
     },
   });
 }

@@ -382,7 +382,7 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 
 ## Proactive WhatsApp Memo Outbox
 
-Run `npm run test:brain` first. It covers pure candidate generation, idempotency keys, the outbox state-machine helper, stale claimed outbox recovery classification, outbox status transitions/backoff, proactive memo reply intent normalization, proactive reply target selection in `brainProactiveReplies`, proactive rule candidate validation, and proactive working-context metadata.
+Run `npm run test:brain` first. It covers pure memo/accountability candidate generation, idempotency keys, the outbox state-machine helper, stale claimed outbox recovery classification, outbox status transitions/backoff, proactive memo/accountability reply intent normalization, proactive reply target selection in `brainProactiveReplies`, proactive rule candidate validation, and proactive working-context metadata.
 
 Manual deployed QA:
 
@@ -410,6 +410,26 @@ Manual deployed QA:
 22. Send `fatto` more than the proactive reply window after a reminder and confirm Brain asks which reminder to update instead of mutating the old memo.
 23. Send two recent proactive memo reminders, then reply `fatto`; confirm Brain asks which reminder unless the reply names one clearly.
 24. Confirm Home and Brain UI do not change and old WhatsApp backend threads remain hidden from normal Brain UI.
+
+## Proactive WhatsApp Accountability
+
+Manual deployed QA:
+
+1. Ensure `brain_proactive_rules` global/rule config does not disable proactive messages.
+2. Ensure today's Shower count is missing while today's `wake_time` and previous-night `sleep_start` are present.
+3. After the shower window, call `POST /api/integrations/whatsapp/outbox` with `action: "evaluate"`, valid secret, and allowed `recipient`.
+4. Confirm an outbox row is queued with `rule_key: accountability_habit_missing`, `source_type: accountability`, `source_id: habit:shower:<today>`, and `metadata.expected_reply_type: accountability`.
+5. Poll and ack the row through the bridge.
+6. Confirm the persisted assistant message has `metadata.proactive_message = true`, `expected_reply_type = accountability`, and `working_context.last_subject.type = accountability`.
+7. Reply `si` or `fatto` from WhatsApp.
+8. Confirm today's `health_logs.hygiene.shower.count` increments with a current Europe/Rome timestamp and Brain replies concisely.
+9. Repeat for Creatine and Skin after their configured windows.
+10. Clear today's `wake_time`, evaluate after the wake window, reply `9.30`, and confirm today's `wake_time` becomes `09:30`.
+11. Clear previous-night `sleep_start`, evaluate the next morning, reply `2.30`, and confirm `logSleepStart()` stores `02:30` on the previous LifeOS date and recalculates the following sleep hours when wake time exists.
+12. Reply `non ancora` to a habit nudge and confirm no Health write happens.
+13. Reply `piu tardi` or `tra 30 min` and confirm a snoozed accountability outbox row is queued.
+14. Trigger an unrelated pending action, receive an accountability nudge, then reply `No. Cancella tutto`; confirm pending cancellation wins and no accountability write occurs.
+15. Confirm accountability replies never create calendar events/memos, never call Vault, and never dump memory.
 
 ## WhatsApp Pending Action Resolution
 

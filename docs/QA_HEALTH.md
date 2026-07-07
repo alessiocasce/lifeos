@@ -85,6 +85,24 @@ Run this after signing in through the global auth gate. This pass does not requi
 7. Confirm Brush and Journal are preserved in legacy JSON but are not updated or displayed.
 8. Confirm missing or invalid auth returns `401`.
 
+## Proactive Accountability WhatsApp
+
+Run `npm run test:brain` first. The pure harness covers accountability candidate generation, deterministic jitter, attention profile metadata, reply normalization, habit/wake/sleep write routing, snooze handling, and pending-action arbitration.
+
+Manual QA after deploy:
+
+1. Ensure today's Shower count is missing and today's wake time plus previous-night sleep start are already present.
+2. Trigger WhatsApp outbox `evaluate` after the shower window.
+3. Confirm a queued row with `rule_key = accountability_habit_missing`, `source_type = accountability`, `metadata.expected_reply_type = accountability`, and source id `habit:shower:YYYY-MM-DD`.
+4. Poll/send/ack through the bridge and confirm WhatsApp receives `Doccia fatta oggi?`.
+5. Reply `si` or `fatto`; confirm today's `health_logs.hygiene.shower.count` increments and a current Europe/Rome time is appended.
+6. Repeat with Creatine and Skin after their windows; confirm they update `hygiene.creatine` and `hygiene.skin`.
+7. Clear today's `wake_time`, evaluate after the wake window, reply `9.30`, and confirm today's `wake_time` is `09:30`.
+8. Clear previous-night `sleep_start`, evaluate the next morning, reply `2.30`, and confirm `sleep_start` is stored on the previous LifeOS date through the canonical sleep-start behavior.
+9. Reply `non ancora` to a habit nudge and confirm no health write happens.
+10. Reply `piu tardi` and confirm a snoozed outbox row is queued instead of an immediate duplicate.
+11. Evaluate during quiet hours in a controlled test and confirm accountability can still queue while duplicate/idempotency suppression remains active.
+
 ## Persistence And Mobile
 
 1. Autosave today and yesterday, refresh, and confirm both logs reload.

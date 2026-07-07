@@ -51,6 +51,7 @@ import {
   normalizeProactiveMemoReply,
   resolveProactiveMemoReply,
   selectProactiveMemoReplyTarget,
+  selectProactiveReplyTarget,
   shouldPrioritizeProactiveReplyOverPending,
 } from '../api/_utils/brainProactiveReplies.js';
 import {
@@ -77,6 +78,16 @@ import {
   shouldSpendAttention,
   validateProactiveCandidate,
 } from '../api/_utils/brainProactiveRules.js';
+import {
+  ACCOUNTABILITY_ATTENTION_PROFILE,
+  ACCOUNTABILITY_REPLY_TYPE,
+  buildAccountabilityProactiveCandidates,
+  buildAccountabilityProactiveCandidatesFromContext,
+  deterministicJitterMinutes,
+  normalizeProactiveAccountabilityReply,
+  resolveProactiveAccountabilityReply,
+  selectProactiveAccountabilityReplyTarget,
+} from '../api/_utils/brainProactiveAccountability.js';
 import { localDateRangeToUtcIso, localRangeToUtcWindow, startOfLocalDayUtcIso } from '../api/_utils/date.js';
 import {
   canonicalizeWhatsappSender,
@@ -1486,6 +1497,220 @@ test('missing-source proactive memo reply is read-only clarification', async () 
   assert.deepEqual(result.actions, []);
 });
 
+test('accountability reply intents normalize and select the latest accountability target', () => {
+  assert.equal(normalizeProactiveAccountabilityReply('fatto').intent, 'done');
+  assert.equal(normalizeProactiveAccountabilityReply('presa').intent, 'done');
+  assert.equal(normalizeProactiveAccountabilityReply('non ancora').intent, 'no');
+  assert.equal(normalizeProactiveAccountabilityReply('9.30').intent, 'time');
+  assert.equal(normalizeProactiveAccountabilityReply('ora').use_now, true);
+  assert.equal(normalizeProactiveAccountabilityReply('piu tardi').intent, 'snooze');
+
+  const brainChat = buildProactiveBrainChat([
+    accountabilityAssistantMessage({
+      id: 'account-1',
+      created_at: '2026-07-07T12:00:00.000Z',
+      accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07', window_key: 'afternoon' },
+    }),
+  ]);
+  const selection = selectProactiveAccountabilityReplyTarget({
+    message: 'fatto',
+    brainChat,
+    now: new Date('2026-07-07T12:05:00.000Z'),
+  });
+  assert.equal(selection.type, 'target', compact(selection));
+  assert.equal(selection.proactive.accountability.habit_id, 'shower');
+
+  const generic = selectProactiveReplyTarget({
+    message: 'fatto',
+    brainChat,
+    now: new Date('2026-07-07T12:05:00.000Z'),
+  });
+  assert.equal(generic.reply_type, ACCOUNTABILITY_REPLY_TYPE, compact(generic));
+});
+
+test('sent proactive outbox message metadata supplies accountability working context', () => {
+  const context = buildProactiveWorkingContextFromOutbox({
+    id: 'outbox-account-1',
+    rule_key: 'accountability_habit_missing',
+    source_type: 'accountability',
+    source_id: 'habit:shower:2026-07-07',
+    scheduled_for: '2026-07-07T14:00:00.000Z',
+    body: 'Doccia fatta oggi?',
+    metadata: {
+      expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
+      language: 'it',
+      accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07', window_key: 'afternoon' },
+    },
+  });
+  assert.equal(context.last_subject.type, 'accountability');
+  assert.equal(context.last_subject.source, 'proactive_whatsapp_accountability');
+  assert.equal(context.last_subject.raw.expected_reply_type, ACCOUNTABILITY_REPLY_TYPE);
+  assert.equal(context.last_subject.raw.accountability.habit_id, 'shower');
+});
+
+test('habit accountability replies write only for done or explicit time', async () => {
+  const calls = [];
+  const actions = {
+    updateHealthLog: async (args) => {
+      calls.push(args);
+      return { id: 'health-1', ...args };
+    },
+  };
+  const brainChat = buildProactiveBrainChat([
+    accountabilityAssistantMessage({
+      id: 'account-habit',
+      created_at: '2026-07-07T12:00:00.000Z',
+      accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07', window_key: 'afternoon' },
+    }),
+  ]);
+  const done = await resolveProactiveAccountabilityReply({
+    message: 'si',
+    brainChat,
+    now: new Date('2026-07-07T14:15:00.000Z'),
+    actions,
+  });
+  assert.equal(done.plan.needsWrite, true, compact(done));
+  assert.equal(calls[0].logged_on, '2026-07-07');
+  assert.equal(calls[0].shower, true);
+  assert.equal(calls[0].habit_time, '16:15');
+
+  calls.length = 0;
+  const timed = await resolveProactiveAccountabilityReply({
+    message: "l'ho fatta alle 18.30",
+    brainChat,
+    now: new Date('2026-07-07T18:00:00.000Z'),
+    actions,
+  });
+  assert.equal(timed.plan.needsWrite, true, compact(timed));
+  assert.equal(calls[0].habit_time, '18:30');
+
+  calls.length = 0;
+  const no = await resolveProactiveAccountabilityReply({
+    message: 'non ancora',
+    brainChat,
+    now: new Date('2026-07-07T18:00:00.000Z'),
+    actions,
+  });
+  assert.equal(no.plan.needsWrite, false, compact(no));
+  assert.deepEqual(calls, []);
+});
+
+test('wake and sleep-start accountability replies use health write helpers deterministically', async () => {
+  const calls = [];
+  const actions = {
+    updateHealthLog: async (args) => {
+      calls.push({ type: 'update', args });
+      return { id: 'health-wake', ...args };
+    },
+    logSleepStart: async (args) => {
+      calls.push({ type: 'sleep', args });
+      return { sleep_start: args.time, sleep_start_logged_on: args.loggedOn };
+    },
+  };
+  const wakeChat = buildProactiveBrainChat([
+    accountabilityAssistantMessage({
+      id: 'account-wake',
+      created_at: '2026-07-07T10:00:00.000Z',
+      accountability: { kind: 'wake_time_missing', field: 'wake_time', local_date: '2026-07-07', window_key: 'morning' },
+    }),
+  ]);
+  const wake = await resolveProactiveAccountabilityReply({
+    message: '9.30',
+    brainChat: wakeChat,
+    now: new Date('2026-07-07T10:10:00.000Z'),
+    actions,
+  });
+  assert.equal(wake.plan.needsWrite, true, compact(wake));
+  assert.deepEqual(calls.at(-1), { type: 'update', args: { logged_on: '2026-07-07', wake_time: '09:30' } });
+
+  const wakeNow = await resolveProactiveAccountabilityReply({
+    message: 'ora',
+    brainChat: wakeChat,
+    now: new Date('2026-07-07T08:15:00.000Z'),
+    actions,
+  });
+  assert.equal(wakeNow.plan.needsWrite, true, compact(wakeNow));
+  assert.equal(calls.at(-1).args.wake_time, '10:15');
+
+  const sleepChat = buildProactiveBrainChat([
+    accountabilityAssistantMessage({
+      id: 'account-sleep',
+      created_at: '2026-07-07T10:00:00.000Z',
+      accountability: { kind: 'sleep_start_missing', field: 'sleep_start', local_date: '2026-07-07', sleep_date: '2026-07-06', window_key: 'morning' },
+    }),
+  ]);
+  const sleep = await resolveProactiveAccountabilityReply({
+    message: '2.30',
+    brainChat: sleepChat,
+    now: new Date('2026-07-07T10:20:00.000Z'),
+    actions,
+  });
+  assert.equal(sleep.plan.needsWrite, true, compact(sleep));
+  assert.deepEqual(calls.at(-1), { type: 'sleep', args: { time: '02:30', loggedOn: '2026-07-06' } });
+});
+
+test('accountability later replies enqueue snooze when a recipient is available', async () => {
+  const calls = [];
+  const actions = {
+    enqueueSnooze: async (args) => {
+      calls.push(args);
+      return { id: 'snooze-1' };
+    },
+  };
+  const brainChat = buildProactiveBrainChat([
+    accountabilityAssistantMessage({
+      id: 'account-later',
+      created_at: '2026-07-07T12:00:00.000Z',
+      accountability: { kind: 'habit_missing', habit_id: 'creatine', local_date: '2026-07-07', window_key: 'afternoon' },
+    }),
+  ]);
+  const result = await resolveProactiveAccountabilityReply({
+    message: 'tra 30 min',
+    brainChat,
+    context: { channelMetadata: { whatsapp_sender: proactiveMemoFixtures.recipient } },
+    now: new Date('2026-07-07T14:00:00.000Z'),
+    actions,
+  });
+  assert.equal(result.plan.needsWrite, false, compact(result));
+  assert.equal(calls[0].minutes, 30);
+  assert.equal(calls[0].accountability.habit_id, 'creatine');
+});
+
+test('accountability replies do not steal generic pending cancellation', () => {
+  const brainChat = buildProactiveBrainChat([
+    accountabilityAssistantMessage({
+      id: 'account-cancel',
+      created_at: '2026-07-07T12:00:00.000Z',
+      accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07', window_key: 'afternoon' },
+    }),
+  ]);
+  const pendingAction = {
+    id: 'pending-calendar-cancel',
+    action_type: 'create_calendar_event',
+    status: 'awaiting_fields',
+    confirmation_required: false,
+    args: { title: 'Parrucchiere', event_date: '2026-07-07', start_time: '11:45' },
+    missing_fields: ['end_time'],
+    language: 'it',
+  };
+  const cancel = shouldPrioritizeProactiveReplyOverPending({
+    message: 'No. Cancella tutto',
+    brainChat,
+    activePendingAction: pendingAction,
+    now: new Date('2026-07-07T12:05:00.000Z'),
+  });
+  assert.equal(cancel.prioritize, false, compact(cancel));
+
+  const done = shouldPrioritizeProactiveReplyOverPending({
+    message: 'fatto',
+    brainChat,
+    activePendingAction: pendingAction,
+    now: new Date('2026-07-07T12:05:00.000Z'),
+  });
+  assert.equal(done.prioritize, true, compact(done));
+  assert.equal(done.reply_type, ACCOUNTABILITY_REPLY_TYPE);
+});
+
 test('BrainTurn records working context and active pending action stage', () => {
   const turn = createBrainTurn({
     message: 'ok',
@@ -1626,6 +1851,148 @@ test('memo proactive registry emits current memo candidates through family contr
     recipient: proactiveMemoFixtures.recipient,
   });
   assert.equal(candidates.some((candidate) => candidate.rule_key === 'timed_memo_due'), true, compact(candidates));
+});
+
+test('accountability proactive registry emits health and habit candidates through family contract', () => {
+  assert.equal(proactiveRuleRegistry.some((rule) => rule.family === 'accountability' && typeof rule.loadContext === 'function' && typeof rule.buildCandidates === 'function'), true);
+  const candidates = buildAccountabilityProactiveCandidatesFromContext({
+    context: {
+      health_logs: [
+        { logged_on: '2026-07-07', wake_time: '09:00', hygiene: { creatine: { count: 1, times: ['10:00'] }, skin: { count: 1, times: ['22:00'] } } },
+        { logged_on: '2026-07-06', sleep_start: '02:00' },
+      ],
+    },
+    now: new Date('2026-07-07T18:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  const shower = candidates.find((candidate) => candidate.source_id === 'habit:shower:2026-07-07');
+  assert.ok(shower, compact(candidates));
+  assert.equal(shower.rule_key, 'accountability_habit_missing');
+  assert.equal(shower.source_type, 'accountability');
+  assert.equal(shower.metadata.expected_reply_type, ACCOUNTABILITY_REPLY_TYPE);
+  assert.deepEqual(shower.metadata.attention_profile, ACCOUNTABILITY_ATTENTION_PROFILE);
+  assert.deepEqual(validateProactiveCandidate(shower), { ok: true, reason: null });
+});
+
+test('accountability habit candidates are suppressed when target count is already logged', () => {
+  const candidates = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      {
+        logged_on: '2026-07-07',
+        wake_time: '09:00',
+        hygiene: {
+          shower: { count: 1, times: ['16:00'] },
+          creatine: { count: 1, times: ['10:00'] },
+          skin: { count: 1, times: ['22:00'] },
+        },
+      },
+      { logged_on: '2026-07-06', sleep_start: '02:00' },
+    ],
+    now: new Date('2026-07-07T18:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  assert.equal(candidates.some((candidate) => candidate.source_id === 'habit:shower:2026-07-07'), false, compact(candidates));
+});
+
+test('accountability creatine and skin windows produce stable habit candidates', () => {
+  const baseLogs = [
+    { logged_on: '2026-07-07', wake_time: '09:00', hygiene: { shower: { count: 1, times: ['16:00'] } } },
+    { logged_on: '2026-07-06', sleep_start: '02:00' },
+  ];
+  const creatine = buildAccountabilityProactiveCandidates({
+    healthLogs: baseLogs,
+    now: new Date('2026-07-07T17:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  }).find((candidate) => candidate.source_id === 'habit:creatine:2026-07-07');
+  assert.ok(creatine, compact(baseLogs));
+  const skin = buildAccountabilityProactiveCandidates({
+    healthLogs: baseLogs,
+    now: new Date('2026-07-07T21:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  }).find((candidate) => candidate.source_id === 'habit:skin:2026-07-07');
+  assert.ok(skin, compact(baseLogs));
+  assert.equal(deterministicJitterMinutes('habit:skin:2026-07-07:late', 29), deterministicJitterMinutes('habit:skin:2026-07-07:late', 29));
+  assert.notEqual(deterministicJitterMinutes('habit:skin:2026-07-07:late', 29), deterministicJitterMinutes('habit:skin:2026-07-08:late', 29));
+});
+
+test('accountability wake and previous-night sleep-start candidates respect existing logs', () => {
+  const wakeCandidates = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      { logged_on: '2026-07-07', hygiene: { shower: { count: 1 }, creatine: { count: 1 }, skin: { count: 1 } } },
+      { logged_on: '2026-07-06', sleep_start: '02:00' },
+    ],
+    now: new Date('2026-07-07T12:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  const wake = wakeCandidates.find((candidate) => candidate.rule_key === 'accountability_wake_time_missing');
+  assert.ok(wake, compact(wakeCandidates));
+  assert.equal(wake.source_id, 'wake_time:2026-07-07');
+
+  const noWake = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      { logged_on: '2026-07-07', wake_time: '09:30', hygiene: { shower: { count: 1 }, creatine: { count: 1 }, skin: { count: 1 } } },
+      { logged_on: '2026-07-06', sleep_start: '02:00' },
+    ],
+    now: new Date('2026-07-07T12:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  assert.equal(noWake.some((candidate) => candidate.rule_key === 'accountability_wake_time_missing'), false, compact(noWake));
+
+  const sleepCandidates = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      { logged_on: '2026-07-07', wake_time: '09:30', hygiene: { shower: { count: 1 }, creatine: { count: 1 }, skin: { count: 1 } } },
+      { logged_on: '2026-07-06' },
+    ],
+    now: new Date('2026-07-07T11:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  const sleep = sleepCandidates.find((candidate) => candidate.rule_key === 'accountability_sleep_start_missing_previous_night');
+  assert.ok(sleep, compact(sleepCandidates));
+  assert.equal(sleep.source_id, 'sleep_start:2026-07-06');
+  assert.equal(sleep.metadata.accountability.sleep_date, '2026-07-06');
+
+  const noSleep = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      { logged_on: '2026-07-07', wake_time: '09:30', hygiene: { shower: { count: 1 }, creatine: { count: 1 }, skin: { count: 1 } } },
+      { logged_on: '2026-07-06', sleep_start: '02:30' },
+    ],
+    now: new Date('2026-07-07T11:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  });
+  assert.equal(noSleep.some((candidate) => candidate.rule_key === 'accountability_sleep_start_missing_previous_night'), false, compact(noSleep));
+});
+
+test('accountability candidates use stable idempotency and profile instead of memo attention defaults', () => {
+  const first = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      { logged_on: '2026-07-07', wake_time: '09:00', hygiene: {} },
+      { logged_on: '2026-07-06', sleep_start: '02:00' },
+    ],
+    now: new Date('2026-07-07T18:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  }).find((candidate) => candidate.source_id === 'habit:shower:2026-07-07');
+  const second = buildAccountabilityProactiveCandidates({
+    healthLogs: [
+      { logged_on: '2026-07-07', wake_time: '09:00', hygiene: {} },
+      { logged_on: '2026-07-06', sleep_start: '02:00' },
+    ],
+    now: new Date('2026-07-07T18:58:00.000Z'),
+    recipient: proactiveMemoFixtures.recipient,
+  }).find((candidate) => candidate.source_id === 'habit:shower:2026-07-07');
+  assert.equal(first.idempotency_key, second.idempotency_key);
+  assert.equal(first.metadata.attention_profile.quiet_hours_bypass, true);
+  assert.equal(first.metadata.attention_profile.max_per_day, 20);
+  assert.equal(first.metadata.attention_profile.min_gap_minutes, 20);
+  assert.deepEqual(shouldSpendAttention({
+    candidate: first,
+    preferences: { max_per_day: first.metadata.attention_profile.max_per_day, min_gap_minutes: first.metadata.attention_profile.min_gap_minutes },
+    attentionBudget: { daily_count: 6, recent_message: null },
+  }), { allowed: true, reason: null });
+  assert.deepEqual(shouldSpendAttention({
+    candidate: first,
+    preferences: { max_per_day: first.metadata.attention_profile.max_per_day, min_gap_minutes: first.metadata.attention_profile.min_gap_minutes },
+    attentionBudget: { daily_count: 1, recent_message: { id: 'recent' } },
+  }), { allowed: false, reason: 'min_gap' });
 });
 
 test('attention budget suppresses daily cap and min-gap messages', () => {
@@ -1776,6 +2143,55 @@ function proactiveAssistantMessage({ id, created_at, source_id, title, rule_key 
           source_id,
           raw: {
             rule_key,
+          },
+        },
+      },
+    },
+  };
+}
+
+function accountabilityAssistantMessage({ id, created_at, accountability, rule_key = null }) {
+  const sourceId = accountability.kind === 'habit_missing'
+    ? `habit:${accountability.habit_id}:${accountability.local_date}`
+    : accountability.kind === 'wake_time_missing'
+      ? `wake_time:${accountability.local_date}`
+      : `sleep_start:${accountability.sleep_date}`;
+  const label = accountability.kind === 'habit_missing'
+    ? accountability.habit_id
+    : accountability.kind === 'wake_time_missing'
+      ? 'wake time'
+      : 'sleep start';
+  const safeRuleKey = rule_key || (accountability.kind === 'habit_missing'
+    ? 'accountability_habit_missing'
+    : accountability.kind === 'wake_time_missing'
+      ? 'accountability_wake_time_missing'
+      : 'accountability_sleep_start_missing_previous_night');
+  return {
+    id,
+    role: 'assistant',
+    content: label,
+    created_at,
+    metadata: {
+      proactive_message: true,
+      outbox_message_id: `outbox-${id}`,
+      rule_key: safeRuleKey,
+      source_type: 'accountability',
+      source_id: sourceId,
+      expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
+      accountability,
+      working_context: {
+        language: 'it',
+        last_subject: {
+          id: sourceId,
+          type: 'accountability',
+          label,
+          source: 'proactive_whatsapp_accountability',
+          source_type: 'accountability',
+          source_id: sourceId,
+          raw: {
+            rule_key: safeRuleKey,
+            expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
+            accountability,
           },
         },
       },

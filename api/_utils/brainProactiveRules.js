@@ -1,5 +1,6 @@
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { TIME_ZONE } from './date.js';
+import { accountabilityProactiveRuleFamily } from './brainProactiveAccountability.js';
 
 const MEMO_SELECT = 'id, user_id, title, memo_date, memo_time, notes, status, created_at, updated_at';
 const DEFAULT_MAX_PER_DAY = 6;
@@ -17,6 +18,7 @@ export const proactiveRuleRegistry = [
     loadContext: loadMemoProactiveContext,
     buildCandidates: buildMemoProactiveCandidatesFromContext,
   },
+  accountabilityProactiveRuleFamily,
 ];
 
 export async function evaluateProactiveCandidates({ userId = getActionUserId(), now = new Date(), recipient } = {}) {
@@ -201,12 +203,19 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
   const globalPreferences = await loadProactiveGlobalPreferences({ userId, channel: candidate.channel });
   if (!config.enabled) return { suppressed: true, reason: 'rule_disabled' };
   if (!globalPreferences.enabled) return { suppressed: true, reason: 'global_proactive_disabled' };
-  const isExactDue = Boolean(candidate.metadata?.exact_due_reminder || candidate.metadata?.quiet_hours_bypass);
-  if (!isExactDue && isWithinQuietHours(nowDate, config.quiet_hours_start, config.quiet_hours_end)) {
+  const quietHoursBypass = Boolean(
+    candidate.metadata?.exact_due_reminder
+      || candidate.metadata?.quiet_hours_bypass
+      || candidate.metadata?.attention_profile?.quiet_hours_bypass,
+  );
+  if (!quietHoursBypass && isWithinQuietHours(nowDate, config.quiet_hours_start, config.quiet_hours_end)) {
     return { suppressed: true, reason: 'quiet_hours' };
   }
 
-  const preferences = mergeAttentionPreferences(config, globalPreferences);
+  const preferences = applyCandidateAttentionProfile(
+    mergeAttentionPreferences(config, globalPreferences),
+    candidate.metadata?.attention_profile,
+  );
   const attentionBudget = await getAttentionBudget({
     userId,
     channel: candidate.channel,
@@ -401,6 +410,17 @@ function mergeAttentionPreferences(ruleConfig, globalConfig) {
     enabled: Boolean(ruleConfig?.enabled && globalConfig?.enabled),
     max_per_day: Math.min(ruleMax, globalMax),
     min_gap_minutes: Math.max(ruleGap, globalGap),
+  };
+}
+
+function applyCandidateAttentionProfile(preferences, profile) {
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return preferences;
+  const maxPerDay = Number(profile.max_per_day);
+  const minGapMinutes = Number(profile.min_gap_minutes);
+  return {
+    ...preferences,
+    max_per_day: Number.isFinite(maxPerDay) ? Math.max(1, Math.trunc(maxPerDay)) : preferences.max_per_day,
+    min_gap_minutes: Number.isFinite(minGapMinutes) ? Math.max(0, Math.trunc(minGapMinutes)) : preferences.min_gap_minutes,
   };
 }
 
