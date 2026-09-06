@@ -12,14 +12,16 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { useLocalDay } from '../hooks/useLocalDay';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
-const today = new Date().toISOString().slice(0, 10);
 const WARMUP_SET_NUMBER_OFFSET = 1000;
 
 export function WorkoutTab() {
+  const today = useLocalDay();
+  const priorDay = useRef(today);
   const {
     activeWorkoutId,
     activeWorkoutSession,
@@ -49,6 +51,11 @@ export function WorkoutTab() {
 
   const [sessionForm, setSessionForm] = useState({ name: 'Today Workout', performed_on: today, notes: '' });
   const [showCustomSession, setShowCustomSession] = useState(false);
+  useEffect(() => {
+    const previous = priorDay.current;
+    priorDay.current = today;
+    if (!showCustomSession) setSessionForm((form) => form.performed_on === previous ? { ...form, performed_on: today } : form);
+  }, [today, showCustomSession]);
   const [setForm, setSetForm] = useState({
     exercise: '',
     set_number: 1,
@@ -72,7 +79,7 @@ export function WorkoutTab() {
   const [formError, setFormError] = useState('');
   const [startingTemplateId, setStartingTemplateId] = useState(null);
 
-  const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions]);
+  const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
   const previousPerformance = useMemo(
     () => getPreviousPerformance(workoutSessions, activeWorkoutSession, setForm.exercise),
     [activeWorkoutSession, setForm.exercise, workoutSessions],

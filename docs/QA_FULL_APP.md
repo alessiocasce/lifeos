@@ -1,5 +1,9 @@
 # LifeOS Full-App Manual QA
 
+## Reliability Release Gate
+
+Follow [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md) before deploying this version: targeted SQL is required and old frontend project increments must not coexist with the database trigger. Run `npm test`, function count, and build. Manual cross-interface checks: reply twice to one accountability prompt; complete a queued target in Health before delivery; cancel a pending action and inspect Open Loops; edit/delete a completed project session; leave date-sensitive tabs open through Rome midnight; verify MCP truncation. See [QA_PROJECTS.md](QA_PROJECTS.md) for progress semantics. Live smoke is preview-only unless separately authorized to mutate.
+
 Run this after applying `supabase/schema.sql` to a Supabase project and setting `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 ## Pre-Release Automated Checks

@@ -1,5 +1,11 @@
 # LifeOS Brain Architecture
 
+## Reliability Release Boundary
+
+See [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md) for deployment and limitations. BrainTurn Contract and `resolveProactiveWhatsappReply` now use the same family-aware `selectProactiveReplyTarget`; accountability is no longer gated through the memo-only selector. Pending cancellation/independent commands still win, ambiguous and consumed prompts are read-only, and `brainProactiveDelivery.js` owns persisted target checks, ensure-health mutations, resolution markers, and delivery revalidation. No planner feature or new route was added.
+
+Accountability notes never infer habit writes. Delivered IDs, user scope, current target state, and compare-and-swap updates constrain mutations; metadata cleanup is a separate transaction. `npm run test:reliability` exercises real schema-backed metadata through contract and dispatch, not just isolated intent parsing. Do not replace this with tests that call the accountability resolver directly and bypass the contract.
+
 Last updated: 2026-07-07
 
 This doc describes the current backend Brain pipeline as implemented in code. `PROJECT_CONTEXT.md` remains the high-level handoff, but `api/` is the source of truth.

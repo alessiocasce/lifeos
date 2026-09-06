@@ -28,7 +28,7 @@ export function buildWorkoutIntelligence({
     sets: workingSets,
     maxExercises,
   });
-  const recovery = buildRecoveryCaveat(healthLogs);
+  const recovery = buildRecoveryCaveat(healthLogs, generatedAt);
 
   return {
     generated_at: generatedAt,
@@ -257,9 +257,13 @@ function buildNextTarget({ latest, previous, plateau }) {
   };
 }
 
-function buildRecoveryCaveat(healthLogs) {
+function buildRecoveryCaveat(healthLogs, generatedAt) {
   const latest = (Array.isArray(healthLogs) ? healthLogs : [])
-    .filter((log) => log && Number.isFinite(Number(log.sleep_hours)))
+    .filter((log) => log && log.sleep_hours != null && log.sleep_hours !== '' && Number.isFinite(Number(log.sleep_hours)))
+    .filter((log) => {
+      const age = new Date(generatedAt) - new Date(`${log.logged_on}T00:00:00Z`);
+      return age >= -86400000 && age <= 2 * 86400000;
+    })
     .sort((a, b) => String(b.logged_on || '').localeCompare(String(a.logged_on || '')))[0];
 
   if (!latest) {

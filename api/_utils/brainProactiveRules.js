@@ -1,6 +1,8 @@
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { TIME_ZONE } from './date.js';
 import { accountabilityProactiveRuleFamily } from './brainProactiveAccountability.js';
+import { sourceIsResolved } from './brainProactiveDelivery.js';
+import { compareOutboxRowsForDelivery } from './brainOutboxStateMachine.js';
 
 const MEMO_SELECT = 'id, user_id, title, memo_date, memo_time, notes, status, created_at, updated_at';
 const DEFAULT_MAX_PER_DAY = 6;
@@ -25,22 +27,24 @@ export async function evaluateProactiveCandidates({ userId = getActionUserId(), 
   const nowDate = normalizeDate(now);
   const candidates = [];
   const skipped = [];
+  const generated = [];
 
   for (const ruleFamily of proactiveRuleRegistry) {
     const ruleContext = await ruleFamily.loadContext({ userId, now: nowDate, recipient });
     const familyCandidates = ruleFamily.buildCandidates({ context: ruleContext, userId, now: nowDate, recipient });
-    for (const candidate of familyCandidates) {
-      const validation = validateProactiveCandidate(candidate);
-      if (!validation.ok) {
-        skipped.push({ candidate, reason: validation.reason, family: ruleFamily.family });
-        continue;
-      }
-      const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate });
-      if (suppression.suppressed) {
-        skipped.push({ candidate, reason: suppression.reason, family: ruleFamily.family });
-      } else {
-        candidates.push(candidate);
-      }
+    generated.push(...familyCandidates);
+  }
+  for (const candidate of generated.sort(compareOutboxRowsForDelivery)) {
+    const validation = validateProactiveCandidate(candidate);
+    if (!validation.ok) {
+      skipped.push({ candidate, reason: validation.reason, family: candidate.source_type });
+      continue;
+    }
+    const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate, admitted: candidates });
+    if (suppression.suppressed) {
+      skipped.push({ candidate, reason: suppression.reason, family: candidate.source_type });
+    } else {
+      candidates.push(candidate);
     }
   }
 
@@ -164,7 +168,7 @@ export function buildMemoProactiveCandidatesFromContext({ context, now = new Dat
   return (context?.memos ?? []).flatMap((memo) => buildMemoProactiveCandidates({ memo, now, recipient }));
 }
 
-export async function shouldSuppressProactiveCandidate({ userId = getActionUserId(), candidate, now = new Date() } = {}) {
+export async function shouldSuppressProactiveCandidate({ userId = getActionUserId(), candidate, now = new Date(), admitted = [] } = {}) {
   const nowDate = normalizeDate(now);
   if (!candidate?.recipient) return { suppressed: true, reason: 'missing_recipient' };
   if (!candidate?.body) return { suppressed: true, reason: 'empty_body' };
@@ -173,6 +177,9 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
   }
 
   const client = getSupabaseAdmin();
+  if (candidate.source_type === 'accountability' && await sourceIsResolved({ client, userId, sourceId: candidate.source_id, sourceType: candidate.source_type })) {
+    return { suppressed: true, reason: 'source_resolved' };
+  }
   const duplicate = await client
     .from('brain_outbox_messages')
     .select('id, status')
@@ -222,6 +229,9 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
     now: nowDate,
     minGapMinutes: preferences.min_gap_minutes,
   });
+  candidate.metadata.attention_profile = { ...candidate.metadata.attention_profile, ...preferences };
+  attentionBudget.daily_count += admitted.length;
+  if (admitted.length) attentionBudget.recent_message ||= { id: 'current_evaluation' };
   const attention = shouldSpendAttention({ candidate, preferences, attentionBudget, now: nowDate });
   if (!attention.allowed) return { suppressed: true, reason: attention.reason };
 

@@ -13,7 +13,7 @@ import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSe
 import { evaluateProactiveCandidates } from '../../_utils/brainProactiveRules.js';
 import { ackOutboxMessage, enqueueOutboxMessage, pollOutboxMessages } from '../../_utils/brainOutbox.js';
 
-const SUPPORTED_ACTIONS = new Set(['evaluate', 'poll', 'ack']);
+const SUPPORTED_ACTIONS = new Set(['evaluate', 'preview', 'poll', 'ack']);
 
 export default async function handler(req, res) {
   const context = createRequestContext(req, res);
@@ -29,8 +29,8 @@ export default async function handler(req, res) {
     const recipientInfo = describeWhatsappSender(rawRecipient);
     const bridgeId = cleanWhatsappText(body.bridge_id ?? body.bridgeId, 120);
 
-    if (action === 'evaluate') {
-      return handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId });
+    if (action === 'evaluate' || action === 'preview') {
+      return handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId, preview: action === 'preview' });
     }
     if (action === 'poll') {
       return handlePoll({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId });
@@ -45,13 +45,13 @@ export default async function handler(req, res) {
   }
 }
 
-async function handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId }) {
+async function handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId, preview = false }) {
   const userId = getActionUserId();
   const evaluation = await evaluateProactiveCandidates({ userId, recipient });
   const queued = [];
   const skipped = [...evaluation.skipped];
 
-  for (const candidate of evaluation.candidates) {
+  for (const candidate of preview ? [] : evaluation.candidates) {
     const metadata = {
       ...candidate.metadata,
       bridge_id: bridgeId,
@@ -76,8 +76,8 @@ async function handleEvaluate({ res, context, debugFlags, recipient, recipientIn
       expiresAt: candidate.expires_at,
       metadata,
     });
-    if (result.duplicate) {
-      skipped.push({ candidate, reason: 'duplicate' });
+    if (result.duplicate || result.deferred) {
+      skipped.push({ candidate, reason: result.deferred ? 'attention_deferred' : 'duplicate' });
     } else {
       queued.push(result.row);
     }
@@ -87,6 +87,7 @@ async function handleEvaluate({ res, context, debugFlags, recipient, recipientIn
     ok: true,
     requestId: context.requestId,
     evaluated: true,
+    preview,
     queued: queued.length,
     skipped: skipped.length,
     ...(debugFlags.enabled ? {
@@ -133,10 +134,12 @@ async function handlePoll({ res, context, debugFlags, body, recipient, recipient
 }
 
 async function handleAck({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId }) {
+  if (body.dry_run || body.dryRun) throw new HttpError(400, 'ACK is mutating. Use preview for read-only diagnostics.');
   const row = await ackOutboxMessage({
     recipient,
     messageId: body.message_id ?? body.messageId ?? body.id,
     status: body.status,
+    deliveryAttempt: body.delivery_attempt,
     error: body.error,
     metadata: {
       bridge_id: bridgeId,
@@ -215,6 +218,7 @@ function compactOutbox(row) {
 function formatBridgeMessage(row) {
   return {
     id: row.id,
+    delivery_attempt: row.attempts,
     to: row.recipient,
     body: row.body,
     rule_key: row.rule_key,

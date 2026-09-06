@@ -11,11 +11,13 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { localDate } from '../utils/date';
+import { useLocalDay } from '../hooks/useLocalDay';
 import { useLifeOS } from '../context/LifeOSContext';
 import { Panel, PanelHeader, Tag } from '../components/ui';
 
-const todayString = () => new Date().toISOString().slice(0, 10);
+const todayString = () => localDate();
 const statuses = ['planned', 'done', 'skipped', 'cancelled'];
 const categories = ['Work', 'Study', 'School', 'Health', 'Workout', 'Errands', 'Personal', 'Social', 'Entertainment', 'Sleep'];
 
@@ -31,6 +33,8 @@ const emptyForm = (date = todayString()) => ({
 });
 
 export function CalendarTab() {
+  const today = useLocalDay();
+  const priorDay = useRef(today);
   const {
     calendarEvents,
     calendarEventsError,
@@ -45,6 +49,12 @@ export function CalendarTab() {
   const [form, setForm] = useState(emptyForm(todayString()));
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
+  useEffect(() => {
+    const previous = priorDay.current;
+    priorDay.current = today;
+    setSelectedDate((date) => date === previous ? today : date);
+    if (!modalOpen) setForm((value) => value.event_date === previous ? { ...value, event_date: today } : value);
+  }, [today, modalOpen]);
   const [formError, setFormError] = useState('');
   const [eventActionError, setEventActionError] = useState('');
   const [actionStatus, setActionStatus] = useState('idle');

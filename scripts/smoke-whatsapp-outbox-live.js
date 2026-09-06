@@ -22,15 +22,16 @@ if (!secret || !recipient) {
 }
 
 const checks = [];
+const mutate = process.env.LIFEOS_SMOKE_MUTATE === '1';
 
 await step('evaluate', async () => {
-  const result = await postOutbox({ action: 'evaluate', recipient, bridge_id: 'codex-smoke' });
+  const result = await postOutbox({ action: mutate ? 'evaluate' : 'preview', recipient, bridge_id: 'codex-smoke' });
   assert(result.ok === true, 'evaluate did not return ok true');
   assert(typeof result.queued === 'number', 'evaluate missing queued count');
   assert(typeof result.skipped === 'number', 'evaluate missing skipped count');
 });
 
-await step('poll shape', async () => {
+if (mutate) await step('poll shape (claims real rows)', async () => {
   const result = await postOutbox({ action: 'poll', recipient, bridge_id: 'codex-smoke', limit: 1 });
   assert(result.ok === true, 'poll did not return ok true');
   assert(Array.isArray(result.messages), 'poll missing messages array');
@@ -39,7 +40,7 @@ await step('poll shape', async () => {
   }
 });
 
-if (String(process.env.LIFEOS_WHATSAPP_OUTBOX_SMOKE_ACK_ID ?? '').trim()) {
+if (mutate && String(process.env.LIFEOS_WHATSAPP_OUTBOX_SMOKE_ACK_ID ?? '').trim()) {
   await step('ack explicit message', async () => {
     const result = await postOutbox({
       action: 'ack',
@@ -48,7 +49,6 @@ if (String(process.env.LIFEOS_WHATSAPP_OUTBOX_SMOKE_ACK_ID ?? '').trim()) {
       message_id: process.env.LIFEOS_WHATSAPP_OUTBOX_SMOKE_ACK_ID,
       status: process.env.LIFEOS_WHATSAPP_OUTBOX_SMOKE_ACK_STATUS || 'failed',
       error: 'codex smoke test ack',
-      dry_run: true,
     });
     assert(result.ok === true, 'ack did not return ok true');
   });
@@ -63,7 +63,7 @@ async function step(name, fn) {
     checks.push(`PASS ${name}`);
   } catch (error) {
     console.error(`FAIL ${name}`);
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error('Backend check failed; inspect sanitized server diagnostics.');
     process.exit(1);
   }
 }

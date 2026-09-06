@@ -636,7 +636,7 @@ async function readHealthLogForDate(userId, loggedOn) {
   return data;
 }
 
-function extractHealthHabitUpdates(args = {}) {
+export function extractHealthHabitUpdates(args = {}) {
   const updates = {};
   const fallbackTime = readHabitUpdateTime(args.habit_time ?? args.time) ?? localTime();
   collectHabitUpdates(updates, args.habits, 'explicit', fallbackTime);
@@ -648,7 +648,7 @@ function extractHealthHabitUpdates(args = {}) {
     }
   }
 
-  collectHabitUpdatesFromNotes(updates, args.notes, fallbackTime);
+  // Notes are observations, never implicit mutation instructions.
 
   return {
     updates,
@@ -678,20 +678,6 @@ function collectHabitUpdates(updates, value, source, fallbackTime) {
       const time = readHabitUpdateTime(valueObject?.time ?? valueObject?.times?.at?.(-1)) ?? fallbackTime;
       setHabitUpdate(updates, id, countValue, source, time);
     }
-  }
-}
-
-function collectHabitUpdatesFromNotes(updates, notes, time) {
-  const text = String(notes ?? '').toLowerCase();
-  if (!text) return;
-  if (/\b(creatine|took creatine|taken creatine|had creatine)\b/.test(text)) {
-    setHabitUpdate(updates, 'creatine', true, 'phrase', time);
-  }
-  if (/\b(showered|shower|took a shower|had a shower)\b/.test(text)) {
-    setHabitUpdate(updates, 'shower', true, 'phrase', time);
-  }
-  if (/\b(skincare|skin care|did skin|skin routine)\b/.test(text)) {
-    setHabitUpdate(updates, 'skin', true, 'phrase', time);
   }
 }
 

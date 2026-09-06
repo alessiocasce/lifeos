@@ -1,8 +1,16 @@
 # LifeOS Project Context
 
-Last updated: 2026-07-07
+Last updated: 2026-09-06
 Current branch: `main`
 Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, planner stage, and backend LifeOS tool guards.
+
+## Reliability Release Handoff
+
+Read [the release/deploy checklist](docs/RELIABILITY_RELEASE.md) before deployment. **Database change required:** apply `supabase/releases/reliability.sql` with polling paused and old clients closed, then deploy/reload the app before resuming. Outbox source IDs are text; transactional admission/claim spacing and project contribution triggers are now database responsibilities. Do not retain the old frontend project increment alongside the trigger.
+
+BrainTurn and runtime proactive dispatch share family-aware target selection. Accountability replies ensure a Health target rather than incrementing, persist resolution, and invalidate queued work; poll revalidates sources. Free-text notes cannot update habits. Missing sleep remains unknown. Pending Open Loops reduce latest state before filtering. Frontend day defaults observe Rome rollover, and MCP reports post-serialization set truncation.
+
+Run `npm test` (Brain, MCP, embedded PostgreSQL schema contracts, lifecycle tests), `npm run check:functions` (7), and build. No production integration was exercised by these local suites. Live outbox smoke is opt-in and preview-only unless `LIFEOS_SMOKE_MUTATE=1`. Next session should validate staged migration/RLS/PM2/PWA rollout and remaining cross-transaction races before feature work.
 
 ## Project Goal
 

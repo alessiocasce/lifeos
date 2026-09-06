@@ -13,6 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useLocalDay } from '../hooks/useLocalDay';
+import { localDate, localTime, addDays } from '../utils/date';
 import { useLifeOS } from '../context/LifeOSContext';
 import { Panel, PanelHeader, Tag } from '../components/ui';
 
@@ -40,7 +42,7 @@ export function MemosTab() {
   const [saveStatus, setSaveStatus] = useState('idle');
   const [busyId, setBusyId] = useState(null);
 
-  const today = getToday();
+  const today = useLocalDay();
   const tomorrow = addDays(today, 1);
   const now = new Date();
   const groups = useMemo(() => groupMemos(memos, now), [memos, now]);
@@ -799,12 +801,6 @@ function getToday() {
   return toDateString(new Date());
 }
 
-function addDays(dateValue, days) {
-  const date = parseDate(dateValue);
-  date.setDate(date.getDate() + days);
-  return toDateString(date);
-}
-
 function addMinutes(date, minutes) {
   const next = new Date(date);
   next.setMinutes(next.getMinutes() + minutes);
@@ -816,14 +812,11 @@ function parseDate(dateString) {
 }
 
 function toDateString(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return localDate(0, date);
 }
 
 function toTimeString(date) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return localTime(date);
 }
 
 function formatInputTime(value) {
@@ -868,7 +861,7 @@ function timeToMinutes(value) {
 }
 
 function getCurrentMinutes(date = new Date()) {
-  return date.getHours() * 60 + date.getMinutes();
+  return timeToMinutes(localTime(date));
 }
 
 function timestamp(value) {

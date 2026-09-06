@@ -1,9 +1,8 @@
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { addDays, localDateTimeToUtcDate, TIME_ZONE } from './date.js';
 import { getHabitEntry, HEALTH_HABITS, normalizeHabitId } from './habits.js';
-import { updateHealthLog } from './lifeosTools.js';
-import { logSleepStart } from './healthActions.js';
 import { canonicalizeWhatsappSender } from './whatsappBridge.js';
+import { ensureAccountabilityHealth, resolveAccountabilityTarget, accountabilityTargetIsResolved } from './brainProactiveDelivery.js';
 
 export const ACCOUNTABILITY_REPLY_TYPE = 'accountability';
 export const ACCOUNTABILITY_CREATED_BY = 'brain_proactive_accountability_v1';
@@ -178,6 +177,7 @@ export function extractRecentProactiveAccountabilityMessages(brainChat, { now = 
     if (item?.role !== 'assistant') continue;
     const metadata = safeObject(item.metadata);
     if (!metadata.proactive_message || metadata.expected_reply_type !== ACCOUNTABILITY_REPLY_TYPE) continue;
+    if (metadata.proactive_resolution) continue;
     const workingContext = safeObject(metadata.working_context);
     const subject = safeObject(workingContext.last_subject);
     const raw = safeObject(subject.raw);
@@ -217,6 +217,7 @@ export function selectProactiveAccountabilityReplyTarget({ message, brainChat, n
   if (!active.length) return { type: 'stale', intent, proactive: all[0], language };
   const explicit = active.filter((item) => accountabilityTargetMatches(message, item));
   if (explicit.length === 1) return { type: 'target', intent, proactive: explicit[0], language: explicit[0].language };
+  if (active.length > 1) return { type: 'ambiguous', intent, candidates: active.slice(0, 3), language };
   return { type: 'target', intent, proactive: active[0], language: active[0].language };
 }
 
@@ -253,9 +254,12 @@ export async function resolveProactiveAccountabilityReply({
   context = {},
   now = new Date(),
   actions = defaultAccountabilityActions,
+  selection: suppliedSelection,
 } = {}) {
-  const selection = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
+  const selection = suppliedSelection || selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
   if (selection.type === 'none') return null;
+  if (selection.type === 'ambiguous') return buildAccountabilityClarificationResult({ language: selection.language,
+    answer: `Quale check-in intendi? ${(selection.candidates || []).map((item) => item.title).join('; ')}`, trace: { ambiguous: true } });
   if (selection.type === 'stale') {
     return buildAccountabilityClarificationResult({
       language: selection.language,
@@ -271,6 +275,8 @@ export async function resolveProactiveAccountabilityReply({
   const intent = selection.intent;
   const accountability = safeObject(proactive.accountability);
   const language = proactive.language === 'en' ? 'en' : 'it';
+  if (await actions.isResolved?.(proactive)) return buildAccountabilityReadOnlyResult({ language,
+    answer: language === 'en' ? 'That check-in is already resolved. Nothing changed.' : 'Questo check-in e gia risolto. Non modifico nulla.', trace: { idempotent_noop: true } });
   if (!accountability.kind) {
     return buildAccountabilityClarificationResult({
       language,
@@ -292,6 +298,7 @@ export async function resolveProactiveAccountabilityReply({
   }
 
   if (intent.intent === 'no' || intent.intent === 'no_sleep') {
+    await actions.resolveTarget?.({ proactive, resolution: intent.intent });
     return buildAccountabilityReadOnlyResult({
       language,
       answer: language === 'en' ? 'Ok, I will not log anything.' : 'Ok, non segno nulla.',
@@ -309,6 +316,7 @@ export async function resolveProactiveAccountabilityReply({
       now,
       minutes,
     });
+    if (snoozed) await actions.resolveTarget?.({ proactive, resolution: 'snooze', preserveId: snoozed.id });
     return buildAccountabilityReadOnlyResult({
       language,
       answer: snoozed
@@ -337,15 +345,15 @@ export async function resolveProactiveAccountabilityReply({
   });
 }
 
-export async function enqueueAccountabilitySnoozeOutboxMessage({ proactive, accountability, context, now = new Date(), minutes = DEFAULT_SNOOZE_MINUTES } = {}) {
+export async function enqueueAccountabilitySnoozeOutboxMessage({ proactive, accountability, context, now = new Date(), minutes = DEFAULT_SNOOZE_MINUTES, client = getSupabaseAdmin(), userId = getActionUserId() } = {}) {
   const recipient = context?.channelMetadata?.whatsapp_sender || proactive?.recipient;
-  if (!recipient) return null;
+  if (!recipient || !proactive?.outbox_message_id) return null;
   const canonicalRecipient = canonicalizeWhatsappSender(recipient);
   const nowDate = normalizeDate(now);
   const scheduledFor = new Date(nowDate.getTime() + Math.min(720, Math.max(5, Math.trunc(Number(minutes)) || DEFAULT_SNOOZE_MINUTES)) * 60000);
   const sourceId = proactive?.source_id || sourceIdForAccountability(accountability);
   const payload = {
-    user_id: getActionUserId(),
+    user_id: userId,
     channel: 'whatsapp',
     recipient: canonicalRecipient,
     body: accountabilityBody(accountability, proactive?.language || DEFAULT_LANGUAGE),
@@ -353,7 +361,7 @@ export async function enqueueAccountabilitySnoozeOutboxMessage({ proactive, acco
     rule_key: `${proactive?.rule_key || ruleKeyForAccountability(accountability)}_snooze`,
     source_type: 'accountability',
     source_id: sourceId,
-    idempotency_key: `accountability_snooze:${sourceId}:${scheduledFor.toISOString().slice(0, 16)}`,
+    idempotency_key: `accountability_snooze:${proactive.outbox_message_id}`,
     scheduled_for: scheduledFor.toISOString(),
     expires_at: new Date(scheduledFor.getTime() + 4 * 60 * 60000).toISOString(),
     metadata: {
@@ -371,14 +379,18 @@ export async function enqueueAccountabilitySnoozeOutboxMessage({ proactive, acco
       },
     },
   };
-  const inserted = await getSupabaseAdmin()
+  const inserted = await client
     .from('brain_outbox_messages')
     .insert(payload)
     .select('id, status, scheduled_for')
     .single();
   if (!inserted.error) return inserted.data;
+  if (inserted.error.code === 'P0001' && inserted.error.message === 'attention_deferred') return null;
   if (inserted.error.code !== '23505') throw inserted.error;
-  return { duplicate: true, scheduled_for: payload.scheduled_for };
+  const existing = await client.from('brain_outbox_messages').select('id,scheduled_for')
+    .eq('user_id', payload.user_id).eq('idempotency_key', payload.idempotency_key).single();
+  if (existing.error) throw existing.error;
+  return { ...existing.data, duplicate: true };
 }
 
 async function resolveHabitAccountabilityReply({ proactive, accountability, intent, language, now, actions }) {
@@ -403,7 +415,10 @@ async function resolveHabitAccountabilityReply({ proactive, accountability, inte
     logged_on: accountability.local_date,
     [accountability.habit_id]: true,
     habit_time: time,
+    target_count: accountability.target_count || 1,
   });
+  await actions.resolveTarget?.({ proactive, resolution: intent.intent });
+  if (data?.accountability_noop) return buildAccountabilityReadOnlyResult({ language, answer: language === 'en' ? 'Already logged. Nothing changed.' : 'Gia segnato. Non modifico nulla.', trace: { idempotent_noop: true } });
   const label = habitLabel(accountability.habit_id, language);
   const answer = language === 'en'
     ? `Logged: ${label} done today.`
@@ -439,6 +454,8 @@ async function resolveWakeTimeAccountabilityReply({ proactive, accountability, i
     logged_on: accountability.local_date,
     wake_time: time,
   });
+  await actions.resolveTarget?.({ proactive, resolution: 'time' });
+  if (data?.accountability_noop) return buildAccountabilityReadOnlyResult({ language, answer: language === 'en' ? 'Wake time is already logged.' : 'Il risveglio e gia segnato.', trace: { idempotent_noop: true } });
   const answer = language === 'en' ? `Logged wake time: ${time}.` : `Segnato wake time: ${time}.`;
   return buildAccountabilityWriteResult({
     answer,
@@ -470,6 +487,8 @@ async function resolveSleepStartAccountabilityReply({ proactive, accountability,
     time: intent.time,
     loggedOn: accountability.sleep_date,
   });
+  await actions.resolveTarget?.({ proactive, resolution: 'time' });
+  if (data?.accountability_noop) return buildAccountabilityReadOnlyResult({ language, answer: language === 'en' ? 'Sleep start is already logged.' : 'Lo sleep start e gia segnato.', trace: { idempotent_noop: true } });
   const answer = language === 'en' ? `Logged sleep start: ${intent.time}.` : `Segnato sleep start: ${intent.time}.`;
   return buildAccountabilityWriteResult({
     answer,
@@ -743,8 +762,10 @@ function buildAccountabilityActionWorkingContext({ proactive, accountability, ac
 }
 
 const defaultAccountabilityActions = {
-  updateHealthLog,
-  logSleepStart,
+  updateHealthLog: ensureAccountabilityHealth,
+  logSleepStart: ensureAccountabilityHealth,
+  resolveTarget: resolveAccountabilityTarget,
+  isResolved: accountabilityTargetIsResolved,
   enqueueSnooze: enqueueAccountabilitySnoozeOutboxMessage,
 };
 

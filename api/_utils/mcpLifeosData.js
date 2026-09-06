@@ -36,6 +36,17 @@ export function sanitizeMcpOutput(value, depth = 0) {
     if (SECRET_KEY_PATTERN.test(key)) continue;
     output[key] = sanitizeMcpOutput(entry, depth + 1);
   }
+  // Counts describe the final serialized payload, including nested workout caps.
+  if (Array.isArray(output.sets)) {
+    const before = value.sets.length;
+    if ('returned_set_count' in value) output.returned_set_count = output.sets.length;
+    output.sets_truncated = Boolean(value.sets_truncated || before > output.sets.length);
+  }
+  if (Array.isArray(output.workouts) && 'returned_set_count' in value) {
+    const count = output.workouts.reduce((sum, workout) => sum + (workout.sets?.length || 0), 0);
+    output.returned_set_count = count;
+    output.sets_truncated = Boolean(value.sets_truncated || count < value.returned_set_count);
+  }
   return output;
 }
 
@@ -235,8 +246,8 @@ export async function getHealthSummary({ userId, days = DEFAULT_DAYS } = {}) {
       .order('logged_on', { ascending: false })
       .limit(normalizedDays + 2),
   );
-  const sleepValues = logs.map((row) => Number(row.sleep_hours)).filter(Number.isFinite);
-  const energyValues = logs.map((row) => Number(row.energy)).filter(Number.isFinite);
+  const sleepValues = logs.filter((row) => row.sleep_hours != null && row.sleep_hours !== '').map((row) => Number(row.sleep_hours)).filter(Number.isFinite);
+  const energyValues = logs.filter((row) => row.energy != null && row.energy !== '').map((row) => Number(row.energy)).filter(Number.isFinite);
 
   return sanitizeMcpOutput({
     range: { start, end, days: normalizedDays },
@@ -720,7 +731,7 @@ function compactOutboxMessage(row) {
   };
 }
 
-function compactProactiveDebugOutboxMessage(row) {
+export function compactProactiveDebugOutboxMessage(row) {
   const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
   return {
     id: row.id,
@@ -743,6 +754,15 @@ function compactProactiveDebugOutboxMessage(row) {
     last_error: safePreview(row.last_error, 240),
     ack_metadata: sanitizeTraceValue(summarizeAckMetadata(row.ack_metadata)),
     proactive_trace: sanitizeTraceValue(metadata.proactive_trace ?? null),
+    resolution: metadata.resolution ? {
+      type: safePreview(metadata.resolution.type, 40),
+      resolved_at: safePreview(metadata.resolution.resolved_at, 40),
+      source_closed: metadata.resolution.source_closed === true,
+    } : null,
+    delivery_revalidation: metadata.delivery_revalidation ? {
+      reason: safePreview(metadata.delivery_revalidation.reason, 80),
+      cancelled_at: safePreview(metadata.delivery_revalidation.cancelled_at, 40),
+    } : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

@@ -80,7 +80,7 @@ export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEF
   const projects = summarizeProjects(normalizedRows.projects, normalizedRows.projectSessions, now);
   const memos = summarizeMemos(normalizedRows.memos, today, future);
   const calendar = summarizeCalendar(normalizedRows.calendarEvents, today, now);
-  const brain = summarizeBrain(normalizedRows.actionLogs, normalizedRows.brainMessages);
+  const brain = summarizeBrain(normalizedRows.actionLogs, normalizedRows.brainMessages, now);
   const whatsapp = summarizeOutbox(normalizedRows.outboxMessages, now);
 
   return sanitizeContextValue({
@@ -125,7 +125,7 @@ export function buildOpenLoops({ rows = {}, days = DEFAULT_DAYS, limit = DEFAULT
     ...buildProjectLoops(normalizedRows.projects, normalizedRows.projectSessions, { now }),
     ...buildActionLogLoops(normalizedRows.actionLogs),
     ...buildOutboxLoops(normalizedRows.outboxMessages, { now }),
-    ...buildBrainPendingLoops(normalizedRows.brainMessages),
+    ...buildBrainPendingLoops(normalizedRows.brainMessages, now),
     ...buildHealthLoops(normalizedRows.healthLogs, { today }),
     ...buildWorkoutLoops(normalizedRows.workouts, { today }),
   ];
@@ -397,15 +397,20 @@ function buildOutboxLoops(messages, { now }) {
     });
 }
 
-function buildBrainPendingLoops(messages) {
+export function latestPendingSnapshots(messages, now = new Date()) {
   const latestByKey = new Map();
-  for (const message of messages) {
+  for (const message of [...messages].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))) {
     const pending = extractPendingActionFromMessage(message);
-    if (!isActivePendingAction(pending)) continue;
+    if (!pending) continue;
     const key = pending.id || `${pending.action_type}:${pending.summary || message.id}`;
     if (!latestByKey.has(key)) latestByKey.set(key, { message, pending });
   }
-  return [...latestByKey.values()].map(({ message, pending }) => createLoop({
+  return [...latestByKey.values()].filter(({ pending }) => isActivePendingAction(pending)
+    && (!pending.expires_at || new Date(pending.expires_at) > new Date(now)));
+}
+
+function buildBrainPendingLoops(messages, now) {
+  return latestPendingSnapshots(messages, now).map(({ message, pending }) => createLoop({
     type: 'brain_pending_action',
     id: pending.id || message.id,
     title: `Brain is waiting: ${safeTitle(pending.summary || pending.action_type, 'pending action')}`,
@@ -433,7 +438,7 @@ function buildBrainPendingLoops(messages) {
 function buildHealthLoops(healthLogs, { today }) {
   const latest = healthLogs[0] ?? null;
   if (!latest || latest.logged_on !== today) return [];
-  const sleep = Number(latest.sleep_hours);
+  const sleep = latest.sleep_hours == null || latest.sleep_hours === '' ? NaN : Number(latest.sleep_hours);
   if (!Number.isFinite(sleep) || sleep >= 5.5) return [];
   return [createLoop({
     type: 'recovery_gap',
@@ -560,7 +565,7 @@ function summarizeProjects(projects, sessions, now) {
 function summarizeHealth(logs, today) {
   const latest = logs[0] ?? null;
   const todayLog = logs.find((log) => log.logged_on === today) ?? null;
-  const sleepValues = logs.map((log) => Number(log.sleep_hours)).filter(Number.isFinite);
+  const sleepValues = logs.filter((log) => log.sleep_hours != null && log.sleep_hours !== '').map((log) => Number(log.sleep_hours)).filter(Number.isFinite);
   const latestSleep = todayLog?.sleep_hours ?? latest?.sleep_hours ?? null;
   return {
     status: todayLog ? 'logged_today' : 'not_logged_today',
@@ -586,9 +591,9 @@ function summarizeWorkouts(workouts, today) {
   };
 }
 
-function summarizeBrain(actionLogs, brainMessages) {
+function summarizeBrain(actionLogs, brainMessages, now) {
   const failed = actionLogs.filter((log) => log.status && log.status !== 'success');
-  const pending = brainMessages.map(extractPendingActionFromMessage).filter(isActivePendingAction);
+  const pending = latestPendingSnapshots(brainMessages, now).map((entry) => entry.pending);
   return {
     failed_actions_count: failed.length,
     active_pending_actions_count: pending.length,

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { localDate } from '../utils/date';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
@@ -1230,7 +1231,7 @@ function isThisWeek(value) {
 }
 
 function todayString() {
-  return new Date().toISOString().slice(0, 10);
+  return localDate();
 }
 
 function formatNumber(value) {

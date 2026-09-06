@@ -1,5 +1,11 @@
 # LifeOS MCP Server
 
+## Reliability Release Completeness
+
+The final output sanitizer now reconciles `returned_set_count` with serialized `workouts[].sets` and sets `sets_truncated` when query or array limits omit data. Each truncated nested set list is also flagged. Never interpret a bounded response as a complete workout archive. Workout intelligence reports the number of input sets analyzed; it is not a raw set export. Null/empty sleep and energy values are not zeros; stale sleep does not justify current recovery advice.
+
+`get_open_loops` reduces pending IDs to their latest snapshot before excluding terminal/expired states. Proactive debug remains read-only, accepts semantic text source IDs, and includes allowlisted `resolution` and `delivery_revalidation` summaries (types/reasons/timestamps only). Static-token and OAuth behavior are unchanged. Run `npm run test:mcp` and `npm run test:reliability`; verify an oversized workout manually after the [release rollout](RELIABILITY_RELEASE.md).
+
 LifeOS MCP v1 exposes read-only LifeOS context and debugging data to MCP-compatible clients such as ChatGPT, Codex, Claude, or local tools.
 
 It is intentionally not a write layer. It cannot create records, send WhatsApp messages, enqueue proactive messages, or execute Brain actions.

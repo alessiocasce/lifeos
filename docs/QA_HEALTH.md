@@ -1,6 +1,14 @@
 # Health Tab Manual QA
 
-Run this after signing in through the global auth gate. This pass does not require a schema rerun.
+Run this after signing in through the global auth gate. For the reliability release, first apply the targeted SQL and deployment sequence in [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md).
+
+## Reliability Semantics
+
+Accountability replies **ensure** a missing target rather than incrementing on every reply. Repeating `fatto` against the same delivered target must leave habit count/times unchanged, including after a client-history retry. Explicit manual logging remains incremental. Text notes alone must never change hygiene, including negations or side-effect descriptions mentioning creatine.
+
+Missing/empty sleep is unknown, not zero; numeric zero remains data. `non ho dormito` closes that accountability source without inventing sleep. Test the canonical previous-night date and recalculated wake-day sleep hours. Completing a target manually while a nudge is queued must prevent its delivery at the next poll. Keep an untouched form open through Rome midnight and confirm it advances; a dirty edit must not be overwritten.
+
+Run `npm run test:reliability` for persisted habit/wake/sleep journeys and `npm run test:brain` for existing command semantics. See the release checklist for concurrent-write limitations and manual staging QA.
 
 ## Visible Health Fields
 
@@ -95,7 +103,7 @@ Manual QA after deploy:
 2. Trigger WhatsApp outbox `evaluate` after the shower window.
 3. Confirm a queued row with `rule_key = accountability_habit_missing`, `source_type = accountability`, `metadata.expected_reply_type = accountability`, and source id `habit:shower:YYYY-MM-DD`.
 4. Poll/send/ack through the bridge and confirm WhatsApp receives `Doccia fatta oggi?`.
-5. Reply `si` or `fatto`; confirm today's `health_logs.hygiene.shower.count` increments and a current Europe/Rome time is appended.
+5. Reply `si` or `fatto`; confirm today's `health_logs.hygiene.shower.count` reaches its target and a current Europe/Rome time is appended once. Repeat the reply; count/times must not change.
 6. Repeat with Creatine and Skin after their windows; confirm they update `hygiene.creatine` and `hygiene.skin`.
 7. Clear today's `wake_time`, evaluate after the wake window, reply `9.30`, and confirm today's `wake_time` is `09:30`.
 8. Clear previous-night `sleep_start`, evaluate the next morning, reply `2.30`, and confirm `sleep_start` is stored on the previous LifeOS date through the canonical sleep-start behavior.

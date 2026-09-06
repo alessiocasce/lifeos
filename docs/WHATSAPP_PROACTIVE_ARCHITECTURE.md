@@ -1,5 +1,13 @@
 # WhatsApp Proactive Architecture
 
+## Reliability Release
+
+**Deployment requires targeted SQL:** follow [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md), including pausing PM2 polling and reloading old frontend clients. `source_id` is a text logical key, not necessarily UUID. BrainTurn and dispatch share one family-aware target selector. `brainProactiveDelivery.js` revalidates queued sources and provides ensure-target Health writes plus persisted resolution/queued-fallback cancellation.
+
+Evaluation spends a mutable current-batch budget. Database admission/claim triggers serialize per user/channel and enforce ordinary delivery spacing after downtime. Exact due memos keep their gap exception; snoozes obey delivery spacing. Inspect `delivery_revalidation`, `resolution`, and poll cancellation/deferred counters. Optional ACK `delivery_attempt` fences older claim attempts when the bridge echoes it; legacy clients remain compatible but cannot provide that protection.
+
+`no` consumes a check-in without Health changes; `no_sleep` closes the source without fake sleep; done/time ensures the target and cancels queued fallbacks. Repeated snooze reuses one row keyed by the original delivered ID. Read the release limitations before claiming exactly-once physical delivery or cross-transaction cleanup.
+
 ## Scope
 
 Proactive WhatsApp is deterministic. Brain does not decide randomly when to text the user. Backend rule families decide whether a reminder/check-in is eligible, the outbox queues delivery, the local bridge sends it, and Brain handles the user's reply in the existing WhatsApp thread.
@@ -142,6 +150,8 @@ Run the live backend outbox smoke only with explicit opt-in:
 LIFEOS_RUN_LIVE_OUTBOX_SMOKE=true npm run smoke:whatsapp:outbox
 ```
 
+That opt-in runs read-only `preview`. Real enqueue/poll/ACK additionally require `LIFEOS_SMOKE_MUTATE=1`; use only a dedicated test recipient with the bridge paused. `dry_run` ACK is rejected, not simulated. Normal tests never run live smoke. Run `npm run test:schema` and `npm run test:reliability` for local persisted lifecycle coverage.
+
 Use MCP tool `get_whatsapp_proactive_debug` or resource `lifeos://whatsapp/proactive-debug` to inspect recent outbox statuses, ACK/retry metadata, and proactive traces without adding a frontend admin UI.
 
 Manual accountability QA after deploy:
@@ -151,7 +161,7 @@ Manual accountability QA after deploy:
 3. Confirm an `accountability_habit_missing` outbox row is queued.
 4. Poll/send/ack through the bridge and receive `Doccia fatta oggi?`.
 5. Reply `si`.
-6. Confirm today's `health_logs.hygiene.shower.count` increments and the same window does not enqueue again.
+6. Confirm today's `health_logs.hygiene.shower.count` reaches one, repeating the reply does not change it, and queued same-source fallbacks are cancelled.
 7. Repeat for wake time with reply `9.30` and for previous-night sleep start with reply `2.30`.
 8. Test `piu tardi` and confirm a snoozed outbox row is queued rather than an immediate duplicate.
 

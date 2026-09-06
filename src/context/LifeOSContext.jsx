@@ -1404,6 +1404,7 @@ export function LifeOSProvider({ children }) {
           const created = await projectSessionApi.create(normalizeProjectSessionPayload(payload));
           setProjectSessions((prev) => sortProjectSessions([created, ...prev]));
           setProjects((prev) => sortProjects(upsertProjectSession(prev, created)));
+          await loadProjects();
           setProjectSessionsStatus('ready');
           return created;
         } catch (error) {
@@ -1418,20 +1419,12 @@ export function LifeOSProvider({ children }) {
         }
         setProjectSessionsError('');
         try {
-          const existing = projectSessions.find((session) => session.id === id);
           const normalizedPatch = normalizeProjectSessionPayload(patch);
           const updated = await projectSessionApi.update(id, normalizedPatch);
-          let nextProjects = sortProjects(upsertProjectSession(projects, updated));
-          const endedNow = !existing?.ended_at && updated.ended_at;
-          const project = nextProjects.find((item) => item.id === updated.project_id);
-          const delta = Number(updated.progress_delta ?? 0);
-          if (endedNow && project && project.goal_type !== 'hours' && delta > 0) {
-            const currentValue = Number(project.current_value ?? 0) + delta;
-            const savedProject = await projectApi.update(project.id, { current_value: currentValue });
-            nextProjects = sortProjects(nextProjects.map((item) => (item.id === savedProject.id ? savedProject : item)));
-          }
+          const nextProjects = sortProjects(upsertProjectSession(projects, updated));
           setProjectSessions((prev) => sortProjectSessions(prev.map((session) => (session.id === id ? updated : session))));
           setProjects(nextProjects);
+          await loadProjects();
           setProjectSessionsStatus('ready');
           setProjectsStatus('ready');
           return updated;
@@ -1450,6 +1443,7 @@ export function LifeOSProvider({ children }) {
           await projectSessionApi.delete(id);
           setProjectSessions((prev) => prev.filter((session) => session.id !== id));
           setProjects((prev) => sortProjects(removeProjectSession(prev, id)));
+          await loadProjects();
           setProjectSessionsStatus('ready');
         } catch (error) {
           const message = projectErrorMessage(error, 'Failed to delete project session.');

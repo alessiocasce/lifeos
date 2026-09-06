@@ -1,5 +1,11 @@
 # LifeOS Deployment QA
 
+## Reliability Release: Required Migration
+
+Use the exact staged procedure in [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md). Back up first; pause Oracle PM2 bridge polling and project edits; close old tabs/PWAs; apply `supabase/releases/reliability.sql`; deploy/reload the new app; validate; resume polling. The SQL preserves memo UUID strings while making `source_id` text and adds attention/project triggers. Old frontend session increments must not run alongside the new trigger. No new server env vars or API functions; function count remains 7.
+
+Run `npm test`, `npm run check:functions`, and `npm run build`. New `test:schema` and `test:reliability` execute embedded PostgreSQL locally, not Supabase RLS or physical WhatsApp. Smoke opt-in alone is preview-only; `LIFEOS_SMOKE_MUTATE=1` is required for real evaluate/poll/ACK and must use a dedicated recipient with the bridge paused. Verify live RLS, delayed ACK/claim attempts, backlog spacing, and PWA reload before calling this deployed.
+
 Run this against the deployed URL after applying `supabase/schema.sql` to the target Supabase project and setting deployment environment variables.
 
 Core Brain/automation env vars include:

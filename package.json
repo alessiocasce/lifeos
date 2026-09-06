@@ -12,7 +12,9 @@
     "smoke:whatsapp:outbox": "node scripts/smoke-whatsapp-outbox-live.js",
     "test:mcp": "node scripts/test-mcp.js",
     "test:brain": "node scripts/test-brain-regressions.js",
-    "test": "npm run test:brain && npm run test:mcp",
+    "test:reliability": "node scripts/test-reliability.js",
+    "test:schema": "node scripts/test-schema-contracts.js",
+    "test": "npm run test:brain && npm run test:mcp && npm run test:schema && npm run test:reliability",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "vite": "^6.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",

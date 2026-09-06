@@ -1,5 +1,5 @@
 import { isPotentialPendingSlotFill, normalizePendingReplyIntent } from './brainPendingActions.js';
-import { normalizeProactiveMemoReply, selectProactiveMemoReplyTarget } from './brainProactiveReplies.js';
+import { selectProactiveReplyTarget, shouldPrioritizeProactiveReplyOverPending } from './brainProactiveReplies.js';
 import {
   getIntentContractOverride,
   hasExplicitContextReferent,
@@ -41,8 +41,8 @@ export function buildBrainTurnContract({
     ? (pendingReplyIntent ?? normalizePendingReplyIntent(message))
     : null;
   const proactiveSelection = source === 'whatsapp'
-    ? selectProactiveMemoReplyTarget({ message, brainChat, now })
-    : { type: 'none', intent: normalizeProactiveMemoReply(message) };
+    ? selectProactiveReplyTarget({ message, brainChat, now })
+    : { type: 'none', intent: { intent: 'other' } };
   const proactiveIntent = proactiveSelection?.intent?.intent ?? 'other';
   const fieldPolicy = buildFieldPolicy({ message, referential, explicitCommand });
   const base = {
@@ -115,7 +115,10 @@ export function buildBrainTurnContract({
     });
   }
 
-  if (pendingAction && pendingIntent?.intent === 'confirm') {
+  const proactiveWins = source === 'whatsapp' && shouldPrioritizeProactiveReplyOverPending({
+    message, brainChat, activePendingAction: pendingAction, now,
+  }).prioritize;
+  if (pendingAction && pendingIntent?.intent === 'confirm' && !proactiveWins) {
     return finalizeContract({
       ...base,
       winning_path: 'pending_action',
@@ -128,7 +131,7 @@ export function buildBrainTurnContract({
     });
   }
 
-  if (pendingAction && isPotentialPendingSlotFill({ message, pendingAction, workingContext })) {
+  if (pendingAction && !proactiveWins && isPotentialPendingSlotFill({ message, pendingAction, workingContext })) {
     return finalizeContract({
       ...base,
       winning_path: 'pending_action',

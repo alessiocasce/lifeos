@@ -1,5 +1,11 @@
 # LifeOS AI Assistant QA
 
+## Reliability Release Gate
+
+Apply the [release deployment order](RELIABILITY_RELEASE.md) first. Run `npm test`, including `test:schema` and `test:reliability`. Verify actual sent accountability metadata reaches `winning_path: proactive_reply`, not casual/planner routing. Reply `fatto` twice to one check-in: the second reply must not change Health. Two unresolved targets require clarification. Pending cancellation and explicit new commands retain priority. Mark a pending action completed/cancelled, then inspect Open Loops: older active snapshots must not revive it.
+
+Negative Health notes (`non ho preso creatina`, `did not take creatine`) must not increment habits. Check source-resolution metadata and pre-delivery cancellation rather than relying only on the WhatsApp answer. Production HTTP/RLS/bridge behavior still requires manual QA; local tests do not send messages.
+
 Run this after deploying to Vercel with:
 
 - `SUPABASE_URL`

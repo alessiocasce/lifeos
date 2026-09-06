@@ -1,6 +1,10 @@
 # Home Tab Manual QA
 
-Run this after signing in through the global auth gate. No schema migration is needed; Home reads persisted data from the existing Calendar, Memos, Health, Workout, and Projects/Ops slices.
+Run this after signing in through the global auth gate. Home itself has no schema change, but the reliability release requires the [targeted migration and deployment sequence](RELIABILITY_RELEASE.md).
+
+## Reliability Checks
+
+The agenda preview should show exactly the first four eligible entries, matching its displayed limit. Keep Home open across Europe/Rome midnight and return from a background tab; today's signals should refresh without reload. A completed/cancelled pending action must not reappear from an older snapshot in MCP Open Loops. Project totals should match completed-session edits/deletes after reload; see [project QA](QA_PROJECTS.md).
 
 ## Zero-Filtered Home
 

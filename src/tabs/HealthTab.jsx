@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import { localDate, localTime } from '../utils/date';
+import { useLocalDay } from '../hooks/useLocalDay';
 import {
   HEALTH_HABITS,
   buildHabitUpdate,
@@ -11,12 +12,11 @@ import {
   normalizeHygieneObject,
 } from '../utils/habits';
 
-const today = localDate();
 
 const defaultHygiene = Object.fromEntries(HEALTH_HABITS.map((habit) => [habit.id, { count: 0, times: [] }]));
 
 const emptyForm = {
-  logged_on: today,
+  logged_on: '',
   sleep_hours: '',
   sleep_start: '',
   wake_time: '',
@@ -27,6 +27,8 @@ const emptyForm = {
 };
 
 export function HealthTab() {
+  const today = useLocalDay();
+  const priorDay = useRef(today);
   const { healthLogs, healthLogsError, healthLogsStatus, saveHealthLog } = useLifeOS();
   const sortedLogs = useMemo(() => sortLogs(healthLogs), [healthLogs]);
   const todaysLog = sortedLogs.find((log) => log.logged_on === today) ?? null;
@@ -47,6 +49,14 @@ export function HealthTab() {
   const pendingSavesRef = useRef(0);
   const [saveState, setSaveState] = useState('idle');
   const [formError, setFormError] = useState('');
+  useEffect(() => {
+    const previous = priorDay.current;
+    priorDay.current = today;
+    if (formRef.current.logged_on === previous && !Object.keys(dirtyVersionsRef.current).length && !pendingSavesRef.current) {
+      selectedDateRef.current = today;
+      replaceForm(formFromLog(healthLogs.find((row) => row.logged_on === today)));
+    }
+  }, [today]);
   const selectedLog = useMemo(
     () => sortedLogs.find((log) => log.logged_on === form.logged_on) ?? null,
     [form.logged_on, sortedLogs],
@@ -426,9 +436,9 @@ function AutosaveStatus({ saveState, sourceStatus }) {
 }
 
 function formFromLog(log) {
-  if (!log) return emptyFormForDate(today);
+  if (!log) return emptyFormForDate(localDate());
   return {
-    logged_on: log.logged_on ?? today,
+    logged_on: log.logged_on ?? localDate(),
     sleep_hours: stringValue(log.sleep_hours),
     sleep_start: log.sleep_start ?? '',
     wake_time: log.wake_time ?? '',
@@ -442,7 +452,7 @@ function formFromLog(log) {
 function emptyFormForDate(loggedOn) {
   return {
     ...emptyForm,
-    logged_on: loggedOn || today,
+    logged_on: loggedOn || localDate(),
     hygiene: normalizeHygieneObject(defaultHygiene),
   };
 }

@@ -348,6 +348,7 @@ test('Workout intelligence analyzes exact sets without treating warmups as top s
       { id: 'work-prev', workout_id: 'w1', exercise: 'Bench Press', set_number: 1, is_warmup: false, weight: 50, reps: 7, rpe: 8 },
     ],
     healthLogs: [{ logged_on: '2026-06-20', sleep_hours: 7.2 }],
+    generatedAt: '2026-06-20T14:00:00Z',
     days: 14,
   });
 
@@ -388,6 +389,7 @@ test('Workout intelligence adds recovery caution only from logged sleep data', (
     workouts: [{ id: 'w1', name: 'Legs', performed_on: '2026-06-20', workout_sets: [] }],
     sets: [{ id: 'set-1', workout_id: 'w1', exercise: 'Squat', set_number: 1, is_warmup: false, weight: 80, reps: 5 }],
     healthLogs: [{ logged_on: '2026-06-20', sleep_hours: 4.8 }],
+    generatedAt: '2026-06-20T14:00:00Z',
   });
   assertEqual(lowSleep.recovery.status, 'caution');
   assert(lowSleep.next_session.suggestion.includes('conservative'), 'expected conservative next-session caveat');

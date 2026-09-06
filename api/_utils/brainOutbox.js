@@ -2,7 +2,8 @@ import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { findOrCreateWhatsappBrainThread, persistBrainAssistantMessage } from './brain.js';
 import { buildProactiveWorkingContextFromOutbox } from './brainProactiveReplies.js';
-import { canonicalizeWhatsappSender } from './whatsappBridge.js';
+import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
+import { checkProactiveDelivery } from './brainProactiveDelivery.js';
 import {
   buildAckMetadataPatch,
   buildClaimMetadataPatch,
@@ -41,6 +42,7 @@ export async function enqueueOutboxMessage({
   scheduledFor,
   expiresAt = null,
   metadata = {},
+  client = getSupabaseAdmin(),
 } = {}) {
   const payload = {
     user_id: userId,
@@ -57,7 +59,6 @@ export async function enqueueOutboxMessage({
     metadata: compactMetadata(metadata),
   };
 
-  const client = getSupabaseAdmin();
   const inserted = await client
     .from('brain_outbox_messages')
     .insert(payload)
@@ -66,6 +67,7 @@ export async function enqueueOutboxMessage({
   if (!inserted.error) {
     return { row: inserted.data, duplicate: false };
   }
+  if (inserted.error.code === 'P0001' && inserted.error.message === 'attention_deferred') return { deferred: true, duplicate: false, row: null };
   if (inserted.error.code !== '23505') throw inserted.error;
 
   const existing = await client
@@ -84,35 +86,52 @@ export async function pollOutboxMessages({
   limit = DEFAULT_OUTBOX_LIMIT,
   bridgeId = null,
   userId = getActionUserId(),
+  client = getSupabaseAdmin(),
+  now = new Date().toISOString(),
 } = {}) {
   const safeRecipient = requiredText(recipient, 'recipient', 180);
   const canonicalRecipient = requiredText(canonicalizeWhatsappSender(safeRecipient), 'recipient', 180);
   const recipients = recipientVariants(safeRecipient);
   const safeChannel = normalizeChannel(channel);
   const safeLimit = Math.min(MAX_OUTBOX_LIMIT, Math.max(1, Math.trunc(Number(limit)) || DEFAULT_OUTBOX_LIMIT));
-  const client = getSupabaseAdmin();
-  const now = new Date().toISOString();
 
   const expiredCount = await expireStaleOutboxMessages({ client, userId, recipient: canonicalRecipient, channel: safeChannel, now, recipients });
   const reclaimed = await reclaimStaleClaimedOutboxMessages({ client, userId, recipient: canonicalRecipient, channel: safeChannel, now, recipients });
   const fetchLimit = Math.min(50, Math.max(safeLimit * 4, safeLimit));
 
-  const due = await client
-    .from('brain_outbox_messages')
-    .select(outboxSelect())
-    .eq('user_id', userId)
-    .in('recipient', recipients)
-    .eq('channel', safeChannel)
-    .eq('status', 'queued')
-    .lte('scheduled_for', now)
-    .or(`expires_at.is.null,expires_at.gt.${now}`)
-    .order('scheduled_for', { ascending: true })
-    .order('created_at', { ascending: true })
-    .limit(fetchLimit);
-  if (due.error) throw due.error;
+  const dueRows = [];
+  for (const priority of ['high', 'normal', 'low']) {
+    const due = await client
+      .from('brain_outbox_messages')
+      .select(outboxSelect())
+      .eq('user_id', userId)
+      .in('recipient', recipients)
+      .eq('channel', safeChannel)
+      .eq('status', 'queued')
+      .eq('priority', priority)
+      .lte('scheduled_for', now)
+      .or(`expires_at.is.null,expires_at.gt.${now}`)
+      .order('scheduled_for', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(fetchLimit);
+    if (due.error) throw due.error;
+    dueRows.push(...(due.data || []));
+  }
 
   const claimed = [];
-  for (const row of sortOutboxRowsForDelivery(due.data ?? [], safeLimit)) {
+  let cancelledCount = 0;
+  let deferredCount = 0;
+  for (const row of sortOutboxRowsForDelivery(dueRows)) {
+    if (claimed.length >= safeLimit) break;
+    const eligibility = await checkProactiveDelivery({ row, client, userId });
+    if (!eligibility.eligible) {
+      const cancelled = await client.from('brain_outbox_messages').update({ status: 'cancelled',
+        metadata: { ...row.metadata, delivery_revalidation: { reason: eligibility.reason, cancelled_at: now } },
+      }).eq('user_id', userId).eq('id', row.id).eq('status', 'queued');
+      if (cancelled.error) throw cancelled.error;
+      cancelledCount++;
+      continue;
+    }
     const update = await client
       .from('brain_outbox_messages')
       .update({
@@ -132,6 +151,7 @@ export async function pollOutboxMessages({
       .maybeSingle();
     if (update.error) throw update.error;
     if (update.data) claimed.push(update.data);
+    else deferredCount++;
   }
 
   Object.defineProperty(claimed, 'diagnostics', {
@@ -139,6 +159,8 @@ export async function pollOutboxMessages({
       outbox_claimed_count: claimed.length,
       outbox_reclaimed_count: reclaimed.length,
       outbox_expired_count: expiredCount,
+      outbox_revalidation_cancelled_count: cancelledCount,
+      outbox_claim_deferred_count: deferredCount,
     },
     enumerable: false,
   });
@@ -180,6 +202,7 @@ export async function reclaimStaleClaimedOutboxMessages({
       .eq('id', row.id)
       .eq('user_id', userId)
       .eq('status', 'claimed')
+      .eq('attempts', row.attempts)
       .is('sent_at', null)
       .select(outboxSelect())
       .maybeSingle();
@@ -197,6 +220,7 @@ export async function ackOutboxMessage({
   error = null,
   metadata = {},
   userId = getActionUserId(),
+  deliveryAttempt = null,
 } = {}) {
   const safeStatus = normalizeAckStatus(status);
   if (!safeStatus) throw new HttpError(400, 'status must be sent or failed.');
@@ -217,6 +241,7 @@ export async function ackOutboxMessage({
     .maybeSingle();
   if (current.error) throw current.error;
   if (!current.data) throw new HttpError(404, 'Outbox message not found.');
+  if (deliveryAttempt != null && Number(deliveryAttempt) !== current.data.attempts) throw new HttpError(409, 'Stale delivery attempt.');
 
   if (safeStatus === 'sent') {
     const sent = await markOutboxSent({ client, row: current.data, metadata });
@@ -273,17 +298,22 @@ export async function persistSentProactiveMessageToWhatsappThread({ userId = get
     actions: [],
     recordRefs: [],
     workingContext,
-    extraMetadata: {
-      proactive_message: true,
-      outbox_message_id: outboxMessage.id,
-      rule_key: outboxMessage.rule_key,
-      source_type: outboxMessage.source_type,
-      source_id: outboxMessage.source_id,
-      expected_reply_type: metadata.expected_reply_type || MEMO_REPLY_TYPE,
-      ...(metadata.language ? { language: metadata.language } : {}),
-      ...(metadata.accountability && typeof metadata.accountability === 'object' ? { accountability: metadata.accountability } : {}),
-    },
+    extraMetadata: proactiveAssistantMetadata(outboxMessage),
   });
+}
+
+export function proactiveAssistantMetadata(outboxMessage) {
+  const metadata = outboxMessage.metadata || {};
+  return {
+    proactive_message: true,
+    outbox_message_id: outboxMessage.id,
+    rule_key: outboxMessage.rule_key,
+    source_type: outboxMessage.source_type,
+    source_id: outboxMessage.source_id,
+    expected_reply_type: metadata.expected_reply_type || MEMO_REPLY_TYPE,
+    ...(metadata.language ? { language: metadata.language } : {}),
+    ...(metadata.accountability && typeof metadata.accountability === 'object' ? { accountability: metadata.accountability } : {}),
+  };
 }
 
 async function findExistingProactiveAssistantMessage({ userId, threadId, outboxMessageId }) {
@@ -304,7 +334,7 @@ async function findExistingProactiveAssistantMessage({ userId, threadId, outboxM
   return result.data ?? null;
 }
 
-async function markOutboxSent({ client, row, metadata = {} }) {
+export async function markOutboxSent({ client, row, metadata = {} }) {
   const permission = canAckOutboxMessage({ row, ackStatus: 'sent' });
   if (permission.idempotent) return row;
   if (!permission.allowed) throw new HttpError(409, `Cannot mark outbox message as sent from status ${row.status}.`);
@@ -326,9 +356,11 @@ async function markOutboxSent({ client, row, metadata = {} }) {
     .eq('id', row.id)
     .eq('user_id', row.user_id)
     .eq('status', 'claimed')
+    .eq('attempts', row.attempts)
     .select(outboxSelect())
-    .single();
+    .maybeSingle();
   if (update.error) throw update.error;
+  if (!update.data) throw new HttpError(409, 'Outbox claim changed before ACK.');
   return update.data;
 }
 
@@ -362,9 +394,11 @@ async function markOutboxFailed({ client, row, error, metadata = {} }) {
     .eq('id', row.id)
     .eq('user_id', row.user_id)
     .eq('status', 'claimed')
+    .eq('attempts', row.attempts)
     .select(outboxSelect())
-    .single();
+    .maybeSingle();
   if (update.error) throw update.error;
+  if (!update.data) throw new HttpError(409, 'Outbox claim changed before ACK.');
   return update.data;
 }
 
@@ -455,7 +489,7 @@ function optionalText(value, max = 1000) {
 function recipientVariants(value) {
   const raw = requiredText(value, 'recipient', 180);
   const canonical = requiredText(canonicalizeWhatsappSender(raw), 'recipient', 180);
-  return [...new Set([canonical, raw].filter(Boolean))];
+  return [...new Set([...getWhatsappSenderAliasesForCanonical(canonical), raw].filter(Boolean))];
 }
 
 function compactMetadata(value) {

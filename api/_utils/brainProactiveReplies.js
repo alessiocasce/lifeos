@@ -1,6 +1,6 @@
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { localDateTime, addDays } from './date.js';
-import { normalizeTurnText } from './brainTurnArbitration.js';
+import { normalizeTurnText, looksLikeExplicitNewCommand } from './brainTurnArbitration.js';
 import {
   ACCOUNTABILITY_REPLY_TYPE,
   buildAccountabilityWorkingContextFromOutbox,
@@ -13,11 +13,22 @@ const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
 const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
 const PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS = 36;
 
-export async function resolveProactiveWhatsappReply({ message, brainChat, context } = {}) {
-  const target = selectProactiveReplyTarget({ message, brainChat, now: new Date() });
+export async function resolveProactiveWhatsappReply({ message, brainChat, context, now = new Date(), actions } = {}) {
+  const target = selectProactiveReplyTarget({ message, brainChat, now });
+  if (target.type === 'ambiguous' || target.type === 'resolved') {
+    const english = target.language === 'en';
+    const labels = (target.candidates || []).slice(0, 3).map((item) => String(item.title || item.source_id).slice(0, 55)).join('; ');
+    return buildProactiveClarificationResult({
+      language: target.language || 'it',
+      answer: target.type === 'resolved'
+        ? (english ? 'This check-in is already resolved. Nothing changed.' : 'Questo check-in e gia stato risolto. Non segno altro.')
+        : `${english ? 'Which check-in do you mean?' : 'Quale promemoria intendi?'} ${labels}`,
+      reason: `proactive_target_${target.type}`, trace: { ambiguous: target.type === 'ambiguous', resolved: target.type === 'resolved' },
+    });
+  }
   let result = null;
   if (target.reply_type === ACCOUNTABILITY_REPLY_TYPE) {
-    result = await resolveProactiveAccountabilityReply({ message, brainChat, context });
+    result = await resolveProactiveAccountabilityReply({ message, brainChat, context, now, actions, selection: target });
   } else if (target.reply_type === MEMO_REPLY_TYPE) {
     result = await resolveProactiveMemoReply({ message, brainChat, context });
   }
@@ -62,6 +73,21 @@ export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, 
 }
 
 export function selectProactiveReplyTarget({ message, brainChat, now = new Date() } = {}) {
+  if (looksLikeExplicitNewCommand(message) || looksLikeIndependentProactiveCommand(message)) return { type: 'none', intent: { intent: 'other' } };
+  const latest = [...(brainChat?.conversationHistory || [])].reverse().find((item) => item.role === 'assistant' && item.metadata?.proactive_message);
+  const accountability = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
+  const memo = selectProactiveMemoReplyTarget({ message, brainChat, now });
+  if (latest?.metadata?.proactive_resolution && (accountability.intent?.intent !== 'other' || memo.intent?.intent !== 'other')) {
+    return { type: 'resolved', intent: accountability.intent?.intent !== 'other' ? accountability.intent : memo.intent, language: latest.metadata.language || 'it' };
+  }
+  if (accountability.type !== 'none' && memo.type !== 'none' && accountability.type !== 'stale' && memo.type !== 'stale') {
+    const targets = [accountability, memo].flatMap((selection) => selection.candidates || [selection.proactive]).filter(Boolean);
+    const matches = targets.filter((item) => messageReferencesProactiveTarget(message, item));
+    if (matches.length !== 1) return { type: 'ambiguous', intent: accountability.intent, candidates: targets.slice(0, 3), language: 'it' };
+    const match = matches[0];
+    return { type: 'target', proactive: match, intent: match.source_type === 'accountability' ? accountability.intent : memo.intent,
+      reply_type: match.source_type === 'accountability' ? ACCOUNTABILITY_REPLY_TYPE : MEMO_REPLY_TYPE };
+  }
   const latestType = getLatestProactiveReplyType(brainChat);
   if (latestType === ACCOUNTABILITY_REPLY_TYPE) {
     const accountability = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
@@ -72,9 +98,7 @@ export function selectProactiveReplyTarget({ message, brainChat, now = new Date(
     if (memo.type !== 'none') return { ...memo, reply_type: MEMO_REPLY_TYPE };
   }
 
-  const memo = selectProactiveMemoReplyTarget({ message, brainChat, now });
   if (memo.type !== 'none') return { ...memo, reply_type: MEMO_REPLY_TYPE };
-  const accountability = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
   if (accountability.type !== 'none') return { ...accountability, reply_type: ACCOUNTABILITY_REPLY_TYPE };
   return { type: 'none', intent: { intent: 'other', confidence: 0 }, reply_type: null };
 }

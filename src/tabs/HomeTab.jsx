@@ -10,6 +10,7 @@ import { useEffect, useMemo } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import { localDate } from '../utils/date';
+import { useLocalDay } from '../hooks/useLocalDay';
 import { HEALTH_HABITS, getHabitEntry } from '../utils/habits';
 
 export function HomeTab() {
@@ -24,7 +25,7 @@ export function HomeTab() {
     workoutSessions,
   } = useLifeOS();
 
-  const today = getToday();
+  const today = useLocalDay();
   const tomorrow = addDays(today, 1);
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function HomeTab() {
   );
   const visibleAgendaEvents = todaysEvents.filter((event) => event.status !== 'cancelled');
   const nextEvent = getNextEvent(visibleAgendaEvents);
-  const shownAgenda = visibleAgendaEvents.slice(0, 5);
+  const shownAgenda = visibleAgendaEvents.slice(0, 4);
   const agendaMoreCount = Math.max(0, visibleAgendaEvents.length - shownAgenda.length);
   const todaysMemos = useMemo(
     () => memos.filter((memo) => memo.status === 'open' && memo.memo_date === today),
