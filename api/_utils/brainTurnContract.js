@@ -30,6 +30,7 @@ export function buildBrainTurnContract({
   pendingReplyIntent = null,
   classification = null,
   route = null,
+  interactionSelection = null,
   now = new Date(),
 } = {}) {
   const normalized = normalizeTurnText(message);
@@ -40,7 +41,9 @@ export function buildBrainTurnContract({
   const pendingIntent = pendingAction
     ? (pendingReplyIntent ?? normalizePendingReplyIntent(message))
     : null;
-  const proactiveSelection = source === 'whatsapp'
+  const proactiveSelection = interactionSelection
+    ? (interactionSelection.proactive_selection || { type: 'none', intent: { intent: 'other' } })
+    : source === 'whatsapp'
     ? selectProactiveReplyTarget({ message, brainChat, now })
     : { type: 'none', intent: { intent: 'other' } };
   const proactiveIntent = proactiveSelection?.intent?.intent ?? 'other';
@@ -73,10 +76,40 @@ export function buildBrainTurnContract({
       route_mode: route?.mode ?? null,
       classification_kind: classification?.kind ?? null,
       write_domain: writeDomain,
+      interaction_path: interactionSelection?.path ?? null,
+      interaction_method: interactionSelection?.selection_method ?? null,
     },
   };
 
-  if (pendingAction && pendingIntent?.intent === 'cancel') {
+  if (interactionSelection?.path === 'explicit_health') {
+    const healthWrite = interactionSelection.source_of_write_intent === CONTRACT_SOURCES.CURRENT;
+    return finalizeContract({
+      ...base,
+      winning_path: healthWrite ? 'explicit_command' : 'read_only_query',
+      intent_type: healthWrite ? 'new_write' : 'analysis',
+      source_of_write_intent: healthWrite ? CONTRACT_SOURCES.CURRENT : 'none',
+      allowed_context_sources: [CONTRACT_SOURCES.CURRENT],
+      disallowed_steals: ['pending_action', 'proactive_reply', 'memory_recall', 'working_context_fields'],
+      confidence: 0.98,
+      reasons: ['Grounded current-message Health self-report owns the turn.'],
+    });
+  }
+
+  if (interactionSelection?.path === 'clarification') {
+    return finalizeContract({
+      ...base,
+      winning_path: 'clarification',
+      intent_type: interactionSelection.intent || 'unknown',
+      source_of_write_intent: 'none',
+      allowed_context_sources: [CONTRACT_SOURCES.CURRENT],
+      disallowed_steals: ['pending_action', 'proactive_reply', 'memory_recall', 'working_context_fields'],
+      confidence: 0.96,
+      reasons: [interactionSelection.reason || 'Interaction target requires safe clarification.'],
+    });
+  }
+
+  if (pendingAction && pendingIntent?.intent === 'cancel'
+    && (!interactionSelection || interactionSelection.path === 'pending_action')) {
     return finalizeContract({
       ...base,
       winning_path: 'pending_action',
@@ -89,7 +122,8 @@ export function buildBrainTurnContract({
     });
   }
 
-  if (pendingAction && pendingIntent?.intent === 'clarify') {
+  if (pendingAction && pendingIntent?.intent === 'clarify'
+    && (!interactionSelection || interactionSelection.path === 'pending_action')) {
     return finalizeContract({
       ...base,
       winning_path: 'pending_action',
@@ -115,9 +149,11 @@ export function buildBrainTurnContract({
     });
   }
 
-  const proactiveWins = source === 'whatsapp' && shouldPrioritizeProactiveReplyOverPending({
-    message, brainChat, activePendingAction: pendingAction, now,
-  }).prioritize;
+  const proactiveWins = interactionSelection
+    ? interactionSelection.path === 'proactive_reply'
+    : source === 'whatsapp' && shouldPrioritizeProactiveReplyOverPending({
+      message, brainChat, activePendingAction: pendingAction, now,
+    }).prioritize;
   if (pendingAction && pendingIntent?.intent === 'confirm' && !proactiveWins) {
     return finalizeContract({
       ...base,

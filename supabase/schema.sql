@@ -169,6 +169,7 @@ create table if not exists public.ai_chat_messages (
   action_type text,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
+  unique (id, user_id),
   foreign key (thread_id, user_id) references public.ai_chat_threads(id, user_id) on delete cascade
 );
 
@@ -273,7 +274,75 @@ create table if not exists public.brain_outbox_messages (
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (user_id, idempotency_key)
+  unique (user_id, idempotency_key),
+  unique (id, user_id)
+);
+
+create table if not exists public.brain_whatsapp_inbound_receipts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  channel text not null default 'whatsapp' check (channel = 'whatsapp'),
+  canonical_recipient text not null check (length(canonical_recipient) between 1 and 180),
+  provider_message_id text not null check (
+    length(provider_message_id) between 1 and 300
+    and provider_message_id <> '[object Object]'
+    and provider_message_id !~ '[[:cntrl:]]'
+  ),
+  thread_id uuid,
+  status text not null default 'processing' check (status in ('processing', 'completed', 'failed_before_effect', 'uncertain')),
+  lease_token uuid,
+  lease_expires_at timestamptz,
+  effect_metadata jsonb not null default '{}'::jsonb,
+  response_payload jsonb,
+  assistant_message_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, channel, canonical_recipient, provider_message_id),
+  foreign key (thread_id, user_id) references public.ai_chat_threads(id, user_id) on delete cascade,
+  foreign key (assistant_message_id, user_id) references public.ai_chat_messages(id, user_id) on delete cascade
+);
+
+create table if not exists public.brain_whatsapp_message_deliveries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  channel text not null default 'whatsapp' check (channel = 'whatsapp'),
+  canonical_recipient text not null check (length(canonical_recipient) between 1 and 180),
+  provider_message_id text not null check (
+    length(provider_message_id) between 1 and 300
+    and provider_message_id <> '[object Object]'
+    and provider_message_id !~ '[[:cntrl:]]'
+  ),
+  thread_id uuid not null,
+  assistant_message_id uuid not null,
+  outbox_message_id uuid,
+  delivery_attempt integer check (delivery_attempt is null or delivery_attempt >= 0),
+  sent_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (user_id, channel, canonical_recipient, provider_message_id),
+  unique (user_id, assistant_message_id, provider_message_id),
+  foreign key (thread_id, user_id) references public.ai_chat_threads(id, user_id) on delete cascade,
+  foreign key (assistant_message_id, user_id) references public.ai_chat_messages(id, user_id) on delete cascade,
+  foreign key (outbox_message_id, user_id) references public.brain_outbox_messages(id, user_id) on delete cascade
+);
+
+create table if not exists public.brain_interaction_state (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  thread_id uuid not null,
+  channel text not null default 'whatsapp' check (channel = 'whatsapp'),
+  version integer not null default 1 check (version > 0),
+  state text not null check (state in ('pending_delivery', 'active', 'answered', 'superseded', 'abandoned', 'expired')),
+  owner_kind text not null check (owner_kind in ('pending_action', 'proactive', 'clarification')),
+  assistant_message_id uuid,
+  pending_action_id text,
+  outbox_message_id uuid,
+  owner_payload jsonb not null default '{}'::jsonb,
+  opened_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, thread_id, channel),
+  foreign key (thread_id, user_id) references public.ai_chat_threads(id, user_id) on delete cascade,
+  foreign key (assistant_message_id, user_id) references public.ai_chat_messages(id, user_id) on delete cascade,
+  foreign key (outbox_message_id, user_id) references public.brain_outbox_messages(id, user_id) on delete cascade
 );
 
 create table if not exists public.brain_proactive_rules (
@@ -1106,6 +1175,16 @@ create trigger set_brain_proactive_rules_updated_at
 before update on public.brain_proactive_rules
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_brain_whatsapp_inbound_receipts_updated_at on public.brain_whatsapp_inbound_receipts;
+create trigger set_brain_whatsapp_inbound_receipts_updated_at
+before update on public.brain_whatsapp_inbound_receipts
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_brain_interaction_state_updated_at on public.brain_interaction_state;
+create trigger set_brain_interaction_state_updated_at
+before update on public.brain_interaction_state
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_projects_updated_at on public.projects;
 create trigger set_projects_updated_at
 before update on public.projects
@@ -1274,6 +1353,12 @@ create index if not exists brain_outbox_messages_user_channel_status_scheduled_i
 create index if not exists brain_outbox_messages_idempotency_key_idx on public.brain_outbox_messages (idempotency_key);
 create index if not exists brain_outbox_messages_source_idx on public.brain_outbox_messages (source_type, source_id);
 create index if not exists brain_proactive_rules_user_rule_channel_idx on public.brain_proactive_rules (user_id, rule_key, channel);
+create unique index if not exists ai_chat_messages_user_thread_outbox_unique
+  on public.ai_chat_messages (user_id, thread_id, (metadata->>'outbox_message_id'))
+  where role = 'assistant' and coalesce(metadata->>'outbox_message_id', '') <> '';
+create index if not exists brain_whatsapp_receipts_user_status_lease_idx on public.brain_whatsapp_inbound_receipts (user_id, status, lease_expires_at);
+create index if not exists brain_whatsapp_deliveries_assistant_idx on public.brain_whatsapp_message_deliveries (user_id, assistant_message_id);
+create index if not exists brain_interaction_state_expiry_idx on public.brain_interaction_state (user_id, channel, state, expires_at);
 create index if not exists projects_user_status_created_at_idx on public.projects (user_id, status, created_at desc);
 create index if not exists project_sessions_user_project_started_at_idx on public.project_sessions (user_id, project_id, started_at desc);
 create index if not exists project_sessions_user_ended_at_idx on public.project_sessions (user_id, ended_at);
@@ -1299,6 +1384,9 @@ alter table public.ai_vault_chunks enable row level security;
 alter table public.memos enable row level security;
 alter table public.brain_outbox_messages enable row level security;
 alter table public.brain_proactive_rules enable row level security;
+alter table public.brain_whatsapp_inbound_receipts enable row level security;
+alter table public.brain_whatsapp_message_deliveries enable row level security;
+alter table public.brain_interaction_state enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_sessions enable row level security;
 alter table public.project_money_entries enable row level security;
@@ -1494,6 +1582,12 @@ create policy "brain_proactive_rules are user scoped" on public.brain_proactive_
 for all to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- WhatsApp receipt, delivery and interaction-state tables are service-role only.
+-- RLS is enabled as defense in depth and no authenticated-user policies exist.
+revoke all on table public.brain_whatsapp_inbound_receipts from anon, authenticated;
+revoke all on table public.brain_whatsapp_message_deliveries from anon, authenticated;
+revoke all on table public.brain_interaction_state from anon, authenticated;
 
 drop policy if exists "lifeos local read projects" on public.projects;
 drop policy if exists "lifeos local write projects" on public.projects;

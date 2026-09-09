@@ -1,16 +1,26 @@
 # LifeOS Project Context
 
-Last updated: 2026-09-06
+Last updated: 2026-09-09
 Current branch: `main`
 Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, planner stage, and backend LifeOS tool guards.
 
 ## Reliability Release Handoff
 
+### WhatsApp interaction ownership patch
+
+The backend now persists Brain metadata as bounded structured JSON (`metadata_version: 2`) and selects one immutable interaction owner per WhatsApp turn in `brainInteractionSelection.js`. Selection precedence is grounded current-message Health/commands, strong pending cancellation, trusted native quote, active delivered interaction, a 30-minute adjacent legacy fallback, then normal Brain routing. The selected object is attached to BrainTurn/BrainTurn Contract and passed unchanged to proactive execution; old history is not rescanned for another writable target.
+
+Durable transport correlation requires the additive migration `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql`. It adds inbound execution receipts, scoped outgoing provider-message mappings, one versioned interaction row per WhatsApp thread, and a unique assistant/outbox linkage. These tables are service-role-only with RLS enabled and no authenticated-client grants. Do not fabricate IDs or infer old provider IDs.
+
+The external Oracle bridge is not stored in this repo. It must adopt `scripts/whatsapp-bridge-adapter-reference.js`: forward native quote IDs, retain full incoming/outgoing provider IDs, include `delivery_attempt` in proactive ACK, and call outbox `action=record_reply_delivery` after sending a normal Brain reply. Until that adapter is deployed, legacy adjacent-message selection works for 30 minutes, but native quote ownership and durable physical-send retry guarantees are incomplete.
+
+Deterministic current-message Health reports now recognize Shower/Creatine/Skin completion and negation before pending/proactive routing. Completion ensures the daily target once; it never writes a note pretending to be a habit. Accountability time parsing accepts complete expressions such as `3 e 30 di notte` as `03:30` and rejects unrelated numeric sentences.
+
 Read [the release/deploy checklist](docs/RELIABILITY_RELEASE.md) before deployment. **Database change required:** apply `supabase/releases/reliability.sql` with polling paused and old clients closed, then deploy/reload the app before resuming. Outbox source IDs are text; transactional admission/claim spacing and project contribution triggers are now database responsibilities. Do not retain the old frontend project increment alongside the trigger.
 
 BrainTurn and runtime proactive dispatch share family-aware target selection. Accountability replies ensure a Health target rather than incrementing, persist resolution, and invalidate queued work; poll revalidates sources. Free-text notes cannot update habits. Missing sleep remains unknown. Pending Open Loops reduce latest state before filtering. Frontend day defaults observe Rome rollover, and MCP reports post-serialization set truncation.
 
-Run `npm test` (Brain, MCP, embedded PostgreSQL schema contracts, lifecycle tests), `npm run check:functions` (7), and build. No production integration was exercised by these local suites. Live outbox smoke is opt-in and preview-only unless `LIFEOS_SMOKE_MUTATE=1`. Next session should validate staged migration/RLS/PM2/PWA rollout and remaining cross-transaction races before feature work.
+Run `npm test` (Brain, MCP, embedded PostgreSQL schema contracts, lifecycle tests, bridge adapter fixtures), `npm run check:functions` (7), and build. No production integration was exercised by these local suites. Live outbox smoke is opt-in and preview-only unless `LIFEOS_SMOKE_MUTATE=1`. Next session should validate staged migration/RLS/PM2 rollout and remaining cross-transaction races before feature work.
 
 ## Project Goal
 
@@ -138,8 +148,11 @@ Current tables:
 - `ai_vault_chunks`
 - `brain_outbox_messages`
 - `brain_proactive_rules`
+- `brain_whatsapp_inbound_receipts`
+- `brain_whatsapp_message_deliveries`
+- `brain_interaction_state`
 
-All tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`.
+App-facing tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`. The three WhatsApp reliability tables require an explicit backend `user_id`; they are service-role-only and intentionally have no authenticated-client policy.
 
 RLS is enabled on all user tables. Current policies are user-scoped for authenticated users:
 
@@ -203,7 +216,7 @@ Real/persisted today:
   - `POST /api/ai/chat`
   - `GET /api/ai/actions`
   - `POST /api/integrations/whatsapp/inbound`
-  - `POST /api/integrations/whatsapp/outbox` with `action=evaluate|poll|ack`
+  - `POST /api/integrations/whatsapp/outbox` with `action=evaluate|poll|ack|record_reply_delivery`
   - Persistent Brain chat with a fresh New Chat draft by default. Old threads/messages persist in the backend, but old-thread selection is hidden from the normal UI for now.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.

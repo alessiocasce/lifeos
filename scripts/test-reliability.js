@@ -3,7 +3,22 @@ import { buildBrainTurnContract } from '../api/_utils/brainTurnContract.js';
 import { buildAccountabilityProactiveCandidates, enqueueAccountabilitySnoozeOutboxMessage } from '../api/_utils/brainProactiveAccountability.js';
 import { resolveProactiveWhatsappReply, selectProactiveReplyTarget, buildProactiveWorkingContextFromOutbox } from '../api/_utils/brainProactiveReplies.js';
 import { ensureAccountabilityHealth, resolveAccountabilityTarget, checkProactiveDelivery, accountabilityTargetIsResolved } from '../api/_utils/brainProactiveDelivery.js';
-import { enqueueOutboxMessage, pollOutboxMessages, markOutboxSent, proactiveAssistantMetadata } from '../api/_utils/brainOutbox.js';
+import { enqueueOutboxMessage, pollOutboxMessages, markOutboxSent, proactiveAssistantMetadata, persistSentProactiveMessageToWhatsappThread } from '../api/_utils/brainOutbox.js';
+import { persistBrainAssistantMessage } from '../api/_utils/brain.js';
+import {
+  claimWhatsappInboundReceipt,
+  completeWhatsappInboundReceipt,
+  closeBrainInteraction,
+  loadBrainInteractionState,
+  recordWhatsappMessageDelivery,
+  resolveWhatsappQuotedDelivery,
+  hydrateLegacyProactiveMessage,
+  markWhatsappInboundReceiptFailedBeforeEffect,
+  normalizeWhatsappProviderMessageId,
+  setBrainInteractionPendingDelivery,
+} from '../api/_utils/brainWhatsappReliability.js';
+import { selectBrainTurnInteraction } from '../api/_utils/brainInteractionSelection.js';
+import { parseExplicitHealthSelfReport, resolveExplicitHealthSelfReport } from '../api/_utils/brainHealthSelfReports.js';
 import { buildWorkoutIntelligence } from '../api/_utils/workoutIntelligence.js';
 import { buildOpenLoops } from '../api/_utils/lifeosContextCompiler.js';
 import { extractHealthHabitUpdates } from '../api/_utils/lifeosTools.js';
@@ -23,6 +38,11 @@ const historyFor = (row) => ({ conversationHistory: [{ role: 'assistant', create
   ...proactiveAssistantMetadata(row), working_context: buildProactiveWorkingContextFromOutbox(row),
 } }] });
 const brainChat = historyFor(candidate);
+await check('backend provider IDs preserve full suffixes and reject object coercion', () => {
+  assert.equal(normalizeWhatsappProviderMessageId('provider:device:full-suffix'), 'provider:device:full-suffix');
+  assert.equal(normalizeWhatsappProviderMessageId({ _serialized: 'not-accepted-at-backend' }), null);
+  assert.equal(normalizeWhatsappProviderMessageId('[object Object]'), null);
+});
 await check('accountability metadata reaches proactive Brain contract', () => {
   assert.equal(buildBrainTurnContract({ message: 'fatto', source: 'whatsapp', brainChat, now }).winning_path, 'proactive_reply');
 });
@@ -86,9 +106,121 @@ await check('Rome date differs from UTC at midnight and handles DST', () => {
 const { db, client } = await createReliabilityDatabase();
 const userId = fixtureUser;
 try {
+  await check('real assistant persistence preserves nested accountability metadata', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from brain_whatsapp_inbound_receipts; delete from ai_chat_messages; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title) values ('persistence') returning *`)).rows[0];
+    const chat = { thread, source: 'app', assistantPersisted: false };
+    const saved = await persistBrainAssistantMessage({
+      chat, answer: 'Doccia fatta oggi?', actions: [], recordRefs: [], client, userId,
+      extraMetadata: {
+        proactive_message: true,
+        outbox_message_id: '00000000-0000-4000-8000-000000000001',
+        source_type: 'accountability', source_id: 'habit:shower:2026-07-07', expected_reply_type: 'accountability',
+        accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07' },
+      },
+    });
+    assert.equal(saved.metadata.metadata_version, 2);
+    assert.equal(saved.metadata.accountability.kind, 'habit_missing');
+    assert.notEqual(saved.metadata.accountability, '[object Object]');
+  });
+
+  await check('durable inbound receipt replays completed response without a second claim', async () => {
+    await db.exec('delete from brain_whatsapp_inbound_receipts; delete from ai_chat_messages; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title) values ('receipt') returning *`)).rows[0];
+    const assistant = (await db.query(`insert into ai_chat_messages(user_id,thread_id,role,content) values ($1,$2,'assistant','ok') returning *`, [userId, thread.id])).rows[0];
+    const first = await claimWhatsappInboundReceipt({ userId, recipient: 'fixture', providerMessageId: 'provider:one', client, now });
+    assert.equal(first.mode, 'claimed');
+    const concurrent = await claimWhatsappInboundReceipt({ userId, recipient: 'fixture', providerMessageId: 'provider:one', client, now });
+    assert.equal(concurrent.mode, 'processing');
+    await completeWhatsappInboundReceipt({ receiptId: first.receipt.id, leaseToken: first.leaseToken, userId, client,
+      result: { answer: 'ok', thread_id: thread.id, persisted_message: assistant, actions: [] } });
+    const replay = await claimWhatsappInboundReceipt({ userId, recipient: 'fixture', providerMessageId: 'provider:one', client, now });
+    assert.equal(replay.mode, 'replay');
+    assert.equal(replay.response.assistant_message_id, assistant.id);
+    assert.equal((await db.query(`select count(*)::int as count from brain_whatsapp_inbound_receipts`)).rows[0].count, 1);
+  });
+
+  await check('receipt failed before Brain effects can be reclaimed safely', async () => {
+    await db.exec('delete from brain_whatsapp_inbound_receipts;');
+    const first = await claimWhatsappInboundReceipt({ userId, recipient: 'fixture', providerMessageId: 'provider:retryable', client, now });
+    await markWhatsappInboundReceiptFailedBeforeEffect({ receiptId: first.receipt.id, leaseToken: first.leaseToken,
+      userId, client, error: new Error('fixture-before-effect') });
+    const retry = await claimWhatsappInboundReceipt({ userId, recipient: 'fixture', providerMessageId: 'provider:retryable', client, now });
+    assert.equal(retry.mode, 'claimed');
+    assert.notEqual(retry.leaseToken, first.leaseToken);
+  });
+
+  await check('provider delivery activates one scoped interaction and quoted lookup resolves it', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from ai_chat_messages; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('delivery',$1) returning *`, [{ source: 'whatsapp', whatsapp_sender: 'fixture' }])).rows[0];
+    const pending = { id: 'pending-wake', action_type: 'update_health_log', status: 'awaiting_confirmation', args: { logged_on: '2026-07-07', wake_time: '08:35' } };
+    const chat = { thread, source: 'whatsapp', channelMetadata: { whatsapp_sender: 'fixture' }, assistantPersisted: false };
+    const assistant = await persistBrainAssistantMessage({ chat, answer: 'Confermi il risveglio alle 08:35?', pendingAction: pending,
+      actions: [], recordRefs: [], client, userId });
+    assert.equal((await loadBrainInteractionState({ threadId: thread.id, userId, client, now })).state, 'pending_delivery');
+    await recordWhatsappMessageDelivery({ assistantMessageId: assistant.id, threadId: thread.id, recipient: 'fixture',
+      providerMessageId: 'provider:pending', userId, client, sentAt: now.toISOString() });
+    assert.equal((await loadBrainInteractionState({ threadId: thread.id, userId, client, now })).state, 'active');
+    const quoted = await resolveWhatsappQuotedDelivery({ recipient: 'fixture', providerMessageId: 'provider:pending', userId, client });
+    assert.equal(quoted.message.id, assistant.id);
+    const selected = selectBrainTurnInteraction({ message: 'si', pendingAction: pending, activeInteraction: await loadBrainInteractionState({ threadId: thread.id, userId, client, now }), brainChat: { conversationHistory: [assistant] }, now });
+    assert.equal(selected.path, 'pending_action');
+    assert.equal(selected.pending_action_id, pending.id);
+  });
+
+  await check('interaction ownership uses version fencing and provider mappings are scope-safe', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from ai_chat_messages; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('owner-cas',$1) returning *`, [{ source: 'whatsapp', whatsapp_sender: 'fixture' }])).rows[0];
+    const first = (await db.query(`insert into ai_chat_messages(user_id,thread_id,role,content) values ($1,$2,'assistant','first') returning *`, [userId, thread.id])).rows[0];
+    const second = (await db.query(`insert into ai_chat_messages(user_id,thread_id,role,content) values ($1,$2,'assistant','second') returning *`, [userId, thread.id])).rows[0];
+    const owner1 = await setBrainInteractionPendingDelivery({ userId, threadId: thread.id, assistantMessageId: first.id,
+      pendingAction: { id: 'pending-1' }, ownerPayload: { pending_action: { id: 'pending-1' } }, client, openedAt: now });
+    const owner2 = await setBrainInteractionPendingDelivery({ userId, threadId: thread.id, assistantMessageId: second.id,
+      pendingAction: { id: 'pending-2' }, ownerPayload: { pending_action: { id: 'pending-2' } }, client, openedAt: now });
+    assert.equal(owner2.version, owner1.version + 1);
+    assert.equal(await closeBrainInteraction({ userId, threadId: thread.id, assistantMessageId: first.id,
+      expectedVersion: owner1.version, client }), null);
+    assert.equal((await loadBrainInteractionState({ threadId: thread.id, userId, client, now })).assistant_message_id, second.id);
+    await recordWhatsappMessageDelivery({ userId, threadId: thread.id, assistantMessageId: second.id,
+      recipient: 'fixture', providerMessageId: 'provider:full:suffix:one', client, sentAt: now.toISOString() });
+    await assert.rejects(recordWhatsappMessageDelivery({ userId, threadId: thread.id, assistantMessageId: first.id,
+      recipient: 'fixture', providerMessageId: 'provider:full:suffix:one', client, sentAt: now.toISOString() }), /already mapped/);
+    assert.equal(await resolveWhatsappQuotedDelivery({ userId, recipient: 'other', providerMessageId: 'provider:full:suffix:one', client }), null);
+  });
+
+  await check('grounded repeated shower report ensures one habit effect and negation does not write', async () => {
+    await db.exec('delete from health_logs;');
+    const actions = { ensureHealth: (args) => ensureAccountabilityHealth(args, { client, userId }) };
+    const report = parseExplicitHealthSelfReport('DOCCIA FATTA', { now });
+    const first = await resolveExplicitHealthSelfReport({ report, actions });
+    const second = await resolveExplicitHealthSelfReport({ report, actions });
+    assert.equal(first.actions.length, 1);
+    assert.equal(second.actions.length, 0);
+    const negative = await resolveExplicitHealthSelfReport({ report: parseExplicitHealthSelfReport('non ho fatto la doccia', { now }), actions });
+    assert.equal(negative.actions.length, 0);
+    const health = (await db.query('select hygiene,notes from health_logs')).rows[0];
+    assert.equal(health.hygiene.shower.count, 1);
+    assert.equal(health.notes, null);
+  });
+
+  await check('legacy malformed target hydrates only from its exact scoped outbox link', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from ai_chat_messages; delete from brain_outbox_messages; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title) values ('legacy') returning *`)).rows[0];
+    const queued = await enqueueOutboxMessage({ userId, client, recipient: 'fixture', body: candidate.body,
+      ruleKey: candidate.rule_key, sourceType: candidate.source_type, sourceId: candidate.source_id,
+      idempotencyKey: `legacy:${candidate.idempotency_key}`, scheduledFor: now.toISOString(), metadata: candidate.metadata });
+    const message = (await client.from('ai_chat_messages').insert({ user_id: userId, thread_id: thread.id, role: 'assistant', content: candidate.body,
+      metadata: { proactive_message: true, expected_reply_type: 'accountability', outbox_message_id: queued.row.id,
+        source_type: 'accountability', source_id: queued.row.source_id, accountability: '[object Object]' } }).single()).data;
+    const hydrated = await hydrateLegacyProactiveMessage({ message, userId, client });
+    assert.equal(hydrated.metadata.accountability.kind, 'habit_missing');
+    const mismatch = await hydrateLegacyProactiveMessage({ message: { ...message, metadata: { ...message.metadata, source_id: 'other' } }, userId, client });
+    assert.equal(mismatch.metadata.accountability, '[object Object]');
+  });
+
   for (const [kind, reply] of [['habit_missing', 'fatto'], ['wake_time_missing', '9.30'], ['sleep_start_missing', '2.30']]) {
     await check(`schema-backed journey ${kind}: generate -> enqueue -> claim -> ACK -> contract -> reply -> resolve`, async () => {
-      await db.exec('delete from ai_chat_messages; delete from brain_outbox_messages; delete from health_logs;');
+      await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from brain_whatsapp_inbound_receipts; delete from ai_chat_messages; delete from brain_outbox_messages; delete from health_logs; delete from ai_chat_threads;');
       const item = Array.from({ length: 48 }, (_, halfHour) => buildAccountabilityProactiveCandidates({
         healthLogs: [], recipient: 'fixture', now: new Date(Date.UTC(2026, 6, 7, 0, halfHour * 30)),
       })).flat().find((row) => row.metadata.accountability.kind === kind);
@@ -99,18 +231,29 @@ try {
       const claimed = await pollOutboxMessages({ client, userId, recipient: 'fixture' });
       assert.equal(claimed.length, 1);
       const sent = await markOutboxSent({ client, row: claimed[0] });
-      const thread = (await db.query(`insert into ai_chat_threads(title) values ('fixture') returning id`)).rows[0];
-      const metadata = { ...proactiveAssistantMetadata(sent), working_context: buildProactiveWorkingContextFromOutbox(sent) };
-      await client.from('ai_chat_messages').insert({ user_id: userId, thread_id: thread.id, role: 'assistant', content: item.body, metadata }).single();
-      const conversation = { conversationHistory: [{ role: 'assistant', created_at: now.toISOString(), metadata }] };
-      assert.equal(buildBrainTurnContract({ message: reply, source: 'whatsapp', brainChat: conversation, now }).winning_path, 'proactive_reply');
+      const thread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('fixture',$1) returning id`, [{ source: 'whatsapp', whatsapp_sender: 'fixture' }])).rows[0];
+      const persisted = await persistSentProactiveMessageToWhatsappThread({ userId, recipient: 'fixture', outboxMessage: sent, client,
+        findThread: async () => thread });
+      const repeatedPersistence = await persistSentProactiveMessageToWhatsappThread({ userId, recipient: 'fixture', outboxMessage: sent, client,
+        findThread: async () => thread });
+      assert.equal(repeatedPersistence.id, persisted.id);
+      assert.equal((await db.query(`select count(*)::int as count from ai_chat_messages where metadata->>'outbox_message_id'=$1`, [sent.id])).rows[0].count, 1);
+      assert.equal(persisted.metadata.accountability.kind, kind);
+      await recordWhatsappMessageDelivery({ userId, threadId: thread.id, assistantMessageId: persisted.id,
+        recipient: 'fixture', providerMessageId: `provider:${kind}`, outboxMessageId: sent.id,
+        deliveryAttempt: sent.attempts, sentAt: now.toISOString(), client });
+      const activeInteraction = await loadBrainInteractionState({ threadId: thread.id, userId, client, now });
+      const conversation = { conversationHistory: [persisted] };
+      const interactionSelection = selectBrainTurnInteraction({ message: reply, brainChat: conversation, activeInteraction, now });
+      assert.equal(interactionSelection.path, 'proactive_reply');
+      assert.equal(buildBrainTurnContract({ message: reply, source: 'whatsapp', brainChat: conversation, interactionSelection, now }).winning_path, 'proactive_reply');
       const actions = { updateHealthLog: (args) => ensureAccountabilityHealth(args, { client, userId }),
         logSleepStart: (args) => ensureAccountabilityHealth(args, { client, userId }),
         isResolved: (proactive) => accountabilityTargetIsResolved(proactive, { client, userId }),
         resolveTarget: (args) => resolveAccountabilityTarget({ ...args, client, userId }) };
-      const result = await resolveProactiveWhatsappReply({ message: reply, brainChat: conversation, now, actions });
+      const result = await resolveProactiveWhatsappReply({ message: reply, brainChat: conversation, now, actions, selection: interactionSelection.proactive_selection });
       assert.equal(result.actions.length, 1);
-      const repeated = await resolveProactiveWhatsappReply({ message: reply, brainChat: conversation, now, actions });
+      const repeated = await resolveProactiveWhatsappReply({ message: reply, brainChat: conversation, now, actions, selection: interactionSelection.proactive_selection });
       assert.equal(repeated.actions.length, 0);
       const health = (await db.query('select * from health_logs')).rows[0];
       if (kind === 'habit_missing') assert.equal(health.hygiene[item.metadata.accountability.habit_id].count, 1);

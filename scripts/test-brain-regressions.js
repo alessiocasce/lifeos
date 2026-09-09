@@ -96,6 +96,14 @@ import {
 } from '../api/_utils/whatsappBridge.js';
 import { hasNegativeWriteIntent } from '../api/ai/chat.js';
 import {
+  hasStructuredHealthField,
+  parseExplicitHealthSelfReport,
+  parseHealthReplyTime,
+  repairBareHabitArgs,
+} from '../api/_utils/brainHealthSelfReports.js';
+import { selectBrainTurnInteraction, serializeInteractionSelection } from '../api/_utils/brainInteractionSelection.js';
+import { sanitizeBrainMetadata } from '../api/_utils/brainMetadata.js';
+import {
   dirtySleepStartPendingActions,
   calendarPendingMissingTime,
   napHealthNoteCandidate,
@@ -111,6 +119,127 @@ import {
 } from '../tests/brain/fixtures.js';
 
 const tests = [];
+
+test('structured Brain metadata preserves nested targets and redacts nested secrets', () => {
+  const metadata = sanitizeBrainMetadata({ accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07' }, nested: { token: 'fixture-secret' } });
+  assert.equal(metadata.accountability.kind, 'habit_missing');
+  assert.equal(metadata.nested.token, '[redacted]');
+  assert.equal(JSON.stringify(metadata).includes('fixture-secret'), false);
+});
+
+test('Health self-reports are grounded, negation-first, and use complete time expressions', () => {
+  assert.equal(parseExplicitHealthSelfReport('DOCCIA FATTA', { now: new Date('2026-07-07T18:30:00Z') }).habit_id, 'shower');
+  assert.equal(parseExplicitHealthSelfReport('CREATINA PRESA', { now: new Date('2026-07-07T18:30:00Z') }).habit_id, 'creatine');
+  assert.equal(parseExplicitHealthSelfReport('non ho fatto la doccia').kind, 'habit_not_done');
+  assert.equal(parseExplicitHealthSelfReport('forse dovrei fare la doccia'), null);
+  assert.equal(parseHealthReplyTime('3 e 30 di notte'), '03:30');
+  assert.equal(parseHealthReplyTime('12.30pm'), '12:30');
+  assert.equal(parseHealthReplyTime('ho dormito 3 ore e 30'), null);
+  assert.equal(parseHealthReplyTime('ho fatto 3 serie da 30'), null);
+});
+
+test('structured habit fields satisfy Health validation and bare nouns repair to typed habits', () => {
+  assert.equal(hasStructuredHealthField({ shower: true }), true);
+  assert.equal(hasStructuredHealthField({ water: 0 }), true);
+  const repaired = repairBareHabitArgs({ health_note_append: 'Doccia' }, 'Doccia');
+  assert.equal(repaired.shower, true);
+  assert.equal(repaired.health_note_append, undefined);
+  const validation = validatePendingActionCandidate({
+    action_type: 'update_health_log', confidence: 0.95, confirmation_required: true,
+    summary: 'Doccia', source_user_message: 'Doccia', args: { health_note_append: 'Doccia' },
+  });
+  assert.equal(validation.missing_fields.includes('health_field'), false);
+  assert.equal(validation.candidate.args.shower, true);
+});
+
+test('single interaction selection gives fresh pending confirmation ownership over old proactive history', () => {
+  const pending = { id: 'pending-wake', action_type: 'update_health_log', status: 'awaiting_confirmation', args: { wake_time: '08:35' } };
+  const brainChat = { conversationHistory: [{ id: 'old-proactive', role: 'assistant', created_at: '2026-07-07T06:00:00Z', metadata: {
+    proactive_message: true, expected_reply_type: 'memo_done_snooze_cancel', source_type: 'memo', source_id: 'memo-1', working_context: { language: 'it', last_subject: { id: 'memo-1', source_id: 'memo-1', label: 'Vecchio memo' } },
+  } }] };
+  const selected = selectBrainTurnInteraction({ message: 'si', brainChat, pendingAction: pending, activeInteraction: {
+    state: 'active', owner_kind: 'pending_action', pending_action_id: pending.id, assistant_message_id: 'pending-question', thread_id: 'thread', version: 2,
+  }, now: new Date('2026-07-07T06:36:00Z') });
+  assert.equal(selected.path, 'pending_action');
+  assert.equal(selected.pending_action_id, pending.id);
+  assert.equal(selected.selection_method, 'active_interaction_owner');
+});
+
+test('latest adjacent accountability prompt owns not-yet without historical ambiguity', () => {
+  const target = (id, kind, createdAt) => {
+    const sourceId = kind === 'habit_missing' ? 'habit:creatine:2026-07-07' : 'sleep_start:2026-07-06';
+    return ({ id, role: 'assistant', created_at: createdAt, metadata: {
+    proactive_message: true, expected_reply_type: ACCOUNTABILITY_REPLY_TYPE, source_type: 'accountability', source_id: sourceId, outbox_message_id: `outbox-${id}`,
+    accountability: kind === 'habit_missing' ? { kind, habit_id: 'creatine', local_date: '2026-07-07' } : { kind, sleep_date: '2026-07-06' },
+    working_context: { language: 'it', last_subject: { source_type: 'accountability', source_id: sourceId, label: kind } },
+  } });
+  };
+  const selected = selectBrainTurnInteraction({ message: 'non ancora', brainChat: { conversationHistory: [
+    target('sleep', 'sleep_start_missing', '2026-07-07T11:30:00Z'),
+    target('creatine', 'habit_missing', '2026-07-07T12:00:00Z'),
+  ] }, now: new Date('2026-07-07T12:01:00Z') });
+  assert.equal(selected.path, 'proactive_reply');
+  assert.equal(selected.selection_method, 'legacy_adjacent_assistant');
+  assert.equal(selected.source_id, 'habit:creatine:2026-07-07');
+});
+
+test('interaction selection trace omits target payload and current self-report bypasses old context', () => {
+  const selected = selectBrainTurnInteraction({ message: 'doccia fatta', brainChat: { conversationHistory: [] }, now: new Date('2026-07-07T18:30:00Z') });
+  const trace = serializeInteractionSelection(selected);
+  assert.equal(selected.path, 'explicit_health');
+  assert.equal(trace.source_of_write_intent, 'current_message');
+  assert.equal(Object.prototype.hasOwnProperty.call(trace, 'target'), false);
+});
+
+test('trusted quote owns ordinary no while explicit cancellation still owns pending action', () => {
+  const pending = { id: 'pending-wake', action_type: 'update_health_log', status: 'awaiting_confirmation', args: { wake_time: '08:35' } };
+  const quotedTarget = { delivery: { id: 'delivery-creatine' }, message: {
+    id: 'assistant-creatine', role: 'assistant', created_at: '2026-07-07T12:00:00Z', metadata: {
+      proactive_message: true, expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
+      source_type: 'accountability', source_id: 'habit:creatine:2026-07-07', outbox_message_id: 'outbox-creatine',
+      accountability: { kind: 'habit_missing', habit_id: 'creatine', local_date: '2026-07-07' },
+    },
+  } };
+  const no = selectBrainTurnInteraction({ message: 'non ancora', pendingAction: pending, quotedTarget, quotedMessagePresent: true, now: new Date('2026-07-07T12:01:00Z') });
+  assert.equal(no.path, 'proactive_reply');
+  assert.equal(no.selection_method, 'trusted_native_quote');
+  assert.equal(buildBrainTurnContract({ message: 'non ancora', source: 'whatsapp', pendingAction: pending,
+    interactionSelection: no, now: new Date('2026-07-07T12:01:00Z') }).winning_path, 'proactive_reply');
+  const cancel = selectBrainTurnInteraction({ message: 'No. Cancella tutto', pendingAction: pending, quotedTarget, quotedMessagePresent: true, now: new Date('2026-07-07T12:01:00Z') });
+  assert.equal(cancel.path, 'pending_action');
+  assert.equal(cancel.intent, 'pending_cancellation');
+});
+
+test('delivered proactive owner handles not-yet over an older stored pending action', () => {
+  const pending = { id: 'old-pending', action_type: 'create_memo', status: 'awaiting_confirmation', args: { title: 'Old' } };
+  const selected = selectBrainTurnInteraction({ message: 'non ancora', pendingAction: pending, brainChat: { conversationHistory: [] },
+    activeInteraction: {
+      state: 'active', owner_kind: 'proactive', assistant_message_id: 'creatine-question',
+      thread_id: 'thread', version: 4, opened_at: '2026-07-07T12:00:00Z', expires_at: '2026-07-07T12:30:00Z',
+      owner_payload: {
+        proactive_message: true, expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
+        source_type: 'accountability', source_id: 'habit:creatine:2026-07-07', outbox_message_id: 'outbox-creatine',
+        accountability: { kind: 'habit_missing', habit_id: 'creatine', local_date: '2026-07-07' },
+      },
+    }, now: new Date('2026-07-07T12:01:00Z') });
+  assert.equal(selected.path, 'proactive_reply');
+  assert.equal(selected.source_id, 'habit:creatine:2026-07-07');
+});
+
+test('unresolved native quote and expired legacy prompt never substitute another writable target', () => {
+  const checkAt = new Date('2026-07-07T18:50:00Z');
+  const unresolved = selectBrainTurnInteraction({ message: 'si', quotedMessagePresent: true, brainChat: { conversationHistory: [] }, now: checkAt });
+  assert.equal(unresolved.path, 'clarification');
+  assert.equal(unresolved.intent, 'invalid_quoted_target');
+  const expired = selectBrainTurnInteraction({ message: 'si', brainChat: { conversationHistory: [{
+    id: 'old', role: 'assistant', created_at: '2026-07-07T17:00:00Z', metadata: {
+      proactive_message: true, expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
+      source_type: 'accountability', source_id: 'habit:shower:2026-07-07', outbox_message_id: 'old-outbox',
+      accountability: { kind: 'habit_missing', habit_id: 'shower', local_date: '2026-07-07' },
+    },
+  }] }, now: checkAt });
+  assert.equal(expired.path, 'normal');
+});
 
 test('sleep-start dirty update_health_log coerces to log_sleep_start', () => {
   for (const fixture of dirtySleepStartPendingActions) {

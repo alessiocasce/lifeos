@@ -1,6 +1,8 @@
 import { generateGeminiJson } from './gemini.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
+import { sanitizeBrainMetadata } from './brainMetadata.js';
+import { setBrainInteractionPendingDelivery } from './brainWhatsappReliability.js';
 
 const MEMORY_CATEGORIES = new Set([
   'preference',
@@ -78,7 +80,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
   if (!['app', 'whatsapp'].includes(normalizedSource)) return null;
   const client = getSupabaseAdmin();
   const userId = getActionUserId();
-  const safeChannelMetadata = channelMetadata && typeof channelMetadata === 'object' ? sanitizeMetadata(channelMetadata) : {};
+  const safeChannelMetadata = channelMetadata && typeof channelMetadata === 'object' ? sanitizeBrainMetadata(channelMetadata) : {};
   const whatsappSender = normalizedSource === 'whatsapp' ? cleanText(canonicalizeWhatsappSender(safeChannelMetadata.whatsapp_sender), 160) : null;
   const whatsappRawSender = normalizedSource === 'whatsapp' ? cleanText(safeChannelMetadata.whatsapp_raw_sender, 160) : null;
   let thread = null;
@@ -177,7 +179,7 @@ export async function beginBrainChat({ threadId, source, message, requestId, cli
           whatsapp_message_id: cleanText(safeChannelMetadata.whatsapp_message_id, 160),
           whatsapp_timestamp: safeChannelMetadata.whatsapp_timestamp ?? null,
         } : {}),
-        ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
+        ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 180) } : {}),
       },
     })
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
@@ -276,13 +278,11 @@ async function updateWhatsappThreadSenderMetadata({ client, userId, thread, cano
   return result.data;
 }
 
-export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace, extraMetadata }) {
+export async function persistBrainAssistantMessage({ chat, answer, requestId, clientRequestId, actionType, actions, plan, recordRefs, selectedSkill, brainRoute, vaultContext, pendingAction, workingContext, brainTrace, extraMetadata, client = getSupabaseAdmin(), userId = getActionUserId() }) {
   if (!chat?.thread?.id || !answer || chat.assistantPersisted) return null;
-  const client = getSupabaseAdmin();
-  const userId = getActionUserId();
   const now = new Date().toISOString();
   const source = normalizeChatSource(chat.source);
-  const channelMetadata = chat.channelMetadata && typeof chat.channelMetadata === 'object' ? sanitizeMetadata(chat.channelMetadata) : {};
+  const channelMetadata = chat.channelMetadata && typeof chat.channelMetadata === 'object' ? sanitizeBrainMetadata(chat.channelMetadata) : {};
   const result = await client
     .from('ai_chat_messages')
     .insert({
@@ -293,6 +293,7 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
       request_id: uuidOrNull(requestId),
       action_type: actionType || null,
       metadata: {
+        metadata_version: 2,
         source,
         ...(source === 'whatsapp' ? {
           channel: 'whatsapp',
@@ -310,8 +311,8 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
         pending_action: pendingAction && typeof pendingAction === 'object' ? pendingAction : null,
         working_context: workingContext && typeof workingContext === 'object' ? workingContext : null,
         brain_trace: brainTrace && typeof brainTrace === 'object' ? brainTrace : null,
-        ...(extraMetadata && typeof extraMetadata === 'object' ? sanitizeMetadata(extraMetadata) : {}),
-        ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 120) } : {}),
+        ...(extraMetadata && typeof extraMetadata === 'object' ? sanitizeBrainMetadata(extraMetadata) : {}),
+        ...(clientRequestId ? { client_request_id: String(clientRequestId).slice(0, 180) } : {}),
       },
     })
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
@@ -324,6 +325,23 @@ export async function persistBrainAssistantMessage({ chat, answer, requestId, cl
     .eq('id', chat.thread.id)
     .eq('user_id', userId);
   if (updateResult.error) throw updateResult.error;
+  const activePending = pendingAction && ['open', 'awaiting_confirmation', 'awaiting_fields'].includes(pendingAction.status)
+    ? pendingAction
+    : null;
+  if (source === 'whatsapp' && (activePending || extraMetadata?.proactive_message)) {
+    await setBrainInteractionPendingDelivery({
+      userId,
+      threadId: chat.thread.id,
+      assistantMessageId: result.data.id,
+      pendingAction: activePending,
+      outboxMessageId: extraMetadata?.outbox_message_id ?? null,
+      ownerPayload: activePending ? { pending_action: activePending } : {
+        ...extraMetadata,
+        working_context: workingContext,
+      },
+      client,
+    });
+  }
   chat.assistantPersisted = true;
   return result.data;
 }
@@ -662,16 +680,6 @@ function normalizeChatSource(source) {
   const value = String(source ?? '').trim().toLowerCase();
   if (['app', 'shortcut', 'api', 'whatsapp'].includes(value)) return value;
   return 'api';
-}
-
-function sanitizeMetadata(metadata) {
-  return Object.fromEntries(Object.entries(metadata ?? {}).slice(0, 20).map(([key, value]) => {
-    if (/secret|token|password|authorization|api[_-]?key/i.test(key)) return [key, '[redacted]'];
-    if (value === null || value === undefined) return [key, null];
-    if (typeof value === 'string') return [key, value.slice(0, 500)];
-    if (typeof value === 'number' || typeof value === 'boolean') return [key, value];
-    return [key, String(value).slice(0, 500)];
-  }));
 }
 
 function normalizeMemoryCandidate(candidate) {

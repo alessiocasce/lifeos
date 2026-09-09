@@ -60,12 +60,15 @@ import {
   createBrainTurn,
   evaluateBrainTurnContract,
   markBrainTurnProactiveBypassedPending,
+  prepareBrainTurnInteraction,
   recordBrainTurnClassification,
   recordBrainTurnPendingResolution,
   recordBrainTurnRoute,
   recordBrainTurnSkill,
   recordBrainTurnVault,
 } from '../_utils/brainTurn.js';
+import { resolveExplicitHealthSelfReport } from '../_utils/brainHealthSelfReports.js';
+import { closeBrainInteraction } from '../_utils/brainWhatsappReliability.js';
 import {
   buildOperationalContextAnswer,
   buildOperationalContextClarification,
@@ -451,7 +454,43 @@ export async function handleBrainChatMessage({
     attachBrainContextToTurn(context, await safeLoadBrainContext(context));
     buildBrainTurnWorkingContext(context);
     const { activePendingAction } = checkBrainTurnPendingAction(context);
+    await prepareBrainTurnInteraction(context);
     const turnContract = evaluateBrainTurnContract(context);
+    if (context.interactionSelection?.path === 'explicit_health') {
+      const healthResult = await resolveExplicitHealthSelfReport({ report: context.interactionSelection.target });
+      if (healthResult) {
+        addBrainTraceStep(context.brainTrace, 'explicit_health_self_report_handled', healthResult.health_self_report_trace);
+        await closeBrainInteraction({
+          threadId: context.thread?.id,
+          assistantMessageId: context.activeInteraction?.assistant_message_id,
+          expectedVersion: context.activeInteraction?.version,
+          state: 'superseded',
+        });
+        return sendAiSuccess(null, 200, healthResult, context, { message: messageForBrain, source: resolvedSource });
+      }
+    }
+    if (context.interactionSelection?.intent === 'abandon') {
+      await closeBrainInteraction({
+        threadId: context.thread?.id,
+        assistantMessageId: context.activeInteraction?.assistant_message_id,
+        expectedVersion: context.activeInteraction?.version,
+        state: 'abandoned',
+      });
+      return sendAiSuccess(null, 200, {
+        answer: context.workingContext?.language === 'it' ? 'Va bene, lasciamo perdere. Dimmi pure cosa vuoi fare.' : 'Okay, we can drop that. Tell me what you want to do.',
+        plan: createReadOnlyBrainPlan('User abandoned unclear conversational context.'),
+        actions: [], contextSummary: null, skipMemoryExtraction: true,
+      }, context, { message: messageForBrain, source: resolvedSource });
+    }
+    if (context.interactionSelection?.intent === 'invalid_quoted_target') {
+      return sendAiSuccess(null, 200, {
+        answer: context.workingContext?.language === 'it'
+          ? 'Non riesco a collegare quella risposta a un check-in LifeOS ancora valido. Dimmi quale dato vuoi aggiornare.'
+          : 'I cannot link that reply to a still-valid LifeOS check-in. Tell me which item you want to update.',
+        plan: createReadOnlyBrainPlan('Quoted WhatsApp message did not resolve to an eligible LifeOS target.'),
+        actions: [], contextSummary: null, skipMemoryExtraction: true,
+      }, context, { message: messageForBrain, source: resolvedSource });
+    }
     if (activePendingAction && resolvedSource === 'whatsapp') {
       const proactivePriority = checkBrainTurnProactivePriority(context, { activePendingAction });
       if (proactivePriority.prioritize) {
@@ -715,6 +754,12 @@ export async function handleBrainChatMessage({
 async function handlePendingActionResolution({ resolution, context, message, source }) {
   const pendingAction = resolution.pending_action;
   if (resolution.type === 'cancelled') {
+    await closeBrainInteraction({
+      threadId: context.thread?.id,
+      assistantMessageId: context.activeInteraction?.assistant_message_id,
+      expectedVersion: context.activeInteraction?.version,
+      state: 'answered',
+    });
     context.pendingActionForResponse = pendingAction;
     return {
       answer: resolution.answer,
@@ -742,6 +787,12 @@ async function handlePendingActionResolution({ resolution, context, message, sou
     const writeResult = await executePendingAction(pendingAction, { message, context, source });
     const completed = markPendingActionCompleted(pendingAction);
     context.pendingActionForResponse = completed;
+    await closeBrainInteraction({
+      threadId: context.thread?.id,
+      assistantMessageId: context.activeInteraction?.assistant_message_id,
+      expectedVersion: context.activeInteraction?.version,
+      state: 'answered',
+    });
     return {
       answer: writeResult.answer || formatPendingActionCompletedAnswer(writeResult.actions?.[0], pendingAction),
       plan: createPendingActionPlan(pendingAction, { reason: 'Confirmed pending action executed.' }),
@@ -767,6 +818,7 @@ async function maybeResolveProactiveWhatsappReply({ message, resolvedSource, con
     message,
     brainChat: context.brainChat,
     context,
+    selection: context.interactionSelection?.proactive_selection ?? null,
   });
   const trace = proactiveResult?.proactive_reply_trace ?? {};
   const traceData = {
@@ -780,6 +832,12 @@ async function maybeResolveProactiveWhatsappReply({ message, resolvedSource, con
   context.brainTrace.proactive_reply = traceData;
   addBrainTraceStep(context.brainTrace, 'proactive_reply_checked', traceData);
   if (!proactiveResult) return null;
+  await closeBrainInteraction({
+    threadId: context.thread?.id,
+    assistantMessageId: context.interactionSelection?.assistant_message_id ?? null,
+    expectedVersion: context.interactionSelection?.interaction_version,
+    state: proactiveResult?.plan?.intent === 'clarify' ? 'abandoned' : 'answered',
+  });
   const { proactive_reply_trace: _internalTrace, ...publicResult } = proactiveResult;
   return publicResult;
 }

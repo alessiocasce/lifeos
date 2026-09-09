@@ -3,6 +3,8 @@ import { addDays, localDateTimeToUtcDate, TIME_ZONE } from './date.js';
 import { getHabitEntry, HEALTH_HABITS, normalizeHabitId } from './habits.js';
 import { canonicalizeWhatsappSender } from './whatsappBridge.js';
 import { ensureAccountabilityHealth, resolveAccountabilityTarget, accountabilityTargetIsResolved } from './brainProactiveDelivery.js';
+import { parseHealthReplyTime } from './brainHealthSelfReports.js';
+import { normalizeAccountabilityTarget } from './brainMetadata.js';
 
 export const ACCOUNTABILITY_REPLY_TYPE = 'accountability';
 export const ACCOUNTABILITY_CREATED_BY = 'brain_proactive_accountability_v1';
@@ -181,7 +183,12 @@ export function extractRecentProactiveAccountabilityMessages(brainChat, { now = 
     const workingContext = safeObject(metadata.working_context);
     const subject = safeObject(workingContext.last_subject);
     const raw = safeObject(subject.raw);
-    const accountability = safeObject(metadata.accountability || raw.accountability);
+    const sourceId = metadata.source_id || subject.source_id || subject.id;
+    const candidateTarget = normalizeAccountabilityTarget(metadata.accountability)
+      || normalizeAccountabilityTarget(raw.accountability);
+    const accountability = candidateTarget && sourceIdForAccountability(candidateTarget) === sourceId
+      ? candidateTarget
+      : {};
     const createdAt = normalizeDate(item.created_at ?? metadata.created_at ?? nowDate);
     const replyWindowHours = accountability.kind === 'sleep_start_missing'
       ? SLEEP_START_REPLY_WINDOW_HOURS
@@ -189,7 +196,7 @@ export function extractRecentProactiveAccountabilityMessages(brainChat, { now = 
     const message = {
       message_id: item.id,
       outbox_message_id: metadata.outbox_message_id,
-      source_id: metadata.source_id || subject.source_id || subject.id,
+      source_id: sourceId,
       source_type: metadata.source_type || subject.source_type || 'accountability',
       title: subject.label || accountabilityLabel(accountability, workingContext.language, item.content),
       language: workingContext.language === 'en' ? 'en' : 'it',
@@ -230,6 +237,9 @@ export function normalizeProactiveAccountabilityReply(message) {
   if (/\b(?:non ho dormito|not slept|did not sleep|all nighter|allnighter|not sleep)\b/.test(text)) {
     return { intent: 'no_sleep', confidence: 0.9, normalized: text };
   }
+  if (/\b(?:non\s+(?:ho\s+)?(?:fatto|fatta|preso|presa)|non\s+fatta|non\s+pres[ao]|did\s+not|didn't|have\s+not|haven't)\b/.test(text)) {
+    return { intent: 'no', confidence: 0.94, normalized: text };
+  }
   if (/\b(?:piu tardi|piu avanti|later|tra\s+\d+|fra\s+\d+|in\s+\d+|snooze|rimanda|posticipa)\b/.test(text)) {
     return { intent: 'snooze', confidence: 0.86, normalized: text, minutes: extractAccountabilitySnoozeMinutes(text) };
   }
@@ -239,7 +249,7 @@ export function normalizeProactiveAccountabilityReply(message) {
   if (/^(?:ora|adesso|now)$/.test(text)) {
     return { intent: 'time', confidence: 0.9, normalized: text, time: null, use_now: true };
   }
-  const time = extractAccountabilityReplyTime(text);
+  const time = parseHealthReplyTime(text);
   if (time) return { intent: 'time', confidence: 0.86, normalized: text, time, use_now: false };
   if (/^(?:si|s|yes|y|ok|okay|fatto|fatta|fatte|done|presa|preso|gia fatto|gia presa|gia|esatto)$/.test(text)
     || /\b(?:fatto|fatta|done|presa|preso|gia fatto|gia presa|l ho fatta|l ho preso)\b/.test(text)) {
@@ -870,19 +880,6 @@ function sourceIdForAccountability(accountability) {
   if (accountability.kind === 'wake_time_missing') return `wake_time:${accountability.local_date}`;
   if (accountability.kind === 'sleep_start_missing') return `sleep_start:${accountability.sleep_date}`;
   return null;
-}
-
-function extractAccountabilityReplyTime(text) {
-  const match = text.match(/\b(?:alle|at|ore)?\s*(\d{1,2})(?:\s*(?::|\.|h)\s*(\d{1,2}))?\s*(am|pm)?\b/);
-  if (!match) return null;
-  let hours = Number(match[1]);
-  const minutes = match[2] === undefined ? 0 : Number(match[2]);
-  const suffix = match[3];
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || minutes < 0 || minutes > 59) return null;
-  if (suffix === 'pm' && hours < 12) hours += 12;
-  if (suffix === 'am' && hours === 12) hours = 0;
-  if (hours < 0 || hours > 23) return null;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function extractAccountabilitySnoozeMinutes(text) {

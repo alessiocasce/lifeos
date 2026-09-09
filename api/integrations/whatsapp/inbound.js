@@ -10,6 +10,16 @@ import {
 import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { handleBrainChatMessage } from '../../ai/chat.js';
 import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender } from '../../_utils/whatsappBridge.js';
+import { getActionUserId } from '../../_utils/supabaseAdmin.js';
+import {
+  buildWhatsappRequestIdentity,
+  claimWhatsappInboundReceipt,
+  completeWhatsappInboundReceipt,
+  markWhatsappInboundReceiptFailedBeforeEffect,
+  markWhatsappInboundReceiptUncertain,
+  normalizeWhatsappProviderMessageId,
+  resolveWhatsappQuotedDelivery,
+} from '../../_utils/brainWhatsappReliability.js';
 
 const MAX_WHATSAPP_BODY_LENGTH = 4000;
 
@@ -22,6 +32,8 @@ export default async function handler(req, res) {
     sender_allowed: false,
     endpoint_validation_result: 'started',
   };
+  let receiptClaim = null;
+  let brainExecutionStarted = false;
   try {
     if (handleOptions(req, res)) return;
     requirePost(req);
@@ -39,7 +51,39 @@ export default async function handler(req, res) {
     endpointTrace.sender_allowed = true;
     endpointTrace.endpoint_validation_result = 'accepted';
 
-    const clientRequestId = buildWhatsappClientRequestId({ ...payload, from: canonicalSender }, context.requestId);
+    const userId = getActionUserId();
+    receiptClaim = await claimWhatsappInboundReceipt({
+      userId,
+      recipient: canonicalSender,
+      providerMessageId: payload.message_id,
+    });
+    endpointTrace.inbound_receipt_mode = receiptClaim.mode;
+    if (receiptClaim.mode === 'replay') {
+      return sendJson(res, 200, {
+        ...receiptClaim.response,
+        source: 'whatsapp',
+        requestId: context.requestId,
+        idempotent_replay: true,
+      });
+    }
+    if (receiptClaim.mode === 'processing') throw new HttpError(409, 'WhatsApp message is already being processed.');
+    if (receiptClaim.mode === 'uncertain') throw new HttpError(409, 'WhatsApp message has an uncertain prior outcome and was not replayed.');
+
+    const quotedTarget = payload.has_quoted_message && payload.quoted_provider_message_id
+      ? await resolveWhatsappQuotedDelivery({
+        userId,
+        recipient: canonicalSender,
+        providerMessageId: payload.quoted_provider_message_id,
+      })
+      : null;
+    endpointTrace.whatsapp_quote_present = payload.has_quoted_message;
+    endpointTrace.whatsapp_quote_resolved = Boolean(quotedTarget);
+    const clientRequestId = buildWhatsappRequestIdentity({
+      userId,
+      recipient: canonicalSender,
+      providerMessageId: payload.message_id,
+    }) || buildWhatsappClientRequestId({ ...payload, from: canonicalSender }, context.requestId);
+    brainExecutionStarted = true;
     const result = await handleBrainChatMessage({
       message: payload.body,
       source: 'whatsapp',
@@ -58,17 +102,38 @@ export default async function handler(req, res) {
         whatsapp_timestamp: payload.timestamp,
         whatsapp_type: payload.type,
         whatsapp_is_group: payload.is_group,
+        whatsapp_has_quoted_message: payload.has_quoted_message,
+        whatsapp_quoted_provider_message_id: payload.quoted_provider_message_id,
+        whatsapp_quoted_from_me: payload.quoted_from_me,
+        whatsapp_quoted_chat_id: payload.quoted_chat_id,
+        quoted_target: quotedTarget,
       },
+    });
+
+    await completeWhatsappInboundReceipt({
+      userId,
+      receiptId: receiptClaim.receipt?.id,
+      leaseToken: receiptClaim.leaseToken,
+      result,
     });
 
     return sendJson(res, 200, {
       reply: String(result?.answer ?? ''),
       thread_id: result?.thread_id ?? null,
+      assistant_message_id: result?.persisted_message?.id ?? null,
       source: 'whatsapp',
       requestId: context.requestId,
       ...(result?.debug ? { debug: result.debug } : {}),
     });
   } catch (error) {
+    try {
+      const markReceipt = brainExecutionStarted
+        ? markWhatsappInboundReceiptUncertain
+        : markWhatsappInboundReceiptFailedBeforeEffect;
+      await markReceipt({ receiptId: receiptClaim?.receipt?.id, leaseToken: receiptClaim?.leaseToken, error });
+    } catch {
+      // Preserve the original request error; receipt diagnostics remain best effort.
+    }
     endpointTrace.endpoint_validation_result = 'rejected';
     if (debugFlags.enabled) {
       console.warn('BRAIN_TRACE', JSON.stringify(sanitizeTraceValue({
@@ -103,16 +168,28 @@ function normalizeWhatsappPayload(body = {}) {
   if (type !== 'chat') {
     throw new HttpError(400, 'Only text chat messages are supported in WhatsApp inbound v1.');
   }
+  const rawMessageId = body.message_id ?? body.messageId ?? body.id;
+  const messageId = rawMessageId === undefined || rawMessageId === null || rawMessageId === ''
+    ? null
+    : normalizeWhatsappProviderMessageId(rawMessageId);
+  if (rawMessageId !== undefined && rawMessageId !== null && rawMessageId !== '' && !messageId) {
+    throw new HttpError(400, 'message_id is invalid.');
+  }
+  const quotedProviderMessageId = normalizeWhatsappProviderMessageId(body.quoted_provider_message_id ?? body.quotedProviderMessageId);
 
   return {
     from,
     author: cleanText(body.author, 160),
-    message_id: cleanText(body.message_id ?? body.messageId ?? body.id, 180),
+    message_id: messageId,
     body: text,
     timestamp: normalizeTimestamp(body.timestamp),
     type,
     is_group: Boolean(body.is_group ?? body.isGroup),
     source: cleanText(body.source, 40) || 'whatsapp',
+    has_quoted_message: Boolean(body.has_quoted_message ?? body.hasQuotedMessage),
+    quoted_provider_message_id: quotedProviderMessageId,
+    quoted_from_me: Boolean(body.quoted_from_me ?? body.quotedFromMe),
+    quoted_chat_id: cleanText(body.quoted_chat_id ?? body.quotedChatId, 180),
   };
 }
 

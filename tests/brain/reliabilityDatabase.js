@@ -10,7 +10,8 @@ export async function createReliabilityDatabase() {
     create function auth.uid() returns uuid language sql as $$ select '${fixtureUser}'::uuid $$;
     insert into auth.users values ('${fixtureUser}');`);
   const schema = fs.readFileSync(new URL('../../supabase/schema.sql', import.meta.url), 'utf8');
-  for (const table of ['health_logs', 'memos', 'projects', 'project_sessions', 'brain_outbox_messages', 'ai_chat_threads', 'ai_chat_messages']) {
+  for (const table of ['health_logs', 'memos', 'projects', 'project_sessions', 'brain_outbox_messages', 'ai_chat_threads', 'ai_chat_messages',
+    'brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state']) {
     const start = schema.indexOf(`create table if not exists public.${table} (`);
     if (start < 0) throw new Error(`Missing checked-in table ${table}`);
     await db.exec(schema.slice(start, schema.indexOf('\n);', start) + 3));
@@ -19,6 +20,9 @@ export async function createReliabilityDatabase() {
   if (timestampStart >= 0) await db.exec(schema.slice(timestampStart, schema.indexOf('drop trigger if exists set_workouts', timestampStart)));
   await db.exec(`create trigger health_updated before update on health_logs for each row execute function public.set_updated_at();`);
   await db.exec(fs.readFileSync(new URL('../../supabase/releases/reliability.sql', import.meta.url), 'utf8'));
+  await db.exec(`create unique index ai_chat_messages_user_thread_outbox_unique
+    on ai_chat_messages (user_id, thread_id, (metadata->>'outbox_message_id'))
+    where role = 'assistant' and coalesce(metadata->>'outbox_message_id', '') <> '';`);
   return { db, client: { from: (table) => new Query(db, table) } };
 }
 
@@ -50,6 +54,7 @@ class Query {
   limit(n) { this.max = Number(n); return this; }
   update(payload) { this.mode = 'update'; this.payload = payload; return this; }
   insert(payload) { this.mode = 'insert'; this.payload = payload; return this; }
+  upsert(payload, { onConflict } = {}) { this.mode = 'upsert'; this.payload = payload; this.conflict = onConflict; return this; }
   single() { this.one = true; return this; }
   maybeSingle() { this.one = true; return this; }
   then(resolve, reject) { return this.run().then(resolve, reject); }
@@ -57,9 +62,12 @@ class Query {
     try {
       const where = this.filters.length ? ` where ${this.filters.join(' and ')}` : '';
       let sql;
-      if (this.mode === 'insert') {
+      if (this.mode === 'insert' || this.mode === 'upsert') {
         const entries = Object.entries(this.payload);
-        sql = `insert into ${this.table} (${entries.map(([key]) => identifier(key)).join(',')}) values (${entries.map(([, value]) => this.bind(value)).join(',')}) returning *`;
+        const conflict = this.mode === 'upsert'
+          ? ` on conflict (${String(this.conflict || '').split(',').map(identifier).join(',')}) do update set ${entries.map(([key, value]) => `${identifier(key)}=${this.bind(value)}`).join(',')}`
+          : '';
+        sql = `insert into ${this.table} (${entries.map(([key]) => identifier(key)).join(',')}) values (${entries.map(([, value]) => this.bind(value)).join(',')})${conflict} returning *`;
       } else if (this.mode === 'update') {
         sql = `update ${this.table} set ${Object.entries(this.payload).map(([key, value]) => `${identifier(key)}=${this.bind(value)}`).join(',')} ${where} returning *`;
       } else {

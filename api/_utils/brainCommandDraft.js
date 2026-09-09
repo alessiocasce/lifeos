@@ -21,6 +21,7 @@ import {
   hasExplicitContextReferent,
   inferWriteDomainFromMessage,
 } from './brainTurnArbitration.js';
+import { hasStructuredHealthField, repairBareHabitArgs } from './brainHealthSelfReports.js';
 
 const SUPPORTED_ACTIONS = new Set(['create_calendar_event', 'create_memo', 'create_expense', 'update_health_log', 'log_sleep_start']);
 const COMMAND_MODES = new Set(['answer', 'action', 'clarify', 'cancel', 'field_update', 'transform', 'memory', 'unsupported']);
@@ -487,13 +488,14 @@ function normalizeActionArgs(actionType, args, options = {}) {
     };
   }
   if (actionType === 'update_health_log') {
+    const healthSource = repairBareHabitArgs(source, options.sourceMessage);
     return {
-      ...source,
-      logged_on: normalizeDateValue(source.logged_on || source.date),
-      notes: cleanText(source.notes, 1200),
-      health_note_append: cleanText(source.health_note_append, 800),
-      nap_start_time: normalizeSimpleTime(source.nap_start_time),
-      nap_end_time: normalizeSimpleTime(source.nap_end_time),
+      ...healthSource,
+      logged_on: normalizeDateValue(healthSource.logged_on || healthSource.date),
+      notes: cleanText(healthSource.notes, 1200),
+      health_note_append: cleanText(healthSource.health_note_append, 800),
+      nap_start_time: normalizeSimpleTime(healthSource.nap_start_time),
+      nap_end_time: normalizeSimpleTime(healthSource.nap_end_time),
     };
   }
   if (actionType === 'log_sleep_start') {
@@ -528,7 +530,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
   }
   if (actionType === 'update_health_log') {
     if (!args.logged_on) missing.add('date');
-    if (!args.health_note_append && !args.notes && !args.wake_time && !args.sleep_start) missing.add('health_field');
+    if (!hasStructuredHealthField(args)) missing.add('health_field');
   }
   if (actionType === 'log_sleep_start') {
     if (!args.time) missing.add('time');
@@ -545,7 +547,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
     if (field === 'end_time' && args.end_time) return false;
     if (field === 'title' && args.title) return false;
     if (field === 'health_field' && actionType === 'log_sleep_start') return false;
-    if (field === 'health_field' && (args.health_field || args.healthField || args.health_note_append || args.notes || args.wake_time || args.sleep_start || args.sleepStart)) return false;
+    if (field === 'health_field' && (args.health_field || args.healthField || hasStructuredHealthField(args))) return false;
     return true;
   });
 }

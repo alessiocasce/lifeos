@@ -4,6 +4,12 @@ Run this after signing in through the global auth gate. For the reliability rele
 
 ## Reliability Semantics
 
+Current-message reports `Doccia fatta`, `Ho fatto la doccia`, `Creatina presa`, and `Ho preso creatina` are deterministic typed Health ensures and bypass unrelated old prompts. `non ho fatto la doccia`, `non ho preso creatina`, hypothetical wording, and questions do not log completion. Repeat a positive report and verify the target count/times do not increment twice.
+
+For accountability replies, verify full time grammar: `3 e 30 di notte` stores `03:30`; `3.30am`, `03:30`, `12.30pm`, and `alle 9.30` normalize correctly. An unrelated sentence containing numbers must not become a wake/sleep time. A sleep reply must use the persisted previous-night `sleep_date`, not the reply date.
+
+New structured assistant rows use `metadata_version: 2`. A malformed historical accountability target may be lazily recovered only from its exact user-scoped outbox linkage. Missing/mismatched linkage must clarify without Health, memo, calendar, or note writes.
+
 Accountability replies **ensure** a missing target rather than incrementing on every reply. Repeating `fatto` against the same delivered target must leave habit count/times unchanged, including after a client-history retry. Explicit manual logging remains incremental. Text notes alone must never change hygiene, including negations or side-effect descriptions mentioning creatine.
 
 Missing/empty sleep is unknown, not zero; numeric zero remains data. `non ho dormito` closes that accountability source without inventing sleep. Test the canonical previous-night date and recalculated wake-day sleep hours. Completing a target manually while a nudge is queued must prevent its delivery at the next poll. Keep an untouched form open through Rome midnight and confirm it advances; a dirty edit must not be overwritten.

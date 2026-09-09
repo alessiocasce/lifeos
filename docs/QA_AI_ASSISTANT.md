@@ -2,6 +2,20 @@
 
 ## Reliability Release Gate
 
+For the WhatsApp interaction patch, also apply `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql` and update the external Oracle adapter from [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md). Run `npm run test:bridge`. The inbound response must include `assistant_message_id`; a normal outgoing reply must be recorded with `action=record_reply_delivery` before it can become the active unquoted reply owner.
+
+Manual ownership matrix:
+
+- Fresh wake confirmation plus old memo, then `si`: the exact pending wake action wins and retains its captured time.
+- Old sleep check-in, then delivered creatine check-in, then `non ancora`: creatine owns the reply, no Health write, no historical ambiguity.
+- Quote the older sleep prompt and reply `3.30`: only that sleep source is eligible.
+- Fabricated/cross-recipient quote plus `si`: read-only invalid-reference clarification, zero writes.
+- Old prompts plus `DOCCIA FATTA` or `CREATINA PRESA`: current-message typed Health ensure wins once; notes stay unchanged.
+- Active pending plus `No. Cancella tutto`: pending is cancelled; no record deletion and no proactive steal.
+- An unquoted legacy proactive question older than 30 minutes cannot own a short reply.
+
+Inspect `brain_trace.interaction_selection`: it should contain one selection method/owner and no full body or target object. `metadata.accountability` must be an object on new rows, never `"[object Object]"`.
+
 Apply the [release deployment order](RELIABILITY_RELEASE.md) first. Run `npm test`, including `test:schema` and `test:reliability`. Verify actual sent accountability metadata reaches `winning_path: proactive_reply`, not casual/planner routing. Reply `fatto` twice to one check-in: the second reply must not change Health. Two unresolved targets require clarification. Pending cancellation and explicit new commands retain priority. Mark a pending action completed/cancelled, then inspect Open Loops: older active snapshots must not revive it.
 
 Negative Health notes (`non ho preso creatina`, `did not take creatine`) must not increment habits. Check source-resolution metadata and pre-delivery cancellation rather than relying only on the WhatsApp answer. Production HTTP/RLS/bridge behavior still requires manual QA; local tests do not send messages.
@@ -33,6 +47,7 @@ npm run test:brain
 Expected:
 
 - Runs locally without Vercel, browser automation, live WhatsApp, Gemini calls, or live Supabase writes.
+- Structured metadata persistence, receipts, delivery mappings, versioned interaction ownership, and real Health effects are exercised by `npm run test:reliability` against PGlite through a PostgREST-shaped adapter.
 - Dirty `update_health_log` sleep-start shapes and command drafts normalize to `log_sleep_start`.
 - Stale `missing_fields` do not block confirmed executable pending actions.
 - `Si`, `Sì`, `ok`, `confermo`, `procedi`, `fallo`, `yes`, and `do it` normalize to confirmation.

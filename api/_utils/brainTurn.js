@@ -4,6 +4,8 @@ import { shouldDeferProactivePriorityToPending } from './brainTurnArbitration.js
 import { buildBrainTurnContract, contractDisallows, serializeBrainTurnContract } from './brainTurnContract.js';
 import { buildBrainWorkingContext } from './brainWorkingContext.js';
 import { addBrainTraceStep, createBrainTrace, safePreview } from './brainTrace.js';
+import { selectBrainTurnInteraction, serializeInteractionSelection } from './brainInteractionSelection.js';
+import { hydrateLegacyProactiveMessage, loadBrainInteractionState } from './brainWhatsappReliability.js';
 
 export function createBrainTurn({
   message,
@@ -125,6 +127,37 @@ export function checkBrainTurnPendingAction(turn) {
   return { activePendingAction, pendingReplyIntent };
 }
 
+export async function prepareBrainTurnInteraction(turn, { now = new Date() } = {}) {
+  if (!turn) return null;
+  const activeInteraction = turn.source === 'whatsapp'
+    ? await loadBrainInteractionState({ threadId: turn.thread?.id, now })
+    : null;
+  if (turn.source === 'whatsapp' && Array.isArray(turn.brainChat?.conversationHistory)) {
+    const latestAssistantIndex = turn.brainChat.conversationHistory.findLastIndex((item) => item?.role === 'assistant');
+    if (latestAssistantIndex >= 0) {
+      const hydrated = await hydrateLegacyProactiveMessage({ message: turn.brainChat.conversationHistory[latestAssistantIndex] });
+      turn.brainChat.conversationHistory[latestAssistantIndex] = hydrated;
+      turn.history = turn.brainChat.conversationHistory;
+    }
+  }
+  turn.activeInteraction = activeInteraction;
+  const quotedTarget = turn.channelMetadata?.quoted_target?.message?.thread_id === turn.thread?.id
+    ? turn.channelMetadata.quoted_target
+    : null;
+  turn.interactionSelection = selectBrainTurnInteraction({
+    message: turn.message,
+    brainChat: turn.brainChat,
+    pendingAction: turn.pendingAction,
+    activeInteraction,
+    quotedTarget,
+    quotedMessagePresent: Boolean(turn.channelMetadata?.whatsapp_has_quoted_message),
+    now,
+  });
+  turn.brainTrace.interaction_selection = serializeInteractionSelection(turn.interactionSelection);
+  recordBrainTurnStage(turn, 'brain_interaction_selected', turn.brainTrace.interaction_selection);
+  return turn.interactionSelection;
+}
+
 export function evaluateBrainTurnContract(turn, options = {}) {
   if (!turn) return null;
   const contract = buildBrainTurnContract({
@@ -136,6 +169,7 @@ export function evaluateBrainTurnContract(turn, options = {}) {
     pendingReplyIntent: turn.pendingReplyIntent,
     classification: options.classification ?? turn.brainClassification,
     route: options.route ?? turn.brainRoute,
+    interactionSelection: turn.interactionSelection,
     now: options.now,
   });
   turn.brainTurnContract = contract;
@@ -157,6 +191,17 @@ export function checkBrainTurnProactivePriority(turn, { activePendingAction = tu
     };
     recordBrainTurnStage(turn, 'proactive_reply_blocked_by_contract', blocked);
     return blocked;
+  }
+  if (turn.interactionSelection) {
+    const owns = turn.interactionSelection.path === 'proactive_reply';
+    const decision = {
+      prioritize: owns,
+      reason: owns ? turn.interactionSelection.reason : 'interaction_owner_is_not_proactive',
+      intent: turn.interactionSelection.intent,
+      selection_method: turn.interactionSelection.selection_method,
+    };
+    if (owns) recordBrainTurnStage(turn, 'proactive_reply_prioritized_before_pending', decision);
+    return decision;
   }
   const deferral = shouldDeferProactivePriorityToPending({
     message: turn.message,

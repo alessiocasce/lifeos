@@ -1,5 +1,28 @@
 # LifeOS Brain Architecture
 
+## WhatsApp Interaction Selection
+
+Before pending/proactive execution, `prepareBrainTurnInteraction()` loads the versioned thread owner and resolves any trusted provider quote. `selectBrainTurnInteraction()` returns one frozen selection and BrainTurn Contract consumes that exact object. Runtime proactive dispatch receives the selected target rather than scanning history again.
+
+Precedence:
+
+1. Grounded current-message command or typed Health self-report; negation is checked first.
+2. Strong pending cancellation such as `annulla` or `cancella tutto`.
+3. A provider ID mapped to a quoted assistant message in the same user, recipient, and thread scope.
+4. The active delivered interaction owner.
+5. The immediately adjacent legacy proactive question, only for 30 minutes.
+6. Compatible pending fallback, bounded clarification/abandon, or normal guarded Brain routing.
+
+An unresolved native quote is a read-only clarification and cannot fall back to another target. Ordinary quoted `no/non ancora` answers the quoted check-in; explicit global cancellation still cancels an active pending action. Safe trace metadata records the selection method and bounded IDs, not bodies or full target metadata.
+
+`brain_interaction_state` separates conversational ownership from source satisfaction and outbox delivery. Assistant persistence creates `pending_delivery`; a validated outgoing provider mapping activates it. Replacements and closure use the row version so stale turns cannot close a newer owner. Legacy clients without delivery receipts do not gain confirmed ownership.
+
+## Structured Health Reports
+
+`brainHealthSelfReports.js` handles grounded Shower/Creatine/Skin completion before competing conversational contexts. Positive reports use ensure-target Health writes; repeated reports become no-ops. Negative and hypothetical phrases do not write. Bare habit pending drafts are repaired to typed habit fields, and shared validation treats structured habits and explicit zero values as present.
+
+The complete time parser is shared with accountability replies. It accepts supported clock expressions and rejects partial-number extraction from unrelated text. Sleep-start accountability still uses the persisted previous-night target and canonical sleep helper.
+
 ## Reliability Release Boundary
 
 See [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md) for deployment and limitations. BrainTurn Contract and `resolveProactiveWhatsappReply` now use the same family-aware `selectProactiveReplyTarget`; accountability is no longer gated through the memo-only selector. Pending cancellation/independent commands still win, ambiguous and consumed prompts are read-only, and `brainProactiveDelivery.js` owns persisted target checks, ensure-health mutations, resolution markers, and delivery revalidation. No planner feature or new route was added.
@@ -139,7 +162,7 @@ Agenda, memo, calendar, workout, and operational follow-up questions must not du
 
 ## Proactive Reply Dispatch
 
-`api/_utils/brainProactiveReplies.js` is the shared deterministic proactive reply entrypoint for WhatsApp. It selects the latest proactive assistant message by `metadata.expected_reply_type` and dispatches without Gemini/planner guessing.
+`api/_utils/brainProactiveReplies.js` is the deterministic proactive reply executor for WhatsApp. BrainTurn now supplies its single selected proactive target; the executor may revalidate eligibility but must not substitute another historical target.
 
 Current reply types:
 
@@ -162,6 +185,8 @@ Run:
 
 ```bash
 npm run test:brain
+npm run test:reliability
+npm run test:bridge
 ```
 
 The harness covers BrainTurn Contract paths, command-draft stage policy, memo/calendar policy, pending/proactive arbitration, operational follow-ups, route repair, Vault skipping, and the existing sleep/calendar/proactive regressions.

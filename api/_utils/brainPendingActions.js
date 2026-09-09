@@ -10,6 +10,7 @@ import {
   validateCalendarEventArgs,
 } from './brainActionNormalizers.js';
 import { looksLikeExplicitNewCommand } from './brainTurnArbitration.js';
+import { hasStructuredHealthField, repairBareHabitArgs } from './brainHealthSelfReports.js';
 
 const PENDING_ACTION_TTL_HOURS = 24;
 const PENDING_CONFIRMATION_TTL_HOURS = 2;
@@ -351,7 +352,7 @@ export function validatePendingActionCandidate(candidate, context = {}) {
   const threshold = action.risk_level === 'medium' ? MEDIUM_RISK_THRESHOLD : LOW_RISK_THRESHOLD;
   if (action.confidence < threshold) return { ok: false, reason: 'Pending action confidence is too low.' };
 
-  const normalizedArgs = normalizePendingArgs(action.action_type, action.args);
+  const normalizedArgs = normalizePendingArgs(action.action_type, repairBareHabitArgs(action.args, action.source_user_message || action.summary));
   const missing = normalizeMissingFields(action.action_type, normalizedArgs, action.missing_fields);
   const executable = missing.length === 0;
   const terminalStatus = ['completed', 'cancelled', 'expired'].includes(action.status);
@@ -461,7 +462,13 @@ export function formatPendingActionCompletedAnswer(result, pendingAction) {
     return language === 'it' ? `Salvato: inizio sonno alle ${time}.` : `Saved: sleep start at ${time}.`;
   }
   if (pendingAction?.action_type === 'update_health_log') {
-    const detail = pendingAction.args?.health_note_append || pendingAction.summary || 'log salute';
+    const updatedHabits = Array.isArray(result?.data?._updatedHabits) ? result.data._updatedHabits : [];
+    if (updatedHabits.length) {
+      const label = updatedHabits[0] === 'shower' ? 'doccia' : updatedHabits[0] === 'creatine' ? 'creatina' : 'skincare';
+      return language === 'it' ? `Salvato in Salute: ${label}.` : `Saved to Health: ${label}.`;
+    }
+    const changedFields = Array.isArray(result?.data?._changedHealthFields) ? result.data._changedHealthFields : [];
+    const detail = pendingAction.args?.health_note_append || changedFields.join(', ') || 'log salute';
     return language === 'it' ? `Salvato nella salute: ${detail}.` : `Saved to Health: ${detail}.`;
   }
   if (pendingAction?.action_type === 'create_calendar_event') {
@@ -753,7 +760,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
   const missing = new Set((Array.isArray(currentMissing) ? currentMissing : []).map(cleanField).filter(Boolean));
   if (actionType === 'update_health_log') {
     if (!args.logged_on) missing.add('date');
-    if (!args.health_note_append && !args.notes && !args.coffee && !args.adc && !args.wake_time && !args.sleep_start) missing.add('health_field');
+    if (!hasStructuredHealthField(args)) missing.add('health_field');
   }
   if (actionType === 'log_sleep_start') {
     if (!args.time) missing.add('time');
@@ -779,7 +786,7 @@ function normalizeMissingFields(actionType, args, currentMissing = []) {
     if (field === 'title' && args.title) missing.delete(field);
     if (field === 'category' && args.category) missing.delete(field);
     if (field === 'health_field' && actionType === 'log_sleep_start') missing.delete(field);
-    if (field === 'health_field' && (args.health_field || args.healthField || args.health_note_append || args.notes || args.coffee || args.adc || args.wake_time || args.sleep_start || args.sleepStart)) missing.delete(field);
+    if (field === 'health_field' && (args.health_field || args.healthField || hasStructuredHealthField(args))) missing.delete(field);
   }
   return [...missing];
 }

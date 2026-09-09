@@ -13,8 +13,9 @@
     "test:mcp": "node scripts/test-mcp.js",
     "test:brain": "node scripts/test-brain-regressions.js",
     "test:reliability": "node scripts/test-reliability.js",
+    "test:bridge": "node scripts/test-whatsapp-bridge-contract.js",
     "test:schema": "node scripts/test-schema-contracts.js",
-    "test": "npm run test:brain && npm run test:mcp && npm run test:schema && npm run test:reliability",
+    "test": "npm run test:brain && npm run test:mcp && npm run test:schema && npm run test:reliability && npm run test:bridge",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

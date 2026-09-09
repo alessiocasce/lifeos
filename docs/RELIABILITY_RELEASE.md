@@ -1,5 +1,49 @@
 # LifeOS Reliability Release
 
+## Follow-up: WhatsApp Interaction Ownership
+
+The earlier `supabase/releases/reliability.sql` migration remains unchanged. This follow-up requires one additional additive migration: `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql`. It adds durable inbound receipts, outgoing provider-message correlation, versioned current interaction ownership, and a partial unique assistant/outbox linkage. It does not alter Health/Memo schemas or the already-migrated text `source_id`.
+
+Deploy in this order: complete local tests; pause Oracle PM2 inbound/polling; apply only the new migration; deploy Vercel; update the external bridge using [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md); restart PM2 and run designated-chat QA. The bridge source is not in this repo, so backend deployment alone does not complete native quote/retry reliability.
+
+New inbound IDs atomically claim a receipt before Brain effects. Completed duplicates replay one stored response; concurrent or uncertain claims do not re-execute. New outgoing IDs map only to an assistant message in the same user-scoped WhatsApp recipient thread. Assistant interaction metadata is recursive, bounded, secret-redacted JSON (`metadata_version: 2`), and proactive target objects retain their types.
+
+BrainTurn now uses one immutable interaction selection. Grounded current-message Health/commands and strong pending cancellation precede trusted native quotes; delivered active ownership precedes a 30-minute adjacent legacy fallback. The proactive executor receives that exact target and cannot silently choose another historical message. Interaction replacement/closure is version-fenced.
+
+`npm run test:schema` executes the additive migration in disposable PostgreSQL and checks RLS, ID constraints, ownership, and uniqueness. `npm run test:reliability` uses actual assistant persistence plus receipt/delivery/interaction tables and exact Health effects. `npm run test:bridge` validates the reference adapter shapes only; it is not proof that Oracle `wts.js` was changed.
+
+After applying the migration, run read-only verification queries:
+
+```sql
+select table_name, column_name, data_type
+from information_schema.columns
+where table_schema = 'public'
+  and table_name in ('brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state')
+order by table_name, ordinal_position;
+
+select c.relname, c.relrowsecurity
+from pg_class c
+where c.relname in ('brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state');
+
+select grantee, table_name, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in ('brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state')
+  and grantee in ('anon', 'authenticated');
+
+select user_id, thread_id, metadata->>'outbox_message_id' as outbox_message_id, count(*)
+from public.ai_chat_messages
+where role = 'assistant' and coalesce(metadata->>'outbox_message_id', '') <> ''
+group by user_id, thread_id, metadata->>'outbox_message_id'
+having count(*) > 1;
+
+select count(*) as invalid_provider_ids
+from public.brain_whatsapp_message_deliveries
+where provider_message_id = '[object Object]' or btrim(provider_message_id) = '';
+```
+
+Expected: all three RLS flags true; no `anon`/`authenticated` grants; no duplicate assistant/outbox linkage; zero invalid provider IDs. Inspect composite foreign keys in Supabase before resuming PM2.
+
 This release changes persistence contracts, not proactive features. Existing memo and accountability families remain the only registered families. No new API function or secret is required.
 
 ## Deploy Order: Database Change Required
@@ -16,7 +60,7 @@ The release changes `brain_outbox_messages.source_id` from UUID to text without 
 
 - `(user_id, source_type, source_id)` identifies a logical target. Memo IDs remain UUID strings; accountability keys remain `habit:shower:YYYY-MM-DD`, `wake_time:YYYY-MM-DD`, or `sleep_start:YYYY-MM-DD`.
 - Existing `(user_id, idempotency_key)` uniqueness protects enqueue. Window IDs identify deliveries, not separate health effects.
-- `selectProactiveReplyTarget()` in `brainProactiveReplies.js` is shared by BrainTurn Contract and runtime dispatch. Pending cancellation and independent commands keep priority. Multiple unresolved plausible targets ask a clarification, without a health/memo write.
+- BrainTurn creates one immutable interaction selection and passes its exact proactive target to runtime dispatch. Pending cancellation and independent commands keep priority; unresolved native quotes and ownerless old history cannot grant a Health/Memo write.
 - Delivered outbox IDs are checked before default accountability actions. Resolution is persisted both on the outbox row and matching assistant messages. Resolved targets cannot silently fall back to another older prompt.
 - Accountability means **ensure the requested target**, not increment blindly. `brainProactiveDelivery.js` uses user/date uniqueness plus compare-and-swap on `health_logs.updated_at`; retries reread the record. Habits reach the target count, and existing wake/sleep fields are not overwritten. Explicit manual habit logging still supports increments.
 - `done`/time closes the logical source and cancels queued same-source fallbacks. `no` consumes this delivery but leaves future windows possible. `no_sleep` closes the source without inventing a sleep timestamp or zero-hour record.
@@ -49,7 +93,7 @@ Evaluation sorts candidates by priority and includes candidates already admitted
 - `npm run test:mcp`: MCP auth/shape, context, and intelligence regression harness.
 - `npm run test:schema`: real in-memory PostgreSQL (PGlite), executing the relevant checked-in table definitions and exact release SQL. Covers UUID-to-text preservation, uniqueness, attention admission/delivery and project contribution transitions.
 - `npm run test:reliability`: pure regressions plus actual generate/enqueue/claim/sent-ACK metadata/contract/reply/health-resolution journeys through a PostgREST-shaped SQL adapter. Also covers repeated snooze, no-sleep resolution, interleaved ensure replies, and pre-delivery cancellation after manual completion.
-- `npm test`: all four suites, no live credentials/services. PGlite is a pinned development dependency.
+- `npm test`: all five suites, no live credentials/services. PGlite is a pinned development dependency.
 - `npm run check:functions`: remains 7 functions; shared helpers are not routes.
 - `npm run build`, syntax checks, and `git diff --check` complete local validation.
 
@@ -77,6 +121,6 @@ The database tests do not emulate production RLS roles, PostgREST transport, HTT
 
 Health mutation, resolution metadata, assistant persistence, and cancellation are separate transactions. Ensure-target retries prevent repeated health increments, but a failure between steps can delay cleanup; poll revalidation is a second defense. A concurrent manual clear or incompatible legacy read-modify-write can still race. Do not claim universal exactly-once semantics.
 
-Physical WhatsApp sends remain at-least-once across send-before-ACK crashes. Concurrent sent-message persistence can still produce duplicate assistant metadata rows; health target writes remain ensure-based. Multi-connection lock behavior, production RLS, installed PWA rollout, and real PM2 delivery require staging/live QA. Run those checks before adding features, then consider a transactional reply-resolution operation and mandatory bridge claim fencing.
+Physical WhatsApp sends remain at-least-once across send-before-ACK crashes. The new unique index prevents duplicate assistant/outbox links, but Health mutation, source resolution, response persistence, and receipt completion are still separate transactions; an unknown non-idempotent outcome becomes `uncertain` and requires reconciliation. Multi-connection behavior, production RLS, actual Oracle adapter behavior, and real PM2 delivery require staging/live QA. Old rows with no provider ID cannot be reconstructed.
 
 Dependency audit at validation reported 8 existing advisories (6 high, 2 low), including Vite/PostCSS and transitive tooling. The lockfile only adds pinned PGlite; no existing dependency versions changed. Dependency upgrades are deferred to a separately tested toolchain patch, not silently treated as a clean audit.

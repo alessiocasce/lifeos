@@ -2,6 +2,8 @@ import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { findOrCreateWhatsappBrainThread, persistBrainAssistantMessage } from './brain.js';
 import { buildProactiveWorkingContextFromOutbox } from './brainProactiveReplies.js';
+import { recordWhatsappMessageDelivery } from './brainWhatsappReliability.js';
+import { normalizeAccountabilityTarget } from './brainMetadata.js';
 import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
 import { checkProactiveDelivery } from './brainProactiveDelivery.js';
 import {
@@ -249,7 +251,21 @@ export async function ackOutboxMessage({
       userId,
       recipient: canonicalRecipient,
       outboxMessage: sent,
+      client,
     });
+    if (persisted?.id && metadata?.provider_message_id) {
+      await recordWhatsappMessageDelivery({
+        userId,
+        assistantMessageId: persisted.id,
+        threadId: persisted.thread_id,
+        recipient: canonicalRecipient,
+        providerMessageId: metadata.provider_message_id,
+        outboxMessageId: sent.id,
+        deliveryAttempt: sent.attempts,
+        sentAt: sent.sent_at,
+        client,
+      });
+    }
     if (persisted?.id && !sent.ack_metadata?.assistant_message_id) {
       const withAssistant = await client
         .from('brain_outbox_messages')
@@ -272,13 +288,16 @@ export async function ackOutboxMessage({
   return markOutboxFailed({ client, row: current.data, error, metadata });
 }
 
-export async function persistSentProactiveMessageToWhatsappThread({ userId = getActionUserId(), recipient, outboxMessage } = {}) {
+export async function persistSentProactiveMessageToWhatsappThread({
+  userId = getActionUserId(), recipient, outboxMessage, client = getSupabaseAdmin(),
+  findThread = findOrCreateWhatsappBrainThread, persistMessage = persistBrainAssistantMessage,
+} = {}) {
   if (!outboxMessage?.id || outboxMessage.status !== 'sent') return null;
   if (outboxMessage.ack_metadata?.assistant_message_id) return null;
   const canonicalRecipient = requiredText(canonicalizeWhatsappSender(recipient), 'recipient', 180);
-  const thread = await findOrCreateWhatsappBrainThread({ sender: canonicalRecipient });
+  const thread = await findThread({ sender: canonicalRecipient });
   if (!thread?.id) return null;
-  const existing = await findExistingProactiveAssistantMessage({ userId, threadId: thread.id, outboxMessageId: outboxMessage.id });
+  const existing = await findExistingProactiveAssistantMessage({ userId, threadId: thread.id, outboxMessageId: outboxMessage.id, client });
   if (existing) return existing;
   const metadata = outboxMessage.metadata && typeof outboxMessage.metadata === 'object' ? outboxMessage.metadata : {};
   const chat = {
@@ -291,20 +310,31 @@ export async function persistSentProactiveMessageToWhatsappThread({ userId = get
     assistantPersisted: false,
   };
   const workingContext = buildProactiveWorkingContextFromOutbox(outboxMessage);
-  return persistBrainAssistantMessage({
-    chat,
-    answer: outboxMessage.body,
-    actionType: null,
-    actions: [],
-    recordRefs: [],
-    workingContext,
-    extraMetadata: proactiveAssistantMetadata(outboxMessage),
-  });
+  try {
+    return await persistMessage({
+      chat,
+      answer: outboxMessage.body,
+      actionType: null,
+      actions: [],
+      recordRefs: [],
+      workingContext,
+      extraMetadata: proactiveAssistantMetadata(outboxMessage),
+      client,
+      userId,
+    });
+  } catch (error) {
+    if (error?.code !== '23505') throw error;
+    const concurrent = await findExistingProactiveAssistantMessage({ userId, threadId: thread.id, outboxMessageId: outboxMessage.id, client });
+    if (concurrent) return concurrent;
+    throw error;
+  }
 }
 
 export function proactiveAssistantMetadata(outboxMessage) {
   const metadata = outboxMessage.metadata || {};
+  const accountability = normalizeAccountabilityTarget(metadata.accountability);
   return {
+    metadata_version: 2,
     proactive_message: true,
     outbox_message_id: outboxMessage.id,
     rule_key: outboxMessage.rule_key,
@@ -312,12 +342,12 @@ export function proactiveAssistantMetadata(outboxMessage) {
     source_id: outboxMessage.source_id,
     expected_reply_type: metadata.expected_reply_type || MEMO_REPLY_TYPE,
     ...(metadata.language ? { language: metadata.language } : {}),
-    ...(metadata.accountability && typeof metadata.accountability === 'object' ? { accountability: metadata.accountability } : {}),
+    ...(accountability ? { accountability } : {}),
   };
 }
 
-async function findExistingProactiveAssistantMessage({ userId, threadId, outboxMessageId }) {
-  const result = await getSupabaseAdmin()
+async function findExistingProactiveAssistantMessage({ userId, threadId, outboxMessageId, client = getSupabaseAdmin() }) {
+  const result = await client
     .from('ai_chat_messages')
     .select('id, thread_id, role, content, request_id, action_type, metadata, created_at')
     .eq('user_id', userId)

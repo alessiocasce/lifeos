@@ -13,16 +13,20 @@ const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
 const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
 const PROACTIVE_REPLY_OVERDUE_WINDOW_HOURS = 36;
 
-export async function resolveProactiveWhatsappReply({ message, brainChat, context, now = new Date(), actions } = {}) {
-  const target = selectProactiveReplyTarget({ message, brainChat, now });
+export async function resolveProactiveWhatsappReply({ message, brainChat, context, now = new Date(), actions, selection = null } = {}) {
+  const target = selection || selectProactiveReplyTarget({ message, brainChat, now });
   if (target.type === 'ambiguous' || target.type === 'resolved') {
     const english = target.language === 'en';
     const labels = (target.candidates || []).slice(0, 3).map((item) => String(item.title || item.source_id).slice(0, 55)).join('; ');
+    const candidateTypes = new Set((target.candidates || []).map((item) => item.source_type));
+    const noun = candidateTypes.size === 1 && candidateTypes.has('accountability')
+      ? (english ? 'Which health check-in do you mean?' : 'Quale check-in salute intendi?')
+      : (english ? 'Which item do you mean?' : 'A quale elemento ti riferisci?');
     return buildProactiveClarificationResult({
       language: target.language || 'it',
       answer: target.type === 'resolved'
         ? (english ? 'This check-in is already resolved. Nothing changed.' : 'Questo check-in e gia stato risolto. Non segno altro.')
-        : `${english ? 'Which check-in do you mean?' : 'Quale promemoria intendi?'} ${labels}`,
+        : `${noun} ${labels}`,
       reason: `proactive_target_${target.type}`, trace: { ambiguous: target.type === 'ambiguous', resolved: target.type === 'resolved' },
     });
   }
@@ -30,7 +34,7 @@ export async function resolveProactiveWhatsappReply({ message, brainChat, contex
   if (target.reply_type === ACCOUNTABILITY_REPLY_TYPE) {
     result = await resolveProactiveAccountabilityReply({ message, brainChat, context, now, actions, selection: target });
   } else if (target.reply_type === MEMO_REPLY_TYPE) {
-    result = await resolveProactiveMemoReply({ message, brainChat, context });
+    result = await resolveProactiveMemoReply({ message, brainChat, context, selection: target });
   }
   if (!result) return null;
   return {
@@ -112,8 +116,8 @@ function messageReferencesProactiveTarget(message, proactive) {
   return titleWords.some((word) => text.includes(word));
 }
 
-export async function resolveProactiveMemoReply({ message, brainChat, context } = {}) {
-  const selection = selectProactiveMemoReplyTarget({ message, brainChat, now: new Date() });
+export async function resolveProactiveMemoReply({ message, brainChat, context, selection: suppliedSelection = null } = {}) {
+  const selection = suppliedSelection || selectProactiveMemoReplyTarget({ message, brainChat, now: new Date() });
   if (selection.type === 'none') return null;
   if (selection.type === 'stale') {
     return buildProactiveClarificationResult({

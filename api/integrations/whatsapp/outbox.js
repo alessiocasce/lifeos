@@ -12,8 +12,9 @@ import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender, cleanWhatsappText } from '../../_utils/whatsappBridge.js';
 import { evaluateProactiveCandidates } from '../../_utils/brainProactiveRules.js';
 import { ackOutboxMessage, enqueueOutboxMessage, pollOutboxMessages } from '../../_utils/brainOutbox.js';
+import { normalizeWhatsappProviderMessageId, recordWhatsappMessageDelivery } from '../../_utils/brainWhatsappReliability.js';
 
-const SUPPORTED_ACTIONS = new Set(['evaluate', 'preview', 'poll', 'ack']);
+const SUPPORTED_ACTIONS = new Set(['evaluate', 'preview', 'poll', 'ack', 'record_reply_delivery']);
 
 export default async function handler(req, res) {
   const context = createRequestContext(req, res);
@@ -38,11 +39,31 @@ export default async function handler(req, res) {
     if (action === 'ack') {
       return handleAck({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId });
     }
+    if (action === 'record_reply_delivery') {
+      return handleRecordReplyDelivery({ res, context, body, recipient });
+    }
 
     throw new HttpError(400, 'Unsupported outbox action.');
   } catch (error) {
     return handleApiError(res, error, context);
   }
+}
+
+async function handleRecordReplyDelivery({ res, context, body, recipient }) {
+  const result = await recordWhatsappMessageDelivery({
+    assistantMessageId: cleanWhatsappText(body.assistant_message_id ?? body.assistantMessageId, 80),
+    threadId: cleanWhatsappText(body.thread_id ?? body.threadId, 80),
+    recipient,
+    providerMessageId: body.provider_message_id ?? body.providerMessageId,
+    sentAt: body.sent_at ?? body.sentAt,
+  });
+  return sendJson(res, 200, {
+    ok: true,
+    requestId: context.requestId,
+    recorded: true,
+    duplicate: result.duplicate,
+    assistant_message_id: result.row.assistant_message_id,
+  });
 }
 
 async function handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId, preview = false }) {
@@ -135,6 +156,13 @@ async function handlePoll({ res, context, debugFlags, body, recipient, recipient
 
 async function handleAck({ res, context, debugFlags, body, recipient, recipientInfo, bridgeId }) {
   if (body.dry_run || body.dryRun) throw new HttpError(400, 'ACK is mutating. Use preview for read-only diagnostics.');
+  const rawProviderMessageId = body.provider_message_id ?? body.providerMessageId;
+  const providerMessageId = rawProviderMessageId === undefined || rawProviderMessageId === null || rawProviderMessageId === ''
+    ? null
+    : normalizeWhatsappProviderMessageId(rawProviderMessageId);
+  if (rawProviderMessageId !== undefined && rawProviderMessageId !== null && rawProviderMessageId !== '' && !providerMessageId) {
+    throw new HttpError(400, 'provider_message_id is invalid.');
+  }
   const row = await ackOutboxMessage({
     recipient,
     messageId: body.message_id ?? body.messageId ?? body.id,
@@ -145,7 +173,7 @@ async function handleAck({ res, context, debugFlags, body, recipient, recipientI
       bridge_id: bridgeId,
       whatsapp_recipient_raw: recipientInfo.raw,
       whatsapp_recipient_canonical: recipient,
-      provider_message_id: cleanWhatsappText(body.provider_message_id ?? body.providerMessageId, 180),
+      provider_message_id: providerMessageId,
       dry_run: Boolean(body.dry_run ?? body.dryRun),
     },
   });
@@ -178,7 +206,7 @@ async function handleAck({ res, context, debugFlags, body, recipient, recipientI
 function getOutboxAction(req, body) {
   const rawAction = body.action ?? req.query?.action ?? getUrlAction(req);
   const action = String(rawAction ?? '').trim().toLowerCase();
-  if (!action) throw new HttpError(400, 'action is required. Use evaluate, poll, or ack.');
+  if (!action) throw new HttpError(400, 'action is required. Use evaluate, poll, ack, or record_reply_delivery.');
   if (!SUPPORTED_ACTIONS.has(action)) throw new HttpError(400, 'Unsupported outbox action.');
   return action;
 }

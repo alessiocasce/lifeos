@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { PGlite } from '@electric-sql/pglite';
 import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
 
 const { db } = await createReliabilityDatabase();
@@ -51,3 +52,32 @@ try {
   console.log('PASS health JSON/day uniqueness and non-hour project authority contracts');
 } catch (error) { console.error(`FAIL schema contracts: ${error.message}`); process.exitCode = 1; }
 finally { await db.close(); }
+
+const migrationDb = new PGlite();
+try {
+  const migration = readFileSync(new URL('../supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql', import.meta.url), 'utf8');
+  await migrationDb.exec(`
+    create schema auth;
+    create role anon;
+    create role authenticated;
+    create table auth.users(id uuid primary key);
+    create table ai_chat_threads(id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id), unique(id,user_id));
+    create table ai_chat_messages(id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id), thread_id uuid not null, role text not null, content text not null, metadata jsonb not null default '{}', created_at timestamptz not null default now(), foreign key(thread_id,user_id) references ai_chat_threads(id,user_id));
+    create table brain_outbox_messages(id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id));
+    create function public.set_updated_at() returns trigger language plpgsql as $$ begin new.updated_at=now(); return new; end $$;
+  `);
+  await migrationDb.exec(migration);
+  const tables = (await migrationDb.query(`select table_name from information_schema.tables where table_schema='public' and (table_name like 'brain_whatsapp%' or table_name='brain_interaction_state')`)).rows.map((row) => row.table_name);
+  assert.deepEqual(tables.sort(), ['brain_interaction_state', 'brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries']);
+  const user = '22222222-2222-4222-8222-222222222222';
+  await migrationDb.query('insert into auth.users values ($1)', [user]);
+  const thread = (await migrationDb.query('insert into ai_chat_threads(user_id) values ($1) returning id', [user])).rows[0];
+  const outbox = (await migrationDb.query('insert into brain_outbox_messages(user_id) values ($1) returning id', [user])).rows[0];
+  const assistant = (await migrationDb.query(`insert into ai_chat_messages(user_id,thread_id,role,content,metadata) values ($1,$2,'assistant','fixture',$3) returning id`, [user, thread.id, { outbox_message_id: outbox.id }])).rows[0];
+  await assert.rejects(migrationDb.query(`insert into ai_chat_messages(user_id,thread_id,role,content,metadata) values ($1,$2,'assistant','duplicate',$3)`, [user, thread.id, { outbox_message_id: outbox.id }]), /duplicate key/);
+  await assert.rejects(migrationDb.query(`insert into brain_whatsapp_inbound_receipts(user_id,canonical_recipient,provider_message_id,thread_id,assistant_message_id) values ($1,'fixture','[object Object]',$2,$3)`, [user, thread.id, assistant.id]), /check constraint/);
+  const rls = await migrationDb.query(`select relname, relrowsecurity from pg_class where relname in ('brain_whatsapp_inbound_receipts','brain_whatsapp_message_deliveries','brain_interaction_state')`);
+  assert.equal(rls.rows.every((row) => row.relrowsecurity === true), true);
+  console.log('PASS additive WhatsApp reliability migration applies with ownership, RLS and uniqueness boundaries');
+} catch (error) { console.error(`FAIL WhatsApp reliability migration: ${error.message}`); process.exitCode = 1; }
+finally { await migrationDb.close(); }
