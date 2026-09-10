@@ -4,6 +4,8 @@
 
 Keep Workout open across Europe/Rome midnight: today's filter and an untouched new-session date should advance, not remain at module-import time or UTC yesterday. Existing edits remain attached to their session. In MCP, request a workout above the serializer cap and verify actual returned set counts and truncation flags. With null/empty or old sleep, intelligence must report unknown recovery rather than fake zero-hour sleep; a real logged zero remains valid data. Run `npm run test:mcp` and `npm run test:reliability`. See [release limitations](RELIABILITY_RELEASE.md) for live/browser QA not covered by those tests.
 
+Run `npm run test:workout` after changing Workout rendering or local-day propagation. It renders the real lazy-loaded tab against empty, loading, stale-selection, active, ended, template, and historical-data fixtures. The Rome-local day returned by `useLocalDay()` must be passed into child controls; file-level Workout helpers must not read a removed module-global `today` value.
+
 Run this after applying `supabase/schema.sql` and signing in with a Supabase-backed account.
 
 ## Session Flow

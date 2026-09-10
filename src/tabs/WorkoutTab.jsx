@@ -470,6 +470,7 @@ export function WorkoutTab() {
               setShowCustomSession={setShowCustomSession}
               showCustomSession={showCustomSession}
               startingTemplateId={startingTemplateId}
+              today={today}
               updateWorkoutTemplate={updateWorkoutTemplate}
               updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
               workoutSessions={workoutSessions}
@@ -506,6 +507,7 @@ export function WorkoutTab() {
               setShowCustomSession={setShowCustomSession}
               showCustomSession={showCustomSession}
               startingTemplateId={startingTemplateId}
+              today={today}
               updateWorkoutTemplate={updateWorkoutTemplate}
               updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
               workoutSessions={workoutSessions}
@@ -574,6 +576,7 @@ function WorkoutSessionControl({
   selectingToday,
   sessionForm,
   startingTemplateId,
+  today,
   setActiveWorkoutId,
   setSessionForm,
   setShowCustomSession,
