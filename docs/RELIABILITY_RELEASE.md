@@ -10,7 +10,7 @@ New inbound IDs atomically claim a receipt before Brain effects. Completed dupli
 
 BrainTurn now uses one immutable interaction selection. Grounded current-message Health/commands and strong pending cancellation precede trusted native quotes; delivered active ownership precedes a 30-minute adjacent legacy fallback. The proactive executor receives that exact target and cannot silently choose another historical message. Interaction replacement/closure is version-fenced.
 
-`npm run test:schema` executes the additive migration in disposable PostgreSQL and checks RLS, ID constraints, ownership, and uniqueness. `npm run test:reliability` uses actual assistant persistence plus receipt/delivery/interaction tables and exact Health effects. `npm run test:bridge` validates the reference adapter shapes only; it is not proof that Oracle `wts.js` was changed.
+`npm run test:schema` executes the additive migration in disposable PostgreSQL and checks RLS, ID constraints, ownership, and uniqueness. `npm run test:reliability` uses actual assistant persistence plus receipt/delivery/interaction tables and exact Health effects. The Oracle bridge source is checked in at `bridge/whatsapp/wts.js`; `npm run test:bridge` validates its reference payload contract but does not replace a live PM2/WhatsApp delivery test.
 
 After applying the migration, run read-only verification queries:
 
