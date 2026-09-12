@@ -10,6 +10,7 @@ import {
   completeWhatsappInboundReceipt,
   closeBrainInteraction,
   loadBrainInteractionState,
+  recordWhatsappMessageDeliveries,
   recordWhatsappMessageDelivery,
   resolveWhatsappQuotedDelivery,
   hydrateLegacyProactiveMessage,
@@ -17,6 +18,7 @@ import {
   normalizeWhatsappProviderMessageId,
   setBrainInteractionPendingDelivery,
 } from '../api/_utils/brainWhatsappReliability.js';
+import { canonicalizeWhatsappSender } from '../api/_utils/whatsappBridge.js';
 import { selectBrainTurnInteraction } from '../api/_utils/brainInteractionSelection.js';
 import { parseExplicitHealthSelfReport, resolveExplicitHealthSelfReport } from '../api/_utils/brainHealthSelfReports.js';
 import { buildWorkoutIntelligence } from '../api/_utils/workoutIntelligence.js';
@@ -30,7 +32,7 @@ const now = new Date('2026-07-07T18:50:00Z');
 let failures = 0;
 async function check(name, run) {
   try { await run(); console.log(`PASS ${name}`); }
-  catch (error) { failures++; console.error(`FAIL ${name}: ${error.message}`); }
+  catch (error) { failures++; console.error(`FAIL ${name}: ${error.stack || error.message}`); }
 }
 const candidates = buildAccountabilityProactiveCandidates({ healthLogs: [], recipient: 'fixture', now });
 const candidate = candidates.find((row) => row.metadata.accountability.habit_id === 'shower');
@@ -186,6 +188,105 @@ try {
     await assert.rejects(recordWhatsappMessageDelivery({ userId, threadId: thread.id, assistantMessageId: first.id,
       recipient: 'fixture', providerMessageId: 'provider:full:suffix:one', client, sentAt: now.toISOString() }), /already mapped/);
     assert.equal(await resolveWhatsappQuotedDelivery({ userId, recipient: 'other', providerMessageId: 'provider:full:suffix:one', client }), null);
+    const scope = await resolveWhatsappQuotedDelivery({ userId, recipient: 'other', providerMessageId: 'provider:full:suffix:one', client, detailed: true });
+    assert.equal(scope.status, 'recipient_mismatch');
+    const unknown = await resolveWhatsappQuotedDelivery({ userId, recipient: 'fixture', providerMessageId: 'provider:unknown', client, detailed: true });
+    assert.equal(unknown.status, 'provider_id_not_found');
+    assert.equal(unknown.target, null);
+  });
+
+  await check('fresh native quotes resolve wake, sleep and habit prompts out of order with persisted mappings', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from brain_whatsapp_inbound_receipts; delete from ai_chat_messages; delete from brain_outbox_messages; delete from health_logs; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('native-quotes',$1) returning id`, [{ source: 'whatsapp', whatsapp_sender: 'fixture' }])).rows[0];
+    const candidateFor = (kind, habitId = null) => Array.from({ length: 48 }, (_, halfHour) => buildAccountabilityProactiveCandidates({
+      healthLogs: [], recipient: 'fixture', now: new Date(Date.UTC(2026, 6, 7, 0, halfHour * 30)),
+    })).flat().find((row) => row.metadata.accountability.kind === kind
+      && (!habitId || row.metadata.accountability.habit_id === habitId));
+    const deliver = async (item, providerMessageIds) => {
+      const queued = await enqueueOutboxMessage({ userId, client, recipient: 'fixture', body: item.body,
+        ruleKey: item.rule_key, sourceType: item.source_type, sourceId: item.source_id,
+        idempotencyKey: `native:${providerMessageIds[0]}`, scheduledFor: new Date(Date.now() - 60000).toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(), metadata: item.metadata });
+      const claimed = (await db.query(`update brain_outbox_messages set status='claimed',claimed_at=now(),attempts=attempts+1 where id=$1 returning *`, [queued.row.id])).rows[0];
+      const sent = await markOutboxSent({ client, row: claimed });
+      const assistant = await persistSentProactiveMessageToWhatsappThread({ userId, recipient: 'fixture', outboxMessage: sent, client,
+        findThread: async () => thread });
+      await recordWhatsappMessageDeliveries({ userId, threadId: thread.id, assistantMessageId: assistant.id,
+        recipient: 'fixture', providerMessageIds, outboxMessageId: sent.id, deliveryAttempt: sent.attempts,
+        sentAt: now.toISOString(), client });
+      const rows = await db.query('select provider_message_id from brain_whatsapp_message_deliveries where assistant_message_id=$1 order by provider_message_id', [assistant.id]);
+      assert.deepEqual(rows.rows.map((row) => row.provider_message_id), [...providerMessageIds].sort());
+      await db.query(`update brain_outbox_messages set created_at=now()-interval '1 hour',sent_at=now()-interval '1 hour' where id=$1`, [sent.id]);
+      return { item, sent, assistant, providerMessageIds };
+    };
+    const answer = async (prompt, text, replyNow = now) => {
+      const lookup = await resolveWhatsappQuotedDelivery({ userId, recipient: 'fixture',
+        providerMessageIds: [prompt.providerMessageIds.at(-1)], detailed: true, client });
+      assert.equal(lookup.status, 'resolved');
+      const selection = selectBrainTurnInteraction({ message: text, brainChat: { conversationHistory: [] },
+        quotedTarget: lookup.target, quotedMessagePresent: true, quotedLookupStatus: lookup.status, now: replyNow });
+      assert.equal(selection.path, 'proactive_reply');
+      assert.equal(selection.selection_method, 'trusted_native_quote');
+      const actions = { updateHealthLog: (args) => ensureAccountabilityHealth(args, { client, userId }),
+        logSleepStart: (args) => ensureAccountabilityHealth(args, { client, userId }),
+        isResolved: (proactive) => accountabilityTargetIsResolved(proactive, { client, userId }),
+        resolveTarget: (args) => resolveAccountabilityTarget({ ...args, client, userId }) };
+      return resolveProactiveWhatsappReply({ message: text, brainChat: { conversationHistory: [] }, now: replyNow,
+        actions, selection: selection.proactive_selection });
+    };
+
+    const wake = await deliver(candidateFor('wake_time_missing'), ['true_fixture@lid_WAKE', 'true_fixture@c.us_WAKE']);
+    const sleep = await deliver(candidateFor('sleep_start_missing'), ['true_fixture@lid_SLEEP']);
+    const creatine = await deliver(candidateFor('habit_missing', 'creatine'), ['true_fixture@lid_CREATINE']);
+    const shower = await deliver(candidateFor('habit_missing', 'shower'), ['true_fixture@lid_SHOWER']);
+    assert.equal((await db.query('select count(*)::int as count from brain_whatsapp_message_deliveries')).rows[0].count, 5);
+
+    const sleepResult = await answer(sleep, '3');
+    assert.equal(sleepResult.actions.length, 1, JSON.stringify(sleepResult));
+    assert.equal(sleepResult.actions[0].type, 'log_sleep_start');
+    assert.equal((await answer(wake, '8.30', new Date('2026-07-07T22:30:00Z'))).actions[0].type, 'update_health_log');
+    assert.equal((await answer(creatine, 'si')).actions[0].type, 'update_health_log');
+    const negative = await answer(shower, 'non ancora');
+    assert.deepEqual(negative.actions, []);
+
+    const health = (await db.query('select * from health_logs order by logged_on')).rows;
+    const sleepRow = health.find((row) => new Date(row.logged_on).toISOString().slice(0, 10) === sleep.item.metadata.accountability.sleep_date);
+    const wakeRow = health.find((row) => new Date(row.logged_on).toISOString().slice(0, 10) === wake.item.metadata.accountability.local_date);
+    assert.equal(sleepRow.sleep_start.slice(0, 5), '03:00');
+    assert.equal(wakeRow.wake_time.slice(0, 5), '08:30');
+    assert.equal(wakeRow.hygiene.creatine.count, 1);
+    assert.equal(wakeRow.hygiene.shower, undefined);
+
+    const resolvedLookup = await resolveWhatsappQuotedDelivery({ userId, recipient: 'fixture', providerMessageId: creatine.providerMessageIds[0], detailed: true, client });
+    const resolvedSelection = selectBrainTurnInteraction({ message: 'si', quotedTarget: resolvedLookup.target,
+      quotedMessagePresent: true, quotedLookupStatus: resolvedLookup.status, now });
+    assert.equal(resolvedSelection.intent, 'quoted_target_resolved');
+  });
+
+  await check('normal multi-chunk Brain replies keep every physical provider mapping addressable', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from ai_chat_messages; delete from ai_chat_threads;');
+    const thread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('normal-chunks',$1) returning id`, [{ source: 'whatsapp', whatsapp_sender: 'fixture' }])).rows[0];
+    const assistant = (await db.query(`insert into ai_chat_messages(user_id,thread_id,role,content) values ($1,$2,'assistant','chunked') returning *`, [userId, thread.id])).rows[0];
+    const ids = ['true_fixture@lid_CHUNK1', 'true_fixture@lid_CHUNK2'];
+    await recordWhatsappMessageDeliveries({ userId, threadId: thread.id, assistantMessageId: assistant.id,
+      recipient: 'fixture', providerMessageIds: ids, client, sentAt: now.toISOString() });
+    for (const id of ids) {
+      const result = await resolveWhatsappQuotedDelivery({ userId, recipient: 'fixture', providerMessageId: id, detailed: true, client });
+      assert.equal(result.status, 'resolved');
+      assert.equal(result.target.message.id, assistant.id);
+    }
+  });
+
+  await check('sender aliases preserve scoped quote lookup without broadening allowed recipients', async () => {
+    const previous = process.env.LIFEOS_WHATSAPP_SENDER_ALIASES;
+    process.env.LIFEOS_WHATSAPP_SENDER_ALIASES = 'fixture@c.us=fixture@lid';
+    try {
+      assert.equal(canonicalizeWhatsappSender('fixture@lid'), 'fixture@c.us');
+      assert.equal(canonicalizeWhatsappSender('unknown@lid'), 'unknown@lid');
+    } finally {
+      if (previous === undefined) delete process.env.LIFEOS_WHATSAPP_SENDER_ALIASES;
+      else process.env.LIFEOS_WHATSAPP_SENDER_ALIASES = previous;
+    }
   });
 
   await check('grounded repeated shower report ensures one habit effect and negation does not write', async () => {

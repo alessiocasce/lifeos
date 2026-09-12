@@ -2,7 +2,7 @@
 
 ## Reliability Release Gate
 
-For the WhatsApp interaction patch, also apply `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql` and update the external Oracle adapter from [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md). Run `npm run test:bridge`. The inbound response must include `assistant_message_id`; a normal outgoing reply must be recorded with `action=record_reply_delivery` before it can become the active unquoted reply owner.
+For the WhatsApp interaction patch, apply `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql` if it is not already present, then deploy the checked-in `bridge/whatsapp/wts.js` and `bridge/whatsapp/providerMessageContract.cjs` to Oracle as described in [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md). Run `npm run test:bridge`. The inbound response must include `assistant_message_id`; every physical normal reply bubble must be recorded with `action=record_reply_delivery` before it can become an exact native-quote target.
 
 Manual ownership matrix:
 
@@ -451,6 +451,21 @@ Manual deployed QA:
 13. Reply `piu tardi` or `tra 30 min` and confirm a snoozed accountability outbox row is queued.
 14. Trigger an unrelated pending action, receive an accountability nudge, then reply `No. Cancella tutto`; confirm pending cancellation wins and no accountability write occurs.
 15. Confirm accountability replies never create calendar events/memos, never call Vault, and never dump memory.
+
+### Native Reply Correlation
+
+Run these against freshly delivered prompts using WhatsApp's native Reply action, not an unquoted text message:
+
+1. Quote `Creatina presa oggi?`, reply `si`, and confirm Creatine reaches one exactly once.
+2. Quote `Doccia fatta oggi?`, reply `non ancora`, and confirm zero positive Shower write while the response still recognizes the target.
+3. Quote the previous-night sleep prompt, reply `3`, and confirm `sleep_start = 03:00` on the date encoded in that prompt.
+4. Quote the wake prompt, reply `8.30`, and confirm `wake_time = 08:30` on the date encoded in that prompt.
+5. Deliver wake prompt A then sleep prompt B. Quote B with `3`, then older A with `8.30`; both must resolve independently even though B was newer.
+6. Reply unquoted `non ancora` to the current owner and confirm existing active-owner behavior remains unchanged.
+7. Repeat an inbound provider `message_id`; confirm the stored response is replayed and the Health effect is not repeated.
+8. For a split normal or proactive reply, quote each physical bubble in turn and confirm each provider mapping resolves to the same logical assistant/outbox target.
+
+Before each reply, verify `brain_whatsapp_message_deliveries` already contains a separate scoped row for the quoted physical provider ID. In `debug.brain_trace`, verify quote lookup status, selected `trusted_native_quote` path, assistant/outbox/source identifiers, and no raw provider ID. Unknown, cross-recipient, and cross-thread IDs must produce distinct read-only clarification outcomes and no write.
 
 ## WhatsApp Pending Action Resolution
 

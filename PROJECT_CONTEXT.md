@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-09-09
+Last updated: 2026-09-12
 Current branch: `main`
 Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, planner stage, and backend LifeOS tool guards.
 
@@ -12,7 +12,9 @@ The backend now persists Brain metadata as bounded structured JSON (`metadata_ve
 
 Durable transport correlation requires the additive migration `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql`. It adds inbound execution receipts, scoped outgoing provider-message mappings, one versioned interaction row per WhatsApp thread, and a unique assistant/outbox linkage. These tables are service-role-only with RLS enabled and no authenticated-client grants. Do not fabricate IDs or infer old provider IDs.
 
-The Oracle/PM2 bridge source is stored at `bridge/whatsapp/wts.js`. It follows `scripts/whatsapp-bridge-adapter-reference.js`: forwarding native quote IDs, retaining full incoming/outgoing provider IDs, including `delivery_attempt` in proactive ACK, and calling outbox `action=record_reply_delivery` after sending a normal Brain reply. Repository tests validate the payload contract, but production PM2 deployment and physical WhatsApp delivery still require separate QA.
+The Oracle/PM2 bridge source is stored at `bridge/whatsapp/wts.js`; `bridge/whatsapp/providerMessageContract.cjs` is the single provider-ID/quote-envelope implementation used by runtime and `npm run test:bridge`. Current WhatsApp Web can expose message IDs as `$1` while `whatsapp-web.js#getQuotedMessage()` still reads `_serialized`, so the bridge restores that validated compatibility field before quote retrieval and uses a bounded raw-data fallback. Normal replies and proactive ACKs send singular plus plural provider IDs, and the backend stores one exact mapping per physical WhatsApp bubble. The old duplicate reference adapter was removed.
+
+Native quote lookup remains exact and scoped by user/channel/canonical recipient, then BrainTurn verifies the resolved assistant belongs to the current thread. Debug traces distinguish unknown provider ID, recipient mismatch, thread mismatch, non-replyable, expired, resolved, and invalid-value outcomes without logging raw provider IDs. The PGlite reliability journey covers fresh and out-of-order wake/sleep/habit quotes, original target dates across Rome midnight, multi-chunk mappings, and resolved-target idempotency. Physical Oracle/WhatsApp delivery still requires manual QA.
 
 Deterministic current-message Health reports now recognize Shower/Creatine/Skin completion and negation before pending/proactive routing. Completion ensures the daily target once; it never writes a note pretending to be a habit. Accountability time parsing accepts complete expressions such as `3 e 30 di notte` as `03:30` and rejects unrelated numeric sentences.
 

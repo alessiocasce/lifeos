@@ -77,11 +77,24 @@ export function parseHealthReplyTime(message) {
     .replace(/\s+/g, ' ')
     .trim();
   if (!text) return null;
+  const wordHours = {
+    una: 1, uno: 1, due: 2, tre: 3, quattro: 4, cinque: 5, sei: 6,
+    sette: 7, otto: 8, nove: 9, dieci: 10, undici: 11, dodici: 12,
+  };
+  const wordClock = text.match(/(?:^|\s)(una|uno|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|undici|dodici)\s+e\s+mezza(?:\s+di\s+(?:notte|mattina|pomeriggio|sera))?(?:\s|$)/);
   const conjunction = text.match(/(?:^|\s)(\d{1,2})\s+e\s+(\d{1,2})(?:\s+di\s+(?:notte|mattina|pomeriggio|sera))?(?:\s|$)/);
-  const clock = conjunction || text.match(/(?:^|\s)(\d{1,2})(?:[:.h](\d{2}))\s*(am|pm)?(?:\s|$)/);
+  const clock = conjunction || text.match(/(?:^|\s)(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?(?:\s|$)/);
+  if (wordClock) {
+    const hour = wordHours[wordClock[1]];
+    const meridiem = /\b(?:pomeriggio|sera)\b/.test(text) ? 'pm' : null;
+    const normalizedHour = meridiem === 'pm' && hour < 12 ? hour + 12 : hour;
+    const remainder = text.replace(wordClock[0].trim(), ' ')
+      .replace(/\b(?:di notte|di mattina|di pomeriggio|di sera)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+    return remainder ? null : `${String(normalizedHour).padStart(2, '0')}:30`;
+  }
   if (!clock) return null;
   let hour = Number(clock[1]);
-  const minute = Number(clock[2]);
+  const minute = clock[2] === undefined ? 0 : Number(clock[2]);
   const meridiem = clock[3] || (conjunction && /\b(?:pomeriggio|sera)\b/.test(text) ? 'pm' : null);
   if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
   if (meridiem === 'am') hour = hour === 12 ? 0 : hour;

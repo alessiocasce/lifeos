@@ -7,11 +7,25 @@ import { canonicalizeWhatsappSender } from './whatsappBridge.js';
 const RECEIPT_LEASE_MINUTES = 5;
 const INTERACTION_LEASE_MINUTES = 30;
 const PROVIDER_ID_MAX = 300;
+const PROVIDER_ID_LIMIT = 32;
 
 export function normalizeWhatsappProviderMessageId(value) {
   const id = String(value ?? '').trim();
   if (!id || id.length > PROVIDER_ID_MAX || id === '[object Object]' || /[\u0000-\u001f\u007f]/.test(id)) return null;
   return id;
+}
+
+export function normalizeWhatsappProviderMessageIds(values, fallback = null) {
+  const input = Array.isArray(values) ? values : [];
+  const ids = [...input, fallback]
+    .map(normalizeWhatsappProviderMessageId)
+    .filter(Boolean);
+  return [...new Set(ids)].slice(0, PROVIDER_ID_LIMIT);
+}
+
+export function fingerprintWhatsappProviderMessageId(value) {
+  const id = normalizeWhatsappProviderMessageId(value);
+  return id ? createHash('sha256').update(id).digest('hex').slice(0, 12) : null;
 }
 
 export function buildWhatsappRequestIdentity({ userId, recipient, providerMessageId }) {
@@ -163,22 +177,55 @@ export async function recordWhatsappMessageDelivery({
   return { row: inserted.data, duplicate: false };
 }
 
-export async function resolveWhatsappQuotedDelivery({ recipient, providerMessageId, userId = getActionUserId(), client = getSupabaseAdmin() } = {}) {
-  const providerId = normalizeWhatsappProviderMessageId(providerMessageId);
-  if (!providerId) return null;
+export async function recordWhatsappMessageDeliveries({ providerMessageIds, providerMessageId, ...options } = {}) {
+  const ids = normalizeWhatsappProviderMessageIds(providerMessageIds, providerMessageId);
+  if (!ids.length) throw new HttpError(400, 'provider_message_id is invalid.');
+  const deliveries = [];
+  for (const id of ids) {
+    deliveries.push(await recordWhatsappMessageDelivery({ ...options, providerMessageId: id }));
+  }
+  return deliveries;
+}
+
+export async function resolveWhatsappQuotedDelivery({
+  recipient,
+  providerMessageId,
+  providerMessageIds,
+  detailed = false,
+  userId = getActionUserId(),
+  client = getSupabaseAdmin(),
+} = {}) {
+  const ids = normalizeWhatsappProviderMessageIds(providerMessageIds, providerMessageId);
+  if (!ids.length) return detailed ? { status: 'invalid_provider_id', target: null } : null;
   const delivery = await client.from('brain_whatsapp_message_deliveries').select('*')
     .eq('user_id', userId).eq('channel', 'whatsapp').eq('canonical_recipient', recipient)
-    .eq('provider_message_id', providerId).maybeSingle();
+    .in('provider_message_id', ids).limit(PROVIDER_ID_LIMIT);
   if (delivery.error) {
-    if (isMissingReliabilityTable(delivery.error)) return null;
+    if (isMissingReliabilityTable(delivery.error)) return detailed ? { status: 'mapping_table_missing', target: null } : null;
     throw delivery.error;
   }
-  if (!delivery.data) return null;
+  const matches = Array.isArray(delivery.data) ? delivery.data : delivery.data ? [delivery.data] : [];
+  if (!matches.length) {
+    if (!detailed) return null;
+    const unscoped = await client.from('brain_whatsapp_message_deliveries').select('id,canonical_recipient,thread_id')
+      .eq('user_id', userId).eq('channel', 'whatsapp').in('provider_message_id', ids).limit(PROVIDER_ID_LIMIT);
+    if (unscoped.error && !isMissingReliabilityTable(unscoped.error)) throw unscoped.error;
+    return { status: (unscoped.data || []).length ? 'recipient_mismatch' : 'provider_id_not_found', target: null };
+  }
+  const assistantIds = [...new Set(matches.map((row) => row.assistant_message_id))];
+  if (assistantIds.length !== 1) {
+    return detailed ? { status: 'ambiguous_provider_mapping', target: null } : null;
+  }
+  const selectedDelivery = matches[0];
   const message = await client.from('ai_chat_messages').select('id,thread_id,role,metadata,created_at')
-    .eq('user_id', userId).eq('id', delivery.data.assistant_message_id).eq('role', 'assistant').maybeSingle();
+    .eq('user_id', userId).eq('id', selectedDelivery.assistant_message_id).eq('role', 'assistant').maybeSingle();
   if (message.error) throw message.error;
-  if (!message.data) return null;
-  return { delivery: delivery.data, message: await hydrateLegacyProactiveMessage({ message: message.data, userId, client }) };
+  if (!message.data) return detailed ? { status: 'assistant_message_missing', target: null } : null;
+  const target = {
+    delivery: selectedDelivery,
+    message: await hydrateLegacyProactiveMessage({ message: message.data, userId, client }),
+  };
+  return detailed ? { status: 'resolved', target, matched_provider_id_count: matches.length } : target;
 }
 
 export async function hydrateLegacyProactiveMessage({ message, userId = getActionUserId(), client = getSupabaseAdmin() } = {}) {

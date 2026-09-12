@@ -482,12 +482,10 @@ export async function handleBrainChatMessage({
         actions: [], contextSummary: null, skipMemoryExtraction: true,
       }, context, { message: messageForBrain, source: resolvedSource });
     }
-    if (context.interactionSelection?.intent === 'invalid_quoted_target') {
+    if (context.interactionSelection?.intent?.startsWith('quoted_')) {
       return sendAiSuccess(null, 200, {
-        answer: context.workingContext?.language === 'it'
-          ? 'Non riesco a collegare quella risposta a un check-in LifeOS ancora valido. Dimmi quale dato vuoi aggiornare.'
-          : 'I cannot link that reply to a still-valid LifeOS check-in. Tell me which item you want to update.',
-        plan: createReadOnlyBrainPlan('Quoted WhatsApp message did not resolve to an eligible LifeOS target.'),
+        answer: formatQuotedTargetClarification(context.interactionSelection.intent, context.workingContext?.language),
+        plan: createReadOnlyBrainPlan(`Quoted WhatsApp target rejected: ${context.interactionSelection.intent}.`),
         actions: [], contextSummary: null, skipMemoryExtraction: true,
       }, context, { message: messageForBrain, source: resolvedSource });
     }
@@ -749,6 +747,36 @@ export async function handleBrainChatMessage({
     await safePersistBrainError(context, error);
     throw error;
   }
+}
+
+function formatQuotedTargetClarification(intent, language) {
+  const english = language !== 'it';
+  const messages = {
+    quoted_provider_id_not_found: english
+      ? 'I cannot find that quoted LifeOS message. Tell me which health item you want to update.'
+      : 'Non trovo quel messaggio LifeOS citato. Dimmi quale dato salute vuoi aggiornare.',
+    quoted_target_scope_mismatch: english
+      ? 'That quoted message belongs to another WhatsApp conversation, so I did not change anything.'
+      : 'Quel messaggio citato appartiene a un altra conversazione WhatsApp. Non modifico nulla.',
+    quoted_target_thread_mismatch: english
+      ? 'That quoted message belongs to another LifeOS thread, so I did not change anything.'
+      : 'Quel messaggio citato appartiene a un altro thread LifeOS. Non modifico nulla.',
+    quoted_target_not_replyable: english
+      ? 'That quoted LifeOS message is not a replyable check-in.'
+      : 'Quel messaggio LifeOS citato non e un check-in a cui posso applicare una risposta.',
+    quoted_target_resolved: english
+      ? 'That check-in is already resolved. Nothing changed.'
+      : 'Quel check-in e gia risolto. Non modifico nulla.',
+    quoted_target_expired: english
+      ? 'That check-in has expired. Tell me which health item you want to update.'
+      : 'Quel check-in e scaduto. Dimmi quale dato salute vuoi aggiornare.',
+    quoted_reply_invalid: english
+      ? 'I found the quoted reminder, but I need a clearer answer.'
+      : 'Ho trovato il promemoria citato, ma mi serve una risposta piu precisa.',
+  };
+  return messages[intent] || (english
+    ? 'I cannot use that quoted LifeOS message. Tell me which item you want to update.'
+    : 'Non posso usare quel messaggio LifeOS citato. Dimmi quale dato vuoi aggiornare.');
 }
 
 async function handlePendingActionResolution({ resolution, context, message, source }) {

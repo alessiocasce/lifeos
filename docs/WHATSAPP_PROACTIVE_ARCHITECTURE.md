@@ -6,7 +6,7 @@ The current reply target is no longer inferred from every unresolved historical 
 
 Inbound messages with a valid provider ID claim `brain_whatsapp_inbound_receipts` before Brain effects. Completed duplicates replay the stored response; concurrent processing and uncertain expired leases return `409` and do not execute again. Requests without an ID retain legacy compatibility but do not have durable retry safety. This prevents repeat execution at the API boundary; it does not claim exactly-once physical WhatsApp delivery.
 
-Normal Brain replies now return `assistant_message_id`. After `sendMessage`, the external bridge must call the existing outbox endpoint with `action=record_reply_delivery`. Proactive sent ACKs should include full `provider_message_id` and `delivery_attempt`; the backend creates the same mapping. See [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md).
+Normal Brain replies now return `assistant_message_id`. After `sendMessage`, the checked-in bridge calls the existing outbox endpoint with `action=record_reply_delivery`. Proactive sent ACKs include `delivery_attempt` and all validated outgoing provider IDs. The backend stores one row per physical WhatsApp bubble, so quoting any chunk resolves to the same logical assistant/outbox target. Singular ID fields remain backward compatible. See [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md).
 
 ## Reliability Release
 
@@ -30,6 +30,8 @@ Current rule families:
 `POST /api/integrations/whatsapp/inbound` validates the bridge secret and sender allowlist, canonicalizes the sender id, then routes the message into the shared Brain pipeline. WhatsApp uses one persistent backend Brain thread per canonical sender. Raw sender ids such as `@lid` are preserved in metadata for debugging.
 
 Short replies are handled only by the selected trusted quote/current owner, or by an immediately adjacent legacy question within 30 minutes. A fresh delivered pending confirmation owns `si` over older proactive history; a later delivered check-in owns compatible replies over an older stored pending action. Strong cancellation (`annulla`, `cancella tutto`, `lascia perdere`, `non farlo`) stays with the pending action. New explicit commands and grounded Health reports bypass unrelated conversational context.
+
+For native replies, `bridge/whatsapp/providerMessageContract.cjs` normalizes `_serialized`, `$1`, nested, and reconstructable provider-key forms. It repairs the current `$1`/`_serialized` compatibility gap before `getQuotedMessage()` and sends plural equivalent IDs when available. Once an exact scoped mapping resolves, target identity comes directly from that assistant message; generic historical target discovery is not rerun. Target validity and reply interpretation are still enforced.
 
 ## Outbox Flow
 

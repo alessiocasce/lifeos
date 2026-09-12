@@ -132,7 +132,15 @@ test('Health self-reports are grounded, negation-first, and use complete time ex
   assert.equal(parseExplicitHealthSelfReport('CREATINA PRESA', { now: new Date('2026-07-07T18:30:00Z') }).habit_id, 'creatine');
   assert.equal(parseExplicitHealthSelfReport('non ho fatto la doccia').kind, 'habit_not_done');
   assert.equal(parseExplicitHealthSelfReport('forse dovrei fare la doccia'), null);
+  assert.equal(parseHealthReplyTime('3.00'), '03:00');
+  assert.equal(parseHealthReplyTime('3:00'), '03:00');
+  assert.equal(parseHealthReplyTime('3 e 30'), '03:30');
   assert.equal(parseHealthReplyTime('3 e 30 di notte'), '03:30');
+  assert.equal(parseHealthReplyTime('3'), '03:00');
+  assert.equal(parseHealthReplyTime('8'), '08:00');
+  assert.equal(parseHealthReplyTime('8.30'), '08:30');
+  assert.equal(parseHealthReplyTime('8:30'), '08:30');
+  assert.equal(parseHealthReplyTime('otto e mezza'), '08:30');
   assert.equal(parseHealthReplyTime('12.30pm'), '12:30');
   assert.equal(parseHealthReplyTime('ho dormito 3 ore e 30'), null);
   assert.equal(parseHealthReplyTime('ho fatto 3 serie da 30'), null);
@@ -230,7 +238,7 @@ test('unresolved native quote and expired legacy prompt never substitute another
   const checkAt = new Date('2026-07-07T18:50:00Z');
   const unresolved = selectBrainTurnInteraction({ message: 'si', quotedMessagePresent: true, brainChat: { conversationHistory: [] }, now: checkAt });
   assert.equal(unresolved.path, 'clarification');
-  assert.equal(unresolved.intent, 'invalid_quoted_target');
+  assert.equal(unresolved.intent, 'quoted_provider_id_not_found');
   const expired = selectBrainTurnInteraction({ message: 'si', brainChat: { conversationHistory: [{
     id: 'old', role: 'assistant', created_at: '2026-07-07T17:00:00Z', metadata: {
       proactive_message: true, expected_reply_type: ACCOUNTABILITY_REPLY_TYPE,
@@ -239,6 +247,26 @@ test('unresolved native quote and expired legacy prompt never substitute another
     },
   }] }, now: checkAt });
   assert.equal(expired.path, 'normal');
+});
+
+test('native quote scope failures remain distinct and cannot select a writable target', () => {
+  const recipientMismatch = selectBrainTurnInteraction({
+    message: 'si',
+    quotedMessagePresent: true,
+    quotedLookupStatus: 'recipient_mismatch',
+  });
+  assert.equal(recipientMismatch.path, 'clarification');
+  assert.equal(recipientMismatch.intent, 'quoted_target_scope_mismatch');
+  assert.equal(recipientMismatch.source_of_write_intent, 'none');
+
+  const threadMismatch = selectBrainTurnInteraction({
+    message: '8.30',
+    quotedMessagePresent: true,
+    quotedLookupStatus: 'resolved_thread_mismatch',
+  });
+  assert.equal(threadMismatch.path, 'clarification');
+  assert.equal(threadMismatch.intent, 'quoted_target_thread_mismatch');
+  assert.equal(threadMismatch.source_of_write_intent, 'none');
 });
 
 test('sleep-start dirty update_health_log coerces to log_sleep_start', () => {

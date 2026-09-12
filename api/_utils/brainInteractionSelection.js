@@ -1,5 +1,5 @@
 import { normalizePendingReplyIntent } from './brainPendingActions.js';
-import { selectProactiveReplyTarget } from './brainProactiveReplies.js';
+import { selectProactiveReplyTarget, selectTrustedQuotedProactiveReplyTarget } from './brainProactiveReplies.js';
 import { parseExplicitHealthSelfReport } from './brainHealthSelfReports.js';
 import { looksLikeExplicitNewCommand, normalizeTurnText } from './brainTurnArbitration.js';
 import { normalizeAccountabilityTarget } from './brainMetadata.js';
@@ -11,6 +11,7 @@ export function selectBrainTurnInteraction({
   activeInteraction = null,
   quotedTarget = null,
   quotedMessagePresent = false,
+  quotedLookupStatus = null,
   now = new Date(),
 } = {}) {
   const healthReport = parseExplicitHealthSelfReport(message, { now });
@@ -42,20 +43,33 @@ export function selectBrainTurnInteraction({
         ownerId: quotedTarget.delivery?.id, reason: 'Trusted quote selected matching pending action prompt.',
       });
     }
-    const quotedSelection = proactiveSelectionFromMessage({ message, assistantMessage: quotedTarget.message, now });
+    const quotedSelection = selectTrustedQuotedProactiveReplyTarget({ message, assistantMessage: quotedTarget.message, now });
     if (quotedSelection?.type === 'target') return selection({
       path: 'proactive_reply', intent: 'proactive_reply', sourceOfWriteIntent: 'proactive_message',
       method: 'trusted_native_quote', proactiveSelection: quotedSelection,
       assistantMessageId: quotedTarget.message.id, ownerId: quotedTarget.delivery?.id,
       reason: 'Trusted provider-message mapping selected quoted assistant target.',
     });
+    const intent = quotedSelection?.type === 'stale'
+      ? 'quoted_target_expired'
+      : quotedSelection?.type === 'resolved'
+        ? 'quoted_target_resolved'
+        : quotedSelection?.type === 'invalid_reply'
+          ? 'quoted_reply_invalid'
+          : 'quoted_target_not_replyable';
     return selection({
-      path: 'clarification', intent: 'invalid_quoted_target', method: 'trusted_native_quote_invalid',
+      path: 'clarification', intent, method: `trusted_native_quote_${quotedSelection?.type || 'invalid'}`,
       assistantMessageId: quotedTarget.message.id, reason: 'Quoted assistant message is not an eligible reply target.', needsClarification: true,
     });
   }
   if (quotedMessagePresent) return selection({
-    path: 'clarification', intent: 'invalid_quoted_target', method: 'unresolved_native_quote',
+    path: 'clarification',
+    intent: quotedLookupStatus === 'recipient_mismatch'
+      ? 'quoted_target_scope_mismatch'
+      : quotedLookupStatus === 'resolved_thread_mismatch'
+        ? 'quoted_target_thread_mismatch'
+        : 'quoted_provider_id_not_found',
+    method: quotedLookupStatus || 'unresolved_native_quote',
     reason: 'Quoted WhatsApp provider ID did not resolve to this LifeOS thread and recipient.', needsClarification: true,
   });
 
@@ -132,6 +146,10 @@ export function serializeInteractionSelection(value) {
   };
 }
 
+function findAssistantMessage(brainChat, id) {
+  return (brainChat?.conversationHistory || []).find((item) => item?.role === 'assistant' && item.id === id) || null;
+}
+
 function proactiveSelectionFromMessage({ message, assistantMessage, now }) {
   if (!assistantMessage) return null;
   return selectProactiveReplyTarget({
@@ -139,10 +157,6 @@ function proactiveSelectionFromMessage({ message, assistantMessage, now }) {
     brainChat: { conversationHistory: [assistantMessage] },
     now,
   });
-}
-
-function findAssistantMessage(brainChat, id) {
-  return (brainChat?.conversationHistory || []).find((item) => item?.role === 'assistant' && item.id === id) || null;
 }
 
 function messageFromOwnerPayload(activeInteraction) {

@@ -3,6 +3,13 @@ const path = require('path');
 const axios = require('axios');
 const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const {
+  buildWhatsappInboundQuoteEnvelope,
+  buildWhatsappReplyDeliveryPayload,
+  describeWhatsappProviderId,
+  extractWhatsappProviderMessageId,
+  extractWhatsappProviderMessageIds,
+} = require('./providerMessageContract.cjs');
 
 /**
  * LifeOS WhatsApp Bridge v2.3
@@ -196,151 +203,6 @@ function logAxiosError(label, error) {
 // -----------------------------------------------------------------------------
 // WhatsApp provider IDs / quoted reply context
 // -----------------------------------------------------------------------------
-
-function normalizeWhatsappProviderId(value) {
-  const id =
-    typeof value === 'string'
-      ? value.trim()
-      : '';
-
-  if (
-    !id ||
-    id.length > 300 ||
-    id === '[object Object]' ||
-    /[\u0000-\u001f\u007f]/.test(id)
-  ) {
-    return null;
-  }
-
-  return id;
-}
-
-function extractWhatsappProviderMessageId(value) {
-  if (typeof value === 'string') {
-    return normalizeWhatsappProviderId(value);
-  }
-
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  if (typeof value._serialized === 'string') {
-    return normalizeWhatsappProviderId(value._serialized);
-  }
-
-  if (typeof value.$1 === 'string') {
-    return normalizeWhatsappProviderId(value.$1);
-  }
-
-  if (
-    value.id &&
-    typeof value.id === 'object' &&
-    value.id !== value
-  ) {
-    return extractWhatsappProviderMessageId(value.id);
-  }
-
-  // Compatibility fallback for raw message-key objects when WhatsApp Web
-  // exposes components but no serialized field.
-  if (typeof value.id === 'string' && value.id) {
-    let remote = null;
-
-    if (typeof value.remote === 'string') {
-      remote = normalizeWhatsappProviderId(value.remote);
-    } else if (value.remote) {
-      remote = extractWhatsappProviderMessageId(value.remote);
-    }
-
-    if (remote) {
-      return normalizeWhatsappProviderId(
-        `${Boolean(value.fromMe)}_${remote}_${value.id}`
-      );
-    }
-  }
-
-  return null;
-}
-
-async function buildWhatsappInboundQuoteEnvelope(message) {
-  if (!message?.hasQuotedMsg) {
-    return {
-      has_quoted_message: false,
-    };
-  }
-
-  try {
-    const quoted =
-      await message.getQuotedMessage();
-
-    return {
-      has_quoted_message: true,
-      quoted_provider_message_id:
-        extractWhatsappProviderMessageId(
-          quoted?.id
-        ),
-      quoted_from_me:
-        quoted?.fromMe === true,
-      quoted_chat_id:
-        normalizeWhatsappProviderId(
-          quoted?.from
-        ),
-    };
-  } catch (error) {
-    if (CONFIG.debug) {
-      console.warn(
-        `[${nowIso()}] Could not resolve quoted WhatsApp message:`,
-        error.message
-      );
-    }
-
-    return {
-      has_quoted_message: true,
-      quoted_provider_message_id: null,
-      quoted_from_me: null,
-      quoted_chat_id: null,
-    };
-  }
-}
-
-function buildWhatsappReplyDeliveryPayload({
-  inboundResponse,
-  sentMessage,
-  recipient,
-  bridgeId,
-  sentAt = new Date(),
-} = {}) {
-  const providerMessageId =
-    extractWhatsappProviderMessageId(
-      sentMessage?.id ?? sentMessage
-    );
-
-  if (
-    !inboundResponse?.assistant_message_id ||
-    !inboundResponse?.thread_id ||
-    !providerMessageId
-  ) {
-    return null;
-  }
-
-  return {
-    action: 'record_reply_delivery',
-    assistant_message_id:
-      inboundResponse.assistant_message_id,
-    thread_id:
-      inboundResponse.thread_id,
-    recipient,
-    provider_message_id:
-      providerMessageId,
-    sent_at:
-      sentAt.toISOString(),
-    ...(bridgeId
-      ? {
-          bridge_id:
-            String(bridgeId).slice(0, 120),
-        }
-      : {}),
-  };
-}
 
 // -----------------------------------------------------------------------------
 // Startup checks
@@ -657,6 +519,19 @@ client.on('message', async (msg) => {
         msg
       );
 
+    if (CONFIG.debug && quoteEnvelope.has_quoted_message) {
+      console.log(
+        `[${nowIso()}] Native quote:`,
+        safeJson({
+          resolution: quoteEnvelope.quote_resolution,
+          provider_id_count: quoteEnvelope.quoted_provider_message_ids?.length || 0,
+          provider_id_shape: describeWhatsappProviderId(
+            quoteEnvelope.quoted_provider_message_id
+          ),
+        })
+      );
+    }
+
     await enqueueForSender(
       from,
       async () => {
@@ -683,46 +558,8 @@ client.on('message', async (msg) => {
 });
 
 function getMessageId(msg) {
-  const id = msg && msg.id;
-
-  if (!id) {
-    return `unknown:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-  }
-
-  if (typeof id === 'string') {
-    return id;
-  }
-
-  if (typeof id === 'object') {
-    // Historical whatsapp-web.js shape
-    if (id._serialized) {
-      return String(id._serialized);
-    }
-
-    // Current WhatsApp Web compatibility shape
-    if (id.$1) {
-      return String(id.$1);
-    }
-
-    // Robust fallback: reconstruct the serialized message ID.
-    if (id.id) {
-      let remote = '';
-
-      if (typeof id.remote === 'string') {
-        remote = id.remote;
-      } else if (id.remote && id.remote._serialized) {
-        remote = id.remote._serialized;
-      } else if (id.remote && id.remote.$1) {
-        remote = id.remote.$1;
-      } else if (id.remote) {
-        remote = String(id.remote);
-      }
-
-      return `${Boolean(id.fromMe)}_${remote}_${id.id}`;
-    }
-  }
-
-  return `unknown:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+  return extractWhatsappProviderMessageId(msg?.id)
+    || `unknown:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 }
 
 async function safeGetChat(msg) {
@@ -871,6 +708,8 @@ async function sendToLifeOS(payload) {
       payload.has_quoted_message === true,
     quoted_provider_message_id:
       payload.quoted_provider_message_id || null,
+    quoted_provider_message_ids:
+      payload.quoted_provider_message_ids || [],
     quoted_from_me:
       payload.quoted_from_me ?? null,
     quoted_chat_id:
@@ -1297,15 +1136,15 @@ async function handleOutboxMessage(
         body
       );
 
-    const providerMessageId =
-      sentResults
-        .map((result) =>
-          extractWhatsappProviderMessageId(
+    const providerMessageIds = [
+      ...new Set(
+        sentResults.flatMap((result) =>
+          extractWhatsappProviderMessageIds(
             result?.id ?? result
           )
         )
-        .filter(Boolean)
-        .join(',');
+      ),
+    ];
 
     await ackOutbox({
       recipient,
@@ -1313,8 +1152,9 @@ async function handleOutboxMessage(
       deliveryAttempt,
       status: 'sent',
       providerMessageId:
-        providerMessageId ||
+        providerMessageIds[0] ||
         null,
+      providerMessageIds,
       metadata: {
         bridge_id:
           CONFIG.clientId,
@@ -1406,7 +1246,14 @@ async function recordWhatsappReplyDelivery({
 
   if (CONFIG.debug) {
     console.log(
-      `[${nowIso()}] 🔗 Recorded WhatsApp provider mapping: ${payload.provider_message_id} -> ${payload.assistant_message_id}`
+      `[${nowIso()}] Recorded WhatsApp provider mapping:`,
+      safeJson({
+        provider_id_count: payload.provider_message_ids.length,
+        provider_id_shape: describeWhatsappProviderId(
+          payload.provider_message_id
+        ),
+        assistant_message_id: payload.assistant_message_id,
+      })
     );
   }
 
@@ -1419,6 +1266,7 @@ async function ackOutbox({
   deliveryAttempt = null,
   status,
   providerMessageId = null,
+  providerMessageIds = [],
   error = null,
   metadata = {},
 }) {
@@ -1435,6 +1283,8 @@ async function ackOutbox({
     status,
     provider_message_id:
       providerMessageId,
+    provider_message_ids:
+      providerMessageIds,
     error,
     bridge_id:
       CONFIG.clientId,

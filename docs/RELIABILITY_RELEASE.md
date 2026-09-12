@@ -4,13 +4,13 @@
 
 The earlier `supabase/releases/reliability.sql` migration remains unchanged. This follow-up requires one additional additive migration: `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql`. It adds durable inbound receipts, outgoing provider-message correlation, versioned current interaction ownership, and a partial unique assistant/outbox linkage. It does not alter Health/Memo schemas or the already-migrated text `source_id`.
 
-Deploy in this order: complete local tests; pause Oracle PM2 inbound/polling; apply only the new migration; deploy Vercel; update the external bridge using [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md); restart PM2 and run designated-chat QA. The bridge source is not in this repo, so backend deployment alone does not complete native quote/retry reliability.
+For installations that have not applied the interaction migration, deploy in this order: complete local tests; pause Oracle PM2 inbound/polling; apply only the new migration; deploy Vercel; update the checked-in bridge files described in [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md); restart PM2 and run designated-chat QA. For already-migrated installations, the native-reply compatibility patch needs no additional SQL. Backend deployment alone does not update the Oracle process.
 
 New inbound IDs atomically claim a receipt before Brain effects. Completed duplicates replay one stored response; concurrent or uncertain claims do not re-execute. New outgoing IDs map only to an assistant message in the same user-scoped WhatsApp recipient thread. Assistant interaction metadata is recursive, bounded, secret-redacted JSON (`metadata_version: 2`), and proactive target objects retain their types.
 
 BrainTurn now uses one immutable interaction selection. Grounded current-message Health/commands and strong pending cancellation precede trusted native quotes; delivered active ownership precedes a 30-minute adjacent legacy fallback. The proactive executor receives that exact target and cannot silently choose another historical message. Interaction replacement/closure is version-fenced.
 
-`npm run test:schema` executes the additive migration in disposable PostgreSQL and checks RLS, ID constraints, ownership, and uniqueness. `npm run test:reliability` uses actual assistant persistence plus receipt/delivery/interaction tables and exact Health effects. The Oracle bridge source is checked in at `bridge/whatsapp/wts.js`; `npm run test:bridge` validates its reference payload contract but does not replace a live PM2/WhatsApp delivery test.
+`npm run test:schema` executes the additive migration in disposable PostgreSQL and checks RLS, ID constraints, ownership, and uniqueness. `npm run test:reliability` uses actual assistant persistence plus receipt/delivery/interaction tables and exact Health effects. The Oracle bridge source is checked in at `bridge/whatsapp/wts.js`; `npm run test:bridge` imports its production provider-message helper and validates current `_serialized`/`$1`, quote, fallback, and multi-bubble payload behavior without launching Chromium. It does not replace a live PM2/WhatsApp delivery test.
 
 After applying the migration, run read-only verification queries:
 
@@ -92,7 +92,7 @@ Evaluation sorts candidates by priority and includes candidates already admitted
 - `npm run test:brain`: deterministic Brain/arbitration/state-machine regression harness.
 - `npm run test:mcp`: MCP auth/shape, context, and intelligence regression harness.
 - `npm run test:schema`: real in-memory PostgreSQL (PGlite), executing the relevant checked-in table definitions and exact release SQL. Covers UUID-to-text preservation, uniqueness, attention admission/delivery and project contribution transitions.
-- `npm run test:reliability`: pure regressions plus actual generate/enqueue/claim/sent-ACK metadata/contract/reply/health-resolution journeys through a PostgREST-shaped SQL adapter. Also covers repeated snooze, no-sleep resolution, interleaved ensure replies, and pre-delivery cancellation after manual completion.
+- `npm run test:reliability`: pure regressions plus actual generate/enqueue/claim/sent-ACK metadata/contract/reply/health-resolution journeys through a PostgREST-shaped SQL adapter. It covers fresh and out-of-order native wake/sleep/habit quotes, exact mapping before reply, original target dates across Rome midnight, multi-chunk mappings, repeated snooze, no-sleep resolution, interleaved ensure replies, and pre-delivery cancellation after manual completion.
 - `npm test`: all five suites, no live credentials/services. PGlite is a pinned development dependency.
 - `npm run check:functions`: remains 7 functions; shared helpers are not routes.
 - `npm run build`, syntax checks, and `git diff --check` complete local validation.

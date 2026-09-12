@@ -17,7 +17,9 @@ import {
   completeWhatsappInboundReceipt,
   markWhatsappInboundReceiptFailedBeforeEffect,
   markWhatsappInboundReceiptUncertain,
+  fingerprintWhatsappProviderMessageId,
   normalizeWhatsappProviderMessageId,
+  normalizeWhatsappProviderMessageIds,
   resolveWhatsappQuotedDelivery,
 } from '../../_utils/brainWhatsappReliability.js';
 
@@ -45,7 +47,7 @@ export default async function handler(req, res) {
     endpointTrace.whatsapp_sender = senderInfo.canonical || payload.from;
     endpointTrace.whatsapp_raw_sender = senderInfo.raw;
     endpointTrace.whatsapp_sender_aliased = senderInfo.aliased;
-    endpointTrace.whatsapp_message_id = payload.message_id;
+    endpointTrace.whatsapp_message_id_fingerprint = fingerprintWhatsappProviderMessageId(payload.message_id);
     endpointTrace.is_group = payload.is_group;
     const canonicalSender = validateWhatsappSender(payload.from, payload.is_group);
     endpointTrace.sender_allowed = true;
@@ -69,15 +71,25 @@ export default async function handler(req, res) {
     if (receiptClaim.mode === 'processing') throw new HttpError(409, 'WhatsApp message is already being processed.');
     if (receiptClaim.mode === 'uncertain') throw new HttpError(409, 'WhatsApp message has an uncertain prior outcome and was not replayed.');
 
-    const quotedTarget = payload.has_quoted_message && payload.quoted_provider_message_id
+    const quotedLookup = payload.has_quoted_message && payload.quoted_provider_message_ids.length
       ? await resolveWhatsappQuotedDelivery({
         userId,
         recipient: canonicalSender,
         providerMessageId: payload.quoted_provider_message_id,
+        providerMessageIds: payload.quoted_provider_message_ids,
+        detailed: true,
       })
-      : null;
+      : { status: payload.has_quoted_message ? 'quoted_provider_id_missing' : 'not_quoted', target: null };
+    const quotedTarget = quotedLookup.target;
     endpointTrace.whatsapp_quote_present = payload.has_quoted_message;
     endpointTrace.whatsapp_quote_resolved = Boolean(quotedTarget);
+    endpointTrace.whatsapp_quote_lookup_status = quotedLookup.status;
+    endpointTrace.whatsapp_quote_provider_id_count = payload.quoted_provider_message_ids.length;
+    endpointTrace.whatsapp_quote_provider_id_fingerprints = payload.quoted_provider_message_ids
+      .map(fingerprintWhatsappProviderMessageId).filter(Boolean);
+    endpointTrace.whatsapp_quote_assistant_message_id = quotedTarget?.message?.id ?? null;
+    endpointTrace.whatsapp_quote_outbox_message_id = quotedTarget?.delivery?.outbox_message_id ?? null;
+    endpointTrace.whatsapp_quote_source_type = quotedTarget?.message?.metadata?.source_type ?? null;
     const clientRequestId = buildWhatsappRequestIdentity({
       userId,
       recipient: canonicalSender,
@@ -103,7 +115,9 @@ export default async function handler(req, res) {
         whatsapp_type: payload.type,
         whatsapp_is_group: payload.is_group,
         whatsapp_has_quoted_message: payload.has_quoted_message,
-        whatsapp_quoted_provider_message_id: payload.quoted_provider_message_id,
+        whatsapp_quoted_provider_message_id_fingerprints: payload.quoted_provider_message_ids
+          .map(fingerprintWhatsappProviderMessageId).filter(Boolean),
+        whatsapp_quote_lookup_status: quotedLookup.status,
         whatsapp_quoted_from_me: payload.quoted_from_me,
         whatsapp_quoted_chat_id: payload.quoted_chat_id,
         quoted_target: quotedTarget,
@@ -176,6 +190,12 @@ function normalizeWhatsappPayload(body = {}) {
     throw new HttpError(400, 'message_id is invalid.');
   }
   const quotedProviderMessageId = normalizeWhatsappProviderMessageId(body.quoted_provider_message_id ?? body.quotedProviderMessageId);
+  const rawQuotedProviderMessageIds = body.quoted_provider_message_ids ?? body.quotedProviderMessageIds;
+  if (rawQuotedProviderMessageIds !== undefined
+    && (!Array.isArray(rawQuotedProviderMessageIds) || rawQuotedProviderMessageIds.some((value) => !normalizeWhatsappProviderMessageId(value)))) {
+    throw new HttpError(400, 'quoted_provider_message_ids is invalid.');
+  }
+  const quotedProviderMessageIds = normalizeWhatsappProviderMessageIds(rawQuotedProviderMessageIds, quotedProviderMessageId);
 
   return {
     from,
@@ -188,6 +208,7 @@ function normalizeWhatsappPayload(body = {}) {
     source: cleanText(body.source, 40) || 'whatsapp',
     has_quoted_message: Boolean(body.has_quoted_message ?? body.hasQuotedMessage),
     quoted_provider_message_id: quotedProviderMessageId,
+    quoted_provider_message_ids: quotedProviderMessageIds,
     quoted_from_me: Boolean(body.quoted_from_me ?? body.quotedFromMe),
     quoted_chat_id: cleanText(body.quoted_chat_id ?? body.quotedChatId, 180),
   };

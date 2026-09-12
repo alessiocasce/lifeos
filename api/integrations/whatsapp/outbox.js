@@ -12,7 +12,11 @@ import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender, cleanWhatsappText } from '../../_utils/whatsappBridge.js';
 import { evaluateProactiveCandidates } from '../../_utils/brainProactiveRules.js';
 import { ackOutboxMessage, enqueueOutboxMessage, pollOutboxMessages } from '../../_utils/brainOutbox.js';
-import { normalizeWhatsappProviderMessageId, recordWhatsappMessageDelivery } from '../../_utils/brainWhatsappReliability.js';
+import {
+  normalizeWhatsappProviderMessageId,
+  normalizeWhatsappProviderMessageIds,
+  recordWhatsappMessageDeliveries,
+} from '../../_utils/brainWhatsappReliability.js';
 
 const SUPPORTED_ACTIONS = new Set(['evaluate', 'preview', 'poll', 'ack', 'record_reply_delivery']);
 
@@ -50,19 +54,21 @@ export default async function handler(req, res) {
 }
 
 async function handleRecordReplyDelivery({ res, context, body, recipient }) {
-  const result = await recordWhatsappMessageDelivery({
+  const results = await recordWhatsappMessageDeliveries({
     assistantMessageId: cleanWhatsappText(body.assistant_message_id ?? body.assistantMessageId, 80),
     threadId: cleanWhatsappText(body.thread_id ?? body.threadId, 80),
     recipient,
     providerMessageId: body.provider_message_id ?? body.providerMessageId,
+    providerMessageIds: body.provider_message_ids ?? body.providerMessageIds,
     sentAt: body.sent_at ?? body.sentAt,
   });
   return sendJson(res, 200, {
     ok: true,
     requestId: context.requestId,
     recorded: true,
-    duplicate: result.duplicate,
-    assistant_message_id: result.row.assistant_message_id,
+    duplicate: results.every((result) => result.duplicate),
+    recorded_count: results.length,
+    assistant_message_id: results[0].row.assistant_message_id,
   });
 }
 
@@ -163,6 +169,12 @@ async function handleAck({ res, context, debugFlags, body, recipient, recipientI
   if (rawProviderMessageId !== undefined && rawProviderMessageId !== null && rawProviderMessageId !== '' && !providerMessageId) {
     throw new HttpError(400, 'provider_message_id is invalid.');
   }
+  const rawProviderMessageIds = body.provider_message_ids ?? body.providerMessageIds;
+  const providerMessageIds = normalizeWhatsappProviderMessageIds(rawProviderMessageIds, providerMessageId);
+  if (rawProviderMessageIds !== undefined
+    && (!Array.isArray(rawProviderMessageIds) || rawProviderMessageIds.some((value) => !normalizeWhatsappProviderMessageId(value)))) {
+    throw new HttpError(400, 'provider_message_ids is invalid.');
+  }
   const row = await ackOutboxMessage({
     recipient,
     messageId: body.message_id ?? body.messageId ?? body.id,
@@ -174,6 +186,7 @@ async function handleAck({ res, context, debugFlags, body, recipient, recipientI
       whatsapp_recipient_raw: recipientInfo.raw,
       whatsapp_recipient_canonical: recipient,
       provider_message_id: providerMessageId,
+      provider_message_ids: providerMessageIds,
       dry_run: Boolean(body.dry_run ?? body.dryRun),
     },
   });

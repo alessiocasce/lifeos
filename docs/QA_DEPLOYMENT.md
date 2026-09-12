@@ -8,7 +8,7 @@ This is separate from the already-applied `supabase/releases/reliability.sql` so
 2. Run only `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql` against staging/production. Its duplicate diagnostic intentionally stops if an outbox message already has multiple assistant rows; reconcile rather than deleting automatically.
 3. Verify `brain_whatsapp_inbound_receipts`, `brain_whatsapp_message_deliveries`, and `brain_interaction_state`; RLS must be enabled and `anon`/`authenticated` grants revoked.
 4. Deploy Vercel and confirm `npm run check:functions` reports 7. Existing inbound/outbox URLs are unchanged.
-5. Apply the external bridge contract in [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md), including full IDs, quote envelope, local send receipt, proactive `delivery_attempt`, and normal reply `record_reply_delivery`.
+5. Deploy the checked-in `bridge/whatsapp/wts.js` and `bridge/whatsapp/providerMessageContract.cjs` together, following [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md). This includes `$1`/`_serialized` quote compatibility, plural physical-bubble IDs, local send receipts, proactive `delivery_attempt`, and normal reply `record_reply_delivery`.
 6. Restart, inspect sanitized logs, then `pm2 save`. Run the designated-chat matrix in [QA_AI_ASSISTANT.md](QA_AI_ASSISTANT.md).
 
 Verification SQL should check duplicate receipt/provider identities, partial assistant/outbox uniqueness, ownership foreign keys, RLS flags, and invalid empty/`[object Object]` provider IDs. Do not fabricate historical provider IDs. Roll back application/bridge code first if needed; retain the additive tables as diagnostic evidence.
@@ -211,7 +211,9 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
    - `pm2 save`
 9. Vercel backend deploys do not require a PM2 bridge restart unless bridge code or bridge env vars changed.
 10. If WhatsApp exposes both `@lid` and `@c.us` ids, set `LIFEOS_WHATSAPP_SENDER_ALIASES` in Vercel, for example `39XXXXXXXXXX@c.us=111780936298528@lid`. Keep `LIFEOS_WHATSAPP_ALLOWED_SENDERS` on the canonical sender.
-11. Manually test the deployed endpoint:
+11. For this native-reply patch, deploy Vercel first, then pull/copy both checked-in bridge files to Oracle and restart PM2. No new SQL is required if the interaction reliability migration is already applied.
+12. Run `npm run test:bridge` before copying. On Oracle, run `node --check wts.js` and `node --check providerMessageContract.cjs` from the deployed bridge directory without deleting session/cache directories.
+13. Manually test the deployed endpoint:
 
 ```bash
 curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \

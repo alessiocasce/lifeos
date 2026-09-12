@@ -116,6 +116,10 @@ Manual QA after deploy:
 9. Reply `non ancora` to a habit nudge and confirm no health write happens.
 10. Reply `piu tardi` and confirm a snoozed outbox row is queued instead of an immediate duplicate.
 11. Evaluate during quiet hours in a controlled test and confirm accountability can still queue while duplicate/idempotency suppression remains active.
+12. Use native Reply on a fresh sleep-start prompt with `3`, `3.00`, `3:00`, `3 e 30`, and `3 e 30 di notte`; confirm the exact prompt target date is retained and each accepted form normalizes deterministically.
+13. Use native Reply on a fresh wake prompt with `8`, `8.30`, `8:30`, and `otto e mezza`; confirm the prompt's original local date receives the normalized wake time.
+14. Deliver wake then sleep prompts and answer them in reverse order by quoting each bubble. Confirm both targets update independently and no generic invalid-link response appears.
+15. Inspect `brain_whatsapp_message_deliveries` before replying. Each physical bubble must have its own provider mapping; repeated inbound `message_id` must not repeat a Health effect.
 
 ## Persistence And Mobile
 

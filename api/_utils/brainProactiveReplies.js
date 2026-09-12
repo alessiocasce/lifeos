@@ -4,6 +4,7 @@ import { normalizeTurnText, looksLikeExplicitNewCommand } from './brainTurnArbit
 import {
   ACCOUNTABILITY_REPLY_TYPE,
   buildAccountabilityWorkingContextFromOutbox,
+  extractRecentProactiveAccountabilityMessages,
   normalizeProactiveAccountabilityReply,
   resolveProactiveAccountabilityReply,
   selectProactiveAccountabilityReplyTarget,
@@ -105,6 +106,43 @@ export function selectProactiveReplyTarget({ message, brainChat, now = new Date(
   if (memo.type !== 'none') return { ...memo, reply_type: MEMO_REPLY_TYPE };
   if (accountability.type !== 'none') return { ...accountability, reply_type: ACCOUNTABILITY_REPLY_TYPE };
   return { type: 'none', intent: { intent: 'other', confidence: 0 }, reply_type: null };
+}
+
+export function selectTrustedQuotedProactiveReplyTarget({ message, assistantMessage, now = new Date() } = {}) {
+  const metadata = assistantMessage?.metadata;
+  if (!metadata?.proactive_message) return { type: 'not_replyable', intent: { intent: 'other' } };
+  if (metadata.proactive_resolution) {
+    return { type: 'resolved', intent: { intent: 'other' }, language: metadata.language || 'it' };
+  }
+  const brainChat = { conversationHistory: [assistantMessage] };
+  if (metadata.expected_reply_type === ACCOUNTABILITY_REPLY_TYPE) {
+    const proactive = extractRecentProactiveAccountabilityMessages(brainChat, { now, includeExpired: true })[0];
+    const intent = normalizeProactiveAccountabilityReply(message);
+    if (!proactive?.accountability?.kind) return { type: 'not_replyable', intent, language: metadata.language || 'it' };
+    return {
+      type: proactive.expired ? 'stale' : 'target',
+      proactive,
+      intent,
+      language: proactive.language,
+      reply_type: ACCOUNTABILITY_REPLY_TYPE,
+      selection_method: 'trusted_native_quote',
+    };
+  }
+  if ((metadata.expected_reply_type || MEMO_REPLY_TYPE) === MEMO_REPLY_TYPE) {
+    const proactive = extractRecentProactiveMemoMessages(brainChat, { now, includeExpired: true })[0];
+    const intent = normalizeProactiveMemoReply(message);
+    if (!proactive?.source_id) return { type: 'not_replyable', intent, language: metadata.language || 'it' };
+    if (intent.intent === 'other') return { type: 'invalid_reply', proactive, intent, language: proactive.language };
+    return {
+      type: proactive.expired ? 'stale' : 'target',
+      proactive,
+      intent,
+      language: proactive.language,
+      reply_type: MEMO_REPLY_TYPE,
+      selection_method: 'trusted_native_quote',
+    };
+  }
+  return { type: 'not_replyable', intent: { intent: 'other' }, language: metadata.language || 'it' };
 }
 
 function messageReferencesProactiveTarget(message, proactive) {

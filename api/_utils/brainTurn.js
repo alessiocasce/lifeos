@@ -141,9 +141,13 @@ export async function prepareBrainTurnInteraction(turn, { now = new Date() } = {
     }
   }
   turn.activeInteraction = activeInteraction;
-  const quotedTarget = turn.channelMetadata?.quoted_target?.message?.thread_id === turn.thread?.id
-    ? turn.channelMetadata.quoted_target
+  const rawQuotedTarget = turn.channelMetadata?.quoted_target;
+  const quotedTarget = rawQuotedTarget?.message?.thread_id === turn.thread?.id
+    ? rawQuotedTarget
     : null;
+  const quotedLookupStatus = rawQuotedTarget && !quotedTarget
+    ? 'resolved_thread_mismatch'
+    : turn.channelMetadata?.whatsapp_quote_lookup_status;
   turn.interactionSelection = selectBrainTurnInteraction({
     message: turn.message,
     brainChat: turn.brainChat,
@@ -151,6 +155,7 @@ export async function prepareBrainTurnInteraction(turn, { now = new Date() } = {
     activeInteraction,
     quotedTarget,
     quotedMessagePresent: Boolean(turn.channelMetadata?.whatsapp_has_quoted_message),
+    quotedLookupStatus,
     now,
   });
   turn.brainTrace.interaction_selection = serializeInteractionSelection(turn.interactionSelection);

@@ -2,7 +2,7 @@ import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { findOrCreateWhatsappBrainThread, persistBrainAssistantMessage } from './brain.js';
 import { buildProactiveWorkingContextFromOutbox } from './brainProactiveReplies.js';
-import { recordWhatsappMessageDelivery } from './brainWhatsappReliability.js';
+import { recordWhatsappMessageDeliveries } from './brainWhatsappReliability.js';
 import { normalizeAccountabilityTarget } from './brainMetadata.js';
 import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
 import { checkProactiveDelivery } from './brainProactiveDelivery.js';
@@ -253,13 +253,14 @@ export async function ackOutboxMessage({
       outboxMessage: sent,
       client,
     });
-    if (persisted?.id && metadata?.provider_message_id) {
-      await recordWhatsappMessageDelivery({
+    if (persisted?.id && (metadata?.provider_message_id || metadata?.provider_message_ids?.length)) {
+      await recordWhatsappMessageDeliveries({
         userId,
         assistantMessageId: persisted.id,
         threadId: persisted.thread_id,
         recipient: canonicalRecipient,
         providerMessageId: metadata.provider_message_id,
+        providerMessageIds: metadata.provider_message_ids,
         outboxMessageId: sent.id,
         deliveryAttempt: sent.attempts,
         sentAt: sent.sent_at,
@@ -293,7 +294,6 @@ export async function persistSentProactiveMessageToWhatsappThread({
   findThread = findOrCreateWhatsappBrainThread, persistMessage = persistBrainAssistantMessage,
 } = {}) {
   if (!outboxMessage?.id || outboxMessage.status !== 'sent') return null;
-  if (outboxMessage.ack_metadata?.assistant_message_id) return null;
   const canonicalRecipient = requiredText(canonicalizeWhatsappSender(recipient), 'recipient', 180);
   const thread = await findThread({ sender: canonicalRecipient });
   if (!thread?.id) return null;
