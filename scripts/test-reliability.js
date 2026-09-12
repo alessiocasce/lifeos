@@ -3,7 +3,7 @@ import { buildBrainTurnContract } from '../api/_utils/brainTurnContract.js';
 import { buildAccountabilityProactiveCandidates, enqueueAccountabilitySnoozeOutboxMessage } from '../api/_utils/brainProactiveAccountability.js';
 import { resolveProactiveWhatsappReply, selectProactiveReplyTarget, buildProactiveWorkingContextFromOutbox } from '../api/_utils/brainProactiveReplies.js';
 import { ensureAccountabilityHealth, resolveAccountabilityTarget, checkProactiveDelivery, accountabilityTargetIsResolved } from '../api/_utils/brainProactiveDelivery.js';
-import { enqueueOutboxMessage, pollOutboxMessages, markOutboxSent, proactiveAssistantMetadata, persistSentProactiveMessageToWhatsappThread } from '../api/_utils/brainOutbox.js';
+import { ackOutboxMessage, enqueueOutboxMessage, pollOutboxMessages, markOutboxSent, proactiveAssistantMetadata, persistSentProactiveMessageToWhatsappThread } from '../api/_utils/brainOutbox.js';
 import { persistBrainAssistantMessage } from '../api/_utils/brain.js';
 import {
   claimWhatsappInboundReceipt,
@@ -15,6 +15,7 @@ import {
   resolveWhatsappQuotedDelivery,
   hydrateLegacyProactiveMessage,
   markWhatsappInboundReceiptFailedBeforeEffect,
+  fingerprintWhatsappProviderMessageId,
   normalizeWhatsappProviderMessageId,
   setBrainInteractionPendingDelivery,
 } from '../api/_utils/brainWhatsappReliability.js';
@@ -193,6 +194,84 @@ try {
     const unknown = await resolveWhatsappQuotedDelivery({ userId, recipient: 'fixture', providerMessageId: 'provider:unknown', client, detailed: true });
     assert.equal(unknown.status, 'provider_id_not_found');
     assert.equal(unknown.target, null);
+  });
+
+  await check('proactive sent ACK requires identity and persists singular/plural physical mappings before reply', async () => {
+    await db.exec('delete from brain_interaction_state; delete from brain_whatsapp_message_deliveries; delete from ai_chat_messages; delete from brain_outbox_messages; delete from ai_chat_threads;');
+    const recipient = 'fixture@lid';
+    const thread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('ack-mapping',$1) returning id`, [{ source: 'whatsapp', whatsapp_sender: recipient }])).rows[0];
+    const queueAndClaim = async (suffix) => {
+      return (await db.query(`
+        insert into brain_outbox_messages
+          (user_id,channel,recipient,body,status,priority,rule_key,source_type,source_id,idempotency_key,scheduled_for,expires_at,claimed_at,attempts,metadata)
+        values ($1,'whatsapp',$2,$3,'claimed','normal',$4,$5,$6,$7,now()-interval '1 minute',now()+interval '1 day',now(),1,$8)
+        returning *
+      `, [userId, recipient, `fixture-${suffix}`, candidate.rule_key, candidate.source_type,
+        `${candidate.source_id}:${suffix}`, `ack-mapping:${suffix}`, {
+          ...candidate.metadata,
+          exact_due_reminder: true,
+        }])).rows[0];
+    };
+
+    const single = await queueAndClaim('single');
+    await assert.rejects(ackOutboxMessage({
+      userId, client, recipient, messageId: single.id, deliveryAttempt: single.attempts,
+      status: 'sent', metadata: {}, findThread: async () => thread,
+    }), /requires a provider message ID/);
+    assert.equal((await db.query('select status from brain_outbox_messages where id=$1', [single.id])).rows[0].status, 'claimed');
+
+    const sentProviderId = 'true_fixture@lid_ACK_SINGLE';
+    const sentFingerprint = fingerprintWhatsappProviderMessageId(sentProviderId);
+    const acked = await ackOutboxMessage({
+      userId, client, recipient, messageId: single.id, deliveryAttempt: single.attempts,
+      status: 'sent', metadata: { provider_message_id: sentProviderId }, findThread: async () => thread,
+    });
+    assert.equal(acked.status, 'sent');
+    assert.deepEqual(acked.delivery_mapping.provider_id_fingerprints, [sentFingerprint]);
+    assert.equal(acked.delivery_mapping.received_count, 1);
+    assert.equal(acked.delivery_mapping.persisted_count, 1);
+    const persistedSingle = (await db.query('select * from brain_whatsapp_message_deliveries where outbox_message_id=$1', [single.id])).rows;
+    assert.equal(persistedSingle.length, 1);
+    const persistedFingerprint = fingerprintWhatsappProviderMessageId(persistedSingle[0].provider_message_id);
+    const quotedFingerprint = fingerprintWhatsappProviderMessageId(sentProviderId);
+    assert.equal(persistedFingerprint, sentFingerprint);
+    assert.equal(quotedFingerprint, persistedFingerprint);
+    const exactLookup = await resolveWhatsappQuotedDelivery({
+      userId, client, recipient, providerMessageId: sentProviderId, detailed: true,
+    });
+    assert.equal(exactLookup.status, 'resolved');
+    assert.equal(exactLookup.target.delivery.outbox_message_id, single.id);
+    assert.equal(exactLookup.target.message.id, acked.delivery_mapping.assistant_message_id);
+
+    const otherThread = (await db.query(`insert into ai_chat_threads(title,metadata) values ('ack-other',$1) returning id`, [{ source: 'whatsapp', whatsapp_sender: recipient }])).rows[0];
+    await assert.rejects(recordWhatsappMessageDelivery({
+      userId,
+      client,
+      recipient,
+      threadId: otherThread.id,
+      assistantMessageId: acked.delivery_mapping.assistant_message_id,
+      providerMessageId: 'true_fixture@lid_WRONG_THREAD',
+    }), /Assistant message not found/);
+
+    const duplicateAck = await ackOutboxMessage({
+      userId, client, recipient, messageId: single.id, deliveryAttempt: single.attempts,
+      status: 'sent', metadata: { provider_message_id: sentProviderId }, findThread: async () => thread,
+    });
+    assert.equal(duplicateAck.delivery_mapping.duplicate_count, 1);
+    assert.equal((await db.query('select count(*)::int as count from brain_whatsapp_message_deliveries where outbox_message_id=$1', [single.id])).rows[0].count, 1);
+
+    const chunked = await queueAndClaim('chunked');
+    const chunkIds = ['true_fixture@lid_ACK_A', 'true_fixture@lid_ACK_B', 'true_fixture@lid_ACK_C'];
+    const chunkedAck = await ackOutboxMessage({
+      userId, client, recipient, messageId: chunked.id, deliveryAttempt: chunked.attempts,
+      status: 'sent', metadata: { provider_message_ids: chunkIds }, findThread: async () => thread,
+    });
+    assert.equal(chunkedAck.delivery_mapping.persisted_count, 3);
+    for (const providerMessageId of chunkIds) {
+      const resolved = await resolveWhatsappQuotedDelivery({ userId, client, recipient, providerMessageId, detailed: true });
+      assert.equal(resolved.status, 'resolved');
+      assert.equal(resolved.target.delivery.outbox_message_id, chunked.id);
+    }
   });
 
   await check('fresh native quotes resolve wake, sleep and habit prompts out of order with persisted mappings', async () => {

@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 
 const PROVIDER_ID_MAX = 300;
 const PROVIDER_ID_LIMIT = 32;
+const OUTGOING_ID_TIMEOUT_MS = 10000;
 
 function normalizeWhatsappProviderId(value) {
   const id = typeof value === 'string' ? value.trim() : '';
@@ -118,6 +119,35 @@ function buildWhatsappReplyDeliveryPayload({
   };
 }
 
+function buildWhatsappOutboxAckPayload({
+  recipient,
+  messageId,
+  deliveryAttempt = null,
+  status,
+  providerMessageId = null,
+  providerMessageIds = [],
+  error = null,
+  bridgeId = null,
+  metadata = {},
+} = {}) {
+  const normalizedProviderIds = [...new Set([
+    providerMessageId,
+    ...(Array.isArray(providerMessageIds) ? providerMessageIds : []),
+  ].flatMap((value) => extractWhatsappProviderMessageIds(value)))].slice(0, PROVIDER_ID_LIMIT);
+  return {
+    action: 'ack',
+    recipient,
+    message_id: messageId,
+    delivery_attempt: deliveryAttempt,
+    status,
+    provider_message_id: normalizedProviderIds[0] || null,
+    provider_message_ids: normalizedProviderIds,
+    error,
+    ...(bridgeId ? { bridge_id: String(bridgeId).slice(0, 120) } : {}),
+    metadata,
+  };
+}
+
 function describeWhatsappProviderId(value) {
   const id = extractWhatsappProviderMessageId(value);
   if (!id) return { present: false };
@@ -130,6 +160,68 @@ function describeWhatsappProviderId(value) {
     address_type: id.includes('@lid') ? 'lid' : id.includes('@c.us') ? 'c.us' : 'other',
     fingerprint: createHash('sha256').update(id).digest('hex').slice(0, 12),
   };
+}
+
+async function sendWhatsappMessageWithProviderIdentity({
+  client,
+  recipient,
+  body,
+  send = null,
+  timeoutMs = OUTGOING_ID_TIMEOUT_MS,
+} = {}) {
+  if (!client || typeof client.on !== 'function') throw new Error('WhatsApp client is required.');
+  const sendMessage = typeof send === 'function'
+    ? send
+    : () => client.sendMessage(recipient, body);
+  let observedMessage = null;
+  let resolveObserved;
+  const observed = new Promise((resolve) => {
+    resolveObserved = resolve;
+  });
+  const onMessageCreate = (message) => {
+    if (observedMessage || !matchesOutgoingMessage(message, { recipient, body })) return;
+    observedMessage = message;
+    resolveObserved(message);
+  };
+  client.on('message_create', onMessageCreate);
+  try {
+    const returnedMessage = await sendMessage();
+    if (extractWhatsappProviderMessageIds(returnedMessage?.id ?? returnedMessage).length) {
+      return { message: returnedMessage, identity_source: 'send_result' };
+    }
+    const capturedMessage = observedMessage || await waitForObservedMessage(observed, timeoutMs);
+    if (capturedMessage && extractWhatsappProviderMessageIds(capturedMessage?.id ?? capturedMessage).length) {
+      return { message: capturedMessage, identity_source: 'message_create' };
+    }
+    const error = new Error('WhatsApp message was sent without a recoverable provider identity.');
+    error.code = 'WHATSAPP_PROVIDER_ID_UNAVAILABLE';
+    throw error;
+  } finally {
+    if (typeof client.off === 'function') client.off('message_create', onMessageCreate);
+    else if (typeof client.removeListener === 'function') client.removeListener('message_create', onMessageCreate);
+  }
+}
+
+function matchesOutgoingMessage(message, { recipient, body } = {}) {
+  const ids = extractWhatsappProviderMessageIds(message?.id ?? message);
+  if (!ids.length) return false;
+  const fromMe = message?.fromMe === true || message?.id?.fromMe === true;
+  if (!fromMe) return false;
+  if (typeof message?.body === 'string' && message.body !== body) return false;
+  const expectedRecipient = normalizeWhatsappProviderId(recipient);
+  const actualRecipient = normalizeWhatsappProviderId(message?.to)
+    || extractWhatsappRemoteId(message?.id?.remote, new Set());
+  return !expectedRecipient || !actualRecipient || expectedRecipient === actualRecipient;
+}
+
+function waitForObservedMessage(observed, timeoutMs) {
+  const safeTimeout = Number.isFinite(Number(timeoutMs))
+    ? Math.max(100, Math.min(Number(timeoutMs), 60000))
+    : OUTGOING_ID_TIMEOUT_MS;
+  return Promise.race([
+    observed,
+    new Promise((resolve) => setTimeout(() => resolve(null), safeTimeout)),
+  ]);
 }
 
 function addCandidate(target, value) {
@@ -146,10 +238,12 @@ function extractWhatsappRemoteId(value, seen) {
 
 module.exports = {
   buildWhatsappInboundQuoteEnvelope,
+  buildWhatsappOutboxAckPayload,
   buildWhatsappReplyDeliveryPayload,
   describeWhatsappProviderId,
   ensureWhatsappSerializedIdCompatibility,
   extractWhatsappProviderMessageId,
   extractWhatsappProviderMessageIds,
   normalizeWhatsappProviderId,
+  sendWhatsappMessageWithProviderIdentity,
 };

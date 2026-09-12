@@ -465,7 +465,7 @@ Run these against freshly delivered prompts using WhatsApp's native Reply action
 7. Repeat an inbound provider `message_id`; confirm the stored response is replayed and the Health effect is not repeated.
 8. For a split normal or proactive reply, quote each physical bubble in turn and confirm each provider mapping resolves to the same logical assistant/outbox target.
 
-Before each reply, verify `brain_whatsapp_message_deliveries` already contains a separate scoped row for the quoted physical provider ID. In `debug.brain_trace`, verify quote lookup status, selected `trusted_native_quote` path, assistant/outbox/source identifiers, and no raw provider ID. Unknown, cross-recipient, and cross-thread IDs must produce distinct read-only clarification outcomes and no write.
+Before each reply, verify `brain_whatsapp_message_deliveries` already contains a separate scoped row for the quoted physical provider ID. With safe bridge/backend debug enabled, compare the outgoing-capture, ACK-persisted, and inbound-quote fingerprints; all three must match, and the ACK mapping count must be nonzero. In `debug.brain_trace`, verify quote lookup status, selected `trusted_native_quote` path, assistant/outbox/source identifiers, and no raw provider ID. Unknown, cross-recipient, and cross-thread IDs must produce distinct read-only clarification outcomes and no write.
 
 ## WhatsApp Pending Action Resolution
 

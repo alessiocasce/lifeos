@@ -2,7 +2,11 @@ import { HttpError } from './http.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { findOrCreateWhatsappBrainThread, persistBrainAssistantMessage } from './brain.js';
 import { buildProactiveWorkingContextFromOutbox } from './brainProactiveReplies.js';
-import { recordWhatsappMessageDeliveries } from './brainWhatsappReliability.js';
+import {
+  fingerprintWhatsappProviderMessageId,
+  normalizeWhatsappProviderMessageIds,
+  recordWhatsappMessageDeliveries,
+} from './brainWhatsappReliability.js';
 import { normalizeAccountabilityTarget } from './brainMetadata.js';
 import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
 import { checkProactiveDelivery } from './brainProactiveDelivery.js';
@@ -223,6 +227,9 @@ export async function ackOutboxMessage({
   metadata = {},
   userId = getActionUserId(),
   deliveryAttempt = null,
+  client = getSupabaseAdmin(),
+  findThread = findOrCreateWhatsappBrainThread,
+  persistMessage = persistBrainAssistantMessage,
 } = {}) {
   const safeStatus = normalizeAckStatus(status);
   if (!safeStatus) throw new HttpError(400, 'status must be sent or failed.');
@@ -231,7 +238,6 @@ export async function ackOutboxMessage({
   const recipients = recipientVariants(safeRecipient);
   const safeChannel = normalizeChannel(channel);
   const id = requiredText(messageId, 'message_id', 80);
-  const client = getSupabaseAdmin();
 
   const current = await client
     .from('brain_outbox_messages')
@@ -246,44 +252,72 @@ export async function ackOutboxMessage({
   if (deliveryAttempt != null && Number(deliveryAttempt) !== current.data.attempts) throw new HttpError(409, 'Stale delivery attempt.');
 
   if (safeStatus === 'sent') {
-    const sent = await markOutboxSent({ client, row: current.data, metadata });
+    const providerMessageIds = normalizeWhatsappProviderMessageIds(
+      metadata?.provider_message_ids,
+      metadata?.provider_message_id,
+    );
+    if (!providerMessageIds.length) {
+      throw new HttpError(400, 'A sent WhatsApp ACK requires a provider message ID.');
+    }
+    const providerFingerprints = providerMessageIds
+      .map(fingerprintWhatsappProviderMessageId)
+      .filter(Boolean);
+    const safeAckMetadata = {
+      ...metadata,
+      provider_message_id: undefined,
+      provider_message_ids: undefined,
+      provider_id_count: providerMessageIds.length,
+      provider_id_fingerprints: providerFingerprints,
+    };
+    const sent = await markOutboxSent({ client, row: current.data, metadata: safeAckMetadata });
     const persisted = await persistSentProactiveMessageToWhatsappThread({
       userId,
       recipient: canonicalRecipient,
       outboxMessage: sent,
       client,
+      findThread,
+      persistMessage,
     });
-    if (persisted?.id && (metadata?.provider_message_id || metadata?.provider_message_ids?.length)) {
-      await recordWhatsappMessageDeliveries({
-        userId,
-        assistantMessageId: persisted.id,
-        threadId: persisted.thread_id,
-        recipient: canonicalRecipient,
-        providerMessageId: metadata.provider_message_id,
-        providerMessageIds: metadata.provider_message_ids,
-        outboxMessageId: sent.id,
-        deliveryAttempt: sent.attempts,
-        sentAt: sent.sent_at,
-        client,
-      });
+    if (!persisted?.id || !persisted.thread_id) {
+      throw new HttpError(500, 'Sent proactive message could not be persisted for provider correlation.');
     }
-    if (persisted?.id && !sent.ack_metadata?.assistant_message_id) {
-      const withAssistant = await client
-        .from('brain_outbox_messages')
-        .update({
-          ack_metadata: {
-            ...(sent.ack_metadata && typeof sent.ack_metadata === 'object' ? sent.ack_metadata : {}),
-            assistant_message_id: persisted.id,
-          },
-        })
-        .eq('id', sent.id)
-        .eq('user_id', userId)
-        .select(outboxSelect())
-        .single();
-      if (withAssistant.error) throw withAssistant.error;
-      return withAssistant.data;
-    }
-    return sent;
+    const mappingResults = await recordWhatsappMessageDeliveries({
+      userId,
+      assistantMessageId: persisted.id,
+      threadId: persisted.thread_id,
+      recipient: canonicalRecipient,
+      providerMessageIds,
+      outboxMessageId: sent.id,
+      deliveryAttempt: sent.attempts,
+      sentAt: sent.sent_at,
+      client,
+    });
+    const deliveryMapping = {
+      received_count: providerMessageIds.length,
+      persisted_count: mappingResults.length,
+      inserted_count: mappingResults.filter((result) => !result.duplicate).length,
+      duplicate_count: mappingResults.filter((result) => result.duplicate).length,
+      provider_id_fingerprints: providerFingerprints,
+      assistant_message_id: persisted.id,
+      outbox_message_id: sent.id,
+      thread_id: persisted.thread_id,
+      recipient: canonicalRecipient,
+    };
+    const withMapping = await client
+      .from('brain_outbox_messages')
+      .update({
+        ack_metadata: {
+          ...(sent.ack_metadata && typeof sent.ack_metadata === 'object' ? sent.ack_metadata : {}),
+          assistant_message_id: persisted.id,
+          delivery_mapping: deliveryMapping,
+        },
+      })
+      .eq('id', sent.id)
+      .eq('user_id', userId)
+      .select(outboxSelect())
+      .single();
+    if (withMapping.error) throw withMapping.error;
+    return { ...withMapping.data, delivery_mapping: deliveryMapping };
   }
 
   return markOutboxFailed({ client, row: current.data, error, metadata });

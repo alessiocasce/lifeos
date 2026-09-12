@@ -211,9 +211,10 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
    - `pm2 save`
 9. Vercel backend deploys do not require a PM2 bridge restart unless bridge code or bridge env vars changed.
 10. If WhatsApp exposes both `@lid` and `@c.us` ids, set `LIFEOS_WHATSAPP_SENDER_ALIASES` in Vercel, for example `39XXXXXXXXXX@c.us=111780936298528@lid`. Keep `LIFEOS_WHATSAPP_ALLOWED_SENDERS` on the canonical sender.
-11. For this native-reply patch, deploy Vercel first, then pull/copy both checked-in bridge files to Oracle and restart PM2. No new SQL is required if the interaction reliability migration is already applied.
+11. For this native-reply patch, deploy Vercel first. It rejects proactive sent ACKs without physical provider IDs and persists all mappings before returning the debug mapping summary. Then pull/copy both checked-in bridge files to Oracle and restart PM2; the bridge now falls back to the matching outgoing `message_create` event when `client.sendMessage()` returns no identity. No new SQL is required if the interaction reliability migration is already applied.
 12. Run `npm run test:bridge` before copying. On Oracle, run `node --check wts.js` and `node --check providerMessageContract.cjs` from the deployed bridge directory without deleting session/cache directories.
-13. Manually test the deployed endpoint:
+13. With `WHATSAPP_DEBUG=true` and backend debug enabled for the designated test, send one proactive message and compare only the safe provider fingerprints: outgoing capture, ACK persisted mapping, and quoted inbound lookup must match. Confirm the ACK reports one received and one persisted mapping before using native Reply.
+14. Manually test the deployed endpoint:
 
 ```bash
 curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inbound" \

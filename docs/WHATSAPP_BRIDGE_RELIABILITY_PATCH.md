@@ -27,11 +27,17 @@ Both outbound paths map every physical WhatsApp bubble independently:
 
 The singular field remains compatible with older backends/bridges. Do not comma-join multiple IDs. A user can quote any chunk and resolve it to the same logical assistant/outbox target.
 
+Do not assume `client.sendMessage()` always returns the sent `Message`. Some provider builds deliver successfully but resolve the promise with `undefined`. The bridge registers a `message_create` listener before each send and captures the matching outgoing message by direction, recipient, and body. Physical sends are serialized to keep that fallback deterministic. If neither the return value nor the event yields a validated ID, a proactive message is not acknowledged as sent.
+
+The backend rejects a proactive `status=sent` ACK with zero provider IDs before changing the claimed row. For accepted ACKs it persists the proactive assistant message, upserts one delivery row per physical ID, and returns a debug-only mapping summary. A duplicate sent ACK repeats these idempotent mapping writes, which repairs a previous partial ACK attempt.
+
 ## Safe Diagnostics
 
-With bridge debug enabled, log only provider-ID shape summaries and fingerprints: presence, length, serialized availability, direction, address suffix, candidate count, lookup status, and bounded LifeOS IDs. Never log full message bodies, provider IDs, sessions, secrets, or auth headers.
+With bridge debug enabled, log only provider-ID shape summaries and fingerprints: identity source (`send_result` or `message_create`), presence, length, serialized availability, direction, address suffix, candidate count, lookup status, and bounded LifeOS IDs. The backend ACK debug response includes received/persisted/inserted/duplicate counts and the same fingerprints. Never log full message bodies, provider IDs, sessions, secrets, or auth headers.
 
 Useful backend quote lookup statuses are `resolved`, `provider_id_not_found`, `recipient_mismatch`, `resolved_thread_mismatch`, `assistant_message_missing`, and `ambiguous_provider_mapping`.
+
+For one physical bubble, verify the outgoing, persisted, and quoted fingerprint are identical. A successful HTTP ACK without a nonzero persisted mapping count is not a successful delivery-correlation test.
 
 ## Oracle Rollout
 

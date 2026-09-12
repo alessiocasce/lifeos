@@ -5,10 +5,12 @@ const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const {
   buildWhatsappInboundQuoteEnvelope,
+  buildWhatsappOutboxAckPayload,
   buildWhatsappReplyDeliveryPayload,
   describeWhatsappProviderId,
   extractWhatsappProviderMessageId,
   extractWhatsappProviderMessageIds,
+  sendWhatsappMessageWithProviderIdentity,
 } = require('./providerMessageContract.cjs');
 
 /**
@@ -342,6 +344,7 @@ const client = new Client({
 let whatsappReady = false;
 let outboxInterval = null;
 let outboxLoopRunning = false;
+let outboundSendQueue = Promise.resolve();
 
 client.on('qr', (qr) => {
   console.log('');
@@ -1146,6 +1149,19 @@ async function handleOutboxMessage(
       ),
     ];
 
+    if (CONFIG.debug) {
+      console.log(
+        `[${nowIso()}] Proactive provider identity:`,
+        safeJson({
+          outbox_message_id: messageId,
+          provider_id_count: providerMessageIds.length,
+          provider_id_fingerprints: providerMessageIds
+            .map((id) => describeWhatsappProviderId(id).fingerprint)
+            .filter(Boolean),
+        })
+      );
+    }
+
     await ackOutbox({
       recipient,
       messageId,
@@ -1273,23 +1289,17 @@ async function ackOutbox({
   const url =
     `${CONFIG.lifeosBaseUrl}/api/integrations/whatsapp/outbox`;
 
-  const body = {
-    action: 'ack',
+  const body = buildWhatsappOutboxAckPayload({
     recipient,
-    message_id:
-      messageId,
-    delivery_attempt:
-      deliveryAttempt,
+    messageId,
+    deliveryAttempt,
     status,
-    provider_message_id:
-      providerMessageId,
-    provider_message_ids:
-      providerMessageIds,
+    providerMessageId,
+    providerMessageIds,
     error,
-    bridge_id:
-      CONFIG.clientId,
+    bridgeId: CONFIG.clientId,
     metadata,
-  };
+  });
 
   const response =
     await axios.post(
@@ -1403,11 +1413,10 @@ async function sendLongMessage(
         ? `(${i + 1}/${chunks.length}) `
         : '';
 
-    const result =
-      await client.sendMessage(
-        to,
-        `${prefix}${chunks[i]}`
-      );
+    const result = await sendMessageWithCapturedIdentity(
+      to,
+      `${prefix}${chunks[i]}`
+    );
 
     results.push(result);
 
@@ -1557,11 +1566,10 @@ async function safeReply(
   text
 ) {
   try {
-    const sentMessage =
-      await client.sendMessage(
-        msg.from,
-        text
-      );
+    const sentMessage = await sendMessageWithCapturedIdentity(
+      msg.from,
+      text
+    );
 
     console.log(
       `[${nowIso()}] 📤 Replied.`
@@ -1576,6 +1584,32 @@ async function safeReply(
 
     return null;
   }
+}
+
+function sendMessageWithCapturedIdentity(recipient, body) {
+  const run = outboundSendQueue.then(async () => {
+    const result = await sendWhatsappMessageWithProviderIdentity({
+      client,
+      recipient,
+      body,
+    });
+    if (CONFIG.debug) {
+      const ids = extractWhatsappProviderMessageIds(result.message?.id ?? result.message);
+      console.log(
+        `[${nowIso()}] Outgoing provider identity:`,
+        safeJson({
+          source: result.identity_source,
+          provider_id_count: ids.length,
+          provider_id_fingerprints: ids
+            .map((id) => describeWhatsappProviderId(id).fingerprint)
+            .filter(Boolean),
+        })
+      );
+    }
+    return result.message;
+  });
+  outboundSendQueue = run.catch(() => null);
+  return run;
 }
 
 // -----------------------------------------------------------------------------

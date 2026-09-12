@@ -211,6 +211,7 @@ async function handleAck({ res, context, debugFlags, body, recipient, recipientI
           whatsapp_recipient_canonical: recipient,
           ack_metadata: row.ack_metadata,
         }),
+        delivery_mapping: sanitizeTraceValue(row.delivery_mapping ?? null),
       },
     } : {}),
   });
