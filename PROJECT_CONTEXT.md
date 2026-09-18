@@ -1,7 +1,24 @@
 # LifeOS Project Context
 
-Last updated: 2026-09-12
+Last updated: 2026-09-18
 Current branch: `main`
+
+
+## Companion vNext Product Direction (2026-09-18)
+
+The living product north star for the next major LifeOS evolution is **[docs/LIFEOS_COMPANION_VNEXT.md](docs/LIFEOS_COMPANION_VNEXT.md)**. Read that file before planning substantial new Brain, proactive, memory, WhatsApp, voice, monitoring, MCP, PWA, or desktop-companion work.
+
+Important distinction:
+
+- this file documents **current implemented architecture and operational handoff**;
+- `LIFEOS_COMPANION_VNEXT.md` documents the **target product behavior and staged roadmap**;
+- do not treat unimplemented vNext ideas as current capabilities;
+- preserve the existing BrainTurn/WhatsApp reliability guarantees while evolving the user-facing system.
+
+Current vNext priorities start with the existing pain surface: make WhatsApp/Brain conversational, support semantic stale-routine/current-belief changes, prevent narrow proactive resolvers from discarding meaningful compound replies, and build toward deep autobiographical memory + MCP semantic sync. Desktop Focus remains a planned organ but is not the first overall Companion priority.
+
+Hard current constraints: keep the existing Oracle-hosted `whatsapp-web.js` transport, prefer a WhatsApp-call proof of concept before PWA/WebRTC fallback, require a **€0 new recurring-spend path**, and keep model/provider dependencies replaceable.
+
 Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, planner stage, and backend LifeOS tool guards.
 
 ## Reliability Release Handoff
