@@ -762,6 +762,118 @@ Every synced item should retain provenance such as:
 
 A one-time import of exported ChatGPT conversations may be useful to bootstrap LifeOS's autobiographical knowledge, but should run through curation/deduplication rather than become raw active memory.
 
+### Existing MCP baseline — do not rebuild this integration from scratch
+
+LifeOS already has a deployed MCP v1 at `/api/mcp` with static-token auth for custom clients and OAuth authorization-code + PKCE support specifically for ChatGPT connectors.
+
+Current MCP implementation is intentionally **read-only**.
+
+Current repo tools:
+
+- `get_lifeos_snapshot`
+- `get_lifeos_context`
+- `get_recent_workouts`
+- `get_workout_intelligence`
+- `get_health_summary`
+- `get_open_memos`
+- `get_upcoming_calendar`
+- `get_projects_status`
+- `get_brain_debug_context`
+- `get_whatsapp_outbox_recent`
+- `get_whatsapp_proactive_debug`
+- `search_lifeos_vault`
+- `get_open_loops`
+
+The MCP also exposes LifeOS resources for snapshot/context/today/week/health/workouts/memos/calendar/projects/Brain/WhatsApp/Vault plus reusable prompts for morning brief, evening review, weekly review, workout analysis, Brain bug analysis, and project execution review.
+
+`get_lifeos_context` / `lifeos://context/today` already provide an important vNext primitive: the shared **LifeOS Context Compiler**, which combines today/next days, health/sleep, workouts, project staleness/carryover, failed actions, WhatsApp issues, pending Brain actions, and ranked open loops. Companion vNext should extend/reuse this compiler rather than building another parallel context aggregator.
+
+Current MCP security is personal/single-user, resolved through the configured LifeOS user and server-side service role. That is acceptable for the current personal build but is not the final public multi-user model.
+
+#### Connector exposure note
+
+The current ChatGPT connector surface observed on 2026-09-18 exposed a subset of 10 read operations:
+
+- snapshot;
+- recent workouts;
+- health summary;
+- open memos;
+- upcoming calendar;
+- projects status;
+- Brain debug context;
+- recent WhatsApp outbox;
+- Vault search;
+- open loops.
+
+The repo itself implements additional read capabilities (`get_lifeos_context`, `get_workout_intelligence`, and `get_whatsapp_proactive_debug`). Keep the deployed MCP/tool manifest and connector registration in sync so external clients receive the full useful surface.
+
+#### MCP v2 requirement for Companion
+
+Do **not** turn MCP v2 into unrestricted CRUD.
+
+Add a small semantic write surface designed around the world model:
+
+```text
+lifeos.sync_context
+lifeos.remember
+lifeos.update_current_belief
+lifeos.update_preference
+lifeos.upsert_project_context
+lifeos.suggest_monitor
+lifeos.create_monitor
+lifeos.suspend_monitor
+lifeos.retire_monitor
+lifeos.log_external_event
+```
+
+The exact names/schema are not final.
+
+Important distinction:
+
+```text
+ChatGPT says what changed / what was learned
+        ↓
+LifeOS validates semantic object + provenance
+        ↓
+world-model mutation / monitor mutation
+        ↓
+audit event
+```
+
+External clients should **not** write arbitrary Supabase rows or invoke arbitrary Brain internals.
+
+MCP write calls should carry:
+
+- provenance/source system;
+- source timestamp;
+- confidence where applicable;
+- semantic type;
+- idempotency key;
+- user-visible summary;
+- supersession target when updating a belief;
+- autonomy/permission basis for monitor creation.
+
+Low-risk memory/current-state synchronization may eventually operate under standing permission. Consequential external actions remain behind their own action policies.
+
+#### ChatGPT sync modes
+
+Build this progressively:
+
+**Mode 1 — explicit**
+> "sync the important changes from this conversation to LifeOS"
+
+ChatGPT emits a compact set of semantic updates through MCP.
+
+**Mode 2 — assistant-suggested**
+ChatGPT recognizes that a project/routine/preference materially changed and offers/initiates sync according to connector permission behavior.
+
+**Mode 3 — ambient high-value sync**
+If/when the ChatGPT platform permits the required connector behavior and the user grants standing permission, meaningful context can synchronize without requiring ritual command phrasing.
+
+The LifeOS backend semantics must work in all three modes so platform UX changes do not require another architecture rewrite.
+
+
+
 ---
 
 ## 11. Local Desktop Companion
@@ -1163,6 +1275,13 @@ That is the level this project is aiming for.
 ---
 
 ## 20. Changelog
+
+### 2026-09-18 — Existing MCP promoted to Companion integration backbone
+- Confirmed LifeOS already has MCP v1 with static-token clients plus OAuth/PKCE support for ChatGPT connectors.
+- MCP v1 is deliberately read-only and exposes high-value LifeOS context, Context Compiler output, workout intelligence, Vault search, Brain/WhatsApp diagnostics, open loops, resources and reusable prompts.
+- Companion vNext will extend this MCP rather than inventing a separate ChatGPT bridge.
+- Defined MCP v2 direction around semantic world-model/project/preference/monitor mutations with provenance, idempotency and auditability instead of unrestricted database CRUD.
+- Noted a current connector-surface mismatch: the ChatGPT-exposed tool set is a subset of the capabilities implemented in the repo.
 
 ### 2026-09-18 — Voice transport direction: WhatsApp-call spike first, PWA/WebRTC fallback
 - Researched current `whatsapp-web.js` stable call API and active upstream call work.
