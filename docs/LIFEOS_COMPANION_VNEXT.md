@@ -52,6 +52,10 @@ iPhone / Shortcuts
 
 Conversation can move between surfaces without losing the underlying user model.
 
+This means **continuity, not merely shared storage**. Recent conversational state, unresolved commitments, active topics and the last meaningful interaction should be representable independently of the transport. A WhatsApp conversation followed by a voice session should not feel like meeting a different assistant.
+
+Channel-specific metadata (provider ids, quotes, media ids, delivery receipts) stays transport-specific; semantic conversation state belongs to Brain.
+
 ### 2.2 Natural-language control, not magic phrases
 
 LifeOS must not require exact commands such as:
@@ -148,6 +152,29 @@ Example autonomy classes:
 LifeOS should be able to create a monitor because it notices something worth monitoring **when the user has granted that class of autonomy**. It should not need an exact "create scheduled task" phrase every time.
 
 For consequential actions, autonomy remains narrower. In particular, financial monitoring may alert/escalate but must not silently execute a trade.
+
+### 2.6 Provider/model independence + zero-cash operation
+
+Companion vNext must not make the identity of the companion depend on OpenAI, Gemini, Claude, or any single model/provider.
+
+```text
+LifeOS Brain contract / memory / tools / monitors / Butler policy
+                            ↓
+                      model adapter
+                  ↙         ↓         ↘
+               local     existing     optional future
+               model     provider     provider
+```
+
+The model is replaceable infrastructure. The **LifeOS world model, permissions, tool contracts, monitor registry, attention policy, conversation state and Butler relationship must survive a brain-provider swap**.
+
+While the current €0 constraint is active:
+
+- no new required per-token, per-minute, per-message or telephony spend;
+- existing services/free allowances may be used only while they do not create a required new cash cost;
+- every new core capability should have a zero-cash path or remain explicitly experimental/future;
+- paid APIs can be optional adapters, never architectural requirements;
+- deterministic monitors, queued events and stored context should continue to function when an optional model provider is unavailable.
 
 ---
 
@@ -410,6 +437,66 @@ Brain: "you still doing skincare these days?"
 
 Do not abuse this.
 
+### Conversation must not collapse into a transaction
+
+A proactive check-in may have a deterministic target, but the user's reply can contain **more information than the target resolver needs**.
+
+Example:
+
+```text
+Brain: "skincare?"
+User: "no lol I stopped doing that like a month ago"
+```
+
+v1 behavior must not be:
+
+```text
+detect "no"
+→ resolve today's check-in
+→ "Ok, non segno nulla."
+→ discard the rest of the meaning
+```
+
+vNext behavior:
+
+```text
+deterministic local resolution: do not log skincare today
+                         +
+semantic residual meaning: skincare routine is no longer active
+                         ↓
+world-model update / monitor retirement
+                         ↓
+natural Butler reply
+```
+
+The same applies to compound responses such as:
+
+> "done btw I'm going away tomorrow"
+
+> "not yet, remind me after the gym"
+
+> "yeah but stop tracking this from next week"
+
+> "no because that project is dead"
+
+**Interaction ownership protects the intended write target; it must not imprison the whole turn inside that narrow subsystem.** After safe target resolution, meaningful residual content should re-enter the semantic Brain path with the completed action as context and without being allowed to duplicate the resolved write.
+
+### Proactive conversation is broader than missing fields
+
+The Butler should initiate conversation for several reasons, not just "did you do X?":
+
+- accountability around commitments the user actually cares about;
+- curiosity when Brain suspects its world model is stale;
+- project momentum / staleness;
+- meaningful positive progress worth noticing;
+- anomalies or risks;
+- opportunities;
+- useful cross-domain patterns;
+- time-sensitive external monitor events;
+- occasional context-aware check-ins when there is a concrete reason.
+
+Positive observations should be specific and evidence-based, not synthetic praise. Casual check-ins should still have an underlying reason; LifeOS should not burn attention merely to imitate a friend.
+
 ---
 
 ## 6. Attention Engine
@@ -463,6 +550,38 @@ The system needs anti-nag behavior:
 
 Repeated "no" responses are **data**. They should change the model.
 
+### Accountability is about commitments, not database completeness
+
+LifeOS should distinguish:
+
+```text
+tracked field missing
+≠
+user failed a commitment
+```
+
+Accountability should be grounded in active goals, routines, commitments and stated priorities. The companion can push when the user is drifting from something they still care about, but it must also allow the user to renegotiate reality conversationally.
+
+Examples:
+
+> "I said I'd finish it tonight but I'm bullshitting, keep me on it."
+
+→ stronger accountability is appropriate.
+
+> "this isn't a priority anymore"
+
+→ reduce/retire the commitment and its nudges.
+
+> "not tonight, move it to tomorrow"
+
+→ update the commitment if the relevant write is safe and clear.
+
+> repeated "no" / silence on a routine
+
+→ increase the probability that the **model is stale**, rather than increasing nag frequency.
+
+A future commitment model should track what was promised, expected timeframe, current state, evidence, and whether Brain is allowed to hold the user to it.
+
 ---
 
 ## 7. Self-Directed Monitors / Agentic Work
@@ -501,6 +620,17 @@ Creation should have:
 - user-visible audit trail.
 
 Brain should retire monitors that become irrelevant.
+
+The monitor engine should also periodically review its **own portfolio**:
+
+- which monitors are still justified by the current world model;
+- which are duplicative;
+- which have never produced useful signal;
+- which should become more/less frequent;
+- which should expire;
+- which new durable questions are implied by active projects, commitments or external dependencies.
+
+A Brain-created monitor is therefore not permanent just because Brain once thought it was useful.
 
 ### Important distinction
 
@@ -675,9 +805,11 @@ Conceptual flow:
 Monitor/event
 → importance verification
 → escalation policy
-→ telephony provider/SIP
+→ call transport adapter
+     ↳ WhatsApp call experiment first
+     ↳ PWA/WebRTC fallback
+     ↳ paid PSTN/SIP only as optional future transport
 → realtime voice Brain
-→ outbound call
 → "Ale, this is worth your attention..."
 ```
 
@@ -909,6 +1041,20 @@ Example:
 instead of permanent browsing history.
 
 Issue #1 remains useful as the Focus/desktop-organ implementation slice, but it is subordinate to this larger Companion vNext vision.
+
+### 11.1 LifeOS UI / iPhone PWA role
+
+The UI is not a usage quota LifeOS must force the user to satisfy. If WhatsApp, ChatGPT and voice are where interaction naturally happens, the UI should become the **control room**:
+
+- inspect what Brain currently believes;
+- inspect/override active routines, commitments and monitors;
+- see why an interruption was sent, suppressed or escalated;
+- review actions and provenance;
+- inspect channel/bridge health;
+- tune autonomy/attention permissions;
+- manually enter a Brain conversation when useful.
+
+The installed iPhone PWA is also the zero-cash fallback communication surface. It can use standards-based Web Push to surface a high-priority "Brain is calling" event and open a WebRTC voice room. This is not equivalent to native PushKit/CallKit ringing, but it gives LifeOS a provider-independent fallback if WhatsApp-call media remains too fragile.
 
 ---
 
@@ -1142,12 +1288,13 @@ This order can change as this living spec evolves.
 ### Phase G — Escalation / outbound calls
 
 1. importance policy;
-2. telephony/SIP;
-3. realtime voice session;
-4. outbound call initiation;
-5. cost/rate limits;
-6. critical-event verification;
-7. audit/duplicate suppression.
+2. isolated WhatsApp-call proof of concept on Oracle;
+3. test outgoing ring + synthetic Brain audio;
+4. test PulseAudio/PipeWire capture of the remote participant;
+5. if bidirectional WhatsApp media is unreliable, implement PWA Web Push + WebRTC fallback;
+6. connect the successful transport to the realtime Brain session;
+7. add critical-event verification, rate limits, audit and duplicate suppression;
+8. keep paid PSTN/SIP as an optional future adapter only.
 
 **Success test:** an actually urgent event can cause LifeOS to call, while ordinary noise never does.
 
@@ -1160,6 +1307,27 @@ This order can change as this living spec evolves.
 5. local files;
 6. optional local camera signals;
 7. overlays.
+
+---
+
+## 15.1 First implementation slice — before desktop Focus
+
+Before Issue #1 / desktop Focus becomes the main build effort, Companion vNext should attack the current pain where it already exists: WhatsApp + stale memory/state.
+
+Suggested first vertical slice:
+
+1. introduce a channel-independent Butler rendering contract so deterministic action results are not themselves the final prose;
+2. preserve deterministic proactive target ownership/writes;
+3. add compound-turn handling so residual semantic meaning survives after a proactive reply is resolved;
+4. add explicit current-routine/current-belief representation with supersession;
+5. let natural language suspend/retire/reactivate a routine or monitor;
+6. feed those current beliefs into proactive candidate generation so inactive routines stop producing candidates;
+7. add anti-nag feedback from repeated negative replies;
+8. add regression coverage for the exact stale-skincare journey;
+9. then broaden proactive messages into project/commitment/pattern conversations;
+10. expose the new current-state/monitor context through MCP and design the first semantic MCP v2 sync operation.
+
+**Definition of done:** after the user naturally explains that a previously tracked routine is no longer part of their life, LifeOS understands the change, stops future related nudges, remembers the transition with provenance, and responds like the same Butler rather than a CRUD confirmation.
 
 ---
 
@@ -1270,11 +1438,49 @@ Brain: "Ale — quick one. Something material just happened with the thing we're
 [The user can continue a fluent conversation and Brain has the same memory/tools as every other surface.]
 ```
 
+Additional acceptance tests:
+
+```text
+Brain: "skincare?"
+User: "bro I stopped doing that like a month ago"
+Brain: natural acknowledgement
+
+[No skincare candidate tomorrow. Current routine state is inactive.
+The historical fact that skincare used to be tracked is retained but no longer treated as current.]
+```
+
+```text
+Brain: "Hair Style hasn't moved in a week. still doing it?"
+User: "yeah, LifeOS took over this week. don't let me abandon Hair Style though"
+
+[Brain keeps the project active, captures the priority/context change,
+and may create or adjust a low-risk monitor under standing permission.]
+```
+
+```text
+User starts in WhatsApp: "I need to figure out the voice architecture"
+Later opens voice session: "where were we?"
+
+[Brain can recover the active semantic topic without treating voice as a new assistant.]
+```
+
 That is the level this project is aiming for.
 
 ---
 
 ## 20. Changelog
+
+### 2026-09-18 — Gap audit: conversational semantics and provider independence
+- Added provider/model independence as a global Brain constraint, not merely a voice implementation detail.
+- Made cross-channel continuity explicit: semantic conversation state belongs to Brain; provider metadata belongs to transports.
+- Added compound-turn handling so deterministic proactive resolution cannot discard meaningful residual statements such as "I stopped doing skincare a month ago."
+- Expanded proactive behavior beyond missing fields into commitments, curiosity, project momentum, positive evidence, anomalies, opportunities and patterns.
+- Reframed accountability around active commitments rather than database completeness.
+- Added self-review/retirement of Brain-created monitor portfolios.
+- Corrected call planning to WhatsApp-call experiment first, PWA/WebRTC zero-cost fallback, paid PSTN/SIP optional only.
+- Clarified that the LifeOS UI/PWA is a control room and fallback communication surface, not the primary interaction requirement.
+- Added a concrete first Companion implementation slice centered on WhatsApp + stale world-model behavior before desktop Focus.
+- Added conversational end-to-end acceptance tests.
 
 ### 2026-09-18 — Existing MCP promoted to Companion integration backbone
 - Confirmed LifeOS already has MCP v1 with static-token clients plus OAuth/PKCE support for ChatGPT connectors.
