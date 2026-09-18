@@ -535,9 +535,17 @@ Not:
 
 Current text bridge is only the start.
 
+### Current WhatsApp transport constraint
+
+**LifeOS currently uses the self-hosted `whatsapp-web.js` bridge on the Oracle always-on worker. It is not using Meta WhatsApp Cloud API, and vNext must not casually redesign around Meta/Twilio/BSP infrastructure.**
+
+The current bridge/auth/session/provider-correlation work is part of the product architecture. Rich media support should first be investigated and implemented against this existing bridge where technically reliable.
+
+An official paid/provider-backed WhatsApp transport can remain a future optional adapter, not a current dependency.
+
 ### 8.1 Images
 
-User can send an image on WhatsApp.
+User can send an image on WhatsApp through the existing `whatsapp-web.js` bridge where supported.
 
 Pipeline:
 
@@ -598,6 +606,24 @@ Voice must sound natural and low-latency, not like a robotic TTS notification.
 
 This is a core product goal, not a gimmick.
 
+### Zero-cash constraint
+
+**Current product constraint: LifeOS must be buildable and usable without new recurring monetary spend.**
+
+Do not make OpenAI Realtime API, Twilio, ElevenLabs, Meta Cloud API, or any other paid cloud provider a required dependency.
+
+Paid services may be documented as future optional adapters, but the default architecture must prefer:
+
+- already-owned/available infrastructure;
+- Oracle Always Free worker capacity;
+- the existing Vercel/Supabase setup while it remains within free allowances;
+- browser-native APIs;
+- open protocols such as WebRTC;
+- local/open-weight STT, TTS and LLM inference where practical;
+- provider/model abstraction so a future paid service can be swapped in without redesigning LifeOS.
+
+"OpenAI call support" therefore means only that a standalone realtime voice engine could someday be connected behind a generic LifeOS voice adapter. **LifeOS itself must not rely on OpenAI for calls or voice.**
+
 ### 9.1 Continuous voice session
 
 User can enter a live conversation with Brain:
@@ -605,10 +631,28 @@ User can enter a live conversation with Brain:
 ```text
 microphone
 ↕
-realtime speech model
+voice transport / local speech pipeline
 ↕
 LifeOS Brain tools/memory
 ```
+
+Zero-cash candidate stack to investigate:
+
+```text
+Browser / desktop microphone
+        ↓
+WebRTC or local streaming transport
+        ↓
+local STT (e.g. faster-whisper / whisper.cpp class of engine)
+        ↓
+model-agnostic LifeOS Brain
+        ↓
+local TTS (e.g. Kokoro / Piper class of engine)
+        ↓
+streamed audio back to user
+```
+
+The exact components are not locked yet; naturalness and latency must be tested on the user's actual hardware.
 
 Requirements:
 
@@ -650,10 +694,22 @@ Calls are a high-attention channel and require strict policy:
 
 A call should mean something.
 
-Possible implementation path:
-- SIP/telephony provider (for example Twilio or another provider);
-- OpenAI/Gemini/other realtime speech backend behind a model adapter;
-- LifeOS tools exposed to the live session through a server-side tool gateway.
+Possible implementation paths must be separated by cost:
+
+**€0 path first**
+- LifeOS-initiated high-priority notification that opens/launches a realtime WebRTC/PWA/desktop voice session;
+- local/open speech pipeline;
+- existing Oracle worker for signaling/orchestration where useful.
+
+**True PSTN/mobile-phone call**
+- remains a desired escalation channel, but should not be treated as solved under the €0 constraint;
+- ordinary outbound PSTN termination normally requires a telephony carrier/provider and can incur usage cost;
+- do not add a paid telephony dependency now.
+
+**WhatsApp call transport**
+- investigate separately against the current `whatsapp-web.js` bridge;
+- do not assume outbound programmable WhatsApp voice calls are available merely because incoming call events can be observed;
+- if the current library cannot reliably originate/handle media calls, keep this as a future transport problem rather than replacing the whole WhatsApp stack.
 
 ---
 
@@ -826,11 +882,12 @@ The appropriate level depends on:
 - channel-independent BrainTurn logic.
 
 **Oracle always-on worker**
-- WhatsApp bridge;
+- existing `whatsapp-web.js` bridge;
 - polling/event workers;
 - long-running monitor workers;
-- future media processing jobs;
-- future telephony/SIP gateway if appropriate.
+- future lightweight media/orchestration jobs that fit the free machine;
+- signaling for free realtime voice if useful;
+- no paid telephony dependency by default.
 
 **Desktop companion**
 - local sensors;
@@ -1045,6 +1102,8 @@ the same underlying update should occur.
 - No "agent council" merely for the aesthetic of agents.
 - No pretending an unsupported platform capability exists.
 - No critical alert based on one unverified noisy signal.
+- No new required recurring paid service while the €0 constraint is active.
+- Core architecture must stay provider/model agnostic.
 - Reliability tests grow with every real incident.
 
 ---
@@ -1056,10 +1115,10 @@ This section should evolve with future discussions.
 - Exact Butler personality and whether the user can tune it conversationally.
 - Which memories should be visible/editable vs mostly invisible.
 - How aggressively Brain may create monitors under standing permission.
-- Cost budgets for model calls, external search, voice and phone calls.
+- Compute/resource budgets for local models and free-tier infrastructure; paid API budget is currently **€0**.
 - Exact escalation policy for finance/company/news monitors.
-- Which realtime voice provider/model should be primary.
-- Whether WhatsApp stays on the unofficial current bridge for personal use or migrates toward an official API for broader product use.
+- Which zero-cost local/browser speech stack gives acceptable realtime quality on the user's hardware.
+- WhatsApp currently stays on the existing self-hosted `whatsapp-web.js` bridge; any future official transport is an optional productization decision, not part of current vNext.
 - How ChatGPT context sync should work on the user's current ChatGPT plan given platform integration constraints.
 - Whether a bootstrap import of ChatGPT history is worth doing.
 - How much of LifeOS UI should remain once conversational surfaces are dominant.
@@ -1104,6 +1163,13 @@ That is the level this project is aiming for.
 ---
 
 ## 20. Changelog
+
+### 2026-09-18 — Cost/transport constraints clarified
+- Confirmed current WhatsApp transport is the Oracle-hosted `whatsapp-web.js` bridge, not Meta Cloud API.
+- Added hard current constraint of **€0 new recurring spend**.
+- Reframed realtime voice around WebRTC/local STT/local TTS/model adapters.
+- Marked true outbound PSTN calls as a desired future escalation transport, not a currently free solved dependency.
+- Explicitly made OpenAI/Twilio/paid realtime providers optional adapters only.
 
 ### 2026-09-18 — Initial vNext vision
 Captured:
