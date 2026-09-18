@@ -1164,6 +1164,17 @@ That is the level this project is aiming for.
 
 ## 20. Changelog
 
+### 2026-09-18 — Voice transport direction: WhatsApp-call spike first, PWA/WebRTC fallback
+- Researched current `whatsapp-web.js` stable call API and active upstream call work.
+- Stable `whatsapp-web.js` 1.34.7 exposes incoming Call metadata/reject only; current LifeOS bridge therefore cannot originate a fluent Brain call as-is.
+- Upstream PR #201825 (still unmerged as of 2026-09-18) has been live-tested for outgoing WhatsApp voice calls, accept/end, connection state, and synthetic audio injection in headless Chromium. This means a zero-cost Brain-initiated WhatsApp call that **speaks** generated audio is technically plausible with an experimental fork/patch.
+- Critical limitation: that PR does not expose the caller's remote audio. The contributor reports WhatsApp Web carries call audio through a WASM/data-channel pipeline rather than ordinary WebRTC audio tracks, so a normal library-level remote-audio capture hook is unavailable.
+- Research spike proposed before abandoning WhatsApp calls: route Chromium output on Oracle into a dedicated PulseAudio/PipeWire virtual sink and capture the sink monitor externally (FFmpeg/parec), then stream chunks to STT. If this works reliably, the zero-cost full duplex path becomes: WhatsApp native call rings iPhone → Oracle captures incoming decoded audio → STT → Brain → local TTS → injected audio back into WhatsApp call.
+- Treat this PulseAudio capture path as an experiment, not an assumed production capability. It depends on WhatsApp Web internals and headless/headful Chromium audio behavior and must pass real-device latency/reconnect tests.
+- PWA/WebRTC remains the clean fallback for true full-duplex audio. Installed iPhone Home Screen web apps support standards-based Web Push, so Brain can send an incoming-call-style notification for free; tapping it opens LifeOS into a WebRTC voice room. A pure PWA does **not** get native PushKit/CallKit incoming-call UI/background VoIP behavior, so it is not equivalent to a native WhatsApp/Phone ringing screen.
+- Current preference: prototype WhatsApp calls first because the native WhatsApp ring UX is exactly what the product wants and requires no paid telephony. Fall back to PWA/WebRTC if reliable bidirectional WhatsApp audio capture proves too fragile.
+- Do not depend directly on unmerged upstream code in the main bridge without pinning the exact fork/commit and adding a kill-switch/fallback to the stable text bridge.
+
 ### 2026-09-18 — Cost/transport constraints clarified
 - Confirmed current WhatsApp transport is the Oracle-hosted `whatsapp-web.js` bridge, not Meta Cloud API.
 - Added hard current constraint of **€0 new recurring spend**.
