@@ -115,7 +115,7 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 ## Last Good Commit
 
-`543f16d` - `Add compound Companion proactive turns`; the final MCP/schema/docs milestone is validated on top of this commit and will be recorded in the next commit.
+`c7eee21` - `Complete Companion vNext first slice`
 
 ## Recommended Next Step
 
