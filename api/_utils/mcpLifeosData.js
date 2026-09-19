@@ -4,6 +4,7 @@ import { searchBrainVault } from './brainVault.js';
 import { getSupabaseAdmin } from './supabaseAdmin.js';
 import { compileLifeOSContext } from './lifeosContextCompiler.js';
 import { buildWorkoutIntelligence } from './workoutIntelligence.js';
+import { listCurrentBeliefs, serializeBeliefForContext } from './brainBeliefs.js';
 
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 7;
@@ -62,6 +63,7 @@ export async function getLifeosSnapshot({ userId, days = DEFAULT_DAYS } = {}) {
     projects,
     brain,
     outbox,
+    beliefs,
   ] = await Promise.all([
     getTodaySummary({ userId }),
     getWeekSummary({ userId, days: normalizedDays }),
@@ -72,6 +74,7 @@ export async function getLifeosSnapshot({ userId, days = DEFAULT_DAYS } = {}) {
     getProjectsStatus({ userId, limit: 8 }),
     getBrainDebugContext({ userId, limit: 5 }),
     getWhatsappOutboxRecent({ userId, limit: 5 }),
+    getCurrentBeliefsForMcp({ userId, limit: 30 }),
   ]);
 
   return sanitizeMcpOutput({
@@ -86,6 +89,7 @@ export async function getLifeosSnapshot({ userId, days = DEFAULT_DAYS } = {}) {
     projects,
     brain_debug: brain,
     whatsapp_outbox: outbox,
+    current_beliefs: beliefs,
     open_loops: await getOpenLoops({ userId, days: normalizedDays, limit: 20 }),
   });
 }
@@ -96,6 +100,20 @@ export async function getLifeosContextSnapshot({ userId, days = DEFAULT_DAYS, li
     days: clampMcpDays(days),
     limit: clampMcpLimit(limit, 30, 80),
   }));
+}
+
+export async function getCurrentBeliefsForMcp({ userId, subjectType = null, limit = 50, client } = {}) {
+  const beliefs = await listCurrentBeliefs({
+    userId,
+    subjectType: subjectType || null,
+    limit: clampMcpLimit(limit, 50, 100),
+    ...(client ? { client } : {}),
+  });
+  return sanitizeMcpOutput({
+    current_count: beliefs.length,
+    beliefs: beliefs.map(serializeBeliefForContext).filter(Boolean),
+    note: 'Current rows only. Superseded history remains stored but is not returned by this read-only v1 surface.',
+  });
 }
 
 export async function getTodaySummary({ userId } = {}) {

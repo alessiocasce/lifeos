@@ -6,6 +6,7 @@ import {
   clampMcpLimit,
   getBrainDebugContext,
   getHealthSummary,
+  getCurrentBeliefsForMcp,
   getLifeosContextSnapshot,
   getLifeosSnapshot,
   getOpenLoops,
@@ -46,6 +47,14 @@ const TOOL_DEFINITIONS = [
     name: 'get_lifeos_context',
     description: 'Returns the shared LifeOS Context Compiler snapshot: today, next days, health/workout/project state, Brain/outbox issues, and ranked open loops for Brain/MCP/Morning Brief use.',
     inputSchema: objectSchema({ days: numberSchema('Optional day window, default 7, max 30.'), limit: numberSchema('Optional max open loops, default 30.') }),
+  },
+  {
+    name: 'get_current_beliefs',
+    description: 'Returns sanitized current LifeOS beliefs and routine states with confidence, provenance, and effective time. Read-only; superseded history is retained but omitted.',
+    inputSchema: objectSchema({
+      subject_type: { type: 'string', description: 'Optional subject type filter, for example routine.' },
+      limit: numberSchema('Optional max current beliefs, default 50.'),
+    }),
   },
   {
     name: 'get_recent_workouts',
@@ -115,6 +124,7 @@ const TOOL_DEFINITIONS = [
 const RESOURCE_DEFINITIONS = [
   ['lifeos://snapshot', 'LifeOS Snapshot', 'Compact full LifeOS overview.', () => getLifeosSnapshot],
   ['lifeos://context/today', 'LifeOS Context', 'Shared compact world snapshot from the LifeOS Context Compiler.', () => getLifeosContextSnapshot],
+  ['lifeos://brain/current-beliefs', 'Current Beliefs', 'Sanitized current LifeOS beliefs and routine states.', () => getCurrentBeliefsForMcp],
   ['lifeos://today', 'Today', 'Today summary for Europe/Rome.', () => getTodaySummary],
   ['lifeos://week/summary', 'Week Summary', 'Last 7 days summary.', () => getWeekSummary],
   ['lifeos://health/7d', 'Health 7d', 'Recent health and sleep summary.', () => getHealthSummary],
@@ -347,6 +357,13 @@ async function callMcpTool(params, context) {
       break;
     case 'get_lifeos_context':
       data = await getLifeosContextSnapshot({ userId, days: clampMcpDays(args.days), limit: clampMcpLimit(args.limit, 30, 80) });
+      break;
+    case 'get_current_beliefs':
+      data = await getCurrentBeliefsForMcp({
+        userId,
+        subjectType: typeof args.subject_type === 'string' ? args.subject_type : null,
+        limit: clampMcpLimit(args.limit, 50, 100),
+      });
       break;
     case 'get_recent_workouts':
       data = await getRecentWorkouts({ userId, days: clampMcpDays(args.days), limit: clampMcpLimit(args.limit, 20, 50) });

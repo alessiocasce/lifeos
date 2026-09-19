@@ -8,6 +8,7 @@ import {
   getCurrentRoutineBelief,
   listBeliefHistory,
   recordRoutineNegativeFeedback,
+  cancelQueuedRoutineCandidates,
 } from '../api/_utils/brainBeliefs.js';
 import {
   applyRoutineSemanticOperation,
@@ -22,6 +23,14 @@ import {
 } from '../api/_utils/brainCompanionTurn.js';
 import { buildButlerFallback, createCompanionResult } from '../api/_utils/brainButler.js';
 import { selectBrainTurnInteraction } from '../api/_utils/brainInteractionSelection.js';
+import { resolveProactiveWhatsappReply } from '../api/_utils/brainProactiveReplies.js';
+import {
+  accountabilityTargetIsResolved,
+  resolveAccountabilityTarget,
+} from '../api/_utils/brainProactiveDelivery.js';
+import { closeBrainInteraction } from '../api/_utils/brainWhatsappReliability.js';
+import { getCurrentBeliefsForMcp } from '../api/_utils/mcpLifeosData.js';
+import { buildLifeOSContext } from '../api/_utils/lifeosContextCompiler.js';
 import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
 
 const tests = [];
@@ -493,6 +502,177 @@ test('Butler fallback is grounded in structured state and exposes no invented ac
   assert.equal(machine.deterministic.action_count, 0);
 });
 
+test('MCP and shared context expose sanitized current beliefs without superseded rows', async () => {
+  const { db, client } = await createReliabilityDatabase();
+  try {
+    await applyRoutineStateTransition({
+      routineId: 'skin', state: 'inactive', confidence: 0.95,
+      provenance: { evidence: 'user stopped' }, idempotencyKey: 'mcp:skin:inactive',
+      userId: fixtureUser, client,
+    });
+    await applyRoutineStateTransition({
+      routineId: 'skin', state: 'active', confidence: 0.97,
+      provenance: { evidence: 'user restarted' }, idempotencyKey: 'mcp:skin:active',
+      userId: fixtureUser, client,
+    });
+    const output = await getCurrentBeliefsForMcp({ userId: fixtureUser, client });
+    assert.equal(output.current_count, 1);
+    assert.equal(output.beliefs[0].value.state, 'active');
+    assert.equal(output.beliefs[0].provenance.evidence, 'user restarted');
+    assert.equal('idempotency_key' in output.beliefs[0], false);
+    assert.equal('user_id' in output.beliefs[0], false);
+
+    const context = buildLifeOSContext({
+      rows: { beliefs: output.beliefs },
+      now: new Date('2026-09-19T12:00:00Z'),
+    });
+    assert.equal(context.beliefs.current_count, 1);
+    assert.equal(context.beliefs.routines[0].value.state, 'active');
+  } finally {
+    await db.close();
+  }
+});
+
+test('canonical persisted proactive journey resolves once, deactivates routine, and suppresses tomorrow', async () => {
+  const { db, client } = await createReliabilityDatabase();
+  try {
+    const thread = await insertOne(client, 'ai_chat_threads', { user_id: fixtureUser, title: 'Companion fixture', status: 'active' });
+    const outbox = await insertOne(client, 'brain_outbox_messages', {
+      user_id: fixtureUser,
+      recipient: 'fixture@lid',
+      body: 'Skincare?',
+      status: 'sent',
+      priority: 'low',
+      rule_key: 'accountability_habit_missing',
+      source_type: 'accountability',
+      source_id: 'habit:skin:2026-09-19',
+      idempotency_key: 'journey:skin:2026-09-19',
+      scheduled_for: '2026-09-19T11:00:00Z',
+      sent_at: '2026-09-19T11:00:05Z',
+      metadata: {
+        expected_reply_type: 'accountability',
+        accountability: { kind: 'habit_missing', habit_id: 'skin', local_date: '2026-09-19', target_count: 1 },
+      },
+    });
+    const assistantMetadata = proactiveHabitMessage({ habitId: 'skin', assistantId: 'unused', outboxId: outbox.id }).metadata;
+    const assistant = await insertOne(client, 'ai_chat_messages', {
+      user_id: fixtureUser,
+      thread_id: thread.id,
+      role: 'assistant',
+      content: 'Skincare?',
+      metadata: assistantMetadata,
+    });
+    const activeInteraction = await insertOne(client, 'brain_interaction_state', {
+      user_id: fixtureUser,
+      thread_id: thread.id,
+      channel: 'whatsapp',
+      version: 1,
+      state: 'active',
+      owner_kind: 'proactive',
+      assistant_message_id: assistant.id,
+      outbox_message_id: outbox.id,
+      owner_payload: assistantMetadata,
+      opened_at: '2026-09-19T11:00:05Z',
+      expires_at: '2026-09-20T05:00:05Z',
+    });
+    const userMessage = await insertOne(client, 'ai_chat_messages', {
+      user_id: fixtureUser,
+      thread_id: thread.id,
+      role: 'user',
+      content: 'no lol I stopped doing that like a month ago',
+      metadata: {},
+    });
+    const persistedAssistant = { ...assistant, metadata: assistantMetadata };
+    const selectionOwner = selectBrainTurnInteraction({
+      message: userMessage.content,
+      brainChat: { conversationHistory: [persistedAssistant] },
+      activeInteraction,
+      now: new Date('2026-09-19T12:00:00Z'),
+    });
+    assert.equal(selectionOwner.path, 'proactive_reply');
+
+    let healthWrites = 0;
+    const actions = {
+      getCurrentRoutineBelief: ({ routineId }) => getCurrentRoutineBelief({ routineId, userId: fixtureUser, client }),
+      inferRoutineStateChange: (args) => inferRoutineStateChange({
+        ...args,
+        infer: async () => ({
+          operation: 'deactivate', routine_id: 'skin', confidence: 0.98,
+          reason: 'Explicitly stopped a month ago.', evidence: 'stopped doing that like a month ago',
+          effective_from: '2026-08-19T12:00:00Z',
+        }),
+      }),
+      resolveProactive: (args) => resolveProactiveWhatsappReply({
+        ...args,
+        actions: {
+          updateHealthLog: async () => { healthWrites += 1; throw new Error('unexpected health write'); },
+          logSleepStart: async () => { healthWrites += 1; throw new Error('unexpected sleep write'); },
+          isResolved: (proactive) => accountabilityTargetIsResolved(proactive, { userId: fixtureUser, client }),
+          resolveTarget: (input) => resolveAccountabilityTarget({ ...input, userId: fixtureUser, client }),
+          enqueueSnooze: async () => null,
+        },
+      }),
+      applyRoutineSemanticOperation: (args) => applyRoutineSemanticOperation({ ...args, userId: fixtureUser, client }),
+      recordRoutineNegativeFeedback: (args) => recordRoutineNegativeFeedback({ ...args, userId: fixtureUser, client }),
+      cancelQueuedRoutineCandidates: (args) => cancelQueuedRoutineCandidates({ ...args, userId: fixtureUser, client }),
+      renderCompanionResult: async ({ result: machine }) => buildButlerFallback(machine),
+    };
+    const context = {
+      source: 'whatsapp',
+      clientRequestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      brainChat: { thread, userMessage, conversationHistory: [persistedAssistant] },
+      interactionSelection: selectionOwner,
+      workingContext: { language: 'en' },
+    };
+    const first = await runCompanionProactiveTurn({
+      message: userMessage.content,
+      brainChat: context.brainChat,
+      context,
+      selection: selectionOwner.proactive_selection,
+      now: new Date('2026-09-19T12:00:00Z'),
+      actions,
+    });
+    assert.equal(first.result.companion_result.semantic.state, 'inactive');
+    assert.equal(healthWrites, 0);
+    await closeBrainInteraction({
+      threadId: thread.id,
+      assistantMessageId: assistant.id,
+      expectedVersion: 1,
+      state: 'answered',
+      userId: fixtureUser,
+      client,
+    });
+
+    const current = await getCurrentRoutineBelief({ routineId: 'skin', userId: fixtureUser, client });
+    assert.equal(current.value.state, 'inactive');
+    assert.equal(current.provenance.evidence, 'stopped doing that like a month ago');
+    assert.equal((await db.query(`select count(*)::int as count from health_logs where user_id=$1`, [fixtureUser])).rows[0].count, 0);
+    assert.equal((await db.query(`select metadata->'resolution'->>'type' as resolution from brain_outbox_messages where id=$1`, [outbox.id])).rows[0].resolution, 'no');
+    assert.equal((await db.query(`select state from brain_interaction_state where user_id=$1 and thread_id=$2`, [fixtureUser, thread.id])).rows[0].state, 'answered');
+
+    await runCompanionProactiveTurn({
+      message: userMessage.content,
+      brainChat: context.brainChat,
+      context,
+      selection: selectionOwner.proactive_selection,
+      now: new Date('2026-09-19T12:00:00Z'),
+      actions,
+    });
+    assert.equal((await db.query(`select count(*)::int as count from brain_beliefs where user_id=$1`, [fixtureUser])).rows[0].count, 1);
+    assert.equal(healthWrites, 0);
+
+    const tomorrow = buildAccountabilityProactiveCandidates({
+      healthLogs: [{ logged_on: '2026-09-20', wake_time: '08:00', sleep_start: '00:30', hygiene: {} }],
+      routineBeliefs: [current],
+      now: new Date('2026-09-20T21:45:00Z'),
+      recipient: 'fixture@lid',
+    });
+    assert.equal(tomorrow.some((candidate) => candidate.metadata?.accountability?.habit_id === 'skin'), false);
+  } finally {
+    await db.close();
+  }
+});
+
 function test(name, fn) {
   tests.push({ name, fn });
 }
@@ -552,6 +732,12 @@ function proactiveHabitMessage({ habitId, assistantId, outboxId }) {
       },
     },
   };
+}
+
+async function insertOne(client, table, payload) {
+  const result = await client.from(table).insert(payload).select('*').single();
+  if (result.error) throw result.error;
+  return result.data;
 }
 
 let failures = 0;

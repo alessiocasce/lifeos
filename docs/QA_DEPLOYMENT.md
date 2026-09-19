@@ -447,3 +447,17 @@ Expected:
 ## Known Non-Failing Build Warning
 
 The production build may warn that a JavaScript chunk is larger than 500 kB. This is expected for now and does not block deployment.
+
+## Companion Belief Migration
+
+The Companion first slice requires `supabase/migrations/20260919120000_companion_beliefs.sql`.
+
+Deployment order:
+
+1. Apply the migration in Supabase before the backend deploy. It is additive and does not rewrite `ai_memories`, Health logs, outbox rows, or interaction/provider mappings.
+2. Verify `brain_beliefs` has RLS enabled, authenticated users have only the user-scoped read policy, and only `service_role` can execute `apply_brain_belief_transition`.
+3. Deploy Vercel and run `npm run smoke:mcp` against the deployed endpoint; confirm `get_current_beliefs` and `lifeos://brain/current-beliefs` are listed.
+4. The Oracle bridge source did not change for this slice, so no PM2 restart is required solely for Companion beliefs. Restart only if bridge code or bridge environment changes separately.
+5. Run the manual WhatsApp journey in `docs/QA_AI_ASSISTANT.md`. Local suites do not prove Gemini semantics or physical Oracle/WhatsApp delivery.
+
+Rollback order: deploy the previous backend first. Keep the additive table/function in place until no deployed backend references it; dropping belief history is intentionally not part of the normal rollback.

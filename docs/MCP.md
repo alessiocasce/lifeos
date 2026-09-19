@@ -43,6 +43,7 @@ Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in
 
 - `get_lifeos_snapshot`
 - `get_lifeos_context`
+- `get_current_beliefs`
 - `get_recent_workouts`
 - `get_workout_intelligence`
 - `get_health_summary`
@@ -58,6 +59,8 @@ Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in
 All tools are read-only and return compact, limited, sanitized JSON.
 
 `get_lifeos_context` and `lifeos://context/today` expose the shared LifeOS Context Compiler snapshot. It is the preferred context source for Morning Brief-style clients because it includes today, next few days, health/sleep status, latest workout hints, project staleness/carryover, failed actions, WhatsApp outbox issues, active pending Brain actions, and ranked open loops.
+
+`get_current_beliefs` and `lifeos://brain/current-beliefs` expose sanitized current belief rows, including routine state, confidence, provenance, effective time, and bounded negative-feedback state. They intentionally omit `user_id`, idempotency keys, and superseded history. MCP remains read-only; Companion belief mutation is internal to the validated Brain semantic service in this slice.
 
 `get_open_loops` uses the same shared engine and returns ranked loop objects with `type`, `severity`, source table/type/id, due/date, reason, suggested next action, and whether the loop is eligible for future proactive handling or Home display.
 
@@ -79,6 +82,7 @@ If `sets_truncated` is true, ask for a narrower workout window.
 
 - `lifeos://snapshot`
 - `lifeos://context/today`
+- `lifeos://brain/current-beliefs`
 - `lifeos://today`
 - `lifeos://week/summary`
 - `lifeos://health/7d`

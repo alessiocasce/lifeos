@@ -769,3 +769,17 @@ MCP is an external read-only context/debug layer. It is not the in-app Brain and
 9. Confirm the Assistant page itself does not require long scrolling to reach the composer/widget.
 10. Confirm messages scroll inside the chat widget when the conversation grows.
 11. Confirm Recent Actions remains compact on desktop and opens its detail view.
+
+## Companion Current-State Journey
+
+Prerequisite: apply `supabase/migrations/20260919120000_companion_beliefs.sql`, deploy Vercel, and keep the Oracle bridge on the existing checked-in transport version.
+
+1. Receive a proactive Skin check-in in WhatsApp and native-reply `no lol I stopped doing that like a month ago`.
+2. Confirm no Skin Health log is written, the owned interaction resolves, and the response does not mention a different habit.
+3. Inspect `brain_beliefs`: exactly one current `routine / health.habit.skin / status` row is inactive, with source/outbox/message provenance; any previous row is superseded.
+4. Re-evaluate proactive candidates after the next Skin window and confirm there is no Skin candidate.
+5. Send `actually I started doing skincare again`; confirm the inactive row remains historical, one new current active row exists, and future candidates can resume.
+6. On a fresh Skin check-in reply only `no`; confirm there is no Health write and no inactive belief. Repeating a negative response should increase bounded feedback and suppress ordinary nags rather than escalating them.
+7. On a Creatine check-in reply `done btw I'm going away tomorrow`; confirm Creatine is written once, only the quoted/current target is resolved, and the residual statement reaches knowledge extraction.
+8. Repeat the same provider inbound delivery and confirm the receipt replay creates no duplicate Health or belief state transition.
+9. Run `npm run test:companion`, `npm run test:brain`, and `npm run test:reliability` before deploy.

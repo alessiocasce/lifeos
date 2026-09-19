@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 Current branch: `main`
 
 
@@ -20,6 +20,14 @@ Current vNext priorities start with the existing pain surface: make WhatsApp/Bra
 Hard current constraints: keep the existing Oracle-hosted `whatsapp-web.js` transport, prefer a WhatsApp-call proof of concept before PWA/WebRTC fallback, require a **€0 new recurring-spend path**, and keep model/provider dependencies replaceable.
 
 Recent context: Assistant now has a shared Brain backend used by app chat and WhatsApp inbound, with a formal BrainTurn contract, controlled command-draft stage, planner stage, and backend LifeOS tool guards.
+
+### Companion vNext First Slice
+
+The first current-state vertical slice is implemented in repository code. `brain_beliefs` stores one current belief per `(user, subject, predicate)` plus immutable superseded rows, confidence, provenance, effective time, and bounded negative feedback. All mutations go through the service-role-only atomic `apply_brain_belief_transition` RPC; authenticated clients have user-scoped read access only. Apply `supabase/migrations/20260919120000_companion_beliefs.sql` before deploying the backend that reads this table.
+
+`brainCompanionTurn.js` composes three distinct contracts: the already-selected immutable proactive target, validated routine semantics, and Butler wording. A rich reply can resolve the owned Health check-in without a Health write, update routine state, preserve unrelated residual content for knowledge extraction, and return one grounded response. A bare `no` records bounded feedback but never means permanent deactivation. Candidate generation and poll-time delivery revalidation both consult current routine beliefs.
+
+MCP remains read-only. `get_current_beliefs`, `lifeos://brain/current-beliefs`, and the shared LifeOS context expose sanitized current rows only; superseded history stays in Postgres. Run `npm run test:companion` for focused current-state/compound-turn coverage.
 
 ## Reliability Release Handoff
 

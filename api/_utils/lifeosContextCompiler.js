@@ -1,6 +1,7 @@
 import { addDays, localDate, localRangeToUtcWindow, TIME_ZONE } from './date.js';
 import { safePreview } from './brainTrace.js';
 import { getSupabaseAdmin } from './supabaseAdmin.js';
+import { serializeBeliefForContext } from './brainBeliefs.js';
 
 const SECRET_KEY_PATTERN = /(authorization|bearer|token|secret|password|service[_-]?role|api[_-]?key|gemini|supabase)/i;
 const DEFAULT_DAYS = 7;
@@ -56,6 +57,7 @@ export async function loadLifeOSContextRows({ client = getSupabaseAdmin(), userI
     actionLogs,
     outboxMessages,
     brainMessages,
+    beliefs,
   ] = await Promise.all([
     selectMany(client.from('memos').select(memoSelect()).eq('user_id', userId).eq('status', 'open').order('memo_date', { ascending: true, nullsFirst: false }).order('memo_time', { ascending: true, nullsFirst: false }).limit(Math.max(maxRows, 80))),
     selectMany(client.from('calendar_events').select(calendarSelect()).eq('user_id', userId).gte('event_date', today).lte('event_date', future).neq('status', 'cancelled').order('event_date', { ascending: true }).order('start_time', { ascending: true }).limit(Math.max(maxRows, 80))),
@@ -66,9 +68,10 @@ export async function loadLifeOSContextRows({ client = getSupabaseAdmin(), userI
     selectMany(client.from('ai_action_logs').select(actionLogSelect()).eq('user_id', userId).order('created_at', { ascending: false }).limit(50)),
     selectMany(client.from('brain_outbox_messages').select(outboxSelect()).eq('user_id', userId).eq('channel', 'whatsapp').order('created_at', { ascending: false }).limit(80)),
     selectMany(client.from('ai_chat_messages').select(brainMessageSelect()).eq('user_id', userId).eq('role', 'assistant').order('created_at', { ascending: false }).limit(40)),
+    selectMany(client.from('brain_beliefs').select(beliefSelect()).eq('user_id', userId).eq('record_status', 'current').order('effective_from', { ascending: false }).limit(100)),
   ]);
 
-  return { memos, calendarEvents, projects, projectSessions, healthLogs, workouts, actionLogs, outboxMessages, brainMessages };
+  return { memos, calendarEvents, projects, projectSessions, healthLogs, workouts, actionLogs, outboxMessages, brainMessages, beliefs };
 }
 
 export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEFAULT_LIMIT, now = new Date() } = {}) {
@@ -82,6 +85,7 @@ export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEF
   const calendar = summarizeCalendar(normalizedRows.calendarEvents, today, now);
   const brain = summarizeBrain(normalizedRows.actionLogs, normalizedRows.brainMessages, now);
   const whatsapp = summarizeOutbox(normalizedRows.outboxMessages, now);
+  const beliefs = summarizeBeliefs(normalizedRows.beliefs);
 
   return sanitizeContextValue({
     generated_at: new Date(now).toISOString(),
@@ -112,6 +116,7 @@ export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEF
     workouts,
     brain,
     whatsapp,
+    beliefs,
     open_loops: openLoops,
   });
 }
@@ -611,6 +616,14 @@ function summarizeOutbox(messages, now) {
   };
 }
 
+function summarizeBeliefs(beliefs) {
+  const current = beliefs.map(serializeBeliefForContext).filter(Boolean);
+  return {
+    current_count: current.length,
+    routines: current.filter((belief) => belief.subject_type === 'routine' && belief.predicate === 'status'),
+  };
+}
+
 function normalizeContextRows(rows) {
   return {
     memos: Array.isArray(rows.memos) ? rows.memos : [],
@@ -622,6 +635,7 @@ function normalizeContextRows(rows) {
     actionLogs: Array.isArray(rows.actionLogs) ? rows.actionLogs : [],
     outboxMessages: Array.isArray(rows.outboxMessages) ? rows.outboxMessages : [],
     brainMessages: Array.isArray(rows.brainMessages) ? rows.brainMessages : [],
+    beliefs: Array.isArray(rows.beliefs) ? rows.beliefs : [],
   };
 }
 
@@ -946,4 +960,8 @@ function outboxSelect() {
 
 function brainMessageSelect() {
   return 'id, thread_id, role, content, request_id, action_type, metadata, created_at';
+}
+
+function beliefSelect() {
+  return 'id, subject_type, subject_key, predicate, value, confidence, source_type, provenance, effective_from, effective_until, negative_feedback_count, last_feedback_at';
 }

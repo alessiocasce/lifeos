@@ -1341,7 +1341,7 @@ revoke all on function public.apply_brain_belief_transition(
 grant execute on function public.apply_brain_belief_transition(
   uuid, text, text, text, jsonb, numeric, text, jsonb, jsonb,
   timestamptz, timestamptz, integer, timestamptz, text
-) to authenticated, service_role;
+) to service_role;
 
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
 create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
@@ -1684,10 +1684,10 @@ using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
 drop policy if exists "brain_beliefs are user scoped" on public.brain_beliefs;
-create policy "brain_beliefs are user scoped" on public.brain_beliefs
-for all to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+drop policy if exists "brain_beliefs are user scoped read" on public.brain_beliefs;
+create policy "brain_beliefs are user scoped read" on public.brain_beliefs
+for select to authenticated
+using (auth.uid() = user_id);
 
 drop policy if exists "ai_insights are user scoped" on public.ai_insights;
 create policy "ai_insights are user scoped" on public.ai_insights

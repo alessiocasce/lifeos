@@ -274,6 +274,8 @@ Examples:
 - preferred accountability style.
 
 #### Current state
+
+Implemented first slice (2026-09-19): LifeOS now has a persistent current-belief layer for routines, semantic deactivate/suspend/reactivate operations with deterministic validation, compound proactive turns, Butler result/wording separation, candidate/delivery filtering, and read-only MCP/context exposure. This is deliberately narrower than the full memory graph described below: only tracked routine state is mutated conversationally today.
 What is true now.
 
 Examples:

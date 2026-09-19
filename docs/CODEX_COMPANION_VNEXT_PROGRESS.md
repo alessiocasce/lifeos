@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-In progress. Milestones 1-3 (persistent beliefs, semantic routine operations, and compound proactive runtime) are implemented and verified. The execution brief remains `docs/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`; this file is only a resumable implementation handoff.
+Implementation complete and locally validated. Milestones 1-4 (beliefs, semantic operations, compound runtime, MCP/context exposure, canonical database journey, and handoff docs) satisfy the first-slice execution brief. Production activation still requires applying the additive Supabase migration before deploying Vercel, followed by the documented physical Oracle/WhatsApp QA.
 
 ## Implementation Approach
 
@@ -37,6 +37,10 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - Added standalone natural routine reactivation/deactivation handling before generic routing.
 - Accountability candidate generation and delivery-time revalidation now reject inactive, suspended, cooling-down, or uncertain routine beliefs.
 - State changes cancel already queued candidates for the same routine.
+- Added read-only MCP tool `get_current_beliefs`, resource `lifeos://brain/current-beliefs`, snapshot/context belief sections, and safe current-row serialization.
+- Added a canonical PGlite journey using persisted outbox, assistant message, active interaction ownership, real proactive resolver, real belief RPC, resolution metadata, interaction close, replay idempotency, and next-day candidate suppression.
+- Updated architecture, MCP, WhatsApp, QA, deployment, product-direction, and project handoff docs to match the implemented slice.
+- Authenticated clients have user-scoped read access to beliefs; semantic transition RPC execution is service-role-only.
 
 ## Files / Schema Changed
 
@@ -48,6 +52,9 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - `api/_utils/brainProactiveAccountability.js`
 - `api/_utils/brainProactiveDelivery.js`
 - `api/ai/chat.js`
+- `api/_utils/lifeosContextCompiler.js`
+- `api/_utils/mcpLifeosData.js`
+- `api/mcp.js`
 - `supabase/schema.sql`
 - `supabase/migrations/20260919120000_companion_beliefs.sql`
 - `tests/brain/reliabilityDatabase.js`
@@ -55,6 +62,13 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - `scripts/test-schema-contracts.js`
 - `package.json`
 - `docs/CODEX_COMPANION_VNEXT_PROGRESS.md`
+- `PROJECT_CONTEXT.md`
+- `docs/BRAIN_ARCHITECTURE.md`
+- `docs/WHATSAPP_PROACTIVE_ARCHITECTURE.md`
+- `docs/MCP.md`
+- `docs/LIFEOS_COMPANION_VNEXT.md`
+- `docs/QA_AI_ASSISTANT.md`
+- `docs/QA_DEPLOYMENT.md`
 
 ## Migrations Added
 
@@ -62,27 +76,30 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 ## Tests Passing
 
-- `node --check api/_utils/brainBeliefs.js`
-- `node --check scripts/test-companion-beliefs.js`
-- `npm run test:companion` (16 focused behavior tests)
+- `node --check` for all changed backend/test JavaScript files
+- `npm run test:companion` (18 focused behavior tests)
 - `npm run test:schema` (includes isolated Companion migration application and RPC replay)
 - `npm run test:reliability`
 - `npm run test:brain`
+- `npm run test:bridge`
+- `npm run test:mcp`
+- `npm test` (Brain, MCP, schema, reliability, bridge, Workout, and Companion)
+- `npm run check:functions` (7 Vercel functions)
+- `npm run build`
 - `git diff --check`
 
 ## Tests Failing
 
-- None known for milestone 1.
+- None.
 
 ## Work In Progress
 
-- Milestone 4: MCP/context exposure, strengthened end-to-end database journey tests, and documentation.
+- None in the repository. Deployment and physical transport QA are operational follow-ups.
 
 ## Requirements Still Missing
 
-- MCP/context exposure.
-- Canonical journeys A-F and full validation.
-- Deployment and Oracle/WhatsApp QA documentation.
+- No implementation requirement remains for this slice.
+- Physical Oracle/WhatsApp/Gemini QA remains a post-deploy manual requirement and cannot be claimed locally.
 
 ## Known Risks / Decisions
 
@@ -92,13 +109,14 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - One negative reply creates an active belief with an eight-hour cooldown. A second creates an uncertain belief with a seven-day cooldown; normal habit nudges remain suppressed until the uncertainty is explicitly resolved.
 - Current v1 behavior suppresses uncertain routines after cooldown rather than sending an automatic clarification; a future stale-model clarification family can make that conversational without restoring ordinary nags.
 - Rich semantic interpretation uses one model call; Butler wording may use a second call but always falls back deterministically. No new provider dependency was added.
+- No MCP write primitive was added. The internal semantic mutation service is narrow and tested; an external write contract is deferred until it can carry equivalent subject grounding, idempotency, provenance, and authorization.
 - Existing quote ownership and health target resolution must remain the only authority for deterministic proactive writes.
 - No external MCP write primitive will be added unless the internal semantic mutation contract proves sufficiently narrow and safe.
 
 ## Last Good Commit
 
-`ee0ce38` - `Add semantic routine state contract`
+`543f16d` - `Add compound Companion proactive turns`; the final MCP/schema/docs milestone is validated on top of this commit and will be recorded in the next commit.
 
 ## Recommended Next Step
 
-Expose sanitized current beliefs through shared context/MCP without weakening read-only v1. Then add a PGlite canonical journey that persists a delivered proactive message, selects the real owned target, applies the compound transition idempotently, proves no health write, and proves subsequent candidate/delivery suppression.
+Apply `supabase/migrations/20260919120000_companion_beliefs.sql`, deploy the Vercel backend, then run the manual WhatsApp journey in `docs/WHATSAPP_PROACTIVE_ARCHITECTURE.md`. The next code slice should add a narrow authenticated semantic belief write API/MCP contract only after production QA confirms this internal transition service.

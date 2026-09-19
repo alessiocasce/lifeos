@@ -46,6 +46,7 @@ test('tools/list includes expected tools', () => {
   for (const name of [
     'get_lifeos_snapshot',
     'get_lifeos_context',
+    'get_current_beliefs',
     'get_recent_workouts',
     'get_workout_intelligence',
     'get_health_summary',
@@ -67,6 +68,7 @@ test('resources/list includes expected resources', () => {
   for (const uri of [
     'lifeos://snapshot',
     'lifeos://context/today',
+    'lifeos://brain/current-beliefs',
     'lifeos://today',
     'lifeos://workouts/intelligence',
     'lifeos://brain/debug',

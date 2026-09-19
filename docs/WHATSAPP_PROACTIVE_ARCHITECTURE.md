@@ -88,6 +88,14 @@ Accountability cases support:
 
 Accountability replies update Health through existing backend helpers only after a clear reply. They must not create memos/calendar events, call Vault, or route through the planner.
 
+### Companion Compound Replies
+
+Rich replies no longer have to fit the short accountability grammar. When the persisted active interaction or trusted native quote identifies a habit check-in, `brainCompanionTurn.js` may process both the deterministic target result and a residual routine-state meaning. The semantic layer cannot choose another target and cannot execute Health, memo, calendar, or planner actions.
+
+Example: `no, I stopped doing that a month ago` resolves today's owned check-in without logging the habit, writes an inactive current routine belief with provenance/history, cancels queued candidates for that routine, and lets the Butler render one response. A bare `no` records bounded feedback and cooldown only; it does not deactivate the routine. A later explicit reactivation supersedes the inactive row and allows future candidates again.
+
+Generation and `poll` delivery revalidation both consult current routine state. Inactive, suspended, cooling-down, and uncertain routines do not produce ordinary habit nags. The new belief migration must be applied before deploying this backend behavior.
+
 ## Sender Canonicalization
 
 Configure `LIFEOS_WHATSAPP_ALLOWED_SENDERS` with the stable canonical sender. If WhatsApp exposes both `@lid` and `@c.us`, add aliases:
@@ -174,6 +182,16 @@ Manual accountability QA after deploy:
 6. Confirm today's `health_logs.hygiene.shower.count` reaches one, repeating the reply does not change it, and queued same-source fallbacks are cancelled.
 7. Repeat for wake time with reply `9.30` and for previous-night sleep start with reply `2.30`.
 8. Test `piu tardi` and confirm a snoozed outbox row is queued rather than an immediate duplicate.
+
+Manual Companion QA after the belief migration and Vercel deploy:
+
+1. Receive a real `Skincare fatta?` message through Oracle/PM2 and native-reply: `no lol I stopped doing that like a month ago`.
+2. Confirm no Skin Health count is written, the interaction/outbox resolution is recorded, one current `brain_beliefs` routine row is `inactive`, and the response is concise.
+3. Replay the same inbound provider message and confirm no second belief or Health write appears.
+4. Run outbox evaluation the next eligible day and confirm no Skin candidate/outbox row is created.
+5. Send `actually I started doing skincare again`; confirm the inactive row becomes superseded, the new current row is active, and later eligible Skin candidates can resume.
+6. Repeat with a bare `no`; confirm the routine does not become inactive and the negative-feedback count/cooldown is bounded.
+7. Reply to Creatine with `done btw I'm going away tomorrow`; confirm Creatine is logged once and the residual information reaches the normal knowledge path without another proactive target mutation.
 
 ## Bridge Runtime
 

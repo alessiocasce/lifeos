@@ -179,6 +179,25 @@ Accountability replies are intentionally narrow:
 
 These replies must not route through Planner Stage, create memos/calendar events, call Vault, or dump memory. Generic pending cancellations still beat proactive reply priority unless the user clearly references the proactive target.
 
+## Companion Current-State And Compound Turns
+
+`api/_utils/brainBeliefs.js` owns the persistent current-state contract. `brain_beliefs.record_status` describes row lifecycle (`current` or `superseded`); `value.state` describes domain truth (`active`, `inactive`, `suspended`, or `uncertain`). The atomic transition RPC serializes one subject/predicate, supersedes the old current row, inserts the new row, and replays by idempotency key. Do not replace this with updates to `ai_memories`: memories do not provide current-vs-historical truth.
+
+`api/_utils/brainRoutineSemantics.js` is provider-agnostic at its boundary. Gemini may propose one narrow routine operation, but deterministic validation owns the allowed operation, grounded routine, confidence threshold, temporal bounds, and persistence. Bare `no`/`not yet` bypass semantic inference. Cross-target or low-confidence model output becomes `no_change`.
+
+`api/_utils/brainCompanionTurn.js` handles compound proactive turns:
+
+1. use the immutable target selected by interaction ownership;
+2. resolve that target at most once through the existing deterministic executor;
+3. apply a validated routine-state transition or bounded negative feedback;
+4. cancel queued candidates when the routine is no longer eligible;
+5. preserve unrelated residual text for the existing knowledge-extraction path;
+6. pass structured machine outcome to `brainButler.js` for wording.
+
+The Butler cannot add actions. Model wording is optional and failure falls back to concise deterministic text grounded in the structured result. Trace metadata records semantic operation/state and whether a belief, feedback record, or residual was handled, without storing model prompts or secrets.
+
+Standalone explicit routine changes such as `I started doing skincare again` use the same semantic validator and belief transition before generic routing. Candidate generation and delivery revalidation must both consult current beliefs; checking only at evaluation time is insufficient because already queued rows can become stale.
+
 ## Tests
 
 Run:
@@ -187,6 +206,7 @@ Run:
 npm run test:brain
 npm run test:reliability
 npm run test:bridge
+npm run test:companion
 ```
 
 The harness covers BrainTurn Contract paths, command-draft stage policy, memo/calendar policy, pending/proactive arbitration, operational follow-ups, route repair, Vault skipping, and the existing sleep/calendar/proactive regressions.
