@@ -9,6 +9,11 @@ import {
   listBeliefHistory,
   recordRoutineNegativeFeedback,
 } from '../api/_utils/brainBeliefs.js';
+import {
+  applyRoutineSemanticOperation,
+  inferRoutineStateChange,
+  validateRoutineSemanticInference,
+} from '../api/_utils/brainRoutineSemantics.js';
 import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
 
 const tests = [];
@@ -168,6 +173,114 @@ test('negative feedback decision remains pure and preserves an explicit inactive
   });
   assert.equal(result.state, 'inactive');
   assert.equal(result.negative_feedback_count, 1);
+});
+
+test('semantic inference accepts grounded deactivation but rejects bare no as durable evidence', async () => {
+  const now = new Date('2026-09-19T12:00:00Z');
+  const semantic = await inferRoutineStateChange({
+    message: 'no lol I stopped doing that like a month ago',
+    targetRoutineId: 'skin',
+    now,
+    infer: async () => ({
+      operation: 'deactivate',
+      routine_id: 'skin',
+      confidence: 0.97,
+      reason: 'The user explicitly stopped the routine.',
+      evidence: 'I stopped doing that like a month ago',
+      effective_from: '2026-08-19T12:00:00Z',
+    }),
+  });
+  assert.equal(semantic.operation, 'deactivate');
+  assert.equal(semantic.state, 'inactive');
+  assert.equal(semantic.routine_id, 'skin');
+  assert.equal(semantic.persist, true);
+
+  let called = false;
+  const bare = await inferRoutineStateChange({
+    message: 'no',
+    targetRoutineId: 'skin',
+    now,
+    infer: async () => { called = true; return { operation: 'deactivate', routine_id: 'skin', confidence: 1 }; },
+  });
+  assert.equal(called, false);
+  assert.equal(bare.operation, 'no_change');
+  assert.equal(bare.validation_reason, 'bare_reply');
+});
+
+test('semantic validator blocks cross-target substitution and low-confidence state changes', () => {
+  const crossTarget = validateRoutineSemanticInference({
+    operation: 'deactivate',
+    routine_id: 'creatine',
+    confidence: 0.99,
+  }, {
+    message: 'I stopped doing that',
+    targetRoutineId: 'skin',
+    now: new Date('2026-09-19T12:00:00Z'),
+  });
+  assert.equal(crossTarget.operation, 'no_change');
+  assert.equal(crossTarget.validation_reason, 'cross_target_not_grounded');
+
+  const weak = validateRoutineSemanticInference({
+    operation: 'deactivate',
+    routine_id: 'skin',
+    confidence: 0.5,
+  }, {
+    message: 'I might not care about skincare',
+    targetRoutineId: 'skin',
+    now: new Date('2026-09-19T12:00:00Z'),
+  });
+  assert.equal(weak.operation, 'no_change');
+  assert.equal(weak.validation_reason, 'low_confidence');
+});
+
+test('temporary suspension gets a bounded default while explicit reactivation restores active state', async () => {
+  const now = new Date('2026-09-19T12:00:00Z');
+  const suspended = await inferRoutineStateChange({
+    message: 'leave me alone about creatine for a while',
+    now,
+    infer: async () => ({ operation: 'suspend', routine_id: 'creatine', confidence: 0.9, evidence: 'for a while' }),
+  });
+  assert.equal(suspended.operation, 'suspend');
+  assert.equal(suspended.inferred_default_duration, true);
+  assert.equal(suspended.effective_until, '2026-10-03T12:00:00.000Z');
+
+  const reactivated = await inferRoutineStateChange({
+    message: 'actually I started doing skincare again',
+    now,
+    infer: async () => ({ operation: 'reactivate', routine_id: 'skin', confidence: 0.96, evidence: 'started doing skincare again' }),
+  });
+  assert.equal(reactivated.operation, 'reactivate');
+  assert.equal(reactivated.state, 'active');
+});
+
+test('validated semantic operations persist through the belief service with provenance', async () => {
+  const { db, client } = await createReliabilityDatabase();
+  try {
+    const semantic = validateRoutineSemanticInference({
+      operation: 'deactivate',
+      routine_id: 'skin',
+      confidence: 0.98,
+      reason: 'Explicitly stopped.',
+      evidence: 'stopped doing skincare',
+    }, {
+      message: 'I stopped doing skincare',
+      now: new Date('2026-09-19T12:00:00Z'),
+    });
+    const persisted = await applyRoutineSemanticOperation({
+      semantic,
+      userId: fixtureUser,
+      idempotencyKey: 'semantic:test:skin:stop:1',
+      sourceRef: { channel: 'whatsapp', message_id: 'message-1' },
+      provenance: { path: 'compound_proactive_reply' },
+      client,
+    });
+    assert.equal(persisted.value.state, 'inactive');
+    assert.equal(persisted.provenance.semantic_operation, 'deactivate');
+    assert.equal(persisted.provenance.path, 'compound_proactive_reply');
+    assert.equal(persisted.provenance.validator, 'brain_routine_semantics_v1');
+  } finally {
+    await db.close();
+  }
 });
 
 function test(name, fn) {

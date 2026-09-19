@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-In progress. Milestone 1 (persistent beliefs) is implemented and verified. The execution brief remains `docs/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`; this file is only a resumable implementation handoff.
+In progress. Milestones 1-2 (persistent beliefs and semantic routine operations) are implemented and verified. The execution brief remains `docs/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`; this file is only a resumable implementation handoff.
 
 ## Implementation Approach
 
@@ -26,10 +26,15 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - Added a model-agnostic belief service for explicit routine transitions, current/history reads, bounded negative feedback, and proactive policy evaluation.
 - A first bare `no` records evidence but remains active; repeated negative feedback becomes uncertain with a bounded cooldown, never implicitly inactive.
 - Explicit reactivation supersedes inactive history without deleting it.
+- Added a provider-agnostic routine semantic contract with an injectable inference function and Gemini as the default provider adapter.
+- Deterministic validation restricts model output to `deactivate`, `suspend`, `reactivate`, `stale_assumption`, or `no_change` for a grounded tracked routine.
+- Bare replies bypass semantic inference; low-confidence and cross-target operations are rejected before persistence.
+- Temporary pauses are bounded (explicit end/duration or a documented 14-day conservative fallback).
 
 ## Files / Schema Changed
 
 - `api/_utils/brainBeliefs.js`
+- `api/_utils/brainRoutineSemantics.js`
 - `supabase/schema.sql`
 - `supabase/migrations/20260919120000_companion_beliefs.sql`
 - `tests/brain/reliabilityDatabase.js`
@@ -46,7 +51,7 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 - `node --check api/_utils/brainBeliefs.js`
 - `node --check scripts/test-companion-beliefs.js`
-- `npm run test:companion` (5 focused behavior tests)
+- `npm run test:companion` (9 focused behavior tests)
 - `npm run test:schema` (includes isolated Companion migration application and RPC replay)
 - `git diff --check`
 
@@ -56,11 +61,10 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 ## Work In Progress
 
-- Milestone 2: semantic routine-state inference and deterministic validation, followed by compound proactive orchestration.
+- Milestone 3: compound proactive orchestration, Butler result rendering, and runtime belief mutation.
 
 ## Requirements Still Missing
 
-- Semantic routine-state inference with validated operations.
 - Compound proactive reply plus residual semantic processing.
 - Butler result/wording separation.
 - Candidate and delivery-time belief filtering.
@@ -84,4 +88,4 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 ## Recommended Next Step
 
-Implement a provider-agnostic semantic routine-state extractor/validator. It should accept current message plus an optional trusted proactive routine target, return a narrow operation (`deactivate`, `suspend`, `reactivate`, `no_change`), reject bare `no` as permanent state evidence, and expose injected-model pure tests before it is wired into `chat.js`.
+Add an explicit compound proactive turn stage. It must resolve the immutable owned accountability target once, run routine semantics only against that trusted routine (or explicit routine mentions), persist state with a request/message-derived idempotency key, preserve unrelated residual content for the normal knowledge path, and hand a structured result to the Butler renderer.
