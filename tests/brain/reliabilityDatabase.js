@@ -5,7 +5,7 @@ export const fixtureUser = '11111111-1111-4111-8111-111111111111';
 
 export async function createReliabilityDatabase() {
   const db = new PGlite();
-  await db.exec(`create schema auth; create role anon; create role authenticated;
+  await db.exec(`create schema auth; create role anon; create role authenticated; create role service_role;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql as $$ select '${fixtureUser}'::uuid $$;
     insert into auth.users values ('${fixtureUser}');`);
@@ -20,10 +20,17 @@ export async function createReliabilityDatabase() {
   if (timestampStart >= 0) await db.exec(schema.slice(timestampStart, schema.indexOf('drop trigger if exists set_workouts', timestampStart)));
   await db.exec(`create trigger health_updated before update on health_logs for each row execute function public.set_updated_at();`);
   await db.exec(fs.readFileSync(new URL('../../supabase/releases/reliability.sql', import.meta.url), 'utf8'));
+  await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8'));
   await db.exec(`create unique index ai_chat_messages_user_thread_outbox_unique
     on ai_chat_messages (user_id, thread_id, (metadata->>'outbox_message_id'))
     where role = 'assistant' and coalesce(metadata->>'outbox_message_id', '') <> '';`);
-  return { db, client: { from: (table) => new Query(db, table) } };
+  return {
+    db,
+    client: {
+      from: (table) => new Query(db, table),
+      rpc: (name, args = {}) => rpc(db, name, args),
+    },
+  };
 }
 
 // A small PostgREST-shaped adapter over real in-memory PostgreSQL. It does not
@@ -82,4 +89,19 @@ class Query {
 function identifier(value) {
   if (!/^[a-z_]+$/.test(value)) throw new Error('Invalid SQL identifier');
   return `"${value}"`;
+}
+
+async function rpc(db, name, args) {
+  try {
+    const params = [];
+    const bind = (value) => { params.push(value); return `$${params.length}`; };
+    const assignments = Object.entries(args).map(([key, value]) => `${identifier(key)} => ${bind(value)}`);
+    const result = await db.query(
+      `select to_jsonb(rows) as value from public.${identifier(name)}(${assignments.join(', ')}) as rows`,
+      params,
+    );
+    return { data: result.rows.map((row) => row.value), error: null };
+  } catch (error) {
+    return { data: null, error: { code: error.code, message: error.message } };
+  }
 }

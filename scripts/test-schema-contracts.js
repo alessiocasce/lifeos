@@ -81,3 +81,35 @@ try {
   console.log('PASS additive WhatsApp reliability migration applies with ownership, RLS and uniqueness boundaries');
 } catch (error) { console.error(`FAIL WhatsApp reliability migration: ${error.message}`); process.exitCode = 1; }
 finally { await migrationDb.close(); }
+
+const companionMigrationDb = new PGlite();
+try {
+  const migration = readFileSync(new URL('../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8');
+  const user = '33333333-3333-4333-8333-333333333333';
+  await companionMigrationDb.exec(`
+    create schema auth;
+    create role authenticated;
+    create role service_role;
+    create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql as $$ select '${user}'::uuid $$;
+    create function public.set_updated_at() returns trigger language plpgsql as $$ begin new.updated_at=now(); return new; end $$;
+    insert into auth.users values ('${user}');
+  `);
+  await companionMigrationDb.exec(migration);
+  const rls = await companionMigrationDb.query(`select relrowsecurity from pg_class where relname='brain_beliefs'`);
+  assert.equal(rls.rows[0].relrowsecurity, true);
+  const transitionArgs = [
+    user, 'routine', 'health.habit.skin', 'status', { state: 'inactive', routine_id: 'skin' }, 0.95,
+    'user_explicit', { message_id: 'fixture-1' }, { evidence: 'stopped' }, '2026-09-19T10:00:00Z', null, 0, null,
+    'schema:companion:skin:inactive',
+  ];
+  const transitionSql = `select * from public.apply_brain_belief_transition(
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
+  )`;
+  const first = (await companionMigrationDb.query(transitionSql, transitionArgs)).rows[0];
+  const replay = (await companionMigrationDb.query(transitionSql, transitionArgs)).rows[0];
+  assert.equal(first.id, replay.id);
+  assert.equal((await companionMigrationDb.query(`select count(*)::int as count from brain_beliefs where record_status='current'`)).rows[0].count, 1);
+  console.log('PASS additive Companion belief migration applies with RLS, current-state uniqueness and idempotent transition RPC');
+} catch (error) { console.error(`FAIL Companion belief migration: ${error.message}`); process.exitCode = 1; }
+finally { await companionMigrationDb.close(); }
