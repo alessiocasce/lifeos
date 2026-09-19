@@ -108,11 +108,11 @@ export async function listCurrentBeliefs({
     .from('brain_beliefs')
     .select(BELIEF_SELECT)
     .eq('user_id', userId)
-    .eq('record_status', 'current')
+    .eq('record_status', 'current');
+  if (subjectType) query = query.eq('subject_type', cleanIdentifier(subjectType, 80));
+  const result = await query
     .order('effective_from', { ascending: false })
     .limit(Math.min(200, Math.max(1, Number(limit) || 100)));
-  if (subjectType) query = query.eq('subject_type', cleanIdentifier(subjectType, 80));
-  const result = await query;
   if (result.error) throw result.error;
   return result.data || [];
 }
@@ -281,6 +281,49 @@ export async function recordRoutineNegativeFeedback({
     idempotencyKey,
     client,
   });
+}
+
+export async function cancelQueuedRoutineCandidates({
+  routineId,
+  reason = 'routine_state_changed',
+  userId = getActionUserId(),
+  client = getSupabaseAdmin(),
+  now = new Date(),
+} = {}) {
+  const identity = buildRoutineBeliefIdentity(routineId);
+  const result = await client
+    .from('brain_outbox_messages')
+    .select('id, metadata')
+    .eq('user_id', userId)
+    .eq('source_type', 'accountability')
+    .eq('status', 'queued')
+    .contains('metadata', {
+      accountability: {
+        kind: 'habit_missing',
+        habit_id: identity.routine_id,
+      },
+    });
+  if (result.error) throw result.error;
+
+  const rows = result.data || [];
+  for (const row of rows) {
+    const updated = await client
+      .from('brain_outbox_messages')
+      .update({
+        status: 'cancelled',
+        metadata: {
+          ...safeObject(row.metadata),
+          cancellation: {
+            reason,
+            cancelled_at: normalizeDate(now, 'now').toISOString(),
+          },
+        },
+      })
+      .eq('user_id', userId)
+      .eq('id', row.id);
+    if (updated.error) throw updated.error;
+  }
+  return { cancelled_count: rows.length };
 }
 
 export function evaluateRoutineProactivePolicy(belief, { now = new Date() } = {}) {

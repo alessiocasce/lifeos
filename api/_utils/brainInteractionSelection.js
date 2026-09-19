@@ -3,6 +3,7 @@ import { selectProactiveReplyTarget, selectTrustedQuotedProactiveReplyTarget } f
 import { parseExplicitHealthSelfReport } from './brainHealthSelfReports.js';
 import { looksLikeExplicitNewCommand, normalizeTurnText } from './brainTurnArbitration.js';
 import { normalizeAccountabilityTarget } from './brainMetadata.js';
+import { shouldAttemptRoutineSemanticInference } from './brainRoutineSemantics.js';
 
 export function selectBrainTurnInteraction({
   message,
@@ -89,7 +90,12 @@ export function selectBrainTurnInteraction({
     if (activeInteraction.owner_kind === 'proactive') {
       const ownerMessage = findAssistantMessage(brainChat, activeInteraction.assistant_message_id)
         || messageFromOwnerPayload(activeInteraction);
-      const proactiveSelection = proactiveSelectionFromMessage({ message, assistantMessage: ownerMessage, now });
+      const proactiveSelection = proactiveSelectionFromMessage({
+        message,
+        assistantMessage: ownerMessage,
+        now,
+        allowRoutineSemanticCandidate: true,
+      });
       if (proactiveSelection?.type === 'target') return selection({
         path: 'proactive_reply', intent: 'proactive_reply', sourceOfWriteIntent: 'proactive_message',
         method: 'active_interaction_owner', proactiveSelection,
@@ -103,7 +109,12 @@ export function selectBrainTurnInteraction({
 
   const latestAssistant = [...(brainChat?.conversationHistory || [])].reverse().find((item) => item?.role === 'assistant');
   if (latestAssistant?.metadata?.proactive_message && isWithinLegacyOwnerLease(latestAssistant.created_at, now)) {
-    const proactiveSelection = proactiveSelectionFromMessage({ message, assistantMessage: latestAssistant, now });
+    const proactiveSelection = proactiveSelectionFromMessage({
+      message,
+      assistantMessage: latestAssistant,
+      now,
+      allowRoutineSemanticCandidate: true,
+    });
     if (proactiveSelection?.type === 'target') return selection({
       path: 'proactive_reply', intent: 'proactive_reply', sourceOfWriteIntent: 'proactive_message',
       method: 'legacy_adjacent_assistant', proactiveSelection, assistantMessageId: latestAssistant.id,
@@ -150,13 +161,19 @@ function findAssistantMessage(brainChat, id) {
   return (brainChat?.conversationHistory || []).find((item) => item?.role === 'assistant' && item.id === id) || null;
 }
 
-function proactiveSelectionFromMessage({ message, assistantMessage, now }) {
+function proactiveSelectionFromMessage({ message, assistantMessage, now, allowRoutineSemanticCandidate = false }) {
   if (!assistantMessage) return null;
-  return selectProactiveReplyTarget({
+  const selected = selectProactiveReplyTarget({
     message,
     brainChat: { conversationHistory: [assistantMessage] },
     now,
   });
+  if (selected?.type !== 'none' || !allowRoutineSemanticCandidate) return selected;
+  const accountability = normalizeAccountabilityTarget(assistantMessage.metadata?.accountability);
+  if (assistantMessage.metadata?.expected_reply_type !== 'accountability'
+    || accountability?.kind !== 'habit_missing'
+    || !shouldAttemptRoutineSemanticInference({ message, targetRoutineId: accountability.habit_id })) return selected;
+  return selectTrustedQuotedProactiveReplyTarget({ message, assistantMessage, now });
 }
 
 function messageFromOwnerPayload(activeInteraction) {

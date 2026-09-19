@@ -26,6 +26,7 @@ Schema:
   "confidence": 0.0,
   "reason": "short semantic explanation",
   "evidence": "short grounded phrase from the user or null",
+  "residual_text": "unrelated meaningful content that remains after the routine operation/check-in reply, or null",
   "effective_from": "ISO timestamp or null",
   "effective_until": "ISO timestamp or null",
   "duration_days": null
@@ -131,6 +132,7 @@ export function validateRoutineSemanticInference(raw, {
     confidence,
     reason: cleanText(raw.reason, 240) || operation,
     evidence: cleanText(raw.evidence, 240),
+    residual_text: cleanText(raw.residual_text, 1200),
     effective_from: effectiveFrom,
     effective_until: effectiveUntil,
     inferred_default_duration: inferredDefaultDuration,
@@ -191,6 +193,12 @@ export function isBareRoutineReply(message) {
   return /^(?:no|nope|nah|non ancora|not yet|skip|salta|si|yes|ok|okay|fatto|fatta|done|presa|preso)$/.test(text);
 }
 
+export function shouldAttemptRoutineSemanticInference({ message, targetRoutineId = null } = {}) {
+  const text = cleanText(message, 2000);
+  if (!text || isBareRoutineReply(text)) return false;
+  return Boolean(normalizeHabitId(targetRoutineId) || inferRoutineIdFromMessage(text));
+}
+
 export function serializeRoutineSemanticResult(result) {
   if (!result) return null;
   return {
@@ -203,6 +211,7 @@ export function serializeRoutineSemanticResult(result) {
     effective_from: result.effective_from || null,
     effective_until: result.effective_until || null,
     inferred_default_duration: Boolean(result.inferred_default_duration),
+    has_residual: Boolean(result.residual_text),
   };
 }
 
@@ -222,6 +231,7 @@ function noChange(reason, raw = null) {
     persist: false,
     validation_reason: reason,
     proposed_operation: raw?.operation || null,
+    residual_text: cleanText(raw?.residual_text, 1200),
   };
 }
 

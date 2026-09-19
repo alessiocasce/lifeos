@@ -50,7 +50,10 @@ import {
   serializeVaultContextForMetadata,
 } from '../_utils/brainVault.js';
 import { shouldRetrieveBrainVault } from '../_utils/brainVaultEligibility.js';
-import { resolveProactiveWhatsappReply } from '../_utils/brainProactiveReplies.js';
+import {
+  runCompanionProactiveTurn,
+  runStandaloneRoutineSemanticTurn,
+} from '../_utils/brainCompanionTurn.js';
 import {
   attachBrainChatToTurn,
   attachBrainContextToTurn,
@@ -539,6 +542,20 @@ export async function handleBrainChatMessage({
       });
     }
 
+    const routineSemanticResult = await runStandaloneRoutineSemanticTurn({
+      message: messageForBrain,
+      context,
+    });
+    if (routineSemanticResult) {
+      addBrainTraceStep(context.brainTrace, 'companion_routine_state_updated', {
+        routine_id: routineSemanticResult.companion_result?.semantic?.routine_id,
+        state: routineSemanticResult.companion_result?.semantic?.state,
+        operation: routineSemanticResult.companion_result?.semantic?.operation,
+        path: 'standalone_routine_semantic_turn',
+      });
+      return sendAiSuccess(null, 200, routineSemanticResult, context, { message: messageForBrain, source: resolvedSource });
+    }
+
     if (turnContract?.winning_path === 'operational_context') {
       const operationalAnswer = buildOperationalContextAnswer({
         message: messageForBrain,
@@ -842,12 +859,13 @@ async function handlePendingActionResolution({ resolution, context, message, sou
 
 async function maybeResolveProactiveWhatsappReply({ message, resolvedSource, context }) {
   if (resolvedSource !== 'whatsapp') return null;
-  const proactiveResult = await resolveProactiveWhatsappReply({
+  const companionTurn = await runCompanionProactiveTurn({
     message,
     brainChat: context.brainChat,
     context,
     selection: context.interactionSelection?.proactive_selection ?? null,
   });
+  const proactiveResult = companionTurn?.result ?? null;
   const trace = proactiveResult?.proactive_reply_trace ?? {};
   const traceData = {
     proactive_reply_checked: true,
@@ -856,6 +874,11 @@ async function maybeResolveProactiveWhatsappReply({ message, resolvedSource, con
     proactive_reply_action_type: trace.action_type ?? proactiveResult?.actions?.[0]?.type ?? null,
     proactive_reply_ambiguous: Boolean(trace.ambiguous),
     proactive_reply_stale: Boolean(trace.stale),
+    companion_turn: Boolean(trace.companion),
+    companion_semantic: trace.semantic ?? null,
+    companion_belief_updated: Boolean(trace.belief_updated),
+    companion_negative_feedback_recorded: Boolean(trace.negative_feedback_recorded),
+    companion_residual_preserved: Boolean(trace.residual_preserved),
   };
   context.brainTrace.proactive_reply = traceData;
   addBrainTraceStep(context.brainTrace, 'proactive_reply_checked', traceData);
@@ -1983,7 +2006,12 @@ function normalizeAssistantSource(value) {
 }
 
 async function sendAiSuccess(res, status, data, context, logInfo) {
-  const { skipMemoryExtraction = false, working_context: explicitWorkingContext = null, ...publicData } = data ?? {};
+  const {
+    skipMemoryExtraction = false,
+    memory_extraction_message: memoryExtractionMessage = null,
+    working_context: explicitWorkingContext = null,
+    ...publicData
+  } = data ?? {};
   const selectedSkill = publicData.selected_skill ?? serializeSkillSelection(context?.brainSkill);
   const brainRoute = publicData.brain_route ?? serializeBrainRoute(context?.brainRoute);
   const vaultContext = publicData.vault_context ?? serializeVaultContextForMetadata(context?.brainVault?.results);
@@ -2056,7 +2084,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
   if (!skipMemoryExtraction) {
     await safeExtractBrainKnowledge({
       context,
-      message: logInfo?.message,
+      message: memoryExtractionMessage || logInfo?.message,
       answer: responseData?.answer,
       actionType,
     });

@@ -5,6 +5,7 @@ import { canonicalizeWhatsappSender } from './whatsappBridge.js';
 import { ensureAccountabilityHealth, resolveAccountabilityTarget, accountabilityTargetIsResolved } from './brainProactiveDelivery.js';
 import { parseHealthReplyTime } from './brainHealthSelfReports.js';
 import { normalizeAccountabilityTarget } from './brainMetadata.js';
+import { evaluateRoutineProactivePolicy, listCurrentBeliefs } from './brainBeliefs.js';
 
 export const ACCOUNTABILITY_REPLY_TYPE = 'accountability';
 export const ACCOUNTABILITY_CREATED_BY = 'brain_proactive_accountability_v1';
@@ -63,19 +64,24 @@ export async function loadAccountabilityProactiveContext({ userId = getActionUse
   const nowDate = normalizeDate(now);
   const today = localDateFromInstant(nowDate);
   const start = addDays(today, -2);
-  const result = await getSupabaseAdmin()
+  const client = getSupabaseAdmin();
+  const [result, routineBeliefs] = await Promise.all([
+    client
     .from('health_logs')
     .select(HEALTH_LOG_SELECT)
     .eq('user_id', userId)
     .gte('logged_on', start)
     .lte('logged_on', today)
-    .order('logged_on', { ascending: false });
+    .order('logged_on', { ascending: false }),
+    listCurrentBeliefs({ userId, subjectType: 'routine', client }),
+  ]);
   if (result.error) throw result.error;
   return {
     family: 'accountability',
     health_logs: result.data ?? [],
     local_date: today,
     language: DEFAULT_LANGUAGE,
+    routine_beliefs: routineBeliefs,
   };
 }
 
@@ -85,6 +91,7 @@ export function buildAccountabilityProactiveCandidatesFromContext({ context, now
     now,
     recipient,
     language: context?.language,
+    routineBeliefs: context?.routine_beliefs ?? context?.routineBeliefs ?? [],
   });
 }
 
@@ -93,12 +100,14 @@ export function buildAccountabilityProactiveCandidates({
   now = new Date(),
   recipient,
   language = DEFAULT_LANGUAGE,
+  routineBeliefs = [],
 } = {}) {
   const nowDate = normalizeDate(now);
   const localToday = localDateFromInstant(nowDate);
   const logsByDate = indexHealthLogsByDate(healthLogs);
   const todayLog = logsByDate.get(localToday);
   const candidates = [];
+  const beliefsByRoutine = indexRoutineBeliefs(routineBeliefs);
 
   if (!cleanTime(todayLog?.wake_time)) {
     candidates.push(...buildWakeTimeMissingCandidates({
@@ -125,6 +134,8 @@ export function buildAccountabilityProactiveCandidates({
     const habitId = normalizeHabitId(habit.id);
     const target = HABIT_TARGETS[habitId];
     if (!target) continue;
+    const routinePolicy = evaluateRoutineProactivePolicy(beliefsByRoutine.get(habitId), { now: nowDate });
+    if (!routinePolicy.allowed || routinePolicy.mode !== 'normal') continue;
     const entry = getHabitEntry(todayLog?.hygiene, habitId);
     if (Number(entry.count ?? 0) >= target.target_count) continue;
     candidates.push(...buildHabitMissingCandidates({
@@ -138,6 +149,16 @@ export function buildAccountabilityProactiveCandidates({
   }
 
   return candidates;
+}
+
+function indexRoutineBeliefs(beliefs = []) {
+  const result = new Map();
+  for (const belief of Array.isArray(beliefs) ? beliefs : []) {
+    if (belief?.subject_type !== 'routine' || belief?.predicate !== 'status') continue;
+    const routineId = normalizeHabitId(belief?.value?.routine_id || String(belief?.subject_key || '').split('.').pop());
+    if (routineId) result.set(routineId, belief);
+  }
+  return result;
 }
 
 export function buildAccountabilityWorkingContextFromOutbox(outboxMessage) {

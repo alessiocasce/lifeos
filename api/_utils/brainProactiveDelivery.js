@@ -2,6 +2,7 @@ import { getHabitEntry, normalizeHygieneObject } from './habits.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { recalculateSleepHoursForDate } from './health.js';
 import { addDays } from './date.js';
+import { evaluateRoutineProactivePolicy, getCurrentRoutineBelief } from './brainBeliefs.js';
 
 export function accountabilitySatisfied(target, health) {
   if (target?.kind === 'habit_missing') return getHabitEntry(health?.hygiene, target.habit_id).count >= (target.target_count || 1);
@@ -36,6 +37,13 @@ export async function checkProactiveDelivery({ row, client = getSupabaseAdmin(),
     return { eligible: false, reason: 'invalid_target' };
   }
   if (await sourceIsResolved({ client, userId, sourceId: row.source_id, sourceType: row.source_type })) return { eligible: false, reason: 'source_resolved' };
+  if (target.kind === 'habit_missing') {
+    const belief = await getCurrentRoutineBelief({ routineId: target.habit_id, userId, client });
+    const routinePolicy = evaluateRoutineProactivePolicy(belief);
+    if (!routinePolicy.allowed || routinePolicy.mode !== 'normal') {
+      return { eligible: false, reason: routinePolicy.reason || 'routine_not_active' };
+    }
+  }
   const result = await client.from('health_logs').select('hygiene,wake_time,sleep_start')
     .eq('user_id', userId).eq('logged_on', target.sleep_date || target.local_date).maybeSingle();
   if (result.error) throw result.error;

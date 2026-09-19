@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-In progress. Milestones 1-2 (persistent beliefs and semantic routine operations) are implemented and verified. The execution brief remains `docs/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`; this file is only a resumable implementation handoff.
+In progress. Milestones 1-3 (persistent beliefs, semantic routine operations, and compound proactive runtime) are implemented and verified. The execution brief remains `docs/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`; this file is only a resumable implementation handoff.
 
 ## Implementation Approach
 
@@ -30,11 +30,24 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - Deterministic validation restricts model output to `deactivate`, `suspend`, `reactivate`, `stale_assumption`, or `no_change` for a grounded tracked routine.
 - Bare replies bypass semantic inference; low-confidence and cross-target operations are rejected before persistence.
 - Temporary pauses are bounded (explicit end/duration or a documented 14-day conservative fallback).
+- Added an explicit compound proactive turn stage that keeps the trusted accountability target immutable, resolves it once, then applies only a validated routine-state operation.
+- Active/quoted proactive ownership can nominate rich semantic replies without broadening target selection.
+- Added a channel-independent Butler machine-result/rendering split with an optional Gemini renderer and concise deterministic fallback.
+- Preserved meaningful unrelated residual content for the existing knowledge-extraction path without running the health target twice.
+- Added standalone natural routine reactivation/deactivation handling before generic routing.
+- Accountability candidate generation and delivery-time revalidation now reject inactive, suspended, cooling-down, or uncertain routine beliefs.
+- State changes cancel already queued candidates for the same routine.
 
 ## Files / Schema Changed
 
 - `api/_utils/brainBeliefs.js`
 - `api/_utils/brainRoutineSemantics.js`
+- `api/_utils/brainCompanionTurn.js`
+- `api/_utils/brainButler.js`
+- `api/_utils/brainInteractionSelection.js`
+- `api/_utils/brainProactiveAccountability.js`
+- `api/_utils/brainProactiveDelivery.js`
+- `api/ai/chat.js`
 - `supabase/schema.sql`
 - `supabase/migrations/20260919120000_companion_beliefs.sql`
 - `tests/brain/reliabilityDatabase.js`
@@ -51,8 +64,10 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 - `node --check api/_utils/brainBeliefs.js`
 - `node --check scripts/test-companion-beliefs.js`
-- `npm run test:companion` (9 focused behavior tests)
+- `npm run test:companion` (16 focused behavior tests)
 - `npm run test:schema` (includes isolated Companion migration application and RPC replay)
+- `npm run test:reliability`
+- `npm run test:brain`
 - `git diff --check`
 
 ## Tests Failing
@@ -61,14 +76,10 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 
 ## Work In Progress
 
-- Milestone 3: compound proactive orchestration, Butler result rendering, and runtime belief mutation.
+- Milestone 4: MCP/context exposure, strengthened end-to-end database journey tests, and documentation.
 
 ## Requirements Still Missing
 
-- Compound proactive reply plus residual semantic processing.
-- Butler result/wording separation.
-- Candidate and delivery-time belief filtering.
-- Bounded anti-nag behavior.
 - MCP/context exposure.
 - Canonical journeys A-F and full validation.
 - Deployment and Oracle/WhatsApp QA documentation.
@@ -78,14 +89,16 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - A bare `no` must record bounded feedback without fabricating an inactive routine.
 - Routine state changes must be idempotent and preserve history/provenance.
 - `brain_beliefs.value.state` is domain state (`active`, `inactive`, `suspended`, `uncertain`); `record_status` is row lifecycle (`current`, `superseded`).
-- One negative reply creates an active belief with an eight-hour cooldown. A second creates an uncertain belief with a seven-day cooldown; after that, candidate generation should ask a stale-model clarification rather than resume a normal nudge.
+- One negative reply creates an active belief with an eight-hour cooldown. A second creates an uncertain belief with a seven-day cooldown; normal habit nudges remain suppressed until the uncertainty is explicitly resolved.
+- Current v1 behavior suppresses uncertain routines after cooldown rather than sending an automatic clarification; a future stale-model clarification family can make that conversational without restoring ordinary nags.
+- Rich semantic interpretation uses one model call; Butler wording may use a second call but always falls back deterministically. No new provider dependency was added.
 - Existing quote ownership and health target resolution must remain the only authority for deterministic proactive writes.
 - No external MCP write primitive will be added unless the internal semantic mutation contract proves sufficiently narrow and safe.
 
 ## Last Good Commit
 
-`2f52715` - `Add Companion belief state model`
+`ee0ce38` - `Add semantic routine state contract`
 
 ## Recommended Next Step
 
-Add an explicit compound proactive turn stage. It must resolve the immutable owned accountability target once, run routine semantics only against that trusted routine (or explicit routine mentions), persist state with a request/message-derived idempotency key, preserve unrelated residual content for the normal knowledge path, and hand a structured result to the Butler renderer.
+Expose sanitized current beliefs through shared context/MCP without weakening read-only v1. Then add a PGlite canonical journey that persists a delivered proactive message, selects the real owned target, applies the compound transition idempotently, proves no health write, and proves subsequent candidate/delivery suppression.

@@ -14,6 +14,14 @@ import {
   inferRoutineStateChange,
   validateRoutineSemanticInference,
 } from '../api/_utils/brainRoutineSemantics.js';
+import { buildAccountabilityProactiveCandidates } from '../api/_utils/brainProactiveAccountability.js';
+import { checkProactiveDelivery } from '../api/_utils/brainProactiveDelivery.js';
+import {
+  runCompanionProactiveTurn,
+  runStandaloneRoutineSemanticTurn,
+} from '../api/_utils/brainCompanionTurn.js';
+import { buildButlerFallback, createCompanionResult } from '../api/_utils/brainButler.js';
+import { selectBrainTurnInteraction } from '../api/_utils/brainInteractionSelection.js';
 import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
 
 const tests = [];
@@ -283,8 +291,267 @@ test('validated semantic operations persist through the belief service with prov
   }
 });
 
+test('active proactive ownership admits a rich routine-state reply without target substitution', () => {
+  const assistant = proactiveHabitMessage({ habitId: 'skin', assistantId: 'assistant-skin', outboxId: 'outbox-skin' });
+  const selected = selectBrainTurnInteraction({
+    message: 'no lol I stopped doing that like a month ago',
+    brainChat: { conversationHistory: [assistant] },
+    activeInteraction: {
+      state: 'active',
+      owner_kind: 'proactive',
+      assistant_message_id: assistant.id,
+      thread_id: 'thread-1',
+      version: 4,
+      expires_at: '2026-09-20T12:00:00Z',
+    },
+    now: new Date('2026-09-19T12:00:00Z'),
+  });
+  assert.equal(selected.path, 'proactive_reply');
+  assert.equal(selected.selection_method, 'active_interaction_owner');
+  assert.equal(selected.proactive_selection.proactive.accountability.habit_id, 'skin');
+  assert.equal(selected.proactive_selection.intent.intent, 'other');
+});
+
+test('compound proactive turn resolves no-write target, updates belief, and renders one grounded reply', async () => {
+  const calls = [];
+  const selection = proactiveSelection({ habitId: 'skin', intent: 'other' });
+  const result = await runCompanionProactiveTurn({
+    message: 'no lol I stopped doing that like a month ago',
+    brainChat: { userMessage: { id: 'user-message-1' } },
+    context: {
+      clientRequestId: 'request-1',
+      brainChat: { userMessage: { id: 'user-message-1' }, thread: { id: 'thread-1' } },
+      interactionSelection: { assistant_message_id: 'assistant-1', selection_method: 'active_interaction_owner' },
+    },
+    selection,
+    now: new Date('2026-09-19T12:00:00Z'),
+    actions: {
+      getCurrentRoutineBelief: async () => null,
+      inferRoutineStateChange: async () => ({
+        operation: 'deactivate', routine_id: 'skin', state: 'inactive', confidence: 0.98, persist: true,
+      }),
+      resolveProactive: async ({ selection: resolvedSelection }) => {
+        calls.push(`resolve:${resolvedSelection.intent.intent}`);
+        return proactiveNoWriteResult();
+      },
+      applyRoutineSemanticOperation: async ({ idempotencyKey }) => {
+        calls.push(`apply:${idempotencyKey}`);
+        return { id: 'belief-1', value: { state: 'inactive' } };
+      },
+      recordRoutineNegativeFeedback: async () => { throw new Error('must not record ambiguous feedback'); },
+      cancelQueuedRoutineCandidates: async () => { calls.push('cancel'); return { cancelled_count: 1 }; },
+      renderCompanionResult: async ({ result: machine }) => {
+        calls.push(`render:${machine.semantic.operation}`);
+        return "Got it. I won't ask about that routine again.";
+      },
+    },
+  });
+  assert.equal(result.handled, true);
+  assert.equal(result.result.companion_result.semantic.operation, 'deactivate');
+  assert.equal(result.result.companion_result.deterministic.needs_write, false);
+  assert.equal(result.result.actions.filter((action) => action.type === 'update_companion_belief').length, 1);
+  assert.equal(result.result.actions.some((action) => action.type === 'update_health_log'), false);
+  assert.deepEqual(calls, [
+    'resolve:no',
+    'apply:companion:user-message-1:semantic:deactivate',
+    'cancel',
+    'render:deactivate',
+  ]);
+});
+
+test('bare no records bounded feedback but never invokes durable semantic mutation', async () => {
+  let semanticWrites = 0;
+  let feedbackWrites = 0;
+  const result = await runCompanionProactiveTurn({
+    message: 'no',
+    brainChat: { userMessage: { id: 'user-message-no' } },
+    context: { brainChat: { userMessage: { id: 'user-message-no' } } },
+    selection: proactiveSelection({ habitId: 'skin', intent: 'no' }),
+    actions: {
+      getCurrentRoutineBelief: async () => null,
+      inferRoutineStateChange: async () => ({ operation: 'no_change', persist: false, validation_reason: 'bare_reply' }),
+      resolveProactive: async () => proactiveNoWriteResult(),
+      applyRoutineSemanticOperation: async () => { semanticWrites += 1; },
+      recordRoutineNegativeFeedback: async () => { feedbackWrites += 1; return { id: 'feedback-1', value: { state: 'active' } }; },
+      cancelQueuedRoutineCandidates: async () => ({ cancelled_count: 0 }),
+      renderCompanionResult: async ({ fallbackAnswer }) => fallbackAnswer,
+    },
+  });
+  assert.equal(result.handled, true);
+  assert.equal(semanticWrites, 0);
+  assert.equal(feedbackWrites, 1);
+  assert.equal(result.result.companion_result.semantic, null);
+});
+
+test('compound done plus unrelated information preserves residual without a second target write', async () => {
+  let resolutions = 0;
+  const result = await runCompanionProactiveTurn({
+    message: "done btw I'm going away tomorrow",
+    brainChat: { userMessage: { id: 'user-message-trip' } },
+    context: { brainChat: { userMessage: { id: 'user-message-trip' } } },
+    selection: proactiveSelection({ habitId: 'creatine', intent: 'done' }),
+    actions: {
+      getCurrentRoutineBelief: async () => null,
+      inferRoutineStateChange: async () => ({
+        operation: 'no_change', persist: false, validation_reason: 'model_no_change', residual_text: "I'm going away tomorrow",
+      }),
+      resolveProactive: async () => {
+        resolutions += 1;
+        return {
+          ...proactiveNoWriteResult(),
+          plan: { intent: 'update_health_log', needsRead: false, needsWrite: true, riskLevel: 'low', args: {} },
+          actions: [{ type: 'update_health_log', data: { habit_id: 'creatine' } }],
+          answer: 'Logged.',
+        };
+      },
+      applyRoutineSemanticOperation: async () => { throw new Error('no routine mutation expected'); },
+      recordRoutineNegativeFeedback: async () => { throw new Error('no negative feedback expected'); },
+      cancelQueuedRoutineCandidates: async () => ({ cancelled_count: 0 }),
+      renderCompanionResult: async () => 'Logged. I will keep the trip in mind.',
+    },
+  });
+  assert.equal(resolutions, 1);
+  assert.equal(result.result.actions.filter((action) => action.type === 'update_health_log').length, 1);
+  assert.equal(result.result.memory_extraction_message, "I'm going away tomorrow");
+  assert.equal(result.result.skipMemoryExtraction, false);
+  assert.equal(result.result.companion_result.residual.disposition, 'knowledge_extraction');
+});
+
+test('inactive beliefs suppress generation and delivery while reactivation resumes generation', async () => {
+  const now = new Date('2026-07-07T21:45:00Z');
+  const inactive = {
+    subject_type: 'routine',
+    subject_key: 'health.habit.skin',
+    predicate: 'status',
+    value: { state: 'inactive', routine_id: 'skin' },
+  };
+  const suppressed = buildAccountabilityProactiveCandidates({
+    healthLogs: [{ logged_on: '2026-07-07', wake_time: '08:00', sleep_start: '00:30', hygiene: {} }],
+    routineBeliefs: [inactive],
+    now,
+    recipient: 'fixture@lid',
+  });
+  assert.equal(suppressed.some((candidate) => candidate.metadata?.accountability?.habit_id === 'skin'), false);
+
+  const active = { ...inactive, value: { state: 'active', routine_id: 'skin' } };
+  const resumed = buildAccountabilityProactiveCandidates({
+    healthLogs: [{ logged_on: '2026-07-07', wake_time: '08:00', sleep_start: '00:30', hygiene: {} }],
+    routineBeliefs: [active],
+    now,
+    recipient: 'fixture@lid',
+  });
+  assert.equal(resumed.some((candidate) => candidate.metadata?.accountability?.habit_id === 'skin'), true);
+
+  const { db, client } = await createReliabilityDatabase();
+  try {
+    await applyRoutineStateTransition({
+      routineId: 'skin', state: 'inactive', idempotencyKey: 'delivery:skin:inactive',
+      userId: fixtureUser, client,
+    });
+    const delivery = await checkProactiveDelivery({
+      row: {
+        source_type: 'accountability',
+        source_id: 'habit:skin:2026-07-07',
+        metadata: { accountability: { kind: 'habit_missing', habit_id: 'skin', local_date: '2026-07-07', target_count: 1 } },
+      },
+      userId: fixtureUser,
+      client,
+    });
+    assert.equal(delivery.eligible, false);
+    assert.equal(delivery.reason, 'routine_inactive');
+  } finally {
+    await db.close();
+  }
+});
+
+test('standalone natural reactivation uses the same semantic and Butler contracts', async () => {
+  const result = await runStandaloneRoutineSemanticTurn({
+    message: 'actually I started doing skincare again',
+    context: { source: 'whatsapp', brainChat: { userMessage: { id: 'reactivate-message' } }, workingContext: { language: 'en' } },
+    actions: {
+      getCurrentRoutineBelief: async () => ({ id: 'inactive-belief', value: { state: 'inactive' } }),
+      inferRoutineStateChange: async () => ({
+        operation: 'reactivate', routine_id: 'skin', state: 'active', confidence: 0.98, persist: true,
+      }),
+      applyRoutineSemanticOperation: async () => ({ id: 'active-belief', value: { state: 'active' } }),
+      cancelQueuedRoutineCandidates: async () => { throw new Error('reactivation must not cancel candidates'); },
+      renderCompanionResult: async ({ result: machine }) => buildButlerFallback(machine),
+    },
+  });
+  assert.equal(result.actions[0].type, 'update_companion_belief');
+  assert.equal(result.actions[0].data.state, 'active');
+  assert.match(result.answer, /include it in check-ins again/i);
+});
+
+test('Butler fallback is grounded in structured state and exposes no invented action', () => {
+  const machine = createCompanionResult({
+    semantic: { operation: 'deactivate', routine_id: 'skin', state: 'inactive', confidence: 0.95 },
+    belief: { id: 'belief-1' },
+    language: 'it',
+  });
+  assert.equal(buildButlerFallback(machine), 'Capito. Non te lo chiedo piu.');
+  assert.equal(machine.deterministic.action_count, 0);
+});
+
 function test(name, fn) {
   tests.push({ name, fn });
+}
+
+function proactiveSelection({ habitId, intent }) {
+  return {
+    type: 'target',
+    reply_type: 'accountability',
+    selection_method: 'active_interaction_owner',
+    intent: { intent, confidence: 0.9 },
+    proactive: {
+      outbox_message_id: `outbox-${habitId}`,
+      source_type: 'accountability',
+      source_id: `habit:${habitId}:2026-09-19`,
+      language: 'en',
+      accountability: { kind: 'habit_missing', habit_id: habitId, local_date: '2026-09-19', target_count: 1 },
+      working_context: { language: 'en' },
+    },
+  };
+}
+
+function proactiveNoWriteResult() {
+  return {
+    answer: 'Ok, I will not log anything.',
+    plan: { intent: 'clarify', needsRead: false, needsWrite: false, riskLevel: 'low', args: {} },
+    actions: [],
+    contextSummary: null,
+    skipMemoryExtraction: true,
+    proactive_reply_trace: { action_type: 'no', expected_reply_type: 'accountability' },
+  };
+}
+
+function proactiveHabitMessage({ habitId, assistantId, outboxId }) {
+  const accountability = { kind: 'habit_missing', habit_id: habitId, local_date: '2026-09-19', target_count: 1 };
+  return {
+    id: assistantId,
+    role: 'assistant',
+    content: `${habitId}?`,
+    created_at: '2026-09-19T11:55:00Z',
+    metadata: {
+      proactive_message: true,
+      expected_reply_type: 'accountability',
+      outbox_message_id: outboxId,
+      source_type: 'accountability',
+      source_id: `habit:${habitId}:2026-09-19`,
+      language: 'en',
+      accountability,
+      working_context: {
+        language: 'en',
+        last_subject: {
+          id: `habit:${habitId}:2026-09-19`,
+          type: 'accountability',
+          source_type: 'accountability',
+          source_id: `habit:${habitId}:2026-09-19`,
+          raw: { outbox_message_id: outboxId, accountability },
+        },
+      },
+    },
+  };
 }
 
 let failures = 0;
