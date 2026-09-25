@@ -40,6 +40,16 @@ Supported semantic families are intentionally limited to tracked routine state, 
 
 Apply `supabase/migrations/20260925120000_companion_external_sync.sql` after the Slice 1 belief migration and before deploying this backend. It adds the audit table, `external_sync` provenance, and revokes unintended public/authenticated RPC execution; it does not alter operational data. No production migration has been applied by this Codex session. Ambient/background ChatGPT synchronization is not part of Slice 2.
 
+### Companion vNext Slice 2.5 + Slice 3 — Current Execution Target
+
+The combined execution brief is **`docs/CODEX_COMPANION_VNEXT_SLICE25_AND_3.md`**.
+
+The run is deliberately security-gated: OAuth authorization-code replay hardening must be completed, tested, and checkpointed before any deep-memory work begins. Authorization codes must become single-use across concurrent serverless instances without persisting raw codes, PKCE verifiers, access tokens, or secrets.
+
+After that gate is green, Slice 3 evolves the existing `ai_memories` / `brain_beliefs` / `ai_insights` / Brain Vault split into autobiographical memory v1: current beliefs remain authoritative current truth; curated memories represent durable facts, episodes, decisions, goals, constraints, and grounded project history; insights remain hypotheses; Vault remains long-form knowledge. Retrieval must be bounded and relevant rather than a full memory dump.
+
+Slice 3 may extend the existing `sync_context` contract with a narrow autobiographical-memory semantic family and add a read-only bounded memory-search MCP tool. It must not broaden operational side effects or introduce generic CRUD.
+
 ## Reliability Release Handoff
 
 ### WhatsApp interaction ownership patch
