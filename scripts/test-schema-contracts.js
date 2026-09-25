@@ -85,10 +85,12 @@ finally { await migrationDb.close(); }
 const companionMigrationDb = new PGlite();
 try {
   const migration = readFileSync(new URL('../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8');
+  const syncMigration = readFileSync(new URL('../supabase/migrations/20260925120000_companion_external_sync.sql', import.meta.url), 'utf8');
   const user = '33333333-3333-4333-8333-333333333333';
   await companionMigrationDb.exec(`
     create schema auth;
     create role authenticated;
+    create role anon;
     create role service_role;
     create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql as $$ select '${user}'::uuid $$;
@@ -96,6 +98,7 @@ try {
     insert into auth.users values ('${user}');
   `);
   await companionMigrationDb.exec(migration);
+  await companionMigrationDb.exec(syncMigration);
   const rls = await companionMigrationDb.query(`select relrowsecurity from pg_class where relname='brain_beliefs'`);
   assert.equal(rls.rows[0].relrowsecurity, true);
   const transitionArgs = [
@@ -110,6 +113,17 @@ try {
   const replay = (await companionMigrationDb.query(transitionSql, transitionArgs)).rows[0];
   assert.equal(first.id, replay.id);
   assert.equal((await companionMigrationDb.query(`select count(*)::int as count from brain_beliefs where record_status='current'`)).rows[0].count, 1);
-  console.log('PASS additive Companion belief migration applies with RLS, current-state uniqueness and idempotent transition RPC');
+  const security = (await companionMigrationDb.query(`select
+    (select relrowsecurity from pg_class where oid='public.brain_external_sync_requests'::regclass) as audit_rls,
+    has_function_privilege('authenticated', 'public.apply_brain_belief_transition(uuid,text,text,text,jsonb,numeric,text,jsonb,jsonb,timestamptz,timestamptz,integer,timestamptz,text)', 'EXECUTE') as authenticated_rpc,
+    has_function_privilege('anon', 'public.apply_brain_belief_transition(uuid,text,text,text,jsonb,numeric,text,jsonb,jsonb,timestamptz,timestamptz,integer,timestamptz,text)', 'EXECUTE') as anon_rpc,
+    has_function_privilege('service_role', 'public.apply_brain_belief_transition(uuid,text,text,text,jsonb,numeric,text,jsonb,jsonb,timestamptz,timestamptz,integer,timestamptz,text)', 'EXECUTE') as service_rpc,
+    has_table_privilege('authenticated', 'public.brain_external_sync_requests', 'INSERT') as authenticated_audit_insert`)).rows[0];
+  assert.equal(security.audit_rls, true);
+  assert.equal(security.authenticated_rpc, false);
+  assert.equal(security.anon_rpc, false);
+  assert.equal(security.service_rpc, true);
+  assert.equal(security.authenticated_audit_insert, false);
+  console.log('PASS additive Companion migrations enforce audit RLS, service-only RPC, and idempotent belief transitions');
 } catch (error) { console.error(`FAIL Companion belief migration: ${error.message}`); process.exitCode = 1; }
 finally { await companionMigrationDb.close(); }

@@ -199,7 +199,7 @@ create table if not exists public.brain_beliefs (
   record_status text not null default 'current' check (record_status in ('current', 'superseded')),
   confidence numeric(4,3) not null default 0.800 check (confidence >= 0 and confidence <= 1),
   source_type text not null default 'assistant_inferred' check (
-    source_type in ('user_explicit', 'assistant_inferred', 'proactive_feedback', 'system', 'manual')
+    source_type in ('user_explicit', 'assistant_inferred', 'proactive_feedback', 'system', 'manual', 'external_sync')
   ),
   source_ref jsonb not null default '{}'::jsonb check (jsonb_typeof(source_ref) = 'object'),
   provenance jsonb not null default '{}'::jsonb check (jsonb_typeof(provenance) = 'object'),
@@ -219,6 +219,29 @@ create table if not exists public.brain_beliefs (
     or predicate <> 'status'
     or value->>'state' in ('active', 'inactive', 'suspended', 'uncertain')
   )
+);
+
+create table if not exists public.brain_external_sync_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  idempotency_key text not null check (length(idempotency_key) between 1 and 160),
+  request_digest text not null check (request_digest ~ '^[0-9a-f]{64}$'),
+  source_system text not null check (length(source_system) between 1 and 64),
+  source_kind text not null check (source_kind = 'explicit_conversation_sync'),
+  source_reference text check (source_reference is null or length(source_reference) <= 160),
+  captured_at timestamptz not null,
+  summary text not null check (length(summary) between 1 and 240),
+  status text not null default 'processing' check (status in ('processing', 'applied', 'partial', 'failed')),
+  requested_count integer not null check (requested_count between 1 and 8),
+  applied_count integer not null default 0 check (applied_count between 0 and 8),
+  rejected_count integer not null default 0 check (rejected_count between 0 and 8),
+  results jsonb not null default '[]'::jsonb check (jsonb_typeof(results) = 'array' and jsonb_array_length(results) <= 8),
+  claim_token uuid not null,
+  claim_expires_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, idempotency_key)
 );
 
 create table if not exists public.ai_insights (
@@ -1182,6 +1205,11 @@ create trigger set_brain_beliefs_updated_at
 before update on public.brain_beliefs
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_brain_external_sync_requests_updated_at on public.brain_external_sync_requests;
+create trigger set_brain_external_sync_requests_updated_at
+before update on public.brain_external_sync_requests
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_ai_insights_updated_at on public.ai_insights;
 create trigger set_ai_insights_updated_at
 before update on public.ai_insights
@@ -1280,6 +1308,18 @@ begin
     0
   ));
 
+  if p_idempotency_key is not null then
+    select * into existing_row
+    from public.brain_beliefs
+    where user_id = p_user_id
+      and idempotency_key = p_idempotency_key
+    limit 1;
+    if found then
+      return next existing_row;
+      return;
+    end if;
+  end if;
+
   select * into current_row
   from public.brain_beliefs
   where user_id = p_user_id
@@ -1337,11 +1377,17 @@ $$;
 revoke all on function public.apply_brain_belief_transition(
   uuid, text, text, text, jsonb, numeric, text, jsonb, jsonb,
   timestamptz, timestamptz, integer, timestamptz, text
-) from public;
+) from public, anon, authenticated;
 grant execute on function public.apply_brain_belief_transition(
   uuid, text, text, text, jsonb, numeric, text, jsonb, jsonb,
   timestamptz, timestamptz, integer, timestamptz, text
 ) to service_role;
+
+revoke all on table public.brain_beliefs from anon, authenticated;
+grant select on table public.brain_beliefs to authenticated;
+revoke all on table public.brain_external_sync_requests from anon, authenticated;
+grant select on table public.brain_external_sync_requests to authenticated;
+grant all on table public.brain_external_sync_requests to service_role;
 
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
 create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
@@ -1499,6 +1545,8 @@ create unique index if not exists brain_beliefs_idempotency_idx
   where idempotency_key is not null;
 create index if not exists brain_beliefs_user_subject_history_idx
   on public.brain_beliefs (user_id, subject_type, subject_key, predicate, effective_from desc);
+create index if not exists brain_external_sync_requests_user_created_idx
+  on public.brain_external_sync_requests (user_id, created_at desc);
 create index if not exists brain_outbox_messages_user_status_scheduled_idx on public.brain_outbox_messages (user_id, status, scheduled_for);
 create index if not exists brain_outbox_messages_user_channel_status_scheduled_idx on public.brain_outbox_messages (user_id, channel, status, scheduled_for);
 create index if not exists brain_outbox_messages_idempotency_key_idx on public.brain_outbox_messages (idempotency_key);
@@ -1530,6 +1578,7 @@ alter table public.ai_chat_threads enable row level security;
 alter table public.ai_chat_messages enable row level security;
 alter table public.ai_memories enable row level security;
 alter table public.brain_beliefs enable row level security;
+alter table public.brain_external_sync_requests enable row level security;
 alter table public.ai_insights enable row level security;
 alter table public.ai_vault_documents enable row level security;
 alter table public.ai_vault_chunks enable row level security;
@@ -1686,6 +1735,11 @@ with check (auth.uid() = user_id);
 drop policy if exists "brain_beliefs are user scoped" on public.brain_beliefs;
 drop policy if exists "brain_beliefs are user scoped read" on public.brain_beliefs;
 create policy "brain_beliefs are user scoped read" on public.brain_beliefs
+for select to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "brain_external_sync_requests are user scoped read" on public.brain_external_sync_requests;
+create policy "brain_external_sync_requests are user scoped read" on public.brain_external_sync_requests
 for select to authenticated
 using (auth.uid() = user_id);
 

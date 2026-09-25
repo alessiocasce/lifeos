@@ -10,7 +10,7 @@ export async function createReliabilityDatabase() {
     create function auth.uid() returns uuid language sql as $$ select '${fixtureUser}'::uuid $$;
     insert into auth.users values ('${fixtureUser}');`);
   const schema = fs.readFileSync(new URL('../../supabase/schema.sql', import.meta.url), 'utf8');
-  for (const table of ['health_logs', 'memos', 'projects', 'project_sessions', 'brain_outbox_messages', 'ai_chat_threads', 'ai_chat_messages',
+  for (const table of ['health_logs', 'memos', 'projects', 'project_sessions', 'brain_outbox_messages', 'brain_proactive_rules', 'ai_chat_threads', 'ai_chat_messages',
     'brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state']) {
     const start = schema.indexOf(`create table if not exists public.${table} (`);
     if (start < 0) throw new Error(`Missing checked-in table ${table}`);
@@ -21,6 +21,7 @@ export async function createReliabilityDatabase() {
   await db.exec(`create trigger health_updated before update on health_logs for each row execute function public.set_updated_at();`);
   await db.exec(fs.readFileSync(new URL('../../supabase/releases/reliability.sql', import.meta.url), 'utf8'));
   await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8'));
+  await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260925120000_companion_external_sync.sql', import.meta.url), 'utf8'));
   await db.exec(`create unique index ai_chat_messages_user_thread_outbox_unique
     on ai_chat_messages (user_id, thread_id, (metadata->>'outbox_message_id'))
     where role = 'assistant' and coalesce(metadata->>'outbox_message_id', '') <> '';`);
@@ -37,7 +38,7 @@ export async function createReliabilityDatabase() {
 // emulate RLS/auth/network behavior; it executes actual constraints and triggers.
 class Query {
   constructor(db, table) { this.db = db; this.table = identifier(table); this.filters = []; this.params = []; this.orders = []; this.mode = 'select'; }
-  bind(value) { this.params.push(value); return `$${this.params.length}`; }
+  bind(value) { this.params.push(value && typeof value === 'object' ? JSON.stringify(value) : value); return `$${this.params.length}`; }
   select(columns = '*', options = {}) { this.columns = columns; this.options = options; return this; }
   eq(key, value) { this.filters.push(`${identifier(key)} = ${this.bind(value)}`); return this; }
   neq(key, value) { this.filters.push(`${identifier(key)} <> ${this.bind(value)}`); return this; }

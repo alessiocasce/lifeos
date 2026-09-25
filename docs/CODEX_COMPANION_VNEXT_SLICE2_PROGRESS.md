@@ -16,29 +16,40 @@ Keep MCP reads on `lifeos.read`. A separately configured static write token or a
 - OAuth write access requires separately configured link and signing secrets; neither may fall back to the existing static read token.
 - OAuth token responses return the requested normalized scopes; authorization UI distinguishes write access.
 - MCP requests carry validated scopes into dispatch, and read tool/resource calls require `lifeos.read`.
+- A provider-independent semantic service validates the whole envelope and grounds existing projects before the first write.
+- Routine, allowlisted preference, and grounded project-context changes use the atomic belief RPC with stable per-item idempotency keys.
+- Durable request audit stores a digest, source, bounded summary, status, and per-item results; exact replay and payload conflict are distinguished.
+- Current preferences and project semantic context are available in the shared Context Compiler.
 
 ## Files Changed
 
 - `api/_utils/mcpOAuth.js`
 - `api/mcp.js`
+- `api/_utils/brainExternalSync.js`
+- `api/_utils/brainBeliefs.js`
+- `api/_utils/lifeosContextCompiler.js`
+- `supabase/schema.sql`
+- `supabase/migrations/20260925120000_companion_external_sync.sql`
+- `tests/brain/reliabilityDatabase.js`
+- `scripts/test-schema-contracts.js`
+- `scripts/test-mcp-write.js`
+- `package.json`
 - `scripts/test-mcp.js`
 - this progress file
 
 ## Migrations
 
-None yet. The Slice 1 `brain_beliefs` migration remains a prerequisite. Slice 2 audit schema is still to be added.
+Added `20260925120000_companion_external_sync.sql`. Live read-only preflight found the Slice 1 table/RPC present, but SQL EXECUTE on the RPC remained granted to `anon`/`authenticated` through inherited/default grants. The new migration revokes those privileges, retains authenticated SELECT under RLS, adds `external_sync` provenance, and creates the audit table. No production mutation was performed.
 
 ## Tests
 
 - Passing: `npm run test:mcp` after the auth foundation changes.
+- Passing: `npm run test:mcp-write`, `npm run test:schema`, `npm run test:companion`, and `npm run test:reliability` after the domain/schema changes.
 - Failing: none known.
 - Full `npm test`, schema, function count, build, and diff checks remain for the completed slice.
 
 ## Work In Progress / Remaining
 
-- Build the strict semantic envelope/update validator and project grounding.
-- Add durable external-sync audit and request digest/conflict handling.
-- Expose bounded preferences and project context through the Context Compiler.
 - Wire `sync_context` into MCP with per-tool write authorization and accurate metadata.
 - Add schema-backed journeys A-J and OAuth flow coverage, then run all gates.
 - Document deployment order and connector re-linking. No production mutation has been performed.
@@ -52,8 +63,8 @@ None yet. The Slice 1 `brain_beliefs` migration remains a prerequisite. Slice 2 
 
 ## Last Good Commit
 
-`25d962d` - current baseline before Slice 2 work. The auth foundation is tested and ready for a checkpoint commit.
+`6285d33` - `Add explicit MCP write authorization scopes`. The domain/audit milestone is tested and ready for its own commit.
 
 ## Recommended Next Step
 
-Commit the tested auth foundation. Then implement and test a provider-independent semantic sync service with whole-request validation, grounded project identity, and bounded values before adding the MCP tool.
+Commit the tested semantic domain/audit milestone. Then wire the MCP tool and expand HTTP/OAuth, partial-failure, and no-side-effect journeys before the full validation matrix.

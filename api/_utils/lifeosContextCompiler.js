@@ -85,7 +85,7 @@ export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEF
   const calendar = summarizeCalendar(normalizedRows.calendarEvents, today, now);
   const brain = summarizeBrain(normalizedRows.actionLogs, normalizedRows.brainMessages, now);
   const whatsapp = summarizeOutbox(normalizedRows.outboxMessages, now);
-  const beliefs = summarizeBeliefs(normalizedRows.beliefs);
+  const beliefs = summarizeBeliefs(normalizedRows.beliefs, normalizedRows.projects);
 
   return sanitizeContextValue({
     generated_at: new Date(now).toISOString(),
@@ -616,11 +616,16 @@ function summarizeOutbox(messages, now) {
   };
 }
 
-function summarizeBeliefs(beliefs) {
+function summarizeBeliefs(beliefs, projects = []) {
   const current = beliefs.map(serializeBeliefForContext).filter(Boolean);
+  const projectsById = new Map(projects.map((project) => [project.id, project.name]));
   return {
     current_count: current.length,
-    routines: current.filter((belief) => belief.subject_type === 'routine' && belief.predicate === 'status'),
+    routines: current.filter((belief) => belief.subject_type === 'routine' && belief.predicate === 'status').slice(0, 30),
+    preferences: current.filter((belief) => belief.subject_type === 'preference' && belief.predicate === 'value').slice(0, 20),
+    project_context: current.filter((belief) => belief.subject_type === 'project_context')
+      .slice(0, 30)
+      .map((belief) => ({ ...belief, project_name: projectsById.get(belief.value.project_id) || belief.value.project_name || null })),
   };
 }
 

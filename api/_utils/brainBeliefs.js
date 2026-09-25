@@ -10,6 +10,7 @@ export const BELIEF_SOURCE_TYPES = Object.freeze([
   'proactive_feedback',
   'system',
   'manual',
+  'external_sync',
 ]);
 
 const BELIEF_SELECT = [

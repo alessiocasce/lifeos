@@ -16,8 +16,9 @@
     "test:bridge": "node scripts/test-whatsapp-bridge-contract.js",
     "test:workout": "node scripts/test-workout-render.js",
     "test:companion": "node scripts/test-companion-beliefs.js",
+    "test:mcp-write": "node scripts/test-mcp-write.js",
     "test:schema": "node scripts/test-schema-contracts.js",
-    "test": "npm run test:brain && npm run test:mcp && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion",
+    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-write && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
