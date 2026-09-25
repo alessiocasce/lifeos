@@ -1375,6 +1375,29 @@ Execution brief: `docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.
 
 **Success test:** after the user explicitly asks ChatGPT to sync a few important changes, LifeOS safely receives the supported semantic updates, records exactly where they came from, rejects unsupported/ambiguous writes, and can immediately return the new current state while existing read-only clients remain read-only.
 
+## 15.3 Slice 2.5 — OAuth replay hardening
+
+Before write-capable MCP is treated as production-ready, OAuth authorization codes must become single-use through durable atomic redemption tracking. Replay protection must work across concurrent serverless instances and must not persist raw authorization codes, PKCE verifiers, access tokens, or secrets.
+
+**Success test:** the first valid redemption succeeds, any sequential or concurrent replay returns `invalid_grant`, and invalid PKCE/client/redirect attempts do not burn an otherwise valid code.
+
+## 15.4 Slice 3 — Deep autobiographical memory v1
+
+Build a shared autobiographical memory system on top of the existing storage split:
+
+- `brain_beliefs` = authoritative current truth;
+- `ai_memories` = curated durable semantic/project/episodic memory;
+- `ai_insights` = hypotheses with evidence/confidence;
+- Brain Vault = long-form knowledge.
+
+Slice 3 adds temporal/provenance-aware memory kinds, project-grounded memory, curation/dedup/reconfirmation/supersession, bounded relevance retrieval, compact Context Compiler integration, narrow explicit MCP memory sync, and bounded read-only memory search.
+
+Historical memory must never override newer current belief state. Memory remains context only and cannot authorize operational actions.
+
+Execution brief for both Slice 2.5 and Slice 3: `docs/CODEX_COMPANION_VNEXT_SLICE25_AND_3.md`.
+
+**Success test:** the same Brain across app/WhatsApp/MCP can retain and retrieve meaningful life history without memory spam, duplicate facts, stale-current-state errors, or operational side effects.
+
 ---
 
 ## 16. Immediate Behavioral Fix: Skincare Example
