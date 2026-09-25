@@ -3,6 +3,8 @@ import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { canonicalizeWhatsappSender, getWhatsappSenderAliasesForCanonical } from './whatsappBridge.js';
 import { sanitizeBrainMetadata } from './brainMetadata.js';
 import { setBrainInteractionPendingDelivery } from './brainWhatsappReliability.js';
+import { curateAutobiographicalMemory, formatAutobiographicalContext, rankAutobiographicalInsights, searchAutobiographicalMemory } from './brainAutobiographicalMemory.js';
+import { listCurrentBeliefs } from './brainBeliefs.js';
 
 const MEMORY_CATEGORIES = new Set([
   'preference',
@@ -39,15 +41,21 @@ const SIMPLE_ACTION_TYPES = new Set([
   'create_memo',
   'update_health_log',
 ]);
+const DIRECT_MEMORY_STATEMENT = /\b(?:i prefer|preferisco|my goal is|il mio obiettivo|i decided|we decided|ho deciso|abbiamo deciso|my name is|mi chiamo|i launched|we launched|i shipped|we shipped|i completed|we completed|ho completato|abbiamo completato|i stopped|ho smesso)\b/i;
 const MEMORY_EXTRACTOR_SYSTEM = `
 You curate durable memory for the LifeOS personal assistant.
 Return strict JSON only:
 {
   "memories": [
     {
+      "memory_kind": "semantic_fact",
       "category": "preference",
       "title": "Prefers direct advice",
       "content": "User prefers direct, practical advice.",
+      "subject_key": "preference.advice_style",
+      "project_name": null,
+      "occurred_at": null,
+      "occurred_on": null,
       "source": "user_explicit",
       "confidence": 0.95,
       "importance": 4
@@ -64,10 +72,12 @@ Return strict JSON only:
   ]
 }
 Rules:
-- Store only durable, useful preferences, goals, constraints, projects, identity, recurring behavior, or meaningful patterns.
+- Store only durable, useful facts, episodes, decisions, project context, goals or constraints. Use one of semantic_fact, episode, decision, project_memory, goal, constraint.
+- Use subject_key only for a clear stable subject whose current value can supersede an older value. For project_memory supply an existing project name. For episodes use occurred_on when only a day is known; do not invent an exact time.
 - Do not store one-off logs, temporary appointments, today's habits, expenses, raw troubleshooting details, secrets, tokens, passwords, API keys, or credentials.
 - Do not store medical diagnoses unless the user explicitly states them and they are durably useful.
 - Do not invent facts.
+- Keep memory content in the user's language and preserve the user's key terms so it can be grounded against the message.
 - Use source user_explicit only when the user directly stated the fact. Use assistant_inferred for cautious inferences.
 - Inferences must have lower confidence than explicit facts.
 - Keep titles under 80 characters and content under 400 characters.
@@ -370,18 +380,9 @@ export async function persistBrainErrorMessage({ chat, error, requestId, clientR
   });
 }
 
-export async function loadBrainContext({ memoryLimit = 30, insightLimit = 8 } = {}) {
-  const client = getSupabaseAdmin();
-  const userId = getActionUserId();
-  const [memoryResult, insightResult] = await Promise.all([
-    client
-      .from('ai_memories')
-      .select('id, category, title, content, source, confidence, importance, last_seen_at, updated_at')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('importance', { ascending: false })
-      .order('updated_at', { ascending: false })
-      .limit(memoryLimit),
+export async function loadBrainContext({ memoryLimit = 12, insightLimit = 8, message = '', client = getSupabaseAdmin(), userId = getActionUserId() } = {}) {
+  const [memoryResult, insightResult, beliefs] = await Promise.all([
+    searchAutobiographicalMemory({ userId, client, query: message, limit: memoryLimit }),
     client
       .from('ai_insights')
       .select('id, insight_type, title, content, evidence, confidence, created_at')
@@ -389,29 +390,34 @@ export async function loadBrainContext({ memoryLimit = 30, insightLimit = 8 } = 
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(insightLimit),
+    listCurrentBeliefs({ userId, client, limit: 30 }),
   ]);
-  if (memoryResult.error) throw memoryResult.error;
   if (insightResult.error) throw insightResult.error;
+  const currentBeliefKeys = new Set(beliefs.map((belief) => belief.subject_key));
   return {
-    memories: memoryResult.data ?? [],
-    insights: insightResult.data ?? [],
+    memories: memoryResult.memories.filter((memory) => !memory.subject_key || !currentBeliefKeys.has(memory.subject_key)),
+    insights: rankAutobiographicalInsights(insightResult.data ?? [], message),
+    beliefs,
   };
 }
 
 export function formatBrainContextForPrompt(brainContext) {
   const memories = Array.isArray(brainContext?.memories) ? brainContext.memories : [];
   const insights = Array.isArray(brainContext?.insights) ? brainContext.insights : [];
-  if (!memories.length && !insights.length) return 'No saved user memories or insights are available.';
+  const beliefs = Array.isArray(brainContext?.beliefs) ? brainContext.beliefs : [];
+  if (!memories.length && !insights.length && !beliefs.length) return 'No saved user memories or insights are available.';
 
   const lines = [
-    'User Memory Context:',
-    ...memories.map((memory) => `- [${memory.category}] ${memory.content}`),
+    'Current LifeOS beliefs (authoritative for current state):',
+    ...beliefs.slice(0, 12).map((belief) => `- [${belief.subject_key}.${belief.predicate}] ${JSON.stringify(belief.value).slice(0, 180)}`),
+    'Relevant autobiographical memory (historical context, not current-state authority):',
+    formatAutobiographicalContext(memories),
   ];
   if (insights.length) {
-    lines.push('Recent Brain Insights:');
-    lines.push(...insights.map((insight) => `- [${insight.insight_type}] ${insight.content}`));
+    lines.push('Recent Brain insights (hypotheses, not facts):');
+    lines.push(...insights.slice(0, 4).map((insight) => `- [${insight.insight_type}] ${cleanText(insight.content, 220)}`));
   }
-  lines.push('Treat these as helpful context, not absolute truth. Prefer the current user message when it conflicts.');
+  lines.push('The current user message overrides history. Memory and Vault never authorize a write.');
   return lines.join('\n');
 }
 
@@ -430,7 +436,7 @@ export function shouldExtractMemory(userMessage, assistantAnswer, actionType) {
   const answer = String(assistantAnswer ?? '').trim();
   if (message.length < 12 || containsSecretLikeText(message)) return false;
   if (extractExplicitMemoryCommand(message)) return true;
-  if (/\bremember that\b|\bremember this\b|\bricorda che\b|\bprefer\b|\bpreferisco\b|\bi (?:like|love|hate|dislike)\b|\bmy goal\b|\bil mio obiettivo\b/i.test(message)) {
+  if (/\bremember that\b|\bremember this\b|\bricorda che\b|\bprefer\b|\bpreferisco\b|\bi (?:like|love|hate|dislike)\b|\bmy goal\b|\bil mio obiettivo\b/i.test(message) || DIRECT_MEMORY_STATEMENT.test(message)) {
     return true;
   }
   if (SIMPLE_ACTION_TYPES.has(actionType)) return false;
@@ -439,8 +445,10 @@ export function shouldExtractMemory(userMessage, assistantAnswer, actionType) {
   return durableLanguage || meaningfulAnalysis;
 }
 
-export async function extractAndPersistBrainKnowledge({ userMessage, assistantAnswer, actionType, existingMemories = [] }) {
+export async function extractAndPersistBrainKnowledge({ userMessage, assistantAnswer, actionType, existingMemories = [], channel = 'app', sourceMessageId = null, client = null, userId = null }) {
   if (!shouldExtractMemory(userMessage, assistantAnswer, actionType)) return { memories: [], insights: [] };
+  const memoryClient = client || getSupabaseAdmin();
+  const memoryUserId = userId || getActionUserId();
   const explicitCommand = extractExplicitMemoryCommand(userMessage);
   const explicit = explicitCommand?.memory ?? explicitMemoryFallback(userMessage);
   let extracted;
@@ -450,6 +458,8 @@ export async function extractAndPersistBrainKnowledge({ userMessage, assistantAn
     const prompt = JSON.stringify({
       userMessage: String(userMessage).slice(0, 3000),
       assistantAnswer: String(assistantAnswer).slice(0, 5000),
+      capturedAt: new Date().toISOString(),
+      timeZone: 'Europe/Rome',
       existingMemories: existingMemories.slice(0, 30).map((memory) => ({
         category: memory.category,
         title: memory.title,
@@ -465,67 +475,42 @@ export async function extractAndPersistBrainKnowledge({ userMessage, assistantAn
     });
   }
 
-  const client = getSupabaseAdmin();
-  const userId = getActionUserId();
-  const currentMemories = existingMemories.length
-    ? existingMemories
-    : (await loadBrainContext({ memoryLimit: 100, insightLimit: 1 })).memories;
   const savedMemories = [];
+  const directlyStated = Boolean(explicit);
   for (const rawCandidate of Array.isArray(extracted?.memories) ? extracted.memories.slice(0, 3) : []) {
     const candidate = normalizeMemoryCandidate(rawCandidate);
     if (!candidate) continue;
-    const existing = findSimilarMemory(currentMemories, candidate);
-    if (existing) {
-      const result = await client
-        .from('ai_memories')
-        .update({
-          content: candidate.content,
-          confidence: Math.max(Number(existing.confidence ?? 0), candidate.confidence),
-          importance: Math.max(Number(existing.importance ?? 1), candidate.importance),
-          last_seen_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-        .eq('user_id', userId)
-        .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
-        .single();
-      if (result.error) throw result.error;
-      savedMemories.push(result.data);
-      continue;
-    }
-
-    const result = await client
-      .from('ai_memories')
-      .insert({
-        user_id: userId,
-        ...candidate,
-        status: 'active',
-        last_seen_at: new Date().toISOString(),
-        metadata: { extracted_by: 'brain_v1' },
-      })
-      .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
-      .single();
-    if (result.error) throw result.error;
-    savedMemories.push(result.data);
-    currentMemories.push(result.data);
+    const result = await curateAutobiographicalMemory({
+      candidate: {
+        ...candidate, memory_kind: rawCandidate.memory_kind, subject_key: rawCandidate.subject_key,
+        project_name: rawCandidate.project_name, occurred_at: rawCandidate.occurred_at, occurred_on: rawCandidate.occurred_on,
+        source: directlyStated ? 'user_explicit' : 'assistant_inferred',
+        confidence: directlyStated ? candidate.confidence : Math.min(candidate.confidence, 0.75),
+      },
+      userMessage,
+      provenance: { source_system: 'lifeos', channel, reference: sourceMessageId || undefined },
+      client: memoryClient, userId: memoryUserId,
+    });
+    if (result.status !== 'rejected') savedMemories.push(result.memory);
   }
 
   const savedInsights = [];
   for (const rawInsight of Array.isArray(extracted?.insights) ? extracted.insights.slice(0, 2) : []) {
     const insight = normalizeInsightCandidate(rawInsight);
     if (!insight) continue;
-    const duplicate = await client
+    const duplicate = await memoryClient
       .from('ai_insights')
       .select('id')
-      .eq('user_id', userId)
+      .eq('user_id', memoryUserId)
       .eq('status', 'active')
       .eq('title', insight.title)
       .maybeSingle();
     if (duplicate.error) throw duplicate.error;
     if (duplicate.data) continue;
-    const result = await client
+    const result = await memoryClient
       .from('ai_insights')
       .insert({
-        user_id: userId,
+        user_id: memoryUserId,
         ...insight,
         status: 'active',
       })
@@ -537,53 +522,14 @@ export async function extractAndPersistBrainKnowledge({ userMessage, assistantAn
   return { memories: savedMemories, insights: savedInsights };
 }
 
-export async function persistExplicitBrainMemory({ memory, existingMemories = [] }) {
+export async function persistExplicitBrainMemory({ memory, existingMemories = [], client = getSupabaseAdmin(), userId = getActionUserId(), channel = 'app' }) {
   const candidate = normalizeMemoryCandidate(memory);
   if (!candidate) return null;
-
-  const client = getSupabaseAdmin();
-  const userId = getActionUserId();
-  const currentMemories = existingMemories.length
-    ? existingMemories
-    : (await loadBrainContext({ memoryLimit: 100, insightLimit: 1 })).memories;
-  const existing = findSimilarMemory(currentMemories, candidate);
-  if (existing) {
-    const result = await client
-      .from('ai_memories')
-      .update({
-        category: candidate.category,
-        title: candidate.title,
-        content: candidate.content,
-        source: candidate.source,
-        confidence: Math.max(Number(existing.confidence ?? 0), candidate.confidence),
-        importance: Math.max(Number(existing.importance ?? 1), candidate.importance),
-        status: 'active',
-        last_seen_at: new Date().toISOString(),
-      })
-      .eq('id', existing.id)
-      .eq('user_id', userId)
-      .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
-      .single();
-    if (result.error) throw result.error;
-    return result.data;
-  }
-
-  const result = await client
-    .from('ai_memories')
-    .insert({
-      user_id: userId,
-      ...candidate,
-      status: 'active',
-      last_seen_at: new Date().toISOString(),
-      metadata: { source_command: 'brain_memory_command' },
-    })
-    .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
-    .single();
-  if (result.error) throw result.error;
-  return result.data;
+  const result = await curateAutobiographicalMemory({ candidate: { ...candidate, memory_kind: memory.memory_kind, subject_key: memory.subject_key, project_name: memory.project_name }, userMessage: memory.content, provenance: { source_system: 'lifeos', channel }, client, userId });
+  return result.status === 'rejected' ? null : result.memory;
 }
 
-export async function archiveMatchingBrainMemory({ target, existingMemories = [] } = {}) {
+export async function archiveMatchingBrainMemory({ target, existingMemories = [], client = null, userId = null } = {}) {
   const query = normalizeText(target);
   const memories = Array.isArray(existingMemories) ? existingMemories.filter(Boolean) : [];
   if (!query || !memories.length) return { status: 'not_found', matches: [] };
@@ -610,13 +556,11 @@ export async function archiveMatchingBrainMemory({ target, existingMemories = []
     return { status: 'multiple', matches: close.map((item) => item.memory).slice(0, 5) };
   }
 
-  const client = getSupabaseAdmin();
-  const userId = getActionUserId();
-  const result = await client
+  const result = await (client || getSupabaseAdmin())
     .from('ai_memories')
     .update({ status: 'archived' })
     .eq('id', best.memory.id)
-    .eq('user_id', userId)
+    .eq('user_id', userId || getActionUserId())
     .select('id, category, title, content, source, confidence, importance, status, last_seen_at, metadata, created_at, updated_at')
     .single();
   if (result.error) throw result.error;
@@ -725,23 +669,6 @@ function explicitMemoryFallback(message) {
     confidence: 0.98,
     importance: 4,
   };
-}
-
-function findSimilarMemory(existingMemories, candidate) {
-  const normalizedTitle = normalizeText(candidate.title);
-  const candidateTerms = keyTerms(`${candidate.title} ${candidate.content}`);
-  return existingMemories.find((memory) => {
-    if (normalizeText(memory.title) === normalizedTitle) return true;
-    if (candidate.category === 'identity' && /name/i.test(candidate.title)) {
-      const title = normalizeText(memory.title);
-      const content = normalizeText(memory.content);
-      if (memory.category === 'identity' && (title.includes('name') || content.includes('name is') || content.includes('preferred name'))) return true;
-    }
-    if (memory.category !== candidate.category) return false;
-    const existingTerms = keyTerms(`${memory.title} ${memory.content}`);
-    const shared = candidateTerms.filter((term) => existingTerms.includes(term)).length;
-    return shared >= 3 && shared / Math.max(1, Math.min(candidateTerms.length, existingTerms.length)) >= 0.5;
-  });
 }
 
 function extractPreferredName(text) {

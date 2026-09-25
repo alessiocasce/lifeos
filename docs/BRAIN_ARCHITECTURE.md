@@ -2,7 +2,7 @@
 
 ## External Semantic Sync Boundary
 
-Companion Slice 2's `api/_utils/brainExternalSync.js` is a separate, explicit MCP write path, not a new BrainTurn stage. `api/mcp.js` requires `lifeos.write` for `sync_context`; the legacy `lifeos.read` token and read-only tools/resources cannot call it. The service validates the complete semantic request, grounds project identity to the configured user, then uses only `applyBeliefTransition` for current-state changes and `brain_external_sync_requests` for request audit/idempotency. No planner, LifeOS action executor, Health operational update, WhatsApp outbox, or monitor is invoked. Current preference/project beliefs flow back through `lifeosContextCompiler.js`. Keep these boundaries when adding later Companion slices; external conversation content is evidence, never autonomous permission for broader writes.
+Companion `api/_utils/brainExternalSync.js` is a separate, explicit MCP write path, not a BrainTurn stage. `api/mcp.js` requires `lifeos.write` for `sync_context`; the legacy `lifeos.read` token and read-only tools/resources cannot call it. Current-state updates use `applyBeliefTransition`; Slice 3 autobiographical updates use `curateAutobiographicalMemory`. Both share the bounded request audit/idempotency envelope. No planner, LifeOS action executor, Health operational update, WhatsApp outbox, or monitor is invoked. External conversation content is evidence, never autonomous permission for broader writes.
 
 ## WhatsApp Interaction Selection
 
@@ -220,3 +220,9 @@ Proactive coverage includes memo reminders and Proactive Accountability v1 candi
 ## Next Extraction
 
 The next useful extraction is the remaining memory/Vault-save/follow-up special branch group, or a lower-level LifeOS tool execution adapter. Do not extract either until tests cover explicit memory writes/forget, Vault save follow-ups, action logging, and final persistence.
+
+## Companion Autobiographical Memory v1
+
+`brain_beliefs` remains current-state authority. `ai_memories` now carries explicit kind, stable subject when available, user-owned project grounding, occurred/effective time, provenance, dedupe identity, and archive/supersession history. `ai_insights` are hypotheses; Vault is long-form. The service-role-only `curate_autobiographical_memory` transaction serializes one subject, reconfirms an exact memory, archives a superseded value, and refuses inferred replacement of an explicit fact. A later explicit return to an older value creates a new current row rather than reactivating old history.
+
+`brainAutobiographicalMemory.js` validates model proposals, rejects secrets and daily log noise, checks lexical grounding in the current user message, and resolves project IDs against user-owned projects. Brain's explicit remember and post-answer extraction paths both call it. Only deterministic explicit remember commands are stored as `user_explicit`; model-proposed memories remain capped `assistant_inferred` evidence. Ordinary Brain turns load at most 12 topical memories; true recall loads a capped broad set. Current belief subjects remove conflicting memories from Brain prompt context. The Context Compiler includes only compact goals/constraints, episodes, project highlights, facts and hypothesis-labeled insights. `search_memory` is bounded/read-only; `sync_context` memory updates require explicit `lifeos.write` and cannot execute operational actions. `npm run test:memory` covers persisted curation, history, retrieval, compiler, and cross-channel entrypoints.

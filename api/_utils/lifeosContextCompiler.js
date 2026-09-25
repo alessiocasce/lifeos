@@ -2,6 +2,7 @@ import { addDays, localDate, localRangeToUtcWindow, TIME_ZONE } from './date.js'
 import { safePreview } from './brainTrace.js';
 import { getSupabaseAdmin } from './supabaseAdmin.js';
 import { serializeBeliefForContext } from './brainBeliefs.js';
+import { serializeAutobiographicalMemory } from './brainAutobiographicalMemory.js';
 
 const SECRET_KEY_PATTERN = /(authorization|bearer|token|secret|password|service[_-]?role|api[_-]?key|gemini|supabase)/i;
 const DEFAULT_DAYS = 7;
@@ -58,6 +59,8 @@ export async function loadLifeOSContextRows({ client = getSupabaseAdmin(), userI
     outboxMessages,
     brainMessages,
     beliefs,
+    memories,
+    insights,
   ] = await Promise.all([
     selectMany(client.from('memos').select(memoSelect()).eq('user_id', userId).eq('status', 'open').order('memo_date', { ascending: true, nullsFirst: false }).order('memo_time', { ascending: true, nullsFirst: false }).limit(Math.max(maxRows, 80))),
     selectMany(client.from('calendar_events').select(calendarSelect()).eq('user_id', userId).gte('event_date', today).lte('event_date', future).neq('status', 'cancelled').order('event_date', { ascending: true }).order('start_time', { ascending: true }).limit(Math.max(maxRows, 80))),
@@ -69,9 +72,11 @@ export async function loadLifeOSContextRows({ client = getSupabaseAdmin(), userI
     selectMany(client.from('brain_outbox_messages').select(outboxSelect()).eq('user_id', userId).eq('channel', 'whatsapp').order('created_at', { ascending: false }).limit(80)),
     selectMany(client.from('ai_chat_messages').select(brainMessageSelect()).eq('user_id', userId).eq('role', 'assistant').order('created_at', { ascending: false }).limit(40)),
     selectMany(client.from('brain_beliefs').select(beliefSelect()).eq('user_id', userId).eq('record_status', 'current').order('effective_from', { ascending: false }).limit(100)),
+    selectMany(client.from('ai_memories').select('id, category, title, content, source, confidence, importance, status, memory_kind, subject_key, project_id, occurred_at, occurred_on, effective_from, effective_until, provenance, last_seen_at, last_confirmed_at, created_at, updated_at').eq('user_id', userId).eq('status', 'active').order('updated_at', { ascending: false }).limit(60)),
+    selectMany(client.from('ai_insights').select('id, insight_type, title, content, confidence, created_at').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: false }).limit(12)),
   ]);
 
-  return { memos, calendarEvents, projects, projectSessions, healthLogs, workouts, actionLogs, outboxMessages, brainMessages, beliefs };
+  return { memos, calendarEvents, projects, projectSessions, healthLogs, workouts, actionLogs, outboxMessages, brainMessages, beliefs, memories, insights };
 }
 
 export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEFAULT_LIMIT, now = new Date() } = {}) {
@@ -86,6 +91,7 @@ export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEF
   const brain = summarizeBrain(normalizedRows.actionLogs, normalizedRows.brainMessages, now);
   const whatsapp = summarizeOutbox(normalizedRows.outboxMessages, now);
   const beliefs = summarizeBeliefs(normalizedRows.beliefs, normalizedRows.projects);
+  const autobiography = summarizeAutobiography(normalizedRows.memories, normalizedRows.insights, normalizedRows.beliefs, now);
 
   return sanitizeContextValue({
     generated_at: new Date(now).toISOString(),
@@ -117,6 +123,7 @@ export function buildLifeOSContext({ rows = {}, days = DEFAULT_DAYS, limit = DEF
     brain,
     whatsapp,
     beliefs,
+    autobiography,
     open_loops: openLoops,
   });
 }
@@ -629,6 +636,31 @@ function summarizeBeliefs(beliefs, projects = []) {
   };
 }
 
+function summarizeAutobiography(memories, insights, beliefs, now) {
+  const currentKeys = new Set(beliefs.map((belief) => belief.subject_key));
+  const active = memories
+    .filter((row) => row.status === 'active' && !SECRET_KEY_PATTERN.test(row.content || ''))
+    .map((row) => serializeAutobiographicalMemory(row, { now }))
+    .filter((row) => !row.subject_key || !currentKeys.has(row.subject_key));
+  const compact = (rows, limit) => rows.slice(0, limit).map((row) => ({
+    id: row.id, kind: row.kind, title: row.title, content: safePreview(row.content, 180),
+    project_id: row.project_id, occurred_on: row.occurred_on,
+    temporal_status: row.temporal_status,
+  }));
+  return {
+    current_truth_source: 'brain_beliefs',
+    goals_and_constraints: compact(active.filter((row) => ['goal', 'constraint'].includes(row.kind)), 4),
+    recent_episodes: compact(active.filter((row) => row.kind === 'episode'), 3),
+    project_highlights: compact(active.filter((row) => row.kind === 'project_memory' || (row.kind === 'decision' && row.project_id)), 4),
+    relevant_facts: compact(active.filter((row) => row.kind === 'semantic_fact'), 4),
+    stale_or_review_count: active.filter((row) => ['stale', 'needs_review'].includes(row.temporal_status)).length,
+    insights_as_hypotheses: insights.slice(0, 3).filter((row) => !SECRET_KEY_PATTERN.test(row.content || '')).map((row) => ({
+      id: row.id, type: row.insight_type, title: row.title,
+      content: safePreview(row.content, 180), confidence: Number(row.confidence),
+    })),
+  };
+}
+
 function normalizeContextRows(rows) {
   return {
     memos: Array.isArray(rows.memos) ? rows.memos : [],
@@ -641,6 +673,8 @@ function normalizeContextRows(rows) {
     outboxMessages: Array.isArray(rows.outboxMessages) ? rows.outboxMessages : [],
     brainMessages: Array.isArray(rows.brainMessages) ? rows.brainMessages : [],
     beliefs: Array.isArray(rows.beliefs) ? rows.beliefs : [],
+    memories: Array.isArray(rows.memories) ? rows.memories : [],
+    insights: Array.isArray(rows.insights) ? rows.insights : [],
   };
 }
 

@@ -178,6 +178,41 @@ test('successful sync changes only beliefs and audit, never operational tables',
   } finally { await db.close(); }
 });
 
+test('autobiographical sync requires write scope, grounds projects, replays and remains read-only to search', async () => {
+  const { db, client } = await createReliabilityDatabase();
+  try {
+    const project = (await db.query(`insert into projects(user_id,name,goal_type,current_value,target_value)
+      values ($1,'LifeOS','units',0,10) returning id`, [fixtureUser])).rows[0];
+    const update = {
+      client_update_id: 'memory-1', type: 'autobiographical_memory', memory_kind: 'project_memory',
+      category: 'project', title: 'LifeOS decision',
+      content: 'LifeOS will use a WhatsApp-first capture flow.', project_id: project.id,
+      confidence: 0.97, importance: 5,
+      evidence_summary: 'User explicitly decided LifeOS should use WhatsApp-first capture.',
+    };
+    const call = { jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'sync_context', arguments: request('memory-sync-1', [update]) } };
+    const read = { userId: fixtureUser, client, now: NOW, scopes: ['lifeos.read'] };
+    const write = { ...read, scopes: ['lifeos.write'] };
+    assert.equal((await handleMcpJsonRpcRequest(call, read)).error.code, -32003);
+    const applied = await handleMcpJsonRpcRequest(call, write);
+    assert.equal(applied.result.structuredContent.status, 'applied');
+    assert.equal(applied.result.structuredContent.results[0].memory_kind, 'project_memory');
+    const replay = await handleMcpJsonRpcRequest(call, write);
+    assert.equal(replay.result.structuredContent.idempotent_replay, true);
+    assert.equal((await client.from('ai_memories').select('*').eq('user_id', fixtureUser)).data.length, 1);
+    const search = await handleMcpJsonRpcRequest({
+      jsonrpc: '2.0', id: 12, method: 'tools/call', params: { name: 'search_memory', arguments: { query: 'WhatsApp capture', limit: 3 } },
+    }, read);
+    assert.equal(search.result.structuredContent.memories[0].project_id, project.id);
+    assert.equal(search.result.structuredContent.memories[0].kind, 'project_memory');
+    await assert.rejects(() => syncExternalContext({ request: request('bad-project-memory', [{ ...update, project_id: '22222222-2222-4222-8222-222222222222' }]), userId: fixtureUser, client, now: NOW }), /Project/);
+    assert.equal((await client.from('brain_external_sync_requests').select('*').eq('user_id', fixtureUser)).data.length, 1);
+    for (const table of ['health_logs', 'memos', 'calendar_events', 'expenses', 'brain_outbox_messages', 'project_sessions']) {
+      assert.equal((await client.from(table).select('*').eq('user_id', fixtureUser)).data.length, 0, `${table} was modified`);
+    }
+  } finally { await db.close(); }
+});
+
 for (const entry of tests) {
   try { await entry.fn(); console.log(`PASS ${entry.name}`); }
   catch (error) { console.error(`FAIL ${entry.name}: ${error.message}`); process.exitCode = 1; }

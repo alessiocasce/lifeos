@@ -631,6 +631,7 @@ export async function handleBrainChatMessage({
       const savedMemory = await persistExplicitBrainMemory({
         memory: command.memory,
         existingMemories: context.brainContext?.memories ?? [],
+        channel: resolvedSource,
       });
       const answer = command.response || "Got it - I'll remember that.";
       return sendAiSuccess(null, 200, {
@@ -1253,7 +1254,7 @@ function normalizeClientRequestId(value) {
 
 async function safeLoadBrainContext(context) {
   try {
-    return await loadBrainContext();
+    return await loadBrainContext({ message: isMemoryRecallRequest(context?.message) ? '' : (context?.message || '') });
   } catch (error) {
     console.error('[LifeOS Brain memory warning]', JSON.stringify({
       requestId: context?.requestId,
@@ -1400,6 +1401,8 @@ async function safeExtractBrainKnowledge({ context, message, answer, actionType 
       assistantAnswer: answer,
       actionType,
       existingMemories: context?.brainContext?.memories ?? [],
+      channel: context?.source || 'app',
+      sourceMessageId: context?.brainChat?.userMessage?.id || null,
     });
   } catch (error) {
     console.error('[LifeOS Brain memory extraction warning]', JSON.stringify({

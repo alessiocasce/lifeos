@@ -139,3 +139,38 @@ try {
   console.log('PASS additive Companion migrations enforce audit RLS, service-only RPC, and idempotent belief transitions');
 } catch (error) { console.error(`FAIL Companion belief migration: ${error.message}`); process.exitCode = 1; }
 finally { await companionMigrationDb.close(); }
+
+const memoryMigrationDb = new PGlite();
+try {
+  const migration = readFileSync(new URL('../supabase/migrations/20260925140000_companion_autobiographical_memory.sql', import.meta.url), 'utf8');
+  assert.ok(readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8').includes('create or replace function public.curate_autobiographical_memory('));
+  await memoryMigrationDb.exec(`
+    create schema auth; create role anon; create role authenticated; create role service_role;
+    create table auth.users(id uuid primary key);
+    create table projects(id uuid primary key default gen_random_uuid(), user_id uuid not null, name text, unique(id,user_id));
+    create table ai_memories(
+      id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id),
+      category text not null, title text not null, content text not null,
+      source text not null default 'assistant_inferred', confidence numeric(3,2) not null default 0.8,
+      importance integer not null default 3, status text not null default 'active',
+      last_seen_at timestamptz, metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+    );
+  `);
+  await memoryMigrationDb.query('insert into auth.users values ($1)', [fixtureUser]);
+  const legacy = (await memoryMigrationDb.query(`insert into ai_memories(user_id,category,title,content)
+    values ($1,'preference','Legacy preference','I prefer concise answers.') returning id`, [fixtureUser])).rows[0];
+  await memoryMigrationDb.exec(migration);
+  const row = (await memoryMigrationDb.query('select memory_kind, status, content from ai_memories where id=$1', [legacy.id])).rows[0];
+  assert.deepEqual(row, { memory_kind: 'semantic_fact', status: 'active', content: 'I prefer concise answers.' });
+  const security = (await memoryMigrationDb.query(`select
+    (select relrowsecurity from pg_class where oid='public.ai_memories'::regclass) as rls,
+    has_function_privilege('anon', 'public.curate_autobiographical_memory(uuid,text,text,text,text,text,numeric,integer,text,uuid,timestamptz,date,timestamptz,jsonb,text)', 'EXECUTE') as anon_exec,
+    has_function_privilege('authenticated', 'public.curate_autobiographical_memory(uuid,text,text,text,text,text,numeric,integer,text,uuid,timestamptz,date,timestamptz,jsonb,text)', 'EXECUTE') as authenticated_exec,
+    has_function_privilege('service_role', 'public.curate_autobiographical_memory(uuid,text,text,text,text,text,numeric,integer,text,uuid,timestamptz,date,timestamptz,jsonb,text)', 'EXECUTE') as service_exec`)).rows[0];
+  assert.deepEqual(security, { rls: true, anon_exec: false, authenticated_exec: false, service_exec: true });
+  await assert.rejects(memoryMigrationDb.query(`insert into ai_memories(user_id,category,title,content,memory_kind)
+    values ($1,'other','Bad','Bad','unknown')`, [fixtureUser]), /check constraint/);
+  console.log('PASS additive autobiographical migration preserves legacy memories and restricts curation RPC');
+} catch (error) { console.error(`FAIL autobiographical migration: ${error.message}`); process.exitCode = 1; }
+finally { await memoryMigrationDb.close(); }

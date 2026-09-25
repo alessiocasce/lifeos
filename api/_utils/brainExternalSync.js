@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { applyBeliefTransition, buildRoutineBeliefIdentity, normalizeRoutineStateTransition } from './brainBeliefs.js';
 import { normalizeHabitId } from './habits.js';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
+import { curateAutobiographicalMemory, normalizeAutobiographicalCandidate } from './brainAutobiographicalMemory.js';
 
 const MAX_UPDATES = 8;
 const CLAIM_MINUTES = 2;
@@ -41,7 +42,9 @@ export function normalizeExternalSyncRequest(input, { now = new Date() } = {}) {
   if (new Set(updates.map((update) => update.client_update_id)).size !== updates.length) {
     throw invalid('client_update_id must be unique within a request.');
   }
-  const targets = updates.map((update) => update.type === 'routine_state'
+  const targets = updates.map((update) => update.type === 'autobiographical_memory'
+    ? `memory:${update.client_update_id}`
+    : update.type === 'routine_state'
     ? `routine:${update.routine_id}`
     : update.type === 'preference'
       ? `preference:${update.key}`
@@ -56,13 +59,13 @@ export function normalizeExternalSyncRequest(input, { now = new Date() } = {}) {
 }
 
 export async function groundExternalSyncUpdates(request, { userId, client = getSupabaseAdmin() } = {}) {
-  const projects = request.updates.filter((update) => update.type === 'project_context');
+  const projects = request.updates.filter((update) => update.type === 'project_context' || (update.type === 'autobiographical_memory' && (update.project_id || update.project_name)));
   if (!projects.length) return request.updates;
   const list = await client.from('projects').select('id, name').eq('user_id', userId).limit(300);
   if (list.error) throw new ExternalSyncError('persistence_failed', 'Project grounding is temporarily unavailable.');
   const rows = list.data || [];
   const grounded = request.updates.map((update) => {
-    if (update.type !== 'project_context') return update;
+    if (update.type !== 'project_context' && update.type !== 'autobiographical_memory') return update;
     const matches = update.project_id
       ? rows.filter((row) => row.id === update.project_id)
       : rows.filter((row) => normalizedProjectName(row.name) === normalizedProjectName(update.project_name));
@@ -155,7 +158,9 @@ export async function syncExternalContext({
     }
   }
   audit = await saveAudit(client, userId, audit.id, claimToken, {
-    status: 'applied', results, applied_count: results.length, rejected_count: 0,
+    status: 'applied', results,
+    applied_count: results.filter((item) => item.status === 'applied').length,
+    rejected_count: results.filter((item) => item.status !== 'applied').length,
     completed_at: new Date().toISOString(), claim_expires_at: null,
   });
   return publicResult(audit, false);
@@ -171,6 +176,14 @@ function normalizeUpdate(input, capturedAt, nowMs) {
   const common = { client_update_id: clientId, type, confidence, evidence_summary: evidence };
   const effectiveFrom = input.effective_from ? requiredIso(input.effective_from, 'effective_from') : capturedAt;
   if (Date.parse(effectiveFrom) > nowMs + 5 * 60000) throw invalid('Future effective_from is not supported.');
+  if (type === 'autobiographical_memory') {
+    allowKeys(input, ['client_update_id', 'type', 'memory_kind', 'category', 'title', 'content', 'subject_key', 'project_id', 'project_name', 'occurred_at', 'occurred_on', 'confidence', 'importance', 'effective_from', 'evidence_summary'], 'autobiographical_memory');
+    const candidate = normalizeAutobiographicalCandidate({
+      ...input, source: 'user_explicit',
+    }, { capturedAt, userMessage: input.evidence_summary });
+    if (!candidate) throw invalid('Autobiographical memory is invalid, low-value, or contains sensitive data.');
+    return { ...common, ...candidate, effective_from: effectiveFrom };
+  }
   if (type === 'routine_state') {
     allowKeys(input, ['client_update_id', 'type', 'routine_id', 'state', 'confidence', 'effective_from', 'effective_until', 'evidence_summary'], 'routine_state');
     const routineId = normalizeHabitId(input.routine_id);
@@ -213,6 +226,25 @@ function normalizeUpdate(input, capturedAt, nowMs) {
 }
 
 async function applyUpdate(update, { request, userId, client, auditId }) {
+  if (update.type === 'autobiographical_memory') {
+    const saved = await curateAutobiographicalMemory({
+      candidate: update, userId, client, capturedAt: request.source.captured_at,
+      userMessage: update.evidence_summary,
+      provenance: {
+        source_system: request.source.system,
+        channel: 'mcp',
+        reference: request.source.reference,
+        evidence_summary: update.evidence_summary,
+      },
+    });
+    if (saved.status === 'rejected') {
+      return { client_update_id: update.client_update_id, type: update.type, status: 'rejected', reason: saved.reason };
+    }
+    return {
+      client_update_id: update.client_update_id, type: update.type, status: 'applied',
+      memory_id: saved.memory.id, memory_kind: saved.memory.memory_kind,
+    };
+  }
   let subjectType;
   let subjectKey;
   let predicate;
@@ -274,7 +306,7 @@ function publicResult(row, replay) {
     status: row.status,
     idempotent_replay: replay,
     summary: row.status === 'applied'
-      ? `${row.applied_count} LifeOS context update${row.applied_count === 1 ? '' : 's'} applied.`
+      ? `${row.applied_count} LifeOS context update${row.applied_count === 1 ? '' : 's'} applied${row.rejected_count ? `; ${row.rejected_count} rejected` : ''}.`
       : `${row.applied_count} of ${row.requested_count} LifeOS context updates applied. Retry with the same idempotency key.`,
     results: results.map((item) => ({ ...item })),
   };

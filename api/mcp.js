@@ -23,11 +23,12 @@ import {
   getWhatsappProactiveDebug,
   getWorkoutIntelligence,
   searchVaultForMcp,
+  searchMemoryForMcp,
 } from './_utils/mcpLifeosData.js';
 
 const MCP_VERSION = '2025-06-18';
 const SERVER_NAME = 'lifeos-mcp';
-const SERVER_VERSION = '1.2.0';
+const SERVER_VERSION = '1.3.0';
 const MCP_READ_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [MCP_READ_SCOPE] }];
 const MCP_WRITE_SECURITY_SCHEMES = [{ type: 'oauth2', scopes: [MCP_WRITE_SCOPE] }];
 
@@ -42,7 +43,7 @@ const JSONRPC_ERRORS = {
 const TOOL_DEFINITIONS = [
   {
     name: 'sync_context',
-    description: 'Explicitly sync up to 8 validated current routine, preference, or existing-project context changes into LifeOS beliefs. Requires lifeos.write. Idempotent; does not execute Brain actions or send messages.',
+    description: 'Explicitly sync up to 8 validated routine, preference, existing-project, or autobiographical-memory changes into LifeOS. Requires lifeos.write. Idempotent; does not execute operational actions or send messages.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -61,7 +62,7 @@ const TOOL_DEFINITIONS = [
         summary: { type: 'string', description: 'Brief user-visible reason for this explicit sync.' },
         updates: {
           type: 'array', minItems: 1, maxItems: 8,
-          description: 'Semantic deltas only: routine_state, preference, or project_context. Each requires client_update_id, confidence >= 0.8, and evidence_summary.',
+          description: 'Semantic deltas only: routine_state, preference, project_context, or autobiographical_memory. Each requires client_update_id, confidence >= 0.8, and evidence_summary.',
           items: semanticSyncUpdateSchema(),
         },
       },
@@ -69,6 +70,17 @@ const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
     requiredScope: MCP_WRITE_SCOPE,
+  },
+  {
+    name: 'search_memory',
+    description: 'Read-only bounded search of curated autobiographical memories. Historical memory is context, not authoritative current state.',
+    inputSchema: objectSchema({
+      query: { type: 'string', description: 'Optional topical search terms, max 160 characters.' },
+      kind: { type: 'string', enum: ['semantic_fact', 'episode', 'decision', 'project_memory', 'goal', 'constraint'] },
+      project_id: { type: 'string', description: 'Optional existing project UUID.' },
+      include_historical: { type: 'boolean', description: 'Include archived/superseded memories, clearly marked historical. Default false.' },
+      limit: numberSchema('Optional result limit, default 8, max 20.'),
+    }),
   },
   {
     name: 'get_lifeos_snapshot',
@@ -404,6 +416,17 @@ async function callMcpTool(params, context) {
         ...(context.now ? { now: context.now } : {}),
       });
       break;
+    case 'search_memory':
+      data = await searchMemoryForMcp({
+        userId,
+        query: typeof args.query === 'string' ? args.query : '',
+        kind: typeof args.kind === 'string' ? args.kind : null,
+        projectId: typeof args.project_id === 'string' ? args.project_id : null,
+        includeHistorical: args.include_historical === true,
+        limit: clampMcpLimit(args.limit, 8, 20),
+        ...(context.client ? { client: context.client } : {}),
+      });
+      break;
     case 'get_lifeos_snapshot':
       data = await getLifeosSnapshot({ userId, days: clampMcpDays(args.days) });
       break;
@@ -578,6 +601,25 @@ function semanticSyncUpdateSchema() {
           value: { type: 'string', description: 'Bounded text; priority_state is active_priority, temporarily_deprioritized, or on_hold.' },
         },
         required: ['client_update_id', 'type', 'field', 'value', 'confidence', 'evidence_summary'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          ...common,
+          type: { type: 'string', const: 'autobiographical_memory' },
+          memory_kind: { type: 'string', enum: ['semantic_fact', 'episode', 'decision', 'project_memory', 'goal', 'constraint'] },
+          category: { type: 'string', maxLength: 40 },
+          title: { type: 'string', maxLength: 80 },
+          content: { type: 'string', maxLength: 400 },
+          subject_key: { type: 'string', maxLength: 180, description: 'Stable subject only for a current durable fact that may supersede its previous value.' },
+          project_id: { type: 'string', description: 'Existing user-owned project UUID.' },
+          project_name: { type: 'string', maxLength: 120, description: 'Existing project name fallback.' },
+          occurred_at: { type: 'string', description: 'Optional exact event time with timezone.' },
+          occurred_on: { type: 'string', description: 'Optional calendar date when exact time is unknown.' },
+          importance: { type: 'integer', minimum: 1, maximum: 5 },
+        },
+        required: ['client_update_id', 'type', 'memory_kind', 'category', 'title', 'content', 'confidence', 'evidence_summary'],
         additionalProperties: false,
       },
     ],

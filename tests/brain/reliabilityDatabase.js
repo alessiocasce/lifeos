@@ -11,7 +11,7 @@ export async function createReliabilityDatabase() {
     insert into auth.users values ('${fixtureUser}');`);
   const schema = fs.readFileSync(new URL('../../supabase/schema.sql', import.meta.url), 'utf8');
   for (const table of ['workouts', 'health_logs', 'memos', 'calendar_events', 'expenses', 'ai_action_logs', 'projects', 'project_sessions', 'brain_outbox_messages', 'brain_proactive_rules', 'ai_chat_threads', 'ai_chat_messages',
-    'brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state']) {
+    'brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state', 'ai_memories', 'ai_insights']) {
     const start = schema.indexOf(`create table if not exists public.${table} (`);
     if (start < 0) throw new Error(`Missing checked-in table ${table}`);
     await db.exec(schema.slice(start, schema.indexOf('\n);', start) + 3));
@@ -23,6 +23,7 @@ export async function createReliabilityDatabase() {
   await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8'));
   await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260925120000_companion_external_sync.sql', import.meta.url), 'utf8'));
   await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260925130000_mcp_oauth_code_redemptions.sql', import.meta.url), 'utf8'));
+  await db.exec(fs.readFileSync(new URL('../../supabase/migrations/20260925140000_companion_autobiographical_memory.sql', import.meta.url), 'utf8'));
   await db.exec(`create unique index ai_chat_messages_user_thread_outbox_unique
     on ai_chat_messages (user_id, thread_id, (metadata->>'outbox_message_id'))
     where role = 'assistant' and coalesce(metadata->>'outbox_message_id', '') <> '';`);

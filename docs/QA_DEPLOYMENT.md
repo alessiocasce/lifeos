@@ -362,7 +362,7 @@ No schema rerun is required for MCP v1.1. The Action API is consolidated into on
    - `npm run check:functions`
    - `npm run smoke:whatsapp:outbox` only with explicit live opt-in when testing outbox lifecycle
 5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
-6. Confirm all legacy MCP tools/resources remain read-only. The separately authorized Slice 2 `sync_context` may update only current beliefs and its audit; no tool sends WhatsApp, enqueues outbox rows, or calls Brain execution.
+6. Confirm all legacy MCP tools/resources remain read-only. After Slice 3, `search_memory` is read-only and the separately authorized `sync_context` may update only current beliefs, curated autobiographical memories, and its audit; no tool sends WhatsApp, enqueues outbox rows, or calls Brain execution.
 7. Confirm ChatGPT OAuth metadata advertises direct `api/mcp.js` URLs, not root OAuth paths, for authorize/token.
 
 The smoke script reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env and does not print it. To test a preview deployment, run it with `LIFEOS_MCP_BASE_URL=https://your-preview-url.vercel.app`.
@@ -473,3 +473,15 @@ This is a separate migration and backend release. Local tests do not apply it to
 5. Replay the same idempotency key and verify no second belief row; reuse that key with changed content and verify conflict. Confirm no Health/project operational/outbox rows changed. Inspect `brain_external_sync_requests` for the bounded request audit. Run `npm run test:mcp-write` locally before this manual QA.
 
 The tool does not run ambient sync, send WhatsApp, or write operational LifeOS records. Roll back the backend before considering migration removal; retain audit/belief history unless a separate data-retention decision authorizes deletion.
+
+## Companion Slice 2.5 and Slice 3 Deployment
+
+Do not push/deploy the backend before applying its migrations. As checked read-only on 2026-09-25, production LifeOS Supabase did not yet have `brain_mcp_oauth_code_redemptions`; the local code has not been deployed or physically verified.
+
+1. Confirm `20260919120000_companion_beliefs.sql` and `20260925120000_companion_external_sync.sql` are present. Apply `supabase/migrations/20260925130000_mcp_oauth_code_redemptions.sql`, then `supabase/migrations/20260925140000_companion_autobiographical_memory.sql`. Do not rerun the whole `schema.sql` against production. These migrations are additive and preserve legacy `ai_memories` rows.
+2. Verify OAuth redemption table RLS and unique hash key; only `service_role` may insert. Verify `ai_memories` RLS/user scoping, composite project owner FK, and that only `service_role` may execute `curate_autobiographical_memory`. Do not inspect or log raw codes/tokens/private memory content during verification.
+3. Run `npm run test:mcp-oauth`, `npm run test:memory`, `npm run test:mcp-write`, `npm run test:schema`, `npm test`, `npm run check:functions`, and `npm run build` locally. Function count should remain seven. Then deploy Vercel. No Oracle PM2 restart is required because bridge code is unchanged.
+4. Relink a connector only if it needs a new OAuth grant or `lifeos.write`. Existing access tokens keep their issued scopes. Test one new code exchange, then a replay returning `invalid_grant`; a wrong PKCE/client/redirect attempt must not consume the code. Local PGlite concurrency is not a multi-instance Vercel proof, so verify safely in a test connector/environment if available.
+5. Follow the `Companion Autobiographical Memory Journey` in `docs/QA_AI_ASSISTANT.md`. MCP read-only search and explicit sync share the app/WhatsApp memory store; neither invokes operational LifeOS actions. Production Gemini curation and physical WhatsApp QA remain manual.
+
+Rollback: deploy the previous backend before removing either additive migration. Do not drop redemption or memory history during an ordinary rollback. If OAuth redemption storage fails, code exchange fails closed; use `LIFEOS_MCP_OAUTH_ENABLED=false` only as a temporary OAuth rollback, not as replay protection.

@@ -5,6 +5,18 @@ import { getSupabaseAdmin } from './supabaseAdmin.js';
 import { compileLifeOSContext } from './lifeosContextCompiler.js';
 import { buildWorkoutIntelligence } from './workoutIntelligence.js';
 import { listCurrentBeliefs, serializeBeliefForContext } from './brainBeliefs.js';
+import { searchAutobiographicalMemory } from './brainAutobiographicalMemory.js';
+
+export async function searchMemoryForMcp({ userId, query = '', kind = null, projectId = null, limit = 8, includeHistorical = false, client = getSupabaseAdmin() } = {}) {
+  const result = await searchAutobiographicalMemory({
+    userId, client, query: String(query || '').slice(0, 160), kind, projectId,
+    limit: clampMcpLimit(limit, 8, 20), includeHistorical: Boolean(includeHistorical),
+  });
+  return sanitizeMcpOutput({
+    ...result,
+    note: 'Autobiographical memories are historical context. Current LifeOS beliefs take precedence for present-state questions.',
+  });
+}
 
 const MAX_DAYS = 30;
 const DEFAULT_DAYS = 7;

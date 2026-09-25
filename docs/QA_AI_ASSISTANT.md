@@ -783,3 +783,17 @@ Prerequisite: apply `supabase/migrations/20260919120000_companion_beliefs.sql`, 
 7. On a Creatine check-in reply `done btw I'm going away tomorrow`; confirm Creatine is written once, only the quoted/current target is resolved, and the residual statement reaches knowledge extraction.
 8. Repeat the same provider inbound delivery and confirm the receipt replay creates no duplicate Health or belief state transition.
 9. Run `npm run test:companion`, `npm run test:brain`, and `npm run test:reliability` before deploy.
+
+## Companion Autobiographical Memory Journey
+
+Prerequisite: apply `20260925130000_mcp_oauth_code_redemptions.sql` and `20260925140000_companion_autobiographical_memory.sql` after the earlier belief/external-sync migrations, then deploy Vercel. No Oracle bridge restart is needed for backend-only changes. Run `npm run test:memory`, `npm run test:mcp-write`, `npm run test:brain`, and `npm run test:schema` locally first.
+
+1. In app Brain say `Remember that I prefer clear technical explanations.` Repeat in WhatsApp. Confirm one active `ai_memories` row is reconfirmed, not duplicated, and both channels can recall it.
+2. State a meaningful event happened yesterday. Confirm `occurred_on` is the correct Europe/Rome previous date; do not claim an exact event time if none was supplied.
+3. Save a decision for an existing project; confirm `project_id` belongs to the configured user. An unknown or ambiguous project must not create a project or memory.
+4. Explicitly change a stable durable fact. Confirm the old row is archived and the new row is active. A weaker inferred contradiction must not replace the explicit row. A later explicit return to the first value must create a new current row.
+5. Ask a topical memory question and confirm relevant memories are used without a whole-memory dump. Ask a present-state question with conflicting historical memory and current belief; current belief wins.
+6. Call MCP `search_memory` with `lifeos.read`, then with `include_historical=true`. Verify limits, historical labels, and no secrets. Attempt `sync_context` with a read-only token and confirm rejection; with explicit `lifeos.write`, sync one bounded memory and replay its idempotency key. Confirm no Health, memo, calendar, project-progress, outbox, or action-log row changed.
+7. Try `Thanks`, a routine completion, and credential-like text. Confirm they are not curated as autobiographical memory. Confirm forget/archive and Vault save still work.
+
+Local PGlite tests do not prove live Gemini extraction quality, deployed OAuth, or physical WhatsApp delivery. Inspect sanitized trace and database state after deployment before claiming live end-to-end success.

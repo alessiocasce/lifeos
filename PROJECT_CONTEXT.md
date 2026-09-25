@@ -50,6 +50,10 @@ After that gate is green, Slice 3 evolves the existing `ai_memories` / `brain_be
 
 Slice 3 may extend the existing `sync_context` contract with a narrow autobiographical-memory semantic family and add a read-only bounded memory-search MCP tool. It must not broaden operational side effects or introduce generic CRUD.
 
+Repository checkpoint: Slice 2.5 is committed as `dd83153`. Its OAuth code redemption is a single unique insert of a SHA-256 JTI hash after client/redirect/PKCE/scope/audience validation. Replay returns `invalid_grant`; database failure fails closed. Apply `supabase/migrations/20260925130000_mcp_oauth_code_redemptions.sql` before deploying that code. The table was absent from production Supabase when checked read-only on 2026-09-25, so this checkpoint has not been pushed/deployed.
+
+Slice 3 repository implementation uses `api/_utils/brainAutobiographicalMemory.js` and additive `supabase/migrations/20260925140000_companion_autobiographical_memory.sql`. `ai_memories` remains the single curated autobiographical store with kinds `semantic_fact`, `episode`, `decision`, `project_memory`, `goal`, and `constraint`; existing rows default to `semantic_fact`. The service-role-only curation RPC atomically reconfirms exact matches or supersedes a stable subject, while low-confidence inference cannot replace explicit memory. Project memories require an existing user-owned project. `brain_beliefs` stays authoritative current truth, `ai_insights` stays hypothetical, and Vault stays long-form. Brain app/WhatsApp load bounded topical memories from the same service; true memory recall uses a capped broad set. The Context Compiler includes a compact autobiography section. `sync_context` accepts a narrow `autobiographical_memory` update under `lifeos.write`; read-only `search_memory` requires `lifeos.read`. No operational LifeOS table or proactive rule is added. Apply the Slice 3 migration after OAuth redemption and before deploying the Slice 3 backend. Local tests do not prove deployed connector or physical WhatsApp behavior.
+
 ## Reliability Release Handoff
 
 ### WhatsApp interaction ownership patch
@@ -632,7 +636,7 @@ Current behavior:
 - Workout Intelligence v1 exposes read-only `get_workout_intelligence` and `lifeos://workouts/intelligence`. It analyzes exact working sets into latest-session summaries, per-exercise progression, cautious next targets, plateau flags, and sleep/recovery caveats when health data exists. Warmups are excluded from top working-set targets. Brain workout context uses the same helper through the workout coach read path.
 - MCP includes read-only proactive WhatsApp debug access through `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug`, exposing outbox status counts, safe ACK/retry summaries, and proactive traces without mutating records.
 - MCP prompts are instruction templates only; they do not embed private data directly.
-- All legacy MCP tools/resources remain read-only. Only `sync_context` may update current beliefs and its bounded audit under `lifeos.write`; it must not call Brain chat, execute LifeOS actions, enqueue or ack outbox rows, or send WhatsApp messages.
+- All legacy MCP tools/resources and new `search_memory` remain read-only. Only `sync_context` may update current beliefs, curated autobiographical memories, and its bounded audit under `lifeos.write`; it must not call Brain chat, execute LifeOS actions, enqueue or ack outbox rows, or send WhatsApp messages.
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.
 - MCP OAuth metadata/authorize/token requests are all served by the same `api/mcp.js` function. OAuth metadata advertises direct `/api/mcp?mcp_oauth=...` URLs so ChatGPT linking cannot be swallowed by the SPA fallback. Action API consolidation keeps total Vercel function count under the Hobby limit. Run `npm run check:functions` before deployment.
 - Local validation uses `npm run test:mcp`; it does not require live Supabase, Gemini, Vercel, or WhatsApp.
@@ -1090,7 +1094,7 @@ Workout mobile direction:
   - `initialize`, `tools/list`, `resources/list`, and `prompts/list` return valid JSON-RPC results.
   - `tools/list` marks read tools with `lifeos.read` and `sync_context` with `lifeos.write`.
   - `get_brain_debug_context` returns compact trace summaries without secrets.
-  - Read credentials cannot invoke `sync_context`; authorized sync changes only current belief/audit rows and never sends WhatsApp messages.
+  - Read credentials cannot invoke `sync_context`; authorized sync changes only current belief/curated memory/audit rows and never sends WhatsApp messages.
   - Run `npm run test:mcp`, `npm run smoke:mcp`, `npm run smoke:mcp:oauth`, and `npm run check:functions`; function count must remain at or below 12.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.

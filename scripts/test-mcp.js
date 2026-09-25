@@ -35,6 +35,13 @@ test('health payload advertises a narrow explicit semantic sync capability', () 
   assert(health.capabilities.tools >= 10, 'expected at least 10 tools');
 });
 
+test('MCP advertises bounded read-only autobiographical search', () => {
+  const tool = listMcpTools().find((item) => item.name === 'search_memory');
+  assert(tool, 'search_memory is missing');
+  assertEqual(tool.inputSchema.properties.limit.type, 'number');
+  assertEqual(tool._meta.securitySchemes[0].scopes[0], 'lifeos.read');
+});
+
 test('initialize returns MCP server info', async () => {
   const response = await handleMcpJsonRpcRequest({
     jsonrpc: '2.0',
