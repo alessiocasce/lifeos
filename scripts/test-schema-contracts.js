@@ -86,6 +86,7 @@ const companionMigrationDb = new PGlite();
 try {
   const migration = readFileSync(new URL('../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8');
   const syncMigration = readFileSync(new URL('../supabase/migrations/20260925120000_companion_external_sync.sql', import.meta.url), 'utf8');
+  const oauthMigration = readFileSync(new URL('../supabase/migrations/20260925130000_mcp_oauth_code_redemptions.sql', import.meta.url), 'utf8');
   const user = '33333333-3333-4333-8333-333333333333';
   await companionMigrationDb.exec(`
     create schema auth;
@@ -99,6 +100,7 @@ try {
   `);
   await companionMigrationDb.exec(migration);
   await companionMigrationDb.exec(syncMigration);
+  await companionMigrationDb.exec(oauthMigration);
   const rls = await companionMigrationDb.query(`select relrowsecurity from pg_class where relname='brain_beliefs'`);
   assert.equal(rls.rows[0].relrowsecurity, true);
   const transitionArgs = [
@@ -124,6 +126,16 @@ try {
   assert.equal(security.anon_rpc, false);
   assert.equal(security.service_rpc, true);
   assert.equal(security.authenticated_audit_insert, false);
+  const oauthSecurity = (await companionMigrationDb.query(`select
+    (select relrowsecurity from pg_class where oid='public.brain_mcp_oauth_code_redemptions'::regclass) as rls,
+    has_table_privilege('anon', 'public.brain_mcp_oauth_code_redemptions', 'INSERT') as anon_insert,
+    has_table_privilege('authenticated', 'public.brain_mcp_oauth_code_redemptions', 'SELECT') as authenticated_select,
+    has_table_privilege('service_role', 'public.brain_mcp_oauth_code_redemptions', 'INSERT') as service_insert`)).rows[0];
+  assert.deepEqual(oauthSecurity, { rls: true, anon_insert: false, authenticated_select: false, service_insert: true });
+  const hash = 'a'.repeat(64);
+  await companionMigrationDb.query('insert into brain_mcp_oauth_code_redemptions(code_jti_hash,expires_at) values ($1,now()+interval \'5 minutes\')', [hash]);
+  await assert.rejects(companionMigrationDb.query('insert into brain_mcp_oauth_code_redemptions(code_jti_hash,expires_at) values ($1,now()+interval \'5 minutes\')', [hash]), /duplicate key/);
+  await assert.rejects(companionMigrationDb.query('insert into brain_mcp_oauth_code_redemptions(code_jti_hash,expires_at) values ($1,now()+interval \'5 minutes\')', ['raw-code']), /check constraint/);
   console.log('PASS additive Companion migrations enforce audit RLS, service-only RPC, and idempotent belief transitions');
 } catch (error) { console.error(`FAIL Companion belief migration: ${error.message}`); process.exitCode = 1; }
 finally { await companionMigrationDb.close(); }

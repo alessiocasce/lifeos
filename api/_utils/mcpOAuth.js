@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { matchesSecret, sendJson } from './http.js';
-import { getActionUserId } from './supabaseAdmin.js';
+import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 
 const CODE_TTL_SECONDS = 5 * 60;
 const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -25,7 +25,7 @@ export function getMcpOAuthRequestKind(req) {
   return '';
 }
 
-export async function handleMcpOAuthRequest(req, res) {
+export async function handleMcpOAuthRequest(req, res, { client } = {}) {
   const kind = getMcpOAuthRequestKind(req);
   if (!kind) return false;
 
@@ -47,7 +47,7 @@ export async function handleMcpOAuthRequest(req, res) {
       return true;
     }
     if (kind === 'token' && req.method === 'POST') {
-      await handleTokenPost(req, res);
+      await handleTokenPost(req, res, client);
       return true;
     }
     sendJson(res, 405, { error: 'method_not_allowed' });
@@ -190,7 +190,7 @@ async function handleAuthorizePost(req, res) {
   res.end();
 }
 
-async function handleTokenPost(req, res) {
+async function handleTokenPost(req, res, client) {
   const params = await readFormBody(req);
   if (params.grant_type !== 'authorization_code') {
     sendJson(res, 400, { error: 'unsupported_grant_type' });
@@ -208,7 +208,18 @@ async function handleTokenPost(req, res) {
     || !verifyPkce(params.code_verifier, codePayload.code_challenge)
     || !isScopeAllowed(codePayload.scope)
     || (normalizeScope(codePayload.scope).split(' ').includes(MCP_WRITE_SCOPE) && !isWriteOAuthConfigured(process.env))
+    || !sameUrl(codePayload.iss, getIssuer(req))
+    || !sameUrl(codePayload.aud, getMcpResourceUrl(req))
+    || (params.resource && !sameUrl(params.resource, codePayload.aud))
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(codePayload.jti || ''))
   ) {
+    sendJson(res, 400, { error: 'invalid_grant' });
+    return;
+  }
+
+  const userId = getActionUserId();
+  const consumed = await consumeOAuthCode(codePayload, client || getSupabaseAdmin());
+  if (!consumed) {
     sendJson(res, 400, { error: 'invalid_grant' });
     return;
   }
@@ -216,7 +227,7 @@ async function handleTokenPost(req, res) {
   const accessToken = signAccessToken({
     iss: getIssuer(req),
     aud: codePayload.aud,
-    sub: getActionUserId(),
+    sub: userId,
     scope: codePayload.scope || MCP_READ_SCOPE,
     client_id: codePayload.client_id,
   });
@@ -226,6 +237,17 @@ async function handleTokenPost(req, res) {
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
     scope: normalizeScope(codePayload.scope),
   });
+}
+
+async function consumeOAuthCode(codePayload, client) {
+  const codeJtiHash = crypto.createHash('sha256').update(codePayload.jti).digest('hex');
+  const inserted = await client.from('brain_mcp_oauth_code_redemptions').insert({
+    code_jti_hash: codeJtiHash,
+    expires_at: new Date(codePayload.exp * 1000).toISOString(),
+  });
+  if (!inserted.error) return true;
+  if (inserted.error.code === '23505') return false;
+  throw new Error('OAuth code redemption is unavailable.');
 }
 
 function validateAuthorizeParams(params, req) {

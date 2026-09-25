@@ -22,6 +22,7 @@ import {
   verifyPkceForTest,
 } from '../api/_utils/mcpOAuth.js';
 import { resolveActionName } from '../api/actions.js';
+import { createReliabilityDatabase } from '../tests/brain/reliabilityDatabase.js';
 
 const checks = [];
 
@@ -210,6 +211,7 @@ test('OAuth write scope requires dedicated link and signing secrets', () => {
 });
 
 test('OAuth authorize and PKCE exchange grant only requested scopes with accurate consent text', async () => {
+  const { db, client } = await createReliabilityDatabase();
   const saved = Object.fromEntries(['LIFEOS_MCP_TOKEN', 'LIFEOS_MCP_LINK_SECRET', 'LIFEOS_MCP_OAUTH_SIGNING_SECRET', 'LIFEOS_ACTION_USER_ID']
     .map((key) => [key, process.env[key]]));
   try {
@@ -248,7 +250,7 @@ test('OAuth authorize and PKCE exchange grant only requested scopes with accurat
     await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=token', body: {
       grant_type: 'authorization_code', code, client_id: params.client_id,
       redirect_uri: params.redirect_uri, code_verifier: verifier,
-    } }, exchanged);
+    } }, exchanged, { client });
     assertEqual(exchanged.statusCode, 200);
     const tokenResult = JSON.parse(exchanged.body);
     assertEqual(tokenResult.scope, 'lifeos.read lifeos.write');
@@ -257,7 +259,7 @@ test('OAuth authorize and PKCE exchange grant only requested scopes with accurat
     await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=token', body: {
       grant_type: 'authorization_code', code, client_id: params.client_id,
       redirect_uri: params.redirect_uri, code_verifier: 'wrong-verifier',
-    } }, wrongVerifier);
+    } }, wrongVerifier, { client });
     assertEqual(wrongVerifier.statusCode, 400);
 
     const readParams = { ...params, scope: 'lifeos.read', state: 'read-state' };
@@ -273,7 +275,7 @@ test('OAuth authorize and PKCE exchange grant only requested scopes with accurat
     await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=token', body: {
       grant_type: 'authorization_code', code: readCode, client_id: readParams.client_id,
       redirect_uri: readParams.redirect_uri, code_verifier: verifier,
-    } }, readExchange);
+    } }, readExchange, { client });
     assertEqual(readExchange.statusCode, 200);
     assertEqual(JSON.parse(readExchange.body).scope, 'lifeos.read');
     assertEqual(validateMcpAuth({ headers: { ...headers, authorization: `Bearer ${JSON.parse(readExchange.body).access_token}` } }).scopes.join(' '), 'lifeos.read');
@@ -283,6 +285,7 @@ test('OAuth authorize and PKCE exchange grant only requested scopes with accurat
     await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=authorize', body: { ...params, link_secret: process.env.LIFEOS_MCP_TOKEN } }, unsafeApproval);
     assertEqual(unsafeApproval.statusCode, 403);
   } finally {
+    await db.close();
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

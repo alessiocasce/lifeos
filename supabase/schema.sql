@@ -244,6 +244,12 @@ create table if not exists public.brain_external_sync_requests (
   unique (user_id, idempotency_key)
 );
 
+create table if not exists public.brain_mcp_oauth_code_redemptions (
+  code_jti_hash text primary key check (code_jti_hash ~ '^[0-9a-f]{64}$'),
+  expires_at timestamptz not null,
+  redeemed_at timestamptz not null default now()
+);
+
 create table if not exists public.ai_insights (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -1388,6 +1394,8 @@ grant select on table public.brain_beliefs to authenticated;
 revoke all on table public.brain_external_sync_requests from anon, authenticated;
 grant select on table public.brain_external_sync_requests to authenticated;
 grant all on table public.brain_external_sync_requests to service_role;
+revoke all on table public.brain_mcp_oauth_code_redemptions from public, anon, authenticated;
+grant select, insert, delete on table public.brain_mcp_oauth_code_redemptions to service_role;
 
 create index if not exists workouts_user_performed_on_idx on public.workouts (user_id, performed_on desc);
 create index if not exists workout_templates_user_name_idx on public.workout_templates (user_id, name);
@@ -1547,6 +1555,8 @@ create index if not exists brain_beliefs_user_subject_history_idx
   on public.brain_beliefs (user_id, subject_type, subject_key, predicate, effective_from desc);
 create index if not exists brain_external_sync_requests_user_created_idx
   on public.brain_external_sync_requests (user_id, created_at desc);
+create index if not exists brain_mcp_oauth_code_redemptions_expires_idx
+  on public.brain_mcp_oauth_code_redemptions (expires_at);
 create index if not exists brain_outbox_messages_user_status_scheduled_idx on public.brain_outbox_messages (user_id, status, scheduled_for);
 create index if not exists brain_outbox_messages_user_channel_status_scheduled_idx on public.brain_outbox_messages (user_id, channel, status, scheduled_for);
 create index if not exists brain_outbox_messages_idempotency_key_idx on public.brain_outbox_messages (idempotency_key);
@@ -1579,6 +1589,7 @@ alter table public.ai_chat_messages enable row level security;
 alter table public.ai_memories enable row level security;
 alter table public.brain_beliefs enable row level security;
 alter table public.brain_external_sync_requests enable row level security;
+alter table public.brain_mcp_oauth_code_redemptions enable row level security;
 alter table public.ai_insights enable row level security;
 alter table public.ai_vault_documents enable row level security;
 alter table public.ai_vault_chunks enable row level security;

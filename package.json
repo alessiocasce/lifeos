@@ -11,6 +11,7 @@
     "smoke:mcp:oauth": "node scripts/smoke-mcp-oauth.js",
     "smoke:whatsapp:outbox": "node scripts/smoke-whatsapp-outbox-live.js",
     "test:mcp": "node scripts/test-mcp.js",
+    "test:mcp-oauth": "node scripts/test-mcp-oauth-replay.js",
     "test:brain": "node scripts/test-brain-regressions.js",
     "test:reliability": "node scripts/test-reliability.js",
     "test:bridge": "node scripts/test-whatsapp-bridge-contract.js",
@@ -18,7 +19,7 @@
     "test:companion": "node scripts/test-companion-beliefs.js",
     "test:mcp-write": "node scripts/test-mcp-write.js",
     "test:schema": "node scripts/test-schema-contracts.js",
-    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-write && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion",
+    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-oauth && npm run test:mcp-write && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
