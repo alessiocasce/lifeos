@@ -1331,6 +1331,48 @@ Suggested first vertical slice:
 
 **Definition of done:** after the user naturally explains that a previously tracked routine is no longer part of their life, LifeOS understands the change, stops future related nudges, remembers the transition with provenance, and responds like the same Butler rather than a CRUD confirmation.
 
+## 15.2 Second implementation slice — explicit semantic MCP sync
+
+Slice 2 turns the existing read-only MCP into the first **two-way ChatGPT ↔ LifeOS bridge** without exposing generic CRUD.
+
+Primary outcome:
+
+```text
+explicit user request to sync
+        ↓
+external MCP client (for example ChatGPT)
+        ↓
+small curated semantic delta set
+        ↓
+LifeOS write scope + semantic validation + entity grounding
+        ↓
+world-model belief transitions + audit
+        ↓
+readable immediately through shared LifeOS context
+```
+
+Scope for this slice:
+
+1. keep all existing MCP read tools backward compatible;
+2. add explicit `lifeos.write` authorization separate from `lifeos.read`;
+3. existing read OAuth/static credentials must not silently gain write power;
+4. add one narrow semantic sync MCP tool rather than table-level CRUD;
+5. support only a small low-risk set:
+   - tracked routine state;
+   - bounded user preferences;
+   - grounded context for existing LifeOS projects;
+6. validate and ground the full request before the first mutation;
+7. preserve idempotency, request conflict detection, provenance and audit history;
+8. reuse `brain_beliefs` temporal supersession rather than bypassing it;
+9. expose synced preferences/project context through the shared Context Compiler/current-belief reads;
+10. prohibit operational side effects: no WhatsApp send, monitor creation, calendar/memo/expense/Health operational write, project progress/money/session mutation, arbitrary Brain execution or SQL;
+11. remain provider-agnostic: `chatgpt` is provenance, not a backend dependency;
+12. explicit sync only; ambient/background ChatGPT synchronization remains future work.
+
+Execution brief: `docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.
+
+**Success test:** after the user explicitly asks ChatGPT to sync a few important changes, LifeOS safely receives the supported semantic updates, records exactly where they came from, rejects unsupported/ambiguous writes, and can immediately return the new current state while existing read-only clients remain read-only.
+
 ---
 
 ## 16. Immediate Behavioral Fix: Skincare Example
@@ -1471,6 +1513,14 @@ That is the level this project is aiming for.
 ---
 
 ## 20. Changelog
+
+### 2026-09-25 — Slice 2 execution brief: explicit semantic MCP sync
+- Defined the next Companion vertical slice as the first write-capable ChatGPT/LifeOS bridge.
+- Write authority is separate from existing `lifeos.read`; old read OAuth/static credentials must remain unable to mutate LifeOS.
+- The initial semantic write surface is intentionally narrow: tracked routine state, bounded preferences, and grounded context for existing projects.
+- Explicitly prohibited arbitrary CRUD/SQL, Brain action execution, monitor creation and operational side effects from the sync tool.
+- Added request-level idempotency/conflict detection, provenance/audit, full-request validation-before-write, and shared Context Compiler readback as slice requirements.
+- Ambient/background ChatGPT synchronization remains future work.
 
 ### 2026-09-18 — Gap audit: conversational semantics and provider independence
 - Added provider/model independence as a global Brain constraint, not merely a voice implementation detail.
