@@ -4,7 +4,9 @@ import { getActionUserId } from './supabaseAdmin.js';
 
 const CODE_TTL_SECONDS = 5 * 60;
 const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
-const SUPPORTED_SCOPE = 'lifeos.read';
+export const MCP_READ_SCOPE = 'lifeos.read';
+export const MCP_WRITE_SCOPE = 'lifeos.write';
+const SUPPORTED_SCOPES = [MCP_READ_SCOPE, MCP_WRITE_SCOPE];
 const CODE_KIND = 'mcp_auth_code';
 const ACCESS_KIND = 'mcp_access_token';
 const MAX_FORM_BYTES = 32 * 1024;
@@ -62,19 +64,23 @@ export function validateMcpBearerAuth(req, env = process.env) {
   const fallback = bearer ? '' : String(req.headers?.['x-lifeos-mcp-token'] ?? req.headers?.['X-LifeOS-MCP-Token'] ?? '').trim();
   const token = bearer || fallback;
   const wwwAuthenticate = buildWwwAuthenticateHeader(req, env);
-  if (!staticToken && !isOAuthEnabled(env)) {
+  const staticWriteToken = String(env.LIFEOS_MCP_WRITE_TOKEN ?? '').trim();
+  if (!staticToken && !staticWriteToken && !isOAuthEnabled(env)) {
     return { ok: false, status: 500, error: 'MCP auth is not configured.', wwwAuthenticate };
   }
 
   if (!token) return { ok: false, status: 401, error: 'Unauthorized.', wwwAuthenticate };
   if (staticToken && matchesSecret(token, staticToken)) {
-    return { ok: true, status: 200, error: null, authType: 'static' };
+    return { ok: true, status: 200, error: null, authType: 'static', scopes: [MCP_READ_SCOPE] };
+  }
+  if (staticWriteToken && (!staticToken || !matchesSecret(staticWriteToken, staticToken)) && matchesSecret(token, staticWriteToken)) {
+    return { ok: true, status: 200, error: null, authType: 'static-write', scopes: SUPPORTED_SCOPES };
   }
 
   if (isOAuthEnabled(env)) {
     const payload = verifySignedToken(token, ACCESS_KIND, env);
-    if (payload && isAccessPayloadValid(payload, req)) {
-      return { ok: true, status: 200, error: null, authType: 'oauth', tokenPayload: payload };
+    if (payload && isAccessPayloadValid(payload, req, env)) {
+      return { ok: true, status: 200, error: null, authType: 'oauth', tokenPayload: payload, scopes: normalizeScope(payload.scope).split(' ') };
     }
   }
 
@@ -82,14 +88,14 @@ export function validateMcpBearerAuth(req, env = process.env) {
 }
 
 export function buildWwwAuthenticateHeader(req, env = process.env) {
-  return `Bearer resource_metadata="${getProtectedResourceMetadataUrl(req, env)}", scope="${SUPPORTED_SCOPE}"`;
+  return `Bearer resource_metadata="${getProtectedResourceMetadataUrl(req, env)}", scope="${MCP_READ_SCOPE}"`;
 }
 
 export function buildProtectedResourceMetadata(req, env = process.env) {
   return {
     resource: getMcpResourceUrl(req, env),
     authorization_servers: [getIssuer(req, env)],
-    scopes_supported: [SUPPORTED_SCOPE],
+    scopes_supported: SUPPORTED_SCOPES,
     resource_documentation: getMcpResourceUrl(req, env),
   };
 }
@@ -105,7 +111,7 @@ export function buildAuthorizationServerMetadata(req, env = process.env) {
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
     client_id_metadata_document_supported: true,
-    scopes_supported: [SUPPORTED_SCOPE],
+    scopes_supported: SUPPORTED_SCOPES,
   };
 }
 
@@ -130,7 +136,7 @@ export function signAccessTokenForTest(params, env = process.env) {
 
 export function verifyOAuthAccessTokenForTest(token, req, env = process.env) {
   const payload = verifySignedToken(token, ACCESS_KIND, env);
-  return Boolean(payload && isAccessPayloadValid(payload, req));
+  return Boolean(payload && isAccessPayloadValid(payload, req, env));
 }
 
 export function verifyPkceForTest(verifier, challenge) {
@@ -157,6 +163,10 @@ async function handleAuthorizePost(req, res) {
   const expectedSecret = getLinkSecret(process.env);
   if (!expectedSecret || !matchesSecret(params.link_secret, expectedSecret)) {
     sendHtml(res, 401, renderErrorPage('Invalid link secret.'));
+    return;
+  }
+  if (normalizeScope(params.scope).split(' ').includes(MCP_WRITE_SCOPE) && !isWriteOAuthConfigured(process.env)) {
+    sendHtml(res, 403, renderErrorPage('Semantic write authorization is not configured.'));
     return;
   }
 
@@ -196,6 +206,8 @@ async function handleTokenPost(req, res) {
     || codePayload.redirect_uri !== params.redirect_uri
     || codePayload.code_challenge_method !== 'S256'
     || !verifyPkce(params.code_verifier, codePayload.code_challenge)
+    || !isScopeAllowed(codePayload.scope)
+    || (normalizeScope(codePayload.scope).split(' ').includes(MCP_WRITE_SCOPE) && !isWriteOAuthConfigured(process.env))
   ) {
     sendJson(res, 400, { error: 'invalid_grant' });
     return;
@@ -205,14 +217,14 @@ async function handleTokenPost(req, res) {
     iss: getIssuer(req),
     aud: codePayload.aud,
     sub: getActionUserId(),
-    scope: codePayload.scope || SUPPORTED_SCOPE,
+    scope: codePayload.scope || MCP_READ_SCOPE,
     client_id: codePayload.client_id,
   });
   sendJson(res, 200, {
     access_token: accessToken,
     token_type: 'Bearer',
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
-    scope: SUPPORTED_SCOPE,
+    scope: normalizeScope(codePayload.scope),
   });
 }
 
@@ -227,11 +239,12 @@ function validateAuthorizeParams(params, req) {
   return { ok: true, error: null };
 }
 
-function isAccessPayloadValid(payload, req) {
+function isAccessPayloadValid(payload, req, env = process.env) {
   return payload.kind === ACCESS_KIND
     && payload.exp > nowSeconds()
-    && payload.scope?.split(/\s+/).includes(SUPPORTED_SCOPE)
-    && sameUrl(payload.aud, getMcpResourceUrl(req));
+    && isScopeAllowed(payload.scope)
+    && (payload.scope.split(' ').includes(MCP_WRITE_SCOPE) ? isWriteOAuthConfigured(env) : true)
+    && sameUrl(payload.aud, getMcpResourceUrl(req, env));
 }
 
 function signAccessToken(params, env = process.env) {
@@ -303,6 +316,7 @@ function normalizeFormObject(body) {
 }
 
 function renderAuthorizePage(params, actionUrl) {
+  const grantsWrite = normalizeScope(params.scope).split(' ').includes(MCP_WRITE_SCOPE);
   const hidden = [
     'response_type',
     'client_id',
@@ -316,14 +330,16 @@ function renderAuthorizePage(params, actionUrl) {
   return htmlPage('Link LifeOS MCP to ChatGPT', `
     <main>
       <h1>Link LifeOS MCP to ChatGPT</h1>
-      <p>Enter your private LifeOS MCP link secret to grant read-only access.</p>
+      <p>${grantsWrite
+    ? 'Grant read access and explicit semantic write access to LifeOS current beliefs. This cannot create calendar items, send messages, or run Brain actions.'
+    : 'Enter your private LifeOS MCP link secret to grant read-only access.'}</p>
       <form method="post" action="${escapeHtml(actionUrl)}" autocomplete="off">
         ${hidden}
         <label>
           Link secret
           <input type="password" name="link_secret" autocomplete="off" required autofocus>
         </label>
-        <button type="submit">Authorize read-only access</button>
+        <button type="submit">${grantsWrite ? 'Authorize semantic sync access' : 'Authorize read-only access'}</button>
       </form>
     </main>
   `);
@@ -387,6 +403,13 @@ function getLinkSecret(env = process.env) {
   return String(env.LIFEOS_MCP_LINK_SECRET || env.LIFEOS_MCP_TOKEN || '').trim();
 }
 
+function isWriteOAuthConfigured(env = process.env) {
+  const signing = String(env.LIFEOS_MCP_OAUTH_SIGNING_SECRET || '').trim();
+  const link = String(env.LIFEOS_MCP_LINK_SECRET || '').trim();
+  const read = String(env.LIFEOS_MCP_TOKEN || '').trim();
+  return Boolean(signing && link && (!read || (!matchesSecret(signing, read) && !matchesSecret(link, read))));
+}
+
 function getProtectedResourceMetadataUrl(req, env = process.env) {
   return getMcpOAuthEndpointUrl(req, 'protected-resource', env);
 }
@@ -432,12 +455,13 @@ function isAllowedRedirectUri(value) {
 }
 
 function isScopeAllowed(scope) {
-  return normalizeScope(scope) === SUPPORTED_SCOPE;
+  const values = normalizeScope(scope).split(' ');
+  return values.length > 0 && values.every((value) => SUPPORTED_SCOPES.includes(value));
 }
 
 function normalizeScope(scope) {
-  const values = String(scope || SUPPORTED_SCOPE).split(/\s+/).filter(Boolean);
-  if (!values.length) return SUPPORTED_SCOPE;
+  const values = String(scope || MCP_READ_SCOPE).split(/\s+/).filter(Boolean);
+  if (!values.length) return MCP_READ_SCOPE;
   return [...new Set(values)].sort().join(' ');
 }
 

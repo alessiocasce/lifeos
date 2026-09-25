@@ -1,5 +1,5 @@
 import { HttpError, readJsonBody, sendJson } from './_utils/http.js';
-import { buildWwwAuthenticateHeader, handleMcpOAuthRequest, validateMcpBearerAuth } from './_utils/mcpOAuth.js';
+import { buildWwwAuthenticateHeader, handleMcpOAuthRequest, MCP_READ_SCOPE, validateMcpBearerAuth } from './_utils/mcpOAuth.js';
 import { getActionUserId } from './_utils/supabaseAdmin.js';
 import {
   clampMcpDays,
@@ -238,7 +238,7 @@ export default async function handler(req, res) {
 
   const responses = [];
   for (const request of requests) {
-    const response = await handleMcpJsonRpcRequest(request, { userId });
+    const response = await handleMcpJsonRpcRequest(request, { userId, scopes: auth.scopes });
     if (response) responses.push(response);
   }
 
@@ -350,6 +350,10 @@ async function callMcpTool(params, context) {
   const name = String(params?.name ?? '').trim();
   const args = params?.arguments && typeof params.arguments === 'object' ? params.arguments : {};
   const userId = context.userId;
+  if (!TOOL_DEFINITIONS.some((tool) => tool.name === name)) {
+    throw new McpJsonRpcError(JSONRPC_ERRORS.invalidParams, `Unknown MCP tool: ${name || '(missing)'}`);
+  }
+  requireMcpScope(context, MCP_READ_SCOPE);
   let data;
   switch (name) {
     case 'get_lifeos_snapshot':
@@ -408,6 +412,7 @@ async function readMcpResource(params, context) {
   const uri = String(params?.uri ?? '').trim();
   const resource = RESOURCE_DEFINITIONS.find((entry) => entry.uri === uri);
   if (!resource) throw new McpJsonRpcError(JSONRPC_ERRORS.invalidParams, `Unknown MCP resource: ${uri || '(missing)'}`);
+  requireMcpScope(context, MCP_READ_SCOPE);
   const reader = resource.getReader();
   const data = await reader({ userId: context.userId });
   return {
@@ -417,6 +422,12 @@ async function readMcpResource(params, context) {
       text: JSON.stringify(data, null, 2),
     }],
   };
+}
+
+function requireMcpScope(context, scope) {
+  if (!Array.isArray(context.scopes) || !context.scopes.includes(scope)) {
+    throw new McpJsonRpcError(-32003, `MCP scope ${scope} is required.`);
+  }
 }
 
 function getMcpPrompt(params) {

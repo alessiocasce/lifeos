@@ -13,6 +13,7 @@ import { buildLifeOSContext, buildOpenLoops, rankOpenLoops } from '../api/_utils
 import { buildWorkoutIntelligence } from '../api/_utils/workoutIntelligence.js';
 import {
   buildAuthorizationServerMetadata,
+  buildProtectedResourceMetadata,
   buildWwwAuthenticateHeader,
   getMcpOAuthRequestKind,
   signAccessTokenForTest,
@@ -114,10 +115,19 @@ test('unknown tool returns JSON-RPC params error', async () => {
 test('auth accepts bearer and fallback header only with matching token', () => {
   const env = { LIFEOS_MCP_TOKEN: 'test-token' };
   assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer test-token' } }, env).ok, true);
+  assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer test-token' } }, env).scopes.join(' '), 'lifeos.read');
   assertEqual(validateMcpAuth({ headers: { 'x-lifeos-mcp-token': 'test-token' } }, env).ok, true);
   assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer wrong' } }, env).status, 401);
   assertEqual(validateMcpAuth({ headers: {} }, env).status, 401);
   assert(validateMcpAuth({ headers: {} }, env).wwwAuthenticate.includes('/api/mcp?mcp_oauth=protected-resource'), 'missing direct WWW-Authenticate metadata');
+});
+
+test('separate static write credential never upgrades the existing read token', () => {
+  const env = { LIFEOS_MCP_TOKEN: 'read-only-fixture', LIFEOS_MCP_WRITE_TOKEN: 'write-fixture' };
+  assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer read-only-fixture' } }, env).scopes.join(' '), 'lifeos.read');
+  assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer write-fixture' } }, env).scopes.join(' '), 'lifeos.read lifeos.write');
+  const misconfigured = { LIFEOS_MCP_TOKEN: 'same', LIFEOS_MCP_WRITE_TOKEN: 'same' };
+  assertEqual(validateMcpAuth({ headers: { authorization: 'Bearer same' } }, misconfigured).scopes.join(' '), 'lifeos.read');
 });
 
 test('auth accepts signed OAuth access tokens without accepting wrong tokens', () => {
@@ -156,6 +166,30 @@ test('OAuth metadata advertises direct API authorize and token URLs', () => {
   assertEqual(metadata.authorization_endpoint, 'https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=authorize');
   assertEqual(metadata.token_endpoint, 'https://lifeos-ruby-gamma.vercel.app/api/mcp?mcp_oauth=token');
   assert(buildWwwAuthenticateHeader(req, {}).includes('/api/mcp?mcp_oauth=protected-resource'), 'WWW-Authenticate should use direct API metadata URL');
+  assert(buildProtectedResourceMetadata(req, {}).scopes_supported.includes('lifeos.write'), 'missing advertised write scope');
+  assert(metadata.scopes_supported.includes('lifeos.write'), 'authorization server missing write scope');
+});
+
+test('OAuth write scope requires dedicated link and signing secrets', () => {
+  const req = { headers: { host: 'lifeos-ruby-gamma.vercel.app', 'x-forwarded-proto': 'https' } };
+  const base = {
+    iss: 'https://lifeos-ruby-gamma.vercel.app',
+    aud: 'https://lifeos-ruby-gamma.vercel.app/api/mcp',
+    sub: 'test-user',
+    client_id: 'test-client',
+    scope: 'lifeos.read lifeos.write',
+  };
+  const secureEnv = {
+    LIFEOS_MCP_TOKEN: 'static-read-fixture',
+    LIFEOS_MCP_LINK_SECRET: 'separate-link-fixture',
+    LIFEOS_MCP_OAUTH_SIGNING_SECRET: 'separate-signing-fixture',
+  };
+  const token = signAccessTokenForTest(base, secureEnv);
+  assertEqual(verifyOAuthAccessTokenForTest(token, req, secureEnv), true);
+  assertEqual(validateMcpAuth({ headers: { ...req.headers, authorization: `Bearer ${token}` } }, secureEnv).scopes.join(' '), 'lifeos.read lifeos.write');
+  assertEqual(verifyOAuthAccessTokenForTest(token, req, { ...secureEnv, LIFEOS_MCP_LINK_SECRET: 'static-read-fixture' }), false);
+  const invalidScopeToken = signAccessTokenForTest({ ...base, scope: 'lifeos.admin' }, secureEnv);
+  assertEqual(verifyOAuthAccessTokenForTest(invalidScopeToken, req, secureEnv), false);
 });
 
 test('consolidated Action API resolves supported action names only', () => {
