@@ -142,7 +142,7 @@ finally { await companionMigrationDb.close(); }
 
 const memoryMigrationDb = new PGlite();
 try {
-  const migration = readFileSync(new URL('../supabase/migrations/20260925140000_companion_autobiographical_memory.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../supabase/migrations/20260925215527_companion_autobiographical_memory.sql', import.meta.url), 'utf8');
   assert.ok(readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8').includes('create or replace function public.curate_autobiographical_memory('));
   await memoryMigrationDb.exec(`
     create schema auth; create role anon; create role authenticated; create role service_role;
