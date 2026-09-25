@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-09-19
+Last updated: 2026-09-25
 Current branch: `main`
 
 
@@ -28,6 +28,17 @@ The first current-state vertical slice is implemented in repository code. `brain
 `brainCompanionTurn.js` composes three distinct contracts: the already-selected immutable proactive target, validated routine semantics, and Butler wording. A rich reply can resolve the owned Health check-in without a Health write, update routine state, preserve unrelated residual content for knowledge extraction, and return one grounded response. A bare `no` records bounded feedback but never means permanent deactivation. Candidate generation and poll-time delivery revalidation both consult current routine beliefs.
 
 MCP remains read-only. `get_current_beliefs`, `lifeos://brain/current-beliefs`, and the shared LifeOS context expose sanitized current rows only; superseded history stays in Postgres. Run `npm run test:companion` for focused current-state/compound-turn coverage.
+
+
+### Companion vNext Slice 2 — Current Execution Target
+
+The next implementation brief is **`docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`**.
+
+Slice 2 adds the first explicit write-capable ChatGPT/LifeOS bridge while preserving MCP v1 read compatibility. The target is one narrow semantic sync surface with separate `lifeos.write` authorization, strict validation/grounding, idempotency conflict detection, provenance/audit, and immediate current-context readback.
+
+Initial supported semantic families are intentionally limited to tracked routine state, bounded preferences, and context attached to existing grounded projects. The tool must not expose arbitrary CRUD/SQL, create projects, mutate project progress/money/sessions, send WhatsApp, create monitors, execute Brain actions, or write calendar/memo/expense/Health operational records.
+
+Existing `lifeos.read` OAuth/static credentials must remain unable to write. Ambient/background ChatGPT synchronization is not part of Slice 2.
 
 ## Reliability Release Handoff
 
