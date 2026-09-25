@@ -1,5 +1,9 @@
 # LifeOS Brain Architecture
 
+## External Semantic Sync Boundary
+
+Companion Slice 2's `api/_utils/brainExternalSync.js` is a separate, explicit MCP write path, not a new BrainTurn stage. `api/mcp.js` requires `lifeos.write` for `sync_context`; the legacy `lifeos.read` token and read-only tools/resources cannot call it. The service validates the complete semantic request, grounds project identity to the configured user, then uses only `applyBeliefTransition` for current-state changes and `brain_external_sync_requests` for request audit/idempotency. No planner, LifeOS action executor, Health operational update, WhatsApp outbox, or monitor is invoked. Current preference/project beliefs flow back through `lifeosContextCompiler.js`. Keep these boundaries when adding later Companion slices; external conversation content is evidence, never autonomous permission for broader writes.
+
 ## WhatsApp Interaction Selection
 
 Before pending/proactive execution, `prepareBrainTurnInteraction()` loads the versioned thread owner and resolves any trusted provider quote. `selectBrainTurnInteraction()` returns one frozen selection and BrainTurn Contract consumes that exact object. Runtime proactive dispatch receives the selected target rather than scanning history again.

@@ -362,7 +362,7 @@ No schema rerun is required for MCP v1.1. The Action API is consolidated into on
    - `npm run check:functions`
    - `npm run smoke:whatsapp:outbox` only with explicit live opt-in when testing outbox lifecycle
 5. Confirm `npm run check:functions` reports 12 or fewer Vercel API route functions.
-6. Confirm MCP v1.1 is read-only: no tool creates records, sends WhatsApp messages, enqueues outbox rows, or calls Brain execution.
+6. Confirm all legacy MCP tools/resources remain read-only. The separately authorized Slice 2 `sync_context` may update only current beliefs and its audit; no tool sends WhatsApp, enqueues outbox rows, or calls Brain execution.
 7. Confirm ChatGPT OAuth metadata advertises direct `api/mcp.js` URLs, not root OAuth paths, for authorize/token.
 
 The smoke script reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env and does not print it. To test a preview deployment, run it with `LIFEOS_MCP_BASE_URL=https://your-preview-url.vercel.app`.
@@ -437,7 +437,7 @@ Expected:
 - Direct `GET /api/mcp?mcp_oauth=authorize` with missing params returns MCP authorization error HTML, not the SPA.
 - Root `/oauth/authorize` is compatibility only; direct API OAuth URLs are the source of truth.
 - Unknown methods/tools/resources return JSON-RPC errors.
-- `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
+- `tools/list` marks legacy read tools with `lifeos.read` and `sync_context` with `lifeos.write`.
 - `tools/list` includes `get_whatsapp_proactive_debug`.
 - `resources/list` includes `lifeos://whatsapp/proactive-debug`.
 - `get_recent_workouts` includes exact set rows plus `sets_truncated`, `set_limit`, and `returned_set_count`.
@@ -461,3 +461,15 @@ Deployment order:
 5. Run the manual WhatsApp journey in `docs/QA_AI_ASSISTANT.md`. Local suites do not prove Gemini semantics or physical Oracle/WhatsApp delivery.
 
 Rollback order: deploy the previous backend first. Keep the additive table/function in place until no deployed backend references it; dropping belief history is intentionally not part of the normal rollback.
+
+## Companion Slice 2 Semantic Sync Deployment
+
+This is a separate migration and backend release. Local tests do not apply it to production.
+
+1. Confirm the Slice 1 belief migration is applied. Apply `supabase/migrations/20260925120000_companion_external_sync.sql` before deploying the Slice 2 backend. It adds the request-audit table and `external_sync` provenance, refreshes belief RPC idempotency, and explicitly revokes `anon`/`authenticated` RPC execution and table writes. Verify RLS and privileges after applying; do not rerun `supabase/schema.sql` against production.
+2. Configure a distinct `LIFEOS_MCP_WRITE_TOKEN` only for a trusted custom write client, or configure independent `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` for OAuth. Never reuse `LIFEOS_MCP_TOKEN` as a write/link/signing secret. Keep `LIFEOS_MCP_OAUTH_ENABLED` consistent with the existing connector deployment.
+3. Deploy Vercel. No Oracle bridge code or environment changes are required for this slice; no PM2 restart is required. Confirm `npm run check:functions` still reports seven functions.
+4. Re-link a ChatGPT connector that needs sync and explicitly grant `lifeos.write` (and `lifeos.read` for readback). Previously issued read-only OAuth tokens remain read-only. Verify a read token cannot call `sync_context`, an authorized token can sync one explicit tracked-routine change, and `get_current_beliefs` / `get_lifeos_context` show it. Do not test with a real private transcript or a destructive operational action.
+5. Replay the same idempotency key and verify no second belief row; reuse that key with changed content and verify conflict. Confirm no Health/project operational/outbox rows changed. Inspect `brain_external_sync_requests` for the bounded request audit. Run `npm run test:mcp-write` locally before this manual QA.
+
+The tool does not run ambient sync, send WhatsApp, or write operational LifeOS records. Roll back the backend before considering migration removal; retain audit/belief history unless a separate data-retention decision authorizes deletion.

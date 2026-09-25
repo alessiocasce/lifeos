@@ -4,6 +4,8 @@
 > **Started:** 2026-09-18  
 > **Purpose:** preserve and continuously refine the next major LifeOS direction. This file is intentionally broader than an implementation ticket. Update it as the product vision becomes clearer.
 
+**Implemented boundary (2026-09-25):** Slice 2 provides explicit, scoped MCP `sync_context` for tracked routine state, allowlisted preferences, and grounded existing-project context. It writes only the current-belief world model plus a bounded audit. It does not provide ambient ChatGPT sync, general external action execution, or operational record writes. See [MCP.md](MCP.md) and [the Slice 2 progress checkpoint](CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md) for the exact contract and deployment state.
+
 ---
 
 ## 1. North Star

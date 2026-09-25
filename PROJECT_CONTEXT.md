@@ -27,18 +27,18 @@ The first current-state vertical slice is implemented in repository code. `brain
 
 `brainCompanionTurn.js` composes three distinct contracts: the already-selected immutable proactive target, validated routine semantics, and Butler wording. A rich reply can resolve the owned Health check-in without a Health write, update routine state, preserve unrelated residual content for knowledge extraction, and return one grounded response. A bare `no` records bounded feedback but never means permanent deactivation. Candidate generation and poll-time delivery revalidation both consult current routine beliefs.
 
-MCP remains read-only. `get_current_beliefs`, `lifeos://brain/current-beliefs`, and the shared LifeOS context expose sanitized current rows only; superseded history stays in Postgres. Run `npm run test:companion` for focused current-state/compound-turn coverage.
+The original MCP belief tools remain read-only. `get_current_beliefs`, `lifeos://brain/current-beliefs`, and the shared LifeOS context expose sanitized current rows only; superseded history stays in Postgres. Run `npm run test:companion` for focused current-state/compound-turn coverage.
 
 
-### Companion vNext Slice 2 — Current Execution Target
+### Companion vNext Slice 2 — Explicit Context Sync
 
 The next implementation brief is **`docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`**.
 
-Slice 2 adds the first explicit write-capable ChatGPT/LifeOS bridge while preserving MCP v1 read compatibility. The target is one narrow semantic sync surface with separate `lifeos.write` authorization, strict validation/grounding, idempotency conflict detection, provenance/audit, and immediate current-context readback.
+Slice 2 adds one narrow mutating MCP tool, `sync_context`, while preserving existing MCP read behavior. Reads require `lifeos.read`; semantic sync requires `lifeos.write` from an explicitly granted OAuth token or distinct `LIFEOS_MCP_WRITE_TOKEN`. The static read token never authorizes sync. OAuth write grants require independently configured link/signing secrets, and existing ChatGPT connectors must be re-linked to request `lifeos.write`. See `docs/MCP.md` for the supported envelope and `docs/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md` for the implementation/deployment checkpoint.
 
-Initial supported semantic families are intentionally limited to tracked routine state, bounded preferences, and context attached to existing grounded projects. The tool must not expose arbitrary CRUD/SQL, create projects, mutate project progress/money/sessions, send WhatsApp, create monitors, execute Brain actions, or write calendar/memo/expense/Health operational records.
+Supported semantic families are intentionally limited to tracked routine state, four allowlisted preference keys, and four context fields attached to an existing user-scoped project. The complete request is validated and project-grounded before any write. The service stores a bounded request audit, digest and per-item belief idempotency keys; partial failures retry without duplicating applied transitions. The shared context compiler exposes current preference/project beliefs. The tool cannot expose arbitrary CRUD/SQL, create projects, mutate project progress/money/sessions, send WhatsApp, create monitors, execute Brain actions, or write calendar/memo/expense/Health operational records.
 
-Existing `lifeos.read` OAuth/static credentials must remain unable to write. Ambient/background ChatGPT synchronization is not part of Slice 2.
+Apply `supabase/migrations/20260925120000_companion_external_sync.sql` after the Slice 1 belief migration and before deploying this backend. It adds the audit table, `external_sync` provenance, and revokes unintended public/authenticated RPC execution; it does not alter operational data. No production migration has been applied by this Codex session. Ambient/background ChatGPT synchronization is not part of Slice 2.
 
 ## Reliability Release Handoff
 
@@ -596,7 +596,7 @@ Current behavior:
 
 ## MCP Server Current Status
 
-LifeOS MCP Server v1.1 exposes external read-only context/debug access for MCP-compatible clients and ChatGPT Connectors without turning them into write-capable LifeOS agents.
+LifeOS MCP retains its read-only context/debug surface and adds one separately authorized semantic current-context sync tool. It is not a general write-capable LifeOS agent.
 
 Current behavior:
 
@@ -615,20 +615,20 @@ Current behavior:
   - `/.well-known/openid-configuration`
   - `/oauth/authorize`
   - `/oauth/token`
-- OAuth mode supports authorization-code + PKCE S256 for the personal connector, with `lifeos.read` scope only. It uses `LIFEOS_MCP_LINK_SECRET` for the linking page and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` for stateless signed codes/access tokens. `LIFEOS_MCP_OAUTH_ENABLED=false` is the emergency rollback flag.
+- OAuth mode supports authorization-code + PKCE S256 with explicit `lifeos.read` and `lifeos.write` scopes. Only tokens actually granted write may call `sync_context`; independent link/signing secrets are required for write grants. `LIFEOS_MCP_OAUTH_ENABLED=false` is the emergency OAuth rollback flag.
 - MCP is scoped to the configured personal user via `LIFEOS_ACTION_USER_ID` and service-role Supabase reads.
 - MCP tools/resources provide compact summaries for snapshots, today/week, workouts, health, open memos, upcoming calendar, projects, Brain traces/action logs, WhatsApp outbox, Vault search, and open loops.
 - MCP workout output includes exact set-level rows in both top-level `sets[]` and per-exercise `sets[]`, including set number, warmup flag, weight, reps, RPE, performed time, and safe note previews, while preserving aggregate workout/exercise summaries. Workout responses include `sets_truncated`, `set_limit`, and `returned_set_count`.
 - Workout Intelligence v1 exposes read-only `get_workout_intelligence` and `lifeos://workouts/intelligence`. It analyzes exact working sets into latest-session summaries, per-exercise progression, cautious next targets, plateau flags, and sleep/recovery caveats when health data exists. Warmups are excluded from top working-set targets. Brain workout context uses the same helper through the workout coach read path.
 - MCP includes read-only proactive WhatsApp debug access through `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug`, exposing outbox status counts, safe ACK/retry summaries, and proactive traces without mutating records.
 - MCP prompts are instruction templates only; they do not embed private data directly.
-- MCP v1.1 is read-only. It must not create/update/delete rows, call Brain chat, execute tools, enqueue or ack outbox rows, or send WhatsApp messages.
+- All legacy MCP tools/resources remain read-only. Only `sync_context` may update current beliefs and its bounded audit under `lifeos.write`; it must not call Brain chat, execute LifeOS actions, enqueue or ack outbox rows, or send WhatsApp messages.
 - Responses are limited and sanitized. MCP must not expose Supabase service keys, Gemini keys, WhatsApp secrets, action tokens, auth headers, or unlimited raw transcripts/dumps.
 - MCP OAuth metadata/authorize/token requests are all served by the same `api/mcp.js` function. OAuth metadata advertises direct `/api/mcp?mcp_oauth=...` URLs so ChatGPT linking cannot be swallowed by the SPA fallback. Action API consolidation keeps total Vercel function count under the Hobby limit. Run `npm run check:functions` before deployment.
 - Local validation uses `npm run test:mcp`; it does not require live Supabase, Gemini, Vercel, or WhatsApp.
 - Deployed validation uses `npm run smoke:mcp`, which reads `LIFEOS_MCP_TOKEN` from `.env.local` or the process env, calls the real deployed endpoint, and prints pass/fail results without dumping private LifeOS data or token material.
 - OAuth deployed validation uses `npm run smoke:mcp:oauth`, which reads the link secret from `.env.local` or process env, completes PKCE linking against the deployed endpoint, and redacts codes/tokens from output.
-- Future MCP v1.5 may add a read-only Brain route preview. Future v2 may add carefully confirmed write tools, but writes are intentionally excluded from v1.
+- Any future MCP write capability needs its own explicit scope, semantic validator, and regression coverage. The current sync tool does not authorize operational CRUD.
 
 ## Calendar Module Current Status
 
@@ -1078,9 +1078,9 @@ Workout mobile direction:
   - OAuth metadata advertises `/api/mcp?mcp_oauth=authorize` and `/api/mcp?mcp_oauth=token`.
   - Direct `GET /api/mcp?mcp_oauth=authorize` returns MCP authorization HTML/errors, not the frontend SPA.
   - `initialize`, `tools/list`, `resources/list`, and `prompts/list` return valid JSON-RPC results.
-  - `tools/list` includes read-only OAuth security metadata with `lifeos.read`.
+  - `tools/list` marks read tools with `lifeos.read` and `sync_context` with `lifeos.write`.
   - `get_brain_debug_context` returns compact trace summaries without secrets.
-  - No MCP tool mutates LifeOS records or sends WhatsApp messages.
+  - Read credentials cannot invoke `sync_context`; authorized sync changes only current belief/audit rows and never sends WhatsApp messages.
   - Run `npm run test:mcp`, `npm run smoke:mcp`, `npm run smoke:mcp:oauth`, and `npm run check:functions`; function count must remain at or below 12.
 - Test workout session creation with RLS enabled in a real Supabase project.
 - Test Workout tab with `docs/QA_WORKOUT.md`, especially template snapshot persistence, nullable RPE, suggestions, and warmup display/edit transitions.

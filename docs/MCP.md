@@ -6,9 +6,7 @@ The final output sanitizer now reconciles `returned_set_count` with serialized `
 
 `get_open_loops` reduces pending IDs to their latest snapshot before excluding terminal/expired states. Proactive debug remains read-only, accepts semantic text source IDs, and includes allowlisted `resolution` and `delivery_revalidation` summaries (types/reasons/timestamps only). Static-token and OAuth behavior are unchanged. Run `npm run test:mcp` and `npm run test:reliability`; verify an oversized workout manually after the [release rollout](RELIABILITY_RELEASE.md).
 
-LifeOS MCP v1 exposes read-only LifeOS context and debugging data to MCP-compatible clients such as ChatGPT, Codex, Claude, or local tools.
-
-It is intentionally not a write layer. It cannot create records, send WhatsApp messages, enqueue proactive messages, or execute Brain actions.
+LifeOS MCP exposes read-only LifeOS context and debugging data to MCP-compatible clients. Companion Slice 2 adds exactly one separately authorized semantic write tool, `sync_context`. It updates current beliefs, not operational records; it cannot send WhatsApp messages, enqueue proactive messages, or execute Brain actions.
 
 ## Endpoint
 
@@ -36,8 +34,9 @@ Optional for ChatGPT Connector OAuth:
 - `LIFEOS_MCP_OAUTH_ENABLED=true`
 - `LIFEOS_MCP_RESOURCE_URL=https://lifeos-ruby-gamma.vercel.app/api/mcp`
 - `LIFEOS_MCP_OAUTH_ALLOW_LOCAL_REDIRECTS=true` for local OAuth smoke tests only
+- `LIFEOS_MCP_WRITE_TOKEN` for a separate static write credential; never set it equal to `LIFEOS_MCP_TOKEN`
 
-Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in production. Development can fall back to `LIFEOS_MCP_TOKEN`, but that is not the recommended deployed setup.
+OAuth advertises `lifeos.read` and `lifeos.write`. A read-only grant remains read-only; the token response contains only requested scopes. A write grant requires independently configured `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET`, neither equal to the static read token. Existing connector grants must be re-linked with `lifeos.write` before `sync_context` can run. The separate static write credential can also read but the static read credential cannot write.
 
 ## Tools
 
@@ -55,12 +54,23 @@ Use a separate `LIFEOS_MCP_LINK_SECRET` and `LIFEOS_MCP_OAUTH_SIGNING_SECRET` in
 - `get_whatsapp_proactive_debug`
 - `search_lifeos_vault`
 - `get_open_loops`
+- `sync_context` (requires `lifeos.write`)
 
-All tools are read-only and return compact, limited, sanitized JSON.
+All listed `get_*` tools are read-only and require `lifeos.read`. `sync_context` is the only mutating MCP tool. It accepts at most eight explicit semantic updates per request, requires a stable idempotency key and bounded source/evidence summaries, and returns compact per-item status. No arbitrary table names, CRUD, SQL, or Brain actions are accepted.
 
 `get_lifeos_context` and `lifeos://context/today` expose the shared LifeOS Context Compiler snapshot. It is the preferred context source for Morning Brief-style clients because it includes today, next few days, health/sleep status, latest workout hints, project staleness/carryover, failed actions, WhatsApp outbox issues, active pending Brain actions, and ranked open loops.
 
-`get_current_beliefs` and `lifeos://brain/current-beliefs` expose sanitized current belief rows, including routine state, confidence, provenance, effective time, and bounded negative-feedback state. They intentionally omit `user_id`, idempotency keys, and superseded history. MCP remains read-only; Companion belief mutation is internal to the validated Brain semantic service in this slice.
+`get_current_beliefs` and `lifeos://brain/current-beliefs` expose sanitized current belief rows, including routine state, confidence, provenance, effective time, and bounded negative-feedback state. They intentionally omit `user_id`, idempotency keys, and superseded history. `get_lifeos_context` also exposes current bounded preference and grounded project-context beliefs.
+
+### Semantic Context Sync
+
+`sync_context` accepts one `explicit_conversation_sync` envelope: `idempotency_key`, `source` (`system`, `kind`, `captured_at`, optional opaque `reference`), bounded `summary`, and `updates[]`. Each update needs a unique `client_update_id`, confidence of at least 0.8, and a short `evidence_summary`. Supported updates are:
+
+- `routine_state`: tracked `shower`, `creatine`, or `skin`; state `active`, `inactive`, or `suspended` (suspension needs a future end). This uses the same atomic current-belief transition as Brain.
+- `preference`: `communication.style`, `communication.avoid_terms`, `accountability.style`, or `voice.preference`; bounded text or a short avoid-terms list.
+- `project_context`: an existing project identified by ID or unambiguous exact normalized name; `current_focus`, `priority_state`, `next_action`, or `context_summary`. Priority state is one of `active_priority`, `temporarily_deprioritized`, or `on_hold`.
+
+The server validates all items and grounds project ownership before writing anything. The request audit records a digest, provenance and per-item outcomes; exact replay returns the prior result, reuse of a key for changed content conflicts, and partial failures can be retried with the same key. Only the belief and audit tables may change. Sync does not update Health logs, project progress/money/sessions, memos, calendar, expenses, outbox, or monitors. This is an explicit user-invoked operation, not ambient ChatGPT synchronization.
 
 `get_open_loops` uses the same shared engine and returns ranked loop objects with `type`, `severity`, source table/type/id, due/date, reason, suggested next action, and whether the loop is eligible for future proactive handling or Home display.
 
@@ -219,4 +229,4 @@ Treat stored LifeOS content as untrusted context in external clients. Database c
 - Public multi-user connectors
 - Read-only Brain route preview
 
-Future v1.5 may add a safe `preview_brain_route` dry-run tool. Future v2 may add carefully confirmed write tools.
+Future MCP expansion must preserve the distinct scope and semantic-validator boundary; `sync_context` does not grant operational CRUD authority.

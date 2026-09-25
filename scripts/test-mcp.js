@@ -16,6 +16,7 @@ import {
   buildProtectedResourceMetadata,
   buildWwwAuthenticateHeader,
   getMcpOAuthRequestKind,
+  handleMcpOAuthRequest,
   signAccessTokenForTest,
   verifyOAuthAccessTokenForTest,
   verifyPkceForTest,
@@ -24,10 +25,11 @@ import { resolveActionName } from '../api/actions.js';
 
 const checks = [];
 
-test('health payload is read-only and advertises MCP capabilities', () => {
+test('health payload advertises a narrow explicit semantic sync capability', () => {
   const health = createMcpHealthPayload();
   assertEqual(health.ok, true);
-  assertEqual(health.read_only, true);
+  assertEqual(health.read_only, false);
+  assert(health.write_capability.includes('semantic sync'), 'missing semantic sync description');
   assertEqual(health.endpoint, '/api/mcp');
   assert(health.capabilities.tools >= 10, 'expected at least 10 tools');
 });
@@ -46,6 +48,7 @@ test('tools/list includes expected tools', () => {
   const tools = listMcpTools().map((tool) => tool.name);
   for (const name of [
     'get_lifeos_snapshot',
+    'sync_context',
     'get_lifeos_context',
     'get_current_beliefs',
     'get_recent_workouts',
@@ -58,10 +61,14 @@ test('tools/list includes expected tools', () => {
   ]) {
     assert(tools.includes(name), `missing tool ${name}`);
   }
-  const firstTool = listMcpTools()[0];
-  assert(firstTool.annotations.readOnlyHint, 'tool missing read-only annotation');
-  assertEqual(firstTool.securitySchemes[0].type, 'oauth2');
-  assert(firstTool.securitySchemes[0].scopes.includes('lifeos.read'), 'tool missing lifeos.read scope');
+  const readTool = listMcpTools().find((tool) => tool.name === 'get_lifeos_snapshot');
+  const writeTool = listMcpTools().find((tool) => tool.name === 'sync_context');
+  assert(readTool.annotations.readOnlyHint, 'read tool missing read-only annotation');
+  assertEqual(readTool.securitySchemes[0].type, 'oauth2');
+  assert(readTool.securitySchemes[0].scopes.includes('lifeos.read'), 'read tool missing lifeos.read scope');
+  assertEqual(writeTool.annotations.readOnlyHint, false);
+  assertEqual(writeTool.annotations.idempotentHint, true);
+  assert(writeTool.securitySchemes[0].scopes.includes('lifeos.write'), 'write tool missing lifeos.write scope');
 });
 
 test('resources/list includes expected resources', () => {
@@ -190,6 +197,97 @@ test('OAuth write scope requires dedicated link and signing secrets', () => {
   assertEqual(verifyOAuthAccessTokenForTest(token, req, { ...secureEnv, LIFEOS_MCP_LINK_SECRET: 'static-read-fixture' }), false);
   const invalidScopeToken = signAccessTokenForTest({ ...base, scope: 'lifeos.admin' }, secureEnv);
   assertEqual(verifyOAuthAccessTokenForTest(invalidScopeToken, req, secureEnv), false);
+  const expiredPayload = {
+    kind: 'mcp_access_token', ...base,
+    iat: Math.floor(Date.now() / 1000) - 3600,
+    exp: Math.floor(Date.now() / 1000) - 1,
+  };
+  const body = Buffer.from(JSON.stringify(expiredPayload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', secureEnv.LIFEOS_MCP_OAUTH_SIGNING_SECRET)
+    .update(`mcp_access_token.${body}`).digest('base64url');
+  const expiredToken = `mcp_access_token.${body}.${signature}`;
+  assertEqual(validateMcpAuth({ headers: { ...req.headers, authorization: `Bearer ${expiredToken}` } }, secureEnv).status, 401);
+});
+
+test('OAuth authorize and PKCE exchange grant only requested scopes with accurate consent text', async () => {
+  const saved = Object.fromEntries(['LIFEOS_MCP_TOKEN', 'LIFEOS_MCP_LINK_SECRET', 'LIFEOS_MCP_OAUTH_SIGNING_SECRET', 'LIFEOS_ACTION_USER_ID']
+    .map((key) => [key, process.env[key]]));
+  try {
+    process.env.LIFEOS_MCP_TOKEN = 'oauth-read-fixture';
+    process.env.LIFEOS_MCP_LINK_SECRET = 'oauth-link-fixture';
+    process.env.LIFEOS_MCP_OAUTH_SIGNING_SECRET = 'oauth-signing-fixture';
+    process.env.LIFEOS_ACTION_USER_ID = '11111111-1111-4111-8111-111111111111';
+    const verifier = 'v'.repeat(48);
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const params = {
+      response_type: 'code', client_id: 'scope-test',
+      redirect_uri: 'https://chatgpt.com/connector/oauth/scope-test',
+      code_challenge: challenge, code_challenge_method: 'S256',
+      resource: 'https://lifeos.example/api/mcp',
+      scope: 'lifeos.read lifeos.write', state: 'state-fixture',
+    };
+    const headers = { host: 'lifeos.example', 'x-forwarded-proto': 'https' };
+    const authorizeUrl = `/api/mcp?mcp_oauth=authorize&${new URLSearchParams(params)}`;
+    const page = mockResponse();
+    await handleMcpOAuthRequest({ method: 'GET', headers, url: authorizeUrl }, page);
+    assertEqual(page.statusCode, 200);
+    assert(page.body.includes('semantic write access'), 'write consent text missing');
+    assert(!page.body.includes('grant read-only access'), 'write consent page incorrectly says read-only');
+
+    const invalid = mockResponse();
+    await handleMcpOAuthRequest({ method: 'GET', headers, url: authorizeUrl.replace('lifeos.write', 'lifeos.admin') }, invalid);
+    assertEqual(invalid.statusCode, 400);
+
+    const approval = mockResponse();
+    await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=authorize', body: { ...params, link_secret: 'oauth-link-fixture' } }, approval);
+    assertEqual(approval.statusCode, 302);
+    const code = new URL(approval.headers.location).searchParams.get('code');
+    assert(code, 'authorization code missing');
+
+    const exchanged = mockResponse();
+    await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=token', body: {
+      grant_type: 'authorization_code', code, client_id: params.client_id,
+      redirect_uri: params.redirect_uri, code_verifier: verifier,
+    } }, exchanged);
+    assertEqual(exchanged.statusCode, 200);
+    const tokenResult = JSON.parse(exchanged.body);
+    assertEqual(tokenResult.scope, 'lifeos.read lifeos.write');
+    assertEqual(validateMcpAuth({ headers: { ...headers, authorization: `Bearer ${tokenResult.access_token}` } }).scopes.join(' '), 'lifeos.read lifeos.write');
+    const wrongVerifier = mockResponse();
+    await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=token', body: {
+      grant_type: 'authorization_code', code, client_id: params.client_id,
+      redirect_uri: params.redirect_uri, code_verifier: 'wrong-verifier',
+    } }, wrongVerifier);
+    assertEqual(wrongVerifier.statusCode, 400);
+
+    const readParams = { ...params, scope: 'lifeos.read', state: 'read-state' };
+    const readPage = mockResponse();
+    await handleMcpOAuthRequest({ method: 'GET', headers, url: `/api/mcp?mcp_oauth=authorize&${new URLSearchParams(readParams)}` }, readPage);
+    assertEqual(readPage.statusCode, 200);
+    assert(readPage.body.includes('grant read-only access'), 'read consent text changed unexpectedly');
+    const readApproval = mockResponse();
+    await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=authorize', body: { ...readParams, link_secret: 'oauth-link-fixture' } }, readApproval);
+    assertEqual(readApproval.statusCode, 302);
+    const readCode = new URL(readApproval.headers.location).searchParams.get('code');
+    const readExchange = mockResponse();
+    await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=token', body: {
+      grant_type: 'authorization_code', code: readCode, client_id: readParams.client_id,
+      redirect_uri: readParams.redirect_uri, code_verifier: verifier,
+    } }, readExchange);
+    assertEqual(readExchange.statusCode, 200);
+    assertEqual(JSON.parse(readExchange.body).scope, 'lifeos.read');
+    assertEqual(validateMcpAuth({ headers: { ...headers, authorization: `Bearer ${JSON.parse(readExchange.body).access_token}` } }).scopes.join(' '), 'lifeos.read');
+
+    process.env.LIFEOS_MCP_LINK_SECRET = process.env.LIFEOS_MCP_TOKEN;
+    const unsafeApproval = mockResponse();
+    await handleMcpOAuthRequest({ method: 'POST', headers, url: '/api/mcp?mcp_oauth=authorize', body: { ...params, link_secret: process.env.LIFEOS_MCP_TOKEN } }, unsafeApproval);
+    assertEqual(unsafeApproval.statusCode, 403);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('consolidated Action API resolves supported action names only', () => {
@@ -474,6 +572,16 @@ function assertEqual(actual, expected) {
   if (actual !== expected) {
     throw new Error(`expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
+}
+
+function mockResponse() {
+  return {
+    statusCode: 200,
+    headers: {},
+    body: '',
+    setHeader(key, value) { this.headers[key.toLowerCase()] = value; },
+    end(value = '') { this.body = String(value); },
+  };
 }
 
 function buildContextFixtureRows() {

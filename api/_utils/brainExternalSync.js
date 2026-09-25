@@ -41,6 +41,12 @@ export function normalizeExternalSyncRequest(input, { now = new Date() } = {}) {
   if (new Set(updates.map((update) => update.client_update_id)).size !== updates.length) {
     throw invalid('client_update_id must be unique within a request.');
   }
+  const targets = updates.map((update) => update.type === 'routine_state'
+    ? `routine:${update.routine_id}`
+    : update.type === 'preference'
+      ? `preference:${update.key}`
+      : `project:${update.project_id || normalizedProjectName(update.project_name)}:${update.field}`);
+  if (new Set(targets).size !== targets.length) throw invalid('Each update must target a distinct current belief.');
   return {
     idempotency_key: idempotencyKey,
     source: { system, kind, captured_at: capturedAt, reference },
@@ -55,7 +61,7 @@ export async function groundExternalSyncUpdates(request, { userId, client = getS
   const list = await client.from('projects').select('id, name').eq('user_id', userId).limit(300);
   if (list.error) throw new ExternalSyncError('persistence_failed', 'Project grounding is temporarily unavailable.');
   const rows = list.data || [];
-  return request.updates.map((update) => {
+  const grounded = request.updates.map((update) => {
     if (update.type !== 'project_context') return update;
     const matches = update.project_id
       ? rows.filter((row) => row.id === update.project_id)
@@ -66,6 +72,9 @@ export async function groundExternalSyncUpdates(request, { userId, client = getS
     }
     return { ...update, project_id: matches[0].id, project_name: matches[0].name };
   });
+  const targets = grounded.filter((update) => update.type === 'project_context').map((update) => `${update.project_id}:${update.field}`);
+  if (new Set(targets).size !== targets.length) throw invalid('Each update must target a distinct current belief.');
+  return grounded;
 }
 
 export async function syncExternalContext({

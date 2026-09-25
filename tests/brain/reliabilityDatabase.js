@@ -10,7 +10,7 @@ export async function createReliabilityDatabase() {
     create function auth.uid() returns uuid language sql as $$ select '${fixtureUser}'::uuid $$;
     insert into auth.users values ('${fixtureUser}');`);
   const schema = fs.readFileSync(new URL('../../supabase/schema.sql', import.meta.url), 'utf8');
-  for (const table of ['health_logs', 'memos', 'projects', 'project_sessions', 'brain_outbox_messages', 'brain_proactive_rules', 'ai_chat_threads', 'ai_chat_messages',
+  for (const table of ['workouts', 'health_logs', 'memos', 'calendar_events', 'expenses', 'ai_action_logs', 'projects', 'project_sessions', 'brain_outbox_messages', 'brain_proactive_rules', 'ai_chat_threads', 'ai_chat_messages',
     'brain_whatsapp_inbound_receipts', 'brain_whatsapp_message_deliveries', 'brain_interaction_state']) {
     const start = schema.indexOf(`create table if not exists public.${table} (`);
     if (start < 0) throw new Error(`Missing checked-in table ${table}`);
