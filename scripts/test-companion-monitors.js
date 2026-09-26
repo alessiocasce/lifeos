@@ -158,6 +158,26 @@ try {
   assert.equal((await loadDueMonitors({ userId: fixtureUser, client, now })).length, 0);
   assert.equal((await transitionMonitorState({ monitorId: created.monitor.id, state: 'active', userId: fixtureUser, client, now })).status, 'unchanged');
   assert.equal((await client.from('brain_monitors').select('id').eq('user_id', fixtureUser)).data.length, 1);
+  await db.query(`insert into projects(user_id, name, goal_type, current_value, target_value, created_at, updated_at)
+    select $1, 'Batch fixture ' || n, 'units', 0, 10, $2::timestamptz, $2::timestamptz
+    from generate_series(1, 31) as n`, [fixtureUser, oldActivity]);
+  await db.query(`insert into brain_monitors(user_id, monitor_type, topic_key, subject, reason, project_id,
+    created_by, source_channel, permission_basis, next_check_at, expires_at, review_at, confidence,
+    idempotency_key, created_at)
+    select $1, 'project_staleness', 'project:' || id, name, 'Bounded batch fixture', id,
+      'brain', 'app', 'standing_monitor', $2::timestamptz, $3::timestamptz,
+      $4::timestamptz, 0.82, id::text, $2::timestamptz
+    from projects where user_id = $1 and name like 'Batch fixture %'`, [fixtureUser, now.toISOString(),
+    new Date(now.getTime() + 45 * 86400000).toISOString(), new Date(now.getTime() + 30 * 86400000).toISOString()]);
+  assert.equal((await loadDueMonitors({ userId: fixtureUser, client, now, limit: 100 })).length, 30);
+  const batchPreview = await evaluateDueMonitors({ userId: fixtureUser, client, now, recipient: '111@c.us',
+    limit: 100, preview: true });
+  assert.equal(batchPreview.checked_count, 30);
+  assert.equal((await client.from('brain_monitors').select('id').eq('user_id', fixtureUser)
+    .eq('state', 'active')).data.length, 31);
+  assert.equal((await db.query(`select count(*)::int as checked from brain_monitors
+    where user_id = $1 and subject like 'Batch fixture %' and check_count > 0`, [fixtureUser])).rows[0].checked, 0);
+  assert.equal((await client.from('brain_attention_events').select('id').eq('user_id', fixtureUser)).data.length, 2);
   console.log('PASS monitor registry is typed, grounded, permission-gated, deduped and cross-channel resolvable');
 } finally {
   await db.close();
