@@ -221,6 +221,14 @@ Proactive coverage includes memo reminders and Proactive Accountability v1 candi
 
 The next useful extraction is the remaining memory/Vault-save/follow-up special branch group, or a lower-level LifeOS tool execution adapter. Do not extract either until tests cover explicit memory writes/forget, Vault save follow-ups, action logging, and final persistence.
 
+## Companion Monitor And Attention Boundary
+
+`brainMonitors.js` accepts only grounded `project_staleness` monitor specs with bounded cadence, expiry and check counts. It can create one autonomous monitor only when a current explicit `companion.monitor` grant exists in `brain_beliefs`. `companion.message` is a separate default-off grant. After a Brain answer, narrowly grounded project focus/resolution statements may create or retire the same user-owned monitor; errors do not fail the user turn.
+
+`brainMonitorEvaluation.js` batches due checks, observes project/session state, and asks `brainAttentionEngine.js` to decide `silent` or `message`. No model call is needed for checking. Silent decisions include low signal, missing MESSAGE permission, quiet hours, interruption caps, cooldowns, and dismissal/unanswered history. Reason codes and bounded references are stored in `brain_attention_events`, not model reasoning. `brainButler.js` only renders wording after approval. The existing WhatsApp outbox owns enqueue/claim/ACK; poll revalidates the monitor and permission. Preview must remain read-only.
+
+Only a current, delivered monitor prompt can receive a deterministic monitor reply. `brainProactiveReplies.js` selects its exact target using the same trusted quote/active-owner contract as memo and Health prompts; `brainMonitorReplies.js` can acknowledge, dismiss/suspend, or retire the monitor. It marks the outbox prompt answered and never routes that reply into planner or operational CRUD. Generic pending cancellation keeps its existing precedence. `npm run test:attention` covers the PGlite service seam; physical Oracle/WhatsApp behavior remains manual QA after migration and deployment.
+
 ## Companion Autobiographical Memory v1
 
 Slice 3.1 adds a write boundary before curation: observational questions cannot be parsed as explicit remember commands or trigger post-answer memory extraction. Clearly dated starts/stops/launches become episodes and dated decisions become decisions even when a model labels them `semantic_fact`; a date alone is insufficient. Narrow, grounded communication-preference facets use stable subject/content normalization across app and WhatsApp, while other memories retain exact/punctuation-normalized dedupe and existing project/supersession rules. Background curation failures remain warnings after the user answer, not failed user turns. Existing production duplicates are not deleted automatically.

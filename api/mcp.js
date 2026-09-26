@@ -8,6 +8,8 @@ import {
   getBrainDebugContext,
   getHealthSummary,
   getCurrentBeliefsForMcp,
+  getMonitorsForMcp,
+  getAttentionDebugForMcp,
   getLifeosContextSnapshot,
   getLifeosSnapshot,
   getOpenLoops,
@@ -146,6 +148,16 @@ const TOOL_DEFINITIONS = [
     inputSchema: objectSchema({ limit: numberSchema('Optional max messages, default 30.') }),
   },
   {
+    name: 'get_monitors',
+    description: 'Read-only bounded list of typed Companion monitors, lifecycle status, cadence, and source provenance. Does not create or execute monitors.',
+    inputSchema: objectSchema({ limit: numberSchema('Optional max monitors, default 30.') }),
+  },
+  {
+    name: 'get_attention_debug',
+    description: 'Read-only recent Companion attention decisions with bounded reason codes and outbox links. No hidden reasoning or message bodies.',
+    inputSchema: objectSchema({ limit: numberSchema('Optional max decisions, default 30.') }),
+  },
+  {
     name: 'search_lifeos_vault',
     description: 'Searches Brain Vault reports/chunks for relevant long-term context.',
     inputSchema: {
@@ -181,6 +193,8 @@ const RESOURCE_DEFINITIONS = [
   ['lifeos://brain/recent-actions', 'Recent Brain Actions', 'Recent AI action log summaries.', () => getRecentActionLogs],
   ['lifeos://whatsapp/outbox/recent', 'WhatsApp Outbox Recent', 'Recent proactive WhatsApp outbox messages.', () => getWhatsappOutboxRecent],
   ['lifeos://whatsapp/proactive-debug', 'WhatsApp Proactive Debug', 'Read-only proactive outbox diagnostics and status counts.', () => getWhatsappProactiveDebug],
+  ['lifeos://brain/monitors', 'Companion Monitors', 'Read-only typed monitor registry and lifecycle status.', () => getMonitorsForMcp],
+  ['lifeos://brain/attention-debug', 'Companion Attention Decisions', 'Read-only bounded attention decision ledger.', () => getAttentionDebugForMcp],
   ['lifeos://vault/recent', 'Vault Recent', 'Recent active Brain Vault documents.', () => getRecentVaultDocuments],
 ].map(([uri, name, description, getReader]) => ({
   uri,
@@ -467,6 +481,14 @@ async function callMcpTool(params, context) {
       break;
     case 'get_whatsapp_proactive_debug':
       data = await getWhatsappProactiveDebug({ userId, limit: clampMcpLimit(args.limit, 30, 100) });
+      break;
+    case 'get_monitors':
+      data = await getMonitorsForMcp({ userId, limit: clampMcpLimit(args.limit, 30, 80),
+        ...(context.client ? { client: context.client } : {}) });
+      break;
+    case 'get_attention_debug':
+      data = await getAttentionDebugForMcp({ userId, limit: clampMcpLimit(args.limit, 30, 80),
+        ...(context.client ? { client: context.client } : {}) });
       break;
     case 'search_lifeos_vault':
       data = await searchVaultForMcp({ userId, query: args.query, limit: clampMcpLimit(args.limit, 5, 10) });

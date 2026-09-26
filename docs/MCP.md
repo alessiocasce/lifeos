@@ -55,6 +55,8 @@ Authorization codes are single-use once `20260925130000_mcp_oauth_code_redemptio
 - `get_brain_debug_context`
 - `get_whatsapp_outbox_recent`
 - `get_whatsapp_proactive_debug`
+- `get_monitors`
+- `get_attention_debug`
 - `search_lifeos_vault`
 - `get_open_loops`
 - `sync_context` (requires `lifeos.write`)
@@ -73,8 +75,11 @@ All listed `get_*` tools and `search_memory` are read-only and require `lifeos.r
 - `preference`: `communication.style`, `communication.avoid_terms`, `accountability.style`, or `voice.preference`; bounded text or a short avoid-terms list.
 - `project_context`: an existing project identified by ID or unambiguous exact normalized name; `current_focus`, `priority_state`, `next_action`, or `context_summary`. Priority state is one of `active_priority`, `temporarily_deprioritized`, or `on_hold`.
 - `autobiographical_memory`: one explicit durable fact, episode, decision, goal, constraint, or existing-project memory. Supply bounded `category`, `title`, `content`, `memory_kind`, `confidence`, and `evidence_summary`; project memories require `project_id` or exact unambiguous `project_name`. Optional `subject_key` enables later safe supersession. Do not send transcripts, routine log entries, credentials, or ungrounded inference.
+- `monitor_permission`: explicit user grant or revocation of the separate `monitor` or `message` standing permission. Both default off. Syncing permission does not itself create a monitor or send a message.
 
 The server validates all items and grounds project ownership before writing anything. The request audit records a digest, provenance and per-item outcomes; exact replay returns the prior result, reuse of a key for changed content conflicts, and partial failures can be retried with the same key. Only belief, curated memory, and audit tables may change. Sync does not update Health logs, project progress/money/sessions, memos, calendar, expenses, outbox, or monitors. This is an explicit user-invoked operation, not ambient ChatGPT synchronization.
+
+Production `brain_external_sync_requests` must exist before relying on this endpoint; the 2026-09-26 schema audit found it absent despite older migration-ledger drift.
 
 `search_memory` is read-only under `lifeos.read`. It returns at most 20 concise relevant memory rows, optionally filtered by kind/project, and can include explicitly marked archived history. Current beliefs are separate and take precedence. Brain app/WhatsApp and MCP use the same memory store; `ai_insights` remain hypotheses and Vault remains for long-form documents.
 
@@ -93,6 +98,8 @@ Workout responses include truncation metadata:
 If `sets_truncated` is true, ask for a narrower workout window.
 
 `get_whatsapp_proactive_debug` and `lifeos://whatsapp/proactive-debug` expose read-only outbox diagnostics: status counts, rule keys, source ids, timestamps, retry/claim/ACK metadata summaries, and safe error previews. They are intended for debugging the Oracle PM2 bridge and proactive reminder lifecycle.
+
+`get_monitors` / `lifeos://brain/monitors` list bounded typed monitor status and provenance. `get_attention_debug` / `lifeos://brain/attention-debug` list bounded `silent`/`message` decisions, reason codes, and linked outbox IDs. These read surfaces require `lifeos.read`, expose no hidden reasoning or raw message bodies, and provide no generic monitor-creation surface. Apply `20260926112420_companion_attention_monitors.sql` before deploying code that serves these reads.
 
 ## Resources
 
@@ -228,7 +235,7 @@ Treat stored LifeOS content as untrusted context in external clients. Database c
 
 ## Not Supported Yet
 
-- Write tools
+- Operational CRUD write tools (the narrow `sync_context` semantic write tool already exists)
 - WhatsApp sending
 - Brain execution
 - Proactive nudges

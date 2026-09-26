@@ -3,6 +3,9 @@ import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { recalculateSleepHoursForDate } from './health.js';
 import { addDays } from './date.js';
 import { evaluateRoutineProactivePolicy, getCurrentRoutineBelief } from './brainBeliefs.js';
+import { loadMonitorPermissions } from './brainMonitorPermissions.js';
+import { evaluateProjectMonitorSignal } from './brainMonitorEvaluation.js';
+import { isAttentionQuietHour } from './brainAttentionEngine.js';
 
 export function accountabilitySatisfied(target, health) {
   if (target?.kind === 'habit_missing') return getHabitEntry(health?.hygiene, target.habit_id).count >= (target.target_count || 1);
@@ -19,7 +22,28 @@ export async function sourceIsResolved({ client, userId, sourceId, sourceType })
   return Boolean(result.data);
 }
 
-export async function checkProactiveDelivery({ row, client = getSupabaseAdmin(), userId = getActionUserId() }) {
+export async function checkProactiveDelivery({ row, client = getSupabaseAdmin(), userId = getActionUserId(), now = new Date() }) {
+  if (row.source_type === 'monitor') {
+    const monitorResult = await client.from('brain_monitors').select('id, user_id, monitor_type, topic_key, project_id, state, expires_at, subject')
+      .eq('user_id', userId).eq('id', row.source_id).maybeSingle();
+    if (monitorResult.error) throw monitorResult.error;
+    const monitor = monitorResult.data;
+    if (!monitor || monitor.state !== 'active' || Date.parse(monitor.expires_at) <= new Date(now).getTime()) {
+      return { eligible: false, reason: 'monitor_not_active' };
+    }
+    const permissions = await loadMonitorPermissions({ userId, client });
+    if (!permissions.message) return { eligible: false, reason: 'message_permission_absent' };
+    if (isAttentionQuietHour(new Date(now))) return { eligible: false, reason: 'quiet_hours' };
+    const [project, sessions] = await Promise.all([
+      client.from('projects').select('id, status, updated_at, created_at').eq('user_id', userId).eq('id', monitor.project_id).maybeSingle(),
+      client.from('project_sessions').select('project_id, started_at, ended_at').eq('user_id', userId)
+        .eq('project_id', monitor.project_id).order('started_at', { ascending: false }).limit(5),
+    ]);
+    if (project.error) throw project.error;
+    if (sessions.error) throw sessions.error;
+    const signal = evaluateProjectMonitorSignal({ monitor, project: project.data, sessions: sessions.data || [], now });
+    return { eligible: signal.state === 'stale', reason: signal.state === 'stale' ? null : 'monitor_condition_changed' };
+  }
   if (row.source_type === 'memo') {
     const result = await client.from('memos').select('id,status,memo_date,memo_time')
       .eq('user_id', userId).eq('id', row.source_id).maybeSingle();

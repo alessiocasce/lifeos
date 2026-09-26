@@ -488,4 +488,23 @@ Live QA checkpoint, 2026-09-26: the deployed MCP read smoke and app explicit rem
 
 Before any future Supabase CLI `db push`, audit the full migration ledger against the repository. Production currently records only `20260925215527` in `supabase_migrations.schema_migrations`; earlier schema objects exist but their migration versions are not recorded there. Renaming the Slice 3 file reconciles that one identity only. Do not blanket-push older migration files until their history and effects have been reconciled separately.
 
+### Companion Slice 4 migration and rollout gate (2026-09-26 audit)
+
+The repository has six numbered migrations. Production ledger reports only `20260925215527`. Read-only production object checks found:
+
+| Repository migration | Production physical state | Safe action |
+| --- | --- | --- |
+| `20260908231937_whatsapp_interaction_reliability` | Inbound receipts, provider deliveries and interaction state tables exist | Inspect full constraints/RLS before marking history reconciled; do not rerun blindly. |
+| `20260919120000_companion_beliefs` | `brain_beliefs` and transition RPC exist | Compare constraints/RPC/grants before ledger repair; do not rerun blindly. |
+| `20260925120000_companion_external_sync` | `brain_external_sync_requests` absent; belief source check lacks `external_sync` | Genuine schema gap. Inspect current RPC definition, then apply this migration explicitly if compatible and verify table/RLS/constraint before permission-sync QA. |
+| `20260925130000_mcp_oauth_code_redemptions` | Redemption table exists | Verify unique hash/RLS; do not rerun blindly. |
+| `20260925215527_companion_autobiographical_memory` | Ledger entry exists and `ai_memories` exists | Already applied; never execute again. |
+| `20260926112420_companion_attention_monitors` | New monitor/attention tables absent | Apply this additive migration explicitly before deploying Slice 4 backend; verify RLS, service-role access, ownership FKs and due/ledger indexes. |
+
+No `supabase db push` until missing history is reconciled object by object. In particular, applying the new Slice 4 migration does not itself repair older ledger entries. The required composite `(id,user_id)` keys on production `projects` and `brain_outbox_messages` were observed. Do not infer the remaining contracts solely from table presence.
+
+Rollout order: pass local `npm test`, `npm run check:functions` (seven), `npm run build`; resolve the genuine external-sync gap; explicitly apply/verify the new monitor migration; deploy the backend; call outbox `preview` to confirm no monitor/ledger mutation; read `get_monitors` and `get_attention_debug` under `lifeos.read`; only then grant MONITOR and MESSAGE through an explicitly authorized `lifeos.write` sync for physical QA. Keep a dedicated allowed WhatsApp recipient and check global proactive preferences. Oracle PM2 restart is unnecessary unless bridge code/env changes. To roll back, deploy the prior backend and revoke standing permissions; retain monitor/attention audit rows.
+
+OAuth remains a separate open gate: a prior authorize POST with the locally available link secret returned `401`, which the current handler emits only when the submitted link secret fails to match the configured server secret. The cause may be stale local input or a production env mismatch; do not assume either. With a verified current credential, run valid PKCE exchange, replay (`invalid_grant`), concurrent redemption (one success), read-token `sync_context` denial, and explicit write-scope sync/readback. Never print secrets or authorization codes.
+
 Rollback: deploy the previous backend before removing either additive migration. Do not drop redemption or memory history during an ordinary rollback. If OAuth redemption storage fails, code exchange fails closed; use `LIFEOS_MCP_OAUTH_ENABLED=false` only as a temporary OAuth rollback, not as replay protection.

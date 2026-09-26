@@ -116,6 +116,15 @@ export function buildButlerFallback(result, fallbackAnswer = '') {
   return language === 'en' ? 'Got it.' : 'Capito.';
 }
 
+export function renderApprovedMonitorMessage({ monitor, signal, decision, language = 'it' } = {}) {
+  if (decision?.decision !== 'message' || monitor?.monitor_type !== 'project_staleness' || signal?.state !== 'stale') return null;
+  const subject = cleanText(monitor.subject, 100);
+  if (!subject) return null;
+  return language === 'en'
+    ? `${subject}: still a priority? I haven't seen recent project activity.`
+    : `${subject}: e' ancora una priorita? Non vedo attivita' recente sul progetto.`;
+}
+
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return null;
   const text = value.replace(/\s+/g, ' ').trim();

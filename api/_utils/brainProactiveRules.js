@@ -1,8 +1,11 @@
+import crypto from 'node:crypto';
 import { getActionUserId, getSupabaseAdmin } from './supabaseAdmin.js';
 import { TIME_ZONE } from './date.js';
 import { accountabilityProactiveRuleFamily } from './brainProactiveAccountability.js';
 import { sourceIsResolved } from './brainProactiveDelivery.js';
 import { compareOutboxRowsForDelivery } from './brainOutboxStateMachine.js';
+import { evaluateDueMonitors } from './brainMonitorEvaluation.js';
+import { decideAccountabilityAttention, recordAttentionDecision, recordAttentionOutbox, recordAttentionSuppression } from './brainAttentionEngine.js';
 
 const MEMO_SELECT = 'id, user_id, title, memo_date, memo_time, notes, status, created_at, updated_at';
 const DEFAULT_MAX_PER_DAY = 6;
@@ -21,27 +24,45 @@ export const proactiveRuleRegistry = [
     buildCandidates: buildMemoProactiveCandidatesFromContext,
   },
   accountabilityProactiveRuleFamily,
+  {
+    family: 'monitor',
+    loadContext: ({ userId, now, recipient, preview }) => evaluateDueMonitors({ userId, now, recipient, preview }),
+    buildCandidates: ({ context }) => context.candidates,
+  },
 ];
 
-export async function evaluateProactiveCandidates({ userId = getActionUserId(), now = new Date(), recipient } = {}) {
+export async function evaluateProactiveCandidates({ userId = getActionUserId(), now = new Date(), recipient, preview = false } = {}) {
   const nowDate = normalizeDate(now);
   const candidates = [];
   const skipped = [];
   const generated = [];
 
   for (const ruleFamily of proactiveRuleRegistry) {
-    const ruleContext = await ruleFamily.loadContext({ userId, now: nowDate, recipient });
+    const ruleContext = await ruleFamily.loadContext({ userId, now: nowDate, recipient, preview });
     const familyCandidates = ruleFamily.buildCandidates({ context: ruleContext, userId, now: nowDate, recipient });
     generated.push(...familyCandidates);
+    if (ruleFamily.family === 'monitor') skipped.push(...ruleContext.skipped.map((item) => ({ ...item, family: 'monitor' })));
   }
   for (const candidate of generated.sort(compareOutboxRowsForDelivery)) {
     const validation = validateProactiveCandidate(candidate);
     if (!validation.ok) {
+      if (!preview && candidate?.source_type === 'monitor' && candidate.metadata?.attention_event_id) {
+        await recordAttentionSuppression({ eventId: candidate.metadata.attention_event_id,
+          reason: validation.reason, userId });
+      }
       skipped.push({ candidate, reason: validation.reason, family: candidate.source_type });
       continue;
     }
-    const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate, admitted: candidates });
+    const suppression = await shouldSuppressProactiveCandidate({ userId, candidate, now: nowDate, admitted: candidates, preview });
     if (suppression.suppressed) {
+      if (!preview && candidate.source_type === 'monitor' && candidate.metadata?.attention_event_id) {
+        if (suppression.reason === 'duplicate' && ['queued', 'claimed', 'sent'].includes(suppression.outbox_status)) {
+          await recordAttentionOutbox({ eventId: candidate.metadata.attention_event_id,
+            outboxId: suppression.outbox_id, monitorId: candidate.metadata.monitor_id, userId, now: nowDate });
+        } else {
+          await recordAttentionSuppression({ eventId: candidate.metadata.attention_event_id, reason: suppression.reason, userId });
+        }
+      }
       skipped.push({ candidate, reason: suppression.reason, family: candidate.source_type });
     } else {
       candidates.push(candidate);
@@ -168,7 +189,7 @@ export function buildMemoProactiveCandidatesFromContext({ context, now = new Dat
   return (context?.memos ?? []).flatMap((memo) => buildMemoProactiveCandidates({ memo, now, recipient }));
 }
 
-export async function shouldSuppressProactiveCandidate({ userId = getActionUserId(), candidate, now = new Date(), admitted = [] } = {}) {
+export async function shouldSuppressProactiveCandidate({ userId = getActionUserId(), candidate, now = new Date(), admitted = [], preview = false } = {}) {
   const nowDate = normalizeDate(now);
   if (!candidate?.recipient) return { suppressed: true, reason: 'missing_recipient' };
   if (!candidate?.body) return { suppressed: true, reason: 'empty_body' };
@@ -188,7 +209,8 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
     .limit(1)
     .maybeSingle();
   if (duplicate.error) throw duplicate.error;
-  if (duplicate.data) return { suppressed: true, reason: 'duplicate' };
+  if (duplicate.data) return { suppressed: true, reason: 'duplicate', outbox_id: duplicate.data.id,
+    outbox_status: duplicate.data.status };
 
   if (candidate.rule_key === 'memo_overdue_followup') {
     const priorDue = await client
@@ -232,6 +254,27 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
   candidate.metadata.attention_profile = { ...candidate.metadata.attention_profile, ...preferences };
   attentionBudget.daily_count += admitted.length;
   if (admitted.length) attentionBudget.recent_message ||= { id: 'current_evaluation' };
+  if (candidate.source_type === 'accountability') {
+    const since = new Date(nowDate.getTime() - 7 * 86400000).toISOString();
+    const recent = await client.from('brain_outbox_messages')
+      .select('rule_key, status, created_at, sent_at, metadata').eq('user_id', userId).eq('channel', candidate.channel)
+      .gte('created_at', since).order('created_at', { ascending: false }).limit(100);
+    if (recent.error) throw recent.error;
+    let decision = decideAccountabilityAttention({ candidate, now: nowDate,
+      dailyCount: attentionBudget.daily_count, recentRows: recent.data || [],
+      quietStart: globalPreferences.quiet_hours_start, quietEnd: globalPreferences.quiet_hours_end });
+    const legacyAttention = shouldSpendAttention({ candidate, preferences, attentionBudget, now: nowDate });
+    if (decision.decision === 'message' && !legacyAttention.allowed) {
+      decision = { ...decision, decision: 'silent', reason_code: legacyAttention.reason };
+    }
+    const eventKey = `accountability:${crypto.createHash('sha256').update(candidate.idempotency_key).digest('hex')}`;
+    if (!preview) {
+      const recorded = await recordAttentionDecision({ userId, client, candidate, eventKey, decision, now: nowDate });
+      if (recorded.duplicate) return { suppressed: true, reason: 'attention_decision_replayed' };
+      if (decision.decision === 'message') candidate.metadata.attention_event_id = recorded.event.id;
+    }
+    if (decision.decision === 'silent') return { suppressed: true, reason: decision.reason_code };
+  }
   const attention = shouldSpendAttention({ candidate, preferences, attentionBudget, now: nowDate });
   if (!attention.allowed) return { suppressed: true, reason: attention.reason };
 

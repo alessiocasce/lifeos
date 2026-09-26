@@ -9,6 +9,7 @@ import {
   resolveProactiveAccountabilityReply,
   selectProactiveAccountabilityReplyTarget,
 } from './brainProactiveAccountability.js';
+import { MONITOR_REPLY_TYPE, normalizeMonitorReply, resolveMonitorProactiveReply } from './brainMonitorReplies.js';
 
 const MEMO_REPLY_TYPE = 'memo_done_snooze_cancel';
 const PROACTIVE_REPLY_DEFAULT_WINDOW_HOURS = 6;
@@ -34,6 +35,8 @@ export async function resolveProactiveWhatsappReply({ message, brainChat, contex
   let result = null;
   if (target.reply_type === ACCOUNTABILITY_REPLY_TYPE) {
     result = await resolveProactiveAccountabilityReply({ message, brainChat, context, now, actions, selection: target });
+  } else if (target.reply_type === MONITOR_REPLY_TYPE) {
+    result = await resolveMonitorProactiveReply({ message, selection: target, now });
   } else if (target.reply_type === MEMO_REPLY_TYPE) {
     result = await resolveProactiveMemoReply({ message, brainChat, context, selection: target });
   }
@@ -80,6 +83,9 @@ export function shouldPrioritizeProactiveReplyOverPending({ message, brainChat, 
 export function selectProactiveReplyTarget({ message, brainChat, now = new Date() } = {}) {
   if (looksLikeExplicitNewCommand(message) || looksLikeIndependentProactiveCommand(message)) return { type: 'none', intent: { intent: 'other' } };
   const latest = [...(brainChat?.conversationHistory || [])].reverse().find((item) => item.role === 'assistant' && item.metadata?.proactive_message);
+  if (latest?.metadata?.expected_reply_type === MONITOR_REPLY_TYPE) {
+    return selectMonitorReplyTarget({ message, assistantMessage: latest, now });
+  }
   const accountability = selectProactiveAccountabilityReplyTarget({ message, brainChat, now });
   const memo = selectProactiveMemoReplyTarget({ message, brainChat, now });
   if (latest?.metadata?.proactive_resolution && (accountability.intent?.intent !== 'other' || memo.intent?.intent !== 'other')) {
@@ -115,6 +121,9 @@ export function selectTrustedQuotedProactiveReplyTarget({ message, assistantMess
     return { type: 'resolved', intent: { intent: 'other' }, language: metadata.language || 'it' };
   }
   const brainChat = { conversationHistory: [assistantMessage] };
+  if (metadata.expected_reply_type === MONITOR_REPLY_TYPE) {
+    return selectMonitorReplyTarget({ message, assistantMessage, now, trusted: true });
+  }
   if (metadata.expected_reply_type === ACCOUNTABILITY_REPLY_TYPE) {
     const proactive = extractRecentProactiveAccountabilityMessages(brainChat, { now, includeExpired: true })[0];
     const intent = normalizeProactiveAccountabilityReply(message);
@@ -143,6 +152,25 @@ export function selectTrustedQuotedProactiveReplyTarget({ message, assistantMess
     };
   }
   return { type: 'not_replyable', intent: { intent: 'other' }, language: metadata.language || 'it' };
+}
+
+function selectMonitorReplyTarget({ message, assistantMessage, now, trusted = false }) {
+  const metadata = assistantMessage?.metadata || {};
+  const intentName = normalizeMonitorReply(message);
+  const intent = { intent: intentName, confidence: intentName === 'other' ? 0 : 0.9 };
+  if (intentName === 'other') return { type: trusted ? 'invalid_reply' : 'none', intent, language: metadata.language || 'it' };
+  if (!metadata.source_id || !metadata.outbox_message_id || metadata.source_type !== 'monitor') {
+    return { type: 'not_replyable', intent, language: metadata.language || 'it' };
+  }
+  const createdAt = Date.parse(assistantMessage.created_at || '');
+  const expired = !Number.isFinite(createdAt) || new Date(now).getTime() - createdAt > 6 * 3600000;
+  return {
+    type: expired ? 'stale' : 'target', intent, language: metadata.language || 'it',
+    proactive: { source_type: 'monitor', source_id: metadata.source_id,
+      outbox_message_id: metadata.outbox_message_id, title: 'Project monitor', expired },
+    reply_type: MONITOR_REPLY_TYPE,
+    ...(trusted ? { selection_method: 'trusted_native_quote' } : {}),
+  };
 }
 
 function messageReferencesProactiveTarget(message, proactive) {
@@ -369,6 +397,13 @@ export function looksLikeIndependentProactiveCommand(message) {
 
 export function buildProactiveWorkingContextFromOutbox(outboxMessage) {
   const metadata = outboxMessage?.metadata && typeof outboxMessage.metadata === 'object' ? outboxMessage.metadata : {};
+  if (metadata.expected_reply_type === MONITOR_REPLY_TYPE) {
+    return { language: metadata.language === 'en' ? 'en' : 'it', last_subject: {
+      id: outboxMessage.source_id, type: 'monitor', label: 'Project monitor', source_type: 'monitor',
+      source_id: outboxMessage.source_id, created_by_last_action: false, confidence: 0.95,
+      raw: { outbox_message_id: outboxMessage.id, expected_reply_type: MONITOR_REPLY_TYPE },
+    }, last_action_result: null };
+  }
   if (metadata.expected_reply_type === ACCOUNTABILITY_REPLY_TYPE || outboxMessage?.source_type === 'accountability') {
     return buildAccountabilityWorkingContextFromOutbox(outboxMessage);
   }
@@ -531,6 +566,7 @@ function getLatestProactiveReplyType(brainChat) {
     if (item?.role !== 'assistant') continue;
     const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
     if (!metadata.proactive_message) continue;
+    if (metadata.expected_reply_type === MONITOR_REPLY_TYPE) return MONITOR_REPLY_TYPE;
     if (metadata.expected_reply_type === ACCOUNTABILITY_REPLY_TYPE) return ACCOUNTABILITY_REPLY_TYPE;
     if (metadata.expected_reply_type === MEMO_REPLY_TYPE) return MEMO_REPLY_TYPE;
   }

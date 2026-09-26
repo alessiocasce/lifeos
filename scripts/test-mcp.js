@@ -8,7 +8,7 @@ import {
   listMcpTools,
   validateMcpAuth,
 } from '../api/mcp.js';
-import { clampMcpDays, clampMcpLimit, compactWorkout, getWorkoutSetTruncationInfo, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
+import { clampMcpDays, clampMcpLimit, compactWorkout, getWorkoutSetTruncationInfo, getMonitorsForMcp, getAttentionDebugForMcp, sanitizeMcpOutput } from '../api/_utils/mcpLifeosData.js';
 import { buildLifeOSContext, buildOpenLoops, rankOpenLoops } from '../api/_utils/lifeosContextCompiler.js';
 import { buildWorkoutIntelligence } from '../api/_utils/workoutIntelligence.js';
 import {
@@ -22,7 +22,7 @@ import {
   verifyPkceForTest,
 } from '../api/_utils/mcpOAuth.js';
 import { resolveActionName } from '../api/actions.js';
-import { createReliabilityDatabase } from '../tests/brain/reliabilityDatabase.js';
+import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
 
 const checks = [];
 
@@ -65,6 +65,8 @@ test('tools/list includes expected tools', () => {
     'get_open_memos',
     'get_brain_debug_context',
     'get_whatsapp_proactive_debug',
+    'get_monitors',
+    'get_attention_debug',
     'search_lifeos_vault',
   ]) {
     assert(tools.includes(name), `missing tool ${name}`);
@@ -90,9 +92,46 @@ test('resources/list includes expected resources', () => {
     'lifeos://brain/debug',
     'lifeos://whatsapp/outbox/recent',
     'lifeos://whatsapp/proactive-debug',
+    'lifeos://brain/monitors',
+    'lifeos://brain/attention-debug',
     'lifeos://vault/recent',
   ]) {
     assert(resources.includes(uri), `missing resource ${uri}`);
+  }
+});
+
+test('monitor and attention MCP diagnostics are scoped, bounded, read-only data', async () => {
+  const { db, client } = await createReliabilityDatabase();
+  try {
+    const project = (await db.query(`insert into projects(user_id,name,goal_type,current_value,target_value)
+      values ($1,'MCP monitor fixture','units',0,1) returning id`, [fixtureUser])).rows[0];
+    const monitor = (await client.from('brain_monitors').insert({ user_id: fixtureUser,
+      monitor_type: 'project_staleness', topic_key: `project:${project.id}`, subject: 'MCP monitor fixture',
+      reason: 'Check grounded project staleness.', project_id: project.id, created_by: 'brain',
+      source_channel: 'app', permission_basis: 'standing_monitor', confidence: 0.82,
+      idempotency_key: `test:${project.id}`, expires_at: '2099-01-01T00:00:00Z',
+      review_at: '2099-01-01T00:00:00Z' }).select('id').single()).data;
+    assert(monitor?.id, 'monitor fixture insert failed');
+    const event = await client.from('brain_attention_events').insert({ user_id: fixtureUser,
+      monitor_id: monitor.id, event_key: `test:${monitor.id}`, source_type: 'monitor', source_id: monitor.id,
+      topic_key: `project:${project.id}`, decision: 'silent', reason_code: 'quiet_hours',
+      importance: 3, confidence: 0.82, metadata: { private_token: 'must-not-appear' } });
+    assert(!event.error, 'attention fixture insert failed');
+    const monitors = await getMonitorsForMcp({ userId: fixtureUser, client });
+    const decisions = await getAttentionDebugForMcp({ userId: fixtureUser, client });
+    assertEqual(monitors.monitors.length, 1);
+    assertEqual(decisions.decisions[0].reason_code, 'quiet_hours');
+    assert(!JSON.stringify(decisions).includes('must-not-appear'), 'debug included private metadata');
+    const denied = await handleMcpJsonRpcRequest({ jsonrpc: '2.0', id: 91, method: 'tools/call',
+      params: { name: 'get_monitors', arguments: {} } }, { userId: fixtureUser, client, scopes: [] });
+    assertEqual(denied.error.code, -32003);
+    const allowed = await handleMcpJsonRpcRequest({ jsonrpc: '2.0', id: 92, method: 'tools/call',
+      params: { name: 'get_monitors', arguments: {} } }, { userId: fixtureUser, client, scopes: ['lifeos.read'] });
+    assertEqual(allowed.result.structuredContent.monitors[0].id, monitor.id);
+    const other = await getMonitorsForMcp({ userId: '00000000-0000-4000-8000-000000000099', client });
+    assertEqual(other.monitors.length, 0);
+  } finally {
+    await db.close();
   }
 });
 

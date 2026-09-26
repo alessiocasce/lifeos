@@ -12,6 +12,7 @@ import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender, cleanWhatsappText } from '../../_utils/whatsappBridge.js';
 import { evaluateProactiveCandidates } from '../../_utils/brainProactiveRules.js';
 import { ackOutboxMessage, enqueueOutboxMessage, pollOutboxMessages } from '../../_utils/brainOutbox.js';
+import { recordAttentionOutbox } from '../../_utils/brainAttentionEngine.js';
 import {
   normalizeWhatsappProviderMessageId,
   normalizeWhatsappProviderMessageIds,
@@ -74,7 +75,7 @@ async function handleRecordReplyDelivery({ res, context, body, recipient }) {
 
 async function handleEvaluate({ res, context, debugFlags, recipient, recipientInfo, bridgeId, preview = false }) {
   const userId = getActionUserId();
-  const evaluation = await evaluateProactiveCandidates({ userId, recipient });
+  const evaluation = await evaluateProactiveCandidates({ userId, recipient, preview });
   const queued = [];
   const skipped = [...evaluation.skipped];
 
@@ -104,9 +105,17 @@ async function handleEvaluate({ res, context, debugFlags, recipient, recipientIn
       metadata,
     });
     if (result.duplicate || result.deferred) {
+      if (result.duplicate && candidate.metadata?.attention_event_id && result.row?.id) {
+        await recordAttentionOutbox({ eventId: candidate.metadata.attention_event_id, outboxId: result.row.id,
+          monitorId: candidate.metadata.monitor_id, userId });
+      }
       skipped.push({ candidate, reason: result.deferred ? 'attention_deferred' : 'duplicate' });
     } else {
       queued.push(result.row);
+      if (candidate.metadata?.attention_event_id) {
+        await recordAttentionOutbox({ eventId: candidate.metadata.attention_event_id, outboxId: result.row.id,
+          monitorId: candidate.metadata.monitor_id, userId });
+      }
     }
   }
 

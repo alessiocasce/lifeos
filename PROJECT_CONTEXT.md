@@ -3,6 +3,12 @@
 Last updated: 2026-09-26
 Current branch: `main`
 
+## Current Companion Slice 4 Handoff (2026-09-26)
+
+Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.
+
+**Deployment gate:** production migration history lists only the Slice 3 memory version. Physical reliability, belief, and OAuth objects exist, but `brain_external_sync_requests` is missing and the belief source constraint lacks `external_sync`. The new `20260926112420_companion_attention_monitors.sql` is not applied. Do not run blanket `supabase db push` or deploy this backend before explicitly reconciling the external-sync gap, applying/verifying the monitor migration, and checking OAuth credentials. No Oracle bridge code changed. See `docs/QA_DEPLOYMENT.md` for the live sequence.
+
 
 ## Companion vNext Product Direction (2026-09-18)
 

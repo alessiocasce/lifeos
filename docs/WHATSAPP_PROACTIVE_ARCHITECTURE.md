@@ -120,7 +120,7 @@ Accountability candidates carry a metadata attention profile:
 }
 ```
 
-This bypasses quiet-hours suppression for accountability only, raises the candidate-level daily cap, and lowers the min gap. It does not loosen memo reminder defaults. Idempotency and duplicate suppression still apply.
+Legacy accountability candidates carry a permissive candidate profile, but the shared Attention Engine now applies a stricter final gate: Europe/Rome quiet hours, four proactive interruptions per day, a 90-minute global gap, and repeated-dismissal/unanswered suppression. Memo reminder defaults remain separate. Idempotency and duplicate suppression still apply.
 
 ## Proactive Accountability v1
 
@@ -153,6 +153,14 @@ New proactive rule families should plug into `proactiveRuleRegistry` in `api/_ut
 `channel`, `recipient`, `body`, `priority`, `rule_key`, `source_type`, `source_id`, `idempotency_key`, `scheduled_for`, `expires_at`, and `metadata`.
 
 Do not add AI guessing for short proactive replies. Add deterministic target selection, expiry windows, idempotency, attention profile behavior, and tests first.
+
+## Typed Companion Monitors
+
+Slice 4 registers only `project_staleness` in `brain_monitors`. The evaluator batches at most 30 due monitors, checks existing project/session state, and records a `silent` or `message` reason code in `brain_attention_events`. MONITOR and MESSAGE standing permissions are separate and default to off. A monitor never performs operational actions. Approved wording comes from Butler after the decision; the existing outbox still owns claim/ACK/provider mapping.
+
+Monitor candidates require a meaningful stale project, MESSAGE permission, attention headroom, and no quiet-hours conflict. Poll revalidates monitor state, permission, and project activity before claiming. A quoted or adjacent reply to a delivered monitor prompt may acknowledge, dismiss, suspend after repeated dismissals, or retire a no-longer-relevant monitor. It cannot mutate Health, memos, or calendar. An answered outbox prompt is not counted as unanswered. Preview must not advance monitors or write attention events.
+
+Run `npm run test:attention` for PGlite service-seam checks. After the monitor migration and backend deployment, use MCP `get_monitors` and `get_attention_debug` (or their `lifeos://brain/...` resources) to inspect bounded states/reasons without message bodies. Do not enable MESSAGE permission for physical QA until a dedicated recipient and global proactive settings are checked.
 
 ## Debugging
 

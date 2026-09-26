@@ -129,7 +129,7 @@ export async function pollOutboxMessages({
   let deferredCount = 0;
   for (const row of sortOutboxRowsForDelivery(dueRows)) {
     if (claimed.length >= safeLimit) break;
-    const eligibility = await checkProactiveDelivery({ row, client, userId });
+    const eligibility = await checkProactiveDelivery({ row, client, userId, now });
     if (!eligibility.eligible) {
       const cancelled = await client.from('brain_outbox_messages').update({ status: 'cancelled',
         metadata: { ...row.metadata, delivery_revalidation: { reason: eligibility.reason, cancelled_at: now } },

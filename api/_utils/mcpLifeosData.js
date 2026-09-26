@@ -410,6 +410,22 @@ export async function getWhatsappProactiveDebug({ userId, limit = 30 } = {}) {
   });
 }
 
+export async function getMonitorsForMcp({ userId, limit = 30, client = getSupabaseAdmin() } = {}) {
+  const result = await client.from('brain_monitors')
+    .select('id, monitor_type, topic_key, subject, project_id, state, created_by, source_channel, permission_basis, cadence_minutes, next_check_at, last_checked_at, last_triggered_at, expires_at, review_at, check_count, max_checks, created_at')
+    .eq('user_id', userId).order('created_at', { ascending: false }).limit(clampMcpLimit(limit, 30, 80));
+  if (result.error) throw result.error;
+  return sanitizeMcpOutput({ monitors: result.data || [] });
+}
+
+export async function getAttentionDebugForMcp({ userId, limit = 30, client = getSupabaseAdmin() } = {}) {
+  const result = await client.from('brain_attention_events')
+    .select('id, monitor_id, source_type, source_id, topic_key, decision, reason_code, importance, confidence, channel, cooldown_until, outbox_message_id, created_at')
+    .eq('user_id', userId).order('created_at', { ascending: false }).limit(clampMcpLimit(limit, 30, 80));
+  if (result.error) throw result.error;
+  return sanitizeMcpOutput({ decisions: result.data || [] });
+}
+
 export async function searchVaultForMcp({ userId, query, limit = 5 } = {}) {
   const text = String(query ?? '').trim();
   if (!text) return { query: '', results: [], note: 'A non-empty query is required.' };

@@ -800,3 +800,16 @@ Prerequisite: apply `20260925130000_mcp_oauth_code_redemptions.sql` and `2026092
 10. State `I prefer concise answers` in app and `Yeah keep your answers pretty short` in WhatsApp; confirm one active communication-preference subject and a WhatsApp `last_seen_source`. Do not delete older production QA duplicates without a separate data review.
 
 Local PGlite tests do not prove live Gemini extraction quality, deployed OAuth, or physical WhatsApp delivery. Inspect sanitized trace and database state after deployment before claiming live end-to-end success.
+
+## Companion Slice 4 Monitor Journey
+
+Prerequisite: explicitly apply/verify `20260926112420_companion_attention_monitors.sql` before deploying the backend. MONITOR and MESSAGE standing permissions default off. Production external-sync storage was absent in the 2026-09-26 audit, so reconcile that migration before trying `sync_context` permission grants.
+
+1. With no MONITOR grant, state a focus on one existing active project. Confirm no `brain_monitors` row appears; a suggestion is acceptable.
+2. Explicitly grant MONITOR, state the same focus, and confirm one typed project-staleness monitor with source provenance. Repeat via WhatsApp; confirm no duplicate.
+3. Grant MESSAGE separately. Preview outbox evaluate and confirm no monitor `check_count` or attention ledger write. Until the project is meaningfully stale, ordinary checks remain silent.
+4. With controlled stale project data and a dedicated test recipient, evaluate after quiet hours. Confirm one attention `message` decision links to one outbox row, then bridge poll/ACK delivers it once. Read `get_monitors` and `get_attention_debug` over `lifeos.read` without raw message bodies.
+5. Native-reply `no` to the delivered prompt. Confirm outbox resolution and one dismissal. A second separately delivered prompt dismissed again should suspend the monitor; quoting the first prompt again must not increment dismissal.
+6. State the project is complete with its exact name, or reply that it is no longer a priority. Confirm the monitor retires but attention history remains. Revoke MESSAGE and verify no later monitor delivery. Check provider quote mapping and `@lid` recipient continuity as in the reliability QA.
+
+Local gates: `npm run test:attention`, `npm run test:reliability`, `npm run test:brain`, `npm run test:mcp`, `npm test`, `npm run check:functions`, and `npm run build`. Do not claim steps 1-6 live until the new backend is deployed and a physical Oracle bridge round trip is observed.
