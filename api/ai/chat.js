@@ -72,6 +72,7 @@ import {
 } from '../_utils/brainTurn.js';
 import { resolveExplicitHealthSelfReport } from '../_utils/brainHealthSelfReports.js';
 import { closeBrainInteraction } from '../_utils/brainWhatsappReliability.js';
+import { proposeProjectMonitorFromTurn, retireProjectMonitorFromTurn } from '../_utils/brainMonitors.js';
 import {
   buildOperationalContextAnswer,
   buildOperationalContextClarification,
@@ -2092,6 +2093,7 @@ async function sendAiSuccess(res, status, data, context, logInfo) {
       actionType,
     });
   }
+  await safeMaintainBrainMonitors({ context, message: memoryExtractionMessage || logInfo?.message });
   const payload = {
     ...responseData,
     ...(context?.clientRequestId ? { client_request_id: context.clientRequestId } : {}),
@@ -2203,6 +2205,22 @@ async function safeUpdateBrainTraceMetadata({ context, assistantMessage, brainTr
       requestId: context?.requestId,
       stage: 'brain_trace_update',
       error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+    }));
+  }
+}
+
+async function safeMaintainBrainMonitors({ context, message }) {
+  if (!context?.brainChat || !message) return;
+  try {
+    const retired = await retireProjectMonitorFromTurn({ message });
+    if (!retired) {
+      await proposeProjectMonitorFromTurn({ message, channel: context.source === 'whatsapp' ? 'whatsapp' : 'app',
+        messageId: context.brainChat.userMessage?.id });
+    }
+  } catch (error) {
+    console.error('[LifeOS Brain monitor warning]', JSON.stringify({
+      requestId: context?.requestId, stage: 'monitor_maintenance',
+      error: error instanceof Error ? error.message : 'Monitor maintenance unavailable',
     }));
   }
 }

@@ -44,6 +44,8 @@ export function normalizeExternalSyncRequest(input, { now = new Date() } = {}) {
   }
   const targets = updates.map((update) => update.type === 'autobiographical_memory'
     ? `memory:${update.client_update_id}`
+    : update.type === 'monitor_permission'
+      ? `permission:${update.permission}`
     : update.type === 'routine_state'
     ? `routine:${update.routine_id}`
     : update.type === 'preference'
@@ -198,6 +200,13 @@ function normalizeUpdate(input, capturedAt, nowMs) {
     normalizeRoutineStateTransition({ routineId, state, confidence, effectiveUntil: until });
     return { ...common, routine_id: routineId, state, effective_from: effectiveFrom, effective_until: until };
   }
+  if (type === 'monitor_permission') {
+    allowKeys(input, ['client_update_id', 'type', 'permission', 'enabled', 'confidence', 'effective_from', 'evidence_summary'], 'monitor_permission');
+    if (!['monitor', 'message'].includes(input.permission) || typeof input.enabled !== 'boolean') {
+      throw invalid('Only explicit boolean MONITOR or MESSAGE permission may be synchronized.');
+    }
+    return { ...common, permission: input.permission, enabled: input.enabled, effective_from: effectiveFrom };
+  }
   if (type === 'preference') {
     allowKeys(input, ['client_update_id', 'type', 'key', 'value', 'confidence', 'effective_from', 'evidence_summary'], 'preference');
     const key = requiredText(input.key, 80, 'key', /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/);
@@ -255,6 +264,11 @@ async function applyUpdate(update, { request, userId, client, auditId }) {
     subjectKey = identity.subject_key;
     predicate = identity.predicate;
     value = { state: update.state, routine_id: update.routine_id };
+  } else if (update.type === 'monitor_permission') {
+    subjectType = 'companion_permission';
+    subjectKey = `companion.${update.permission}`;
+    predicate = 'grant';
+    value = { enabled: update.enabled };
   } else if (update.type === 'preference') {
     subjectType = 'preference';
     subjectKey = update.key;

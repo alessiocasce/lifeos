@@ -43,7 +43,7 @@ const JSONRPC_ERRORS = {
 const TOOL_DEFINITIONS = [
   {
     name: 'sync_context',
-    description: 'Explicitly sync up to 8 validated routine, preference, existing-project, or autobiographical-memory changes into LifeOS. Requires lifeos.write. Idempotent; does not execute operational actions or send messages.',
+    description: 'Explicitly sync up to 8 validated routine, preference, existing-project, autobiographical-memory, or MONITOR/MESSAGE standing-permission changes into LifeOS. Requires lifeos.write. Idempotent; does not execute operational actions or send messages.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -62,7 +62,7 @@ const TOOL_DEFINITIONS = [
         summary: { type: 'string', description: 'Brief user-visible reason for this explicit sync.' },
         updates: {
           type: 'array', minItems: 1, maxItems: 8,
-          description: 'Semantic deltas only: routine_state, preference, project_context, or autobiographical_memory. Each requires client_update_id, confidence >= 0.8, and evidence_summary.',
+          description: 'Semantic deltas only: routine_state, preference, project_context, autobiographical_memory, or monitor_permission. Permission changes must reflect an explicit user authorization. Each requires client_update_id, confidence >= 0.8, and evidence_summary.',
           items: semanticSyncUpdateSchema(),
         },
       },
@@ -588,6 +588,17 @@ function semanticSyncUpdateSchema() {
           value: { oneOf: [{ type: 'string', maxLength: 160 }, { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', maxLength: 48 } }] },
         },
         required: ['client_update_id', 'type', 'key', 'value', 'confidence', 'evidence_summary'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          ...common,
+          type: { type: 'string', const: 'monitor_permission' },
+          permission: { type: 'string', enum: ['monitor', 'message'] },
+          enabled: { type: 'boolean' },
+        },
+        required: ['client_update_id', 'type', 'permission', 'enabled', 'confidence', 'evidence_summary'],
         additionalProperties: false,
       },
       {
