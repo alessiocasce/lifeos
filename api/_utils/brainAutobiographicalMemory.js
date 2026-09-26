@@ -15,7 +15,7 @@ const MAX_CONTEXT_ITEMS = 8;
 export function normalizeAutobiographicalCandidate(input, { capturedAt = new Date(), userMessage = '', source = null } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   if (input.memory_kind && !KINDS.has(input.memory_kind)) return null;
-  const memoryKind = input.memory_kind || 'semantic_fact';
+  const memoryKind = classifyMemoryKind(input.memory_kind || 'semantic_fact', userMessage, input.content);
   const memorySource = source || input.source || 'assistant_inferred';
   const title = boundedText(input.title, 80);
   const content = boundedText(input.content, 400);
@@ -31,12 +31,14 @@ export function normalizeAutobiographicalCandidate(input, { capturedAt = new Dat
   const projectName = boundedText(input.project_name, 120);
   if (input.project_id && !projectId) return null;
   if (memoryKind === 'project_memory' && !projectId && !projectName) return null;
-  const subjectKey = normalizeSubjectKey(input.subject_key, memoryKind, category, title);
+  const preference = !input.subject_key && category === 'preference' && memoryKind === 'semantic_fact'
+    ? stableCommunicationPreference(userMessage || content) : null;
+  const subjectKey = preference?.subject_key || normalizeSubjectKey(input.subject_key, memoryKind, category, title);
   if (input.subject_key && !subjectKey) return null;
   const time = normalizeMemoryTime(input, { capturedAt, userMessage });
   if (!time) return null;
   return {
-    memory_kind: memoryKind, category, title, content, source: memorySource,
+    memory_kind: memoryKind, category, title, content: preference?.content || content, source: memorySource,
     confidence, importance, subject_key: subjectKey, project_id: projectId,
     project_name: projectName, ...time,
   };
@@ -52,11 +54,20 @@ export async function curateAutobiographicalMemory({
   if (project.status === 'rejected') return project;
   const projectId = project.project_id;
   const safeProvenance = normalizeMemoryProvenance(provenance, capturedAt, normalized.temporal_precision);
-  const dedupeKey = crypto.createHash('sha256').update(JSON.stringify([
+  let dedupeKey = crypto.createHash('sha256').update(JSON.stringify([
     userId, normalized.memory_kind, projectId, normalized.subject_key,
-    normalized.content.toLocaleLowerCase().replace(/\s+/g, ' ').trim(),
+    normalized.content.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(),
     normalized.memory_kind === 'episode' ? normalized.occurred_at || normalized.occurred_on : null,
   ])).digest('hex');
+  if (normalized.category === 'preference' && normalized.subject_key?.startsWith('preference.communication_')) {
+    const existing = await client.from('ai_memories')
+      .select('dedupe_key, content').eq('user_id', userId).eq('status', 'active')
+      .eq('category', 'preference').order('created_at', { ascending: true }).limit(100);
+    if (existing.error) throw new Error('Autobiographical memory could not be checked.');
+    const match = (existing.data || []).find((row) =>
+      row.dedupe_key && stableCommunicationPreference(row.content)?.content === normalized.content);
+    if (match) dedupeKey = match.dedupe_key;
+  }
   const stored = await client.rpc('curate_autobiographical_memory', {
     p_user_id: userId,
     p_memory_kind: normalized.memory_kind,
@@ -83,6 +94,35 @@ export async function curateAutobiographicalMemory({
       : row.dedupe_key === dedupeKey ? null : 'stronger_explicit_memory_exists',
     memory: row,
   };
+}
+
+function classifyMemoryKind(kind, message, content) {
+  if (kind !== 'semantic_fact') return kind;
+  const text = `${message || ''} ${content || ''}`.toLocaleLowerCase();
+  const dated = /\b(?:yesterday|ieri|last (?:month|week|year)|mese scorso|settimana scorsa|anno scorso|on (?:\w+\s+)?\d{1,2}|il \d{1,2}|\d{4}-\d{2}-\d{2})\b/i.test(text);
+  if (!dated) return kind;
+  if (/\b(?:decided|chose|agreed|ho deciso|abbiamo deciso|scelto|deciso)\b/i.test(text)) return 'decision';
+  if (/\b(?:started|stopped|began|joined|graduated|launched|deployed|shipped|finished|moved|quit|iniziato|iniziata|smesso|smessa|lanciato|pubblicato|rilasciato|finito|trasferito)\b/i.test(text)) return 'episode';
+  return kind;
+}
+
+function stableCommunicationPreference(value) {
+  const text = String(value || '').toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/\b(?:don't|do not|never|non)\b/.test(text)) return null;
+  if (!/\b(?:i prefer|preferisco|keep|give me|risposte|answers|replies|explanations|spiegazioni|prefers)\b/.test(text)) return null;
+  if (/\b(?:clear|chiare)\b/.test(text) && /\b(?:technical|tecniche)\b/.test(text)
+    && /\b(?:explanations|spiegazioni)\b/.test(text)) {
+    return { subject_key: 'preference.communication_explanation_style', content: 'User prefers clear technical explanations.' };
+  }
+  if (/\b(?:answers|replies|responses|risposte)\b/.test(text)) {
+    if (/\b(?:concise|short|brief|succinct|brevi|sintetiche|corte)\b/.test(text)) {
+      return { subject_key: 'preference.communication_response_length', content: 'User prefers concise answers.' };
+    }
+    if (/\b(?:detailed|long|thorough|dettagliate|lunghe)\b/.test(text)) {
+      return { subject_key: 'preference.communication_response_length', content: 'User prefers detailed answers.' };
+    }
+  }
+  return null;
 }
 
 export async function searchAutobiographicalMemory({

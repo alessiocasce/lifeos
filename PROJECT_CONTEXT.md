@@ -44,6 +44,8 @@ Apply `supabase/migrations/20260925120000_companion_external_sync.sql` after the
 
 The combined execution brief is **`docs/CODEX_COMPANION_VNEXT_SLICE25_AND_3.md`**.
 
+Slice 3.1 memory hardening now guards observational recall from explicit-memory parsing and post-answer extraction, repairs clearly dated event/decision kinds, and reconfirms narrowly recognized cross-channel communication preferences (including punctuation variants). It does not rewrite the two existing production duplicate preference rows. Run `npm run test:memory` and read `docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md` before Slice 4 work. No schema rerun is required for Slice 3.1.
+
 The run is deliberately security-gated: OAuth authorization-code replay hardening must be completed, tested, and checkpointed before any deep-memory work begins. Authorization codes must become single-use across concurrent serverless instances without persisting raw codes, PKCE verifiers, access tokens, or secrets.
 
 After that gate is green, Slice 3 evolves the existing `ai_memories` / `brain_beliefs` / `ai_insights` / Brain Vault split into autobiographical memory v1: current beliefs remain authoritative current truth; curated memories represent durable facts, episodes, decisions, goals, constraints, and grounded project history; insights remain hypotheses; Vault remains long-form knowledge. Retrieval must be bounded and relevant rather than a full memory dump.

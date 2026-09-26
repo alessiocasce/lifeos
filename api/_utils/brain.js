@@ -435,6 +435,7 @@ export function shouldExtractMemory(userMessage, assistantAnswer, actionType) {
   const message = String(userMessage ?? '').trim();
   const answer = String(assistantAnswer ?? '').trim();
   if (message.length < 12 || containsSecretLikeText(message)) return false;
+  if (isObservationalMemoryQuestion(message)) return false;
   if (extractExplicitMemoryCommand(message)) return true;
   if (/\bremember that\b|\bremember this\b|\bricorda che\b|\bprefer\b|\bpreferisco\b|\bi (?:like|love|hate|dislike)\b|\bmy goal\b|\bil mio obiettivo\b/i.test(message) || DIRECT_MEMORY_STATEMENT.test(message)) {
     return true;
@@ -569,7 +570,7 @@ export async function archiveMatchingBrainMemory({ target, existingMemories = []
 
 export function extractExplicitMemoryCommand(message) {
   const text = String(message ?? '').trim();
-  if (!text || containsSecretLikeText(text)) return null;
+  if (!text || containsSecretLikeText(text) || isObservationalMemoryQuestion(text)) return null;
 
   const name = extractPreferredName(text);
   if (name) {
@@ -586,8 +587,8 @@ export function extractExplicitMemoryCommand(message) {
     };
   }
 
-  const explicitFact = text.match(/\b(?:remember that|remember this|ricorda che|ricordati che)\s+(.+)/i)?.[1]
-    ?? text.match(/\bremember\s+(?!to\b)(.+)/i)?.[1];
+  const explicitFact = text.match(/^(?:please\s+)?(?:remember that|remember this|ricorda che|ricordati che)\s+(.+)/i)?.[1]
+    ?? text.match(/^(?:please\s+)?remember\s+(?!to\b)(.+)/i)?.[1];
   if (!explicitFact) return null;
   const content = formatExplicitFactMemory(explicitFact);
   if (!content) return null;
@@ -613,6 +614,12 @@ export function generateThreadTitle(message) {
   const words = cleaned.split(' ').filter(Boolean).slice(0, 7);
   if (!words.length) return 'New Chat';
   return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ').slice(0, 80);
+}
+
+export function isObservationalMemoryQuestion(message) {
+  const text = String(message ?? '').trim();
+  return /^(?:what|when|where|why|how|do you|did i|can you|could you|cosa|che cosa|quando|dove|perche|perché|come|ti ricordi|ricordi|sai|cosa sai)\b/i.test(text)
+    && /\b(?:remember|recall|memory|memories|prefer|preference|told|tell|know|ricord|memor|prefer|detto|sai|sapere|decision|decis|stopp|smess)\w*/i.test(text);
 }
 
 function generateWhatsappThreadTitle(sender) {
@@ -655,9 +662,10 @@ function normalizeInsightCandidate(candidate) {
 }
 
 function explicitMemoryFallback(message) {
+  if (isObservationalMemoryQuestion(message)) return null;
   const command = extractExplicitMemoryCommand(message);
   if (command?.memory) return command.memory;
-  const match = String(message ?? '').match(/\b(?:remember that|remember this|ricorda che|ricordati che)\s+(.+)/i);
+  const match = String(message ?? '').match(/^\s*(?:please\s+)?(?:remember that|remember this|ricorda che|ricordati che)\s+(.+)/i);
   if (!match?.[1]) return null;
   const content = cleanText(match[1], 400);
   if (!content || containsSecretLikeText(content)) return null;

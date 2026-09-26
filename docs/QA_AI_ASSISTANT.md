@@ -795,5 +795,8 @@ Prerequisite: apply `20260925130000_mcp_oauth_code_redemptions.sql` and `2026092
 5. Ask a topical memory question and confirm relevant memories are used without a whole-memory dump. Ask a present-state question with conflicting historical memory and current belief; current belief wins.
 6. Call MCP `search_memory` with `lifeos.read`, then with `include_historical=true`. Verify limits, historical labels, and no secrets. Attempt `sync_context` with a read-only token and confirm rejection; with explicit `lifeos.write`, sync one bounded memory and replay its idempotency key. Confirm no Health, memo, calendar, project-progress, outbox, or action-log row changed.
 7. Try `Thanks`, a routine completion, and credential-like text. Confirm they are not curated as autobiographical memory. Confirm forget/archive and Vault save still work.
+8. Ask `What do you remember about how I prefer explanations?` and `Do you remember when I stopped skincare?`; inspect the related `ai_chat_messages` and confirm neither turn creates an `ai_memories` row. An explicit `Remember that ...` must still save.
+9. State `On September 20 I started university` and a dated decision; confirm `episode` and `decision` kinds respectively. A dated preference should remain `semantic_fact`.
+10. State `I prefer concise answers` in app and `Yeah keep your answers pretty short` in WhatsApp; confirm one active communication-preference subject and a WhatsApp `last_seen_source`. Do not delete older production QA duplicates without a separate data review.
 
 Local PGlite tests do not prove live Gemini extraction quality, deployed OAuth, or physical WhatsApp delivery. Inspect sanitized trace and database state after deployment before claiming live end-to-end success.

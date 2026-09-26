@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { curateAutobiographicalMemory, normalizeAutobiographicalCandidate, rankAutobiographicalInsights, searchAutobiographicalMemory } from '../api/_utils/brainAutobiographicalMemory.js';
 import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
 import { buildLifeOSContext } from '../api/_utils/lifeosContextCompiler.js';
-import { archiveMatchingBrainMemory, extractAndPersistBrainKnowledge, formatBrainContextForPrompt, loadBrainContext, shouldExtractMemory } from '../api/_utils/brain.js';
+import { archiveMatchingBrainMemory, extractAndPersistBrainKnowledge, extractExplicitMemoryCommand, formatBrainContextForPrompt, loadBrainContext, shouldExtractMemory } from '../api/_utils/brain.js';
+import { safeExtractBrainKnowledge } from '../api/ai/chat.js';
 
 const { db, client } = await createReliabilityDatabase();
 const capturedAt = new Date('2026-09-25T12:00:00Z');
@@ -18,6 +19,23 @@ try {
   assert.equal(shouldExtractMemory('I launched LifeOS beta yesterday.', 'Noted.', 'analysis'), true);
   assert.equal(shouldExtractMemory('I took creatine today.', 'Done.', 'update_health_log'), false);
   assert.equal(shouldExtractMemory('Thanks!', 'You are welcome.', 'casual_chat'), false);
+  assert.equal(shouldExtractMemory('What do you remember about how I prefer explanations?', 'You prefer clarity.', 'memory_recall'), false);
+  assert.equal(extractExplicitMemoryCommand('What do you remember about how I prefer explanations?'), null);
+  assert.equal(extractExplicitMemoryCommand('Do you remember when I stopped skincare?'), null);
+  assert.ok(extractExplicitMemoryCommand('Remember that I prefer clear technical explanations.'));
+  assert.equal(normalizeAutobiographicalCandidate({
+    memory_kind: 'semantic_fact', category: 'productivity', title: 'Started university',
+    content: 'I started university on September 20.', source: 'assistant_inferred',
+    occurred_on: '2026-09-20',
+  }, { capturedAt, userMessage: 'On September 20 I started university.' }).memory_kind, 'episode');
+  assert.equal(normalizeAutobiographicalCandidate({
+    memory_kind: 'semantic_fact', category: 'project', title: 'LifeOS priority',
+    content: 'We decided yesterday that LifeOS is the priority.', source: 'assistant_inferred',
+  }, { capturedAt, userMessage: 'We decided yesterday that LifeOS is the priority.' }).memory_kind, 'decision');
+  assert.equal(normalizeAutobiographicalCandidate({
+    memory_kind: 'semantic_fact', category: 'preference', title: 'Calendar preference',
+    content: 'I prefer a calendar view on September 20.', source: 'assistant_inferred',
+  }, { capturedAt, userMessage: 'I prefer a calendar view on September 20.' }).memory_kind, 'semantic_fact');
   assert.deepEqual(rankAutobiographicalInsights([
     { id: 'unrelated', title: 'Food', content: 'Maybe nutrition matters.', created_at: '2026-09-25T11:00:00Z' },
     { id: 'relevant', title: 'Workout', content: 'Maybe bench press progression matters.', created_at: '2026-09-24T11:00:00Z' },
@@ -149,13 +167,36 @@ try {
     channel: 'app', client, userId: fixtureUser,
   });
   const whatsappMemory = await extractAndPersistBrainKnowledge({
-    userMessage: 'Remember that I prefer clear technical explanations.',
+    userMessage: 'Remember that I prefer clear, technical explanations.',
     assistantAnswer: 'I will remember that.', actionType: 'memory_write',
     channel: 'whatsapp', client, userId: fixtureUser,
   });
   assert.equal(appMemory.memories[0].id, whatsappMemory.memories[0].id);
   assert.equal(whatsappMemory.memories[0].provenance.channel, 'app');
   assert.equal(whatsappMemory.memories[0].provenance.last_seen_source.channel, 'whatsapp');
+  const shortApp = await save({ memory_kind: 'semantic_fact', category: 'preference', title: 'Short answers',
+    content: 'I prefer concise answers.', source: 'user_explicit' },
+  { userMessage: 'I prefer concise answers.', provenance: { source_system: 'lifeos', channel: 'app' } });
+  const shortWhatsapp = await save({ memory_kind: 'semantic_fact', category: 'preference', title: 'Short replies',
+    content: 'Yeah keep your answers pretty short.', source: 'user_explicit' },
+  { userMessage: 'Yeah keep your answers pretty short.', provenance: { source_system: 'lifeos', channel: 'whatsapp' } });
+  assert.equal(shortWhatsapp.memory.id, shortApp.memory.id);
+  assert.equal(shortWhatsapp.memory.provenance.last_seen_source.channel, 'whatsapp');
+  assert.equal((await client.from('ai_memories').select('id').eq('user_id', fixtureUser)
+    .eq('subject_key', 'preference.communication_response_length').eq('status', 'active')).data.length, 1);
+  const countBeforeRecall = (await client.from('ai_memories').select('id').eq('user_id', fixtureUser)).data.length;
+  const recallExtraction = await extractAndPersistBrainKnowledge({
+    userMessage: 'What do you remember about how I prefer explanations?',
+    assistantAnswer: 'You prefer clear technical explanations.', actionType: 'memory_recall',
+    channel: 'app', client, userId: fixtureUser,
+  });
+  assert.deepEqual(recallExtraction, { memories: [], insights: [] });
+  assert.equal((await client.from('ai_memories').select('id').eq('user_id', fixtureUser)).data.length, countBeforeRecall);
+  assert.equal(await safeExtractBrainKnowledge({
+    context: { brainChat: { userMessage: { id: 'test' } }, requestId: 'test' },
+    message: 'I prefer concise answers.', answer: 'Understood.', actionType: 'analysis',
+    extractKnowledge: async () => { throw new Error('curator unavailable'); },
+  }), undefined);
   assert.equal((await searchAutobiographicalMemory({ userId: fixtureUser, client, query: 'technical explanations' })).memories[0].id, appMemory.memories[0].id);
   const forgetContext = await loadBrainContext({ client, userId: fixtureUser, message: 'forget clear technical explanations' });
   const forgotten = await archiveMatchingBrainMemory({

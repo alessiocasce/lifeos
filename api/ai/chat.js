@@ -1393,10 +1393,10 @@ async function safePersistBrainError(context, error) {
   }
 }
 
-async function safeExtractBrainKnowledge({ context, message, answer, actionType }) {
+export async function safeExtractBrainKnowledge({ context, message, answer, actionType, extractKnowledge = extractAndPersistBrainKnowledge }) {
   if (!context?.brainChat) return;
   try {
-    await extractAndPersistBrainKnowledge({
+    await extractKnowledge({
       userMessage: message,
       assistantAnswer: answer,
       actionType,
