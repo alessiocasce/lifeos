@@ -17,6 +17,8 @@ if (!LINK_SECRET) {
 
 const checks = [];
 const oauth = {};
+const issuedCodes = [];
+const issuedTokens = [];
 
 test('direct protected resource metadata is available', async () => {
   const response = await fetchJson(`${BASE_URL}/api/mcp?mcp_oauth=protected-resource`);
@@ -85,6 +87,7 @@ test('direct authorize post returns signed code redirect', async () => {
   assertEqual(redirect.searchParams.get('state'), oauth.state);
   oauth.code = redirect.searchParams.get('code');
   assert(oauth.code, 'missing authorization code');
+  issuedCodes.push(oauth.code);
 });
 
 test('direct token endpoint exchanges code for bearer token', async () => {
@@ -106,6 +109,37 @@ test('direct token endpoint exchanges code for bearer token', async () => {
   assert(Number(response.body.expires_in) > 0, 'missing expires_in');
   oauth.accessToken = response.body.access_token;
   assert(oauth.accessToken, 'missing access token');
+  issuedTokens.push(oauth.accessToken);
+});
+
+test('redeemed authorization code cannot be replayed', async () => {
+  const response = await exchangeCode(oauth.code, oauth.codeVerifier);
+  assertEqual(response.status, 400);
+  assertEqual(response.body?.error, 'invalid_grant');
+});
+
+test('concurrent redemption of one code succeeds exactly once', async () => {
+  const pkce = buildPkce();
+  const code = await authorizeCode(pkce);
+  const responses = await Promise.all([
+    exchangeCode(code, pkce.codeVerifier),
+    exchangeCode(code, pkce.codeVerifier),
+  ]);
+  assertEqual(responses.filter((response) => response.status === 200).length, 1);
+  assertEqual(responses.filter((response) => response.status === 400 && response.body?.error === 'invalid_grant').length, 1);
+  const token = responses.find((response) => response.status === 200)?.body?.access_token;
+  if (token) issuedTokens.push(token);
+});
+
+test('wrong PKCE verifier does not consume a valid code', async () => {
+  const pkce = buildPkce();
+  const code = await authorizeCode(pkce);
+  const wrong = await exchangeCode(code, buildPkce().codeVerifier);
+  assertEqual(wrong.status, 400);
+  assertEqual(wrong.body?.error, 'invalid_grant');
+  const valid = await exchangeCode(code, pkce.codeVerifier);
+  assertEqual(valid.status, 200);
+  if (valid.body?.access_token) issuedTokens.push(valid.body.access_token);
 });
 
 test('OAuth access token can call MCP tools/list', async () => {
@@ -121,6 +155,65 @@ test('OAuth access token can call MCP tools/list', async () => {
   const toolNames = response.body.result?.tools?.map((tool) => tool.name) ?? [];
   assert(toolNames.includes('get_lifeos_snapshot'), 'OAuth tools/list missing LifeOS tools');
 });
+
+test('read-only OAuth token cannot call sync_context', async () => {
+  const response = await fetchJson(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${oauth.accessToken}`,
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'sync_context', arguments: {} } }),
+  });
+  assertEqual(response.status, 200);
+  assertEqual(response.body?.error?.code, -32003);
+});
+
+if (process.env.LIFEOS_RUN_LIVE_MCP_WRITE_SMOKE === 'true') {
+  test('explicit write-scope sync is idempotent and visible to a read token', async () => {
+    const pkce = buildPkce();
+    const code = await authorizeCode(pkce, 'lifeos.read lifeos.write');
+    const exchange = await exchangeCode(code, pkce.codeVerifier);
+    assertEqual(exchange.status, 200);
+    assertEqual(exchange.body?.scope, 'lifeos.read lifeos.write');
+    const writeToken = exchange.body?.access_token;
+    assert(writeToken, 'missing write-scoped access token');
+    issuedTokens.push(writeToken);
+
+    const auditKey = `codex-oauth-smoke-${crypto.randomUUID()}`;
+    const request = {
+      idempotency_key: auditKey,
+      source: {
+        system: 'codex', kind: 'explicit_conversation_sync',
+        captured_at: new Date().toISOString(), reference: auditKey,
+      },
+      summary: 'User-approved reconfirmation of an existing communication preference.',
+      updates: [{
+        client_update_id: 'communication-style', type: 'preference',
+        key: 'communication.style', value: 'clear technical explanations',
+        confidence: 0.99,
+        evidence_summary: 'User explicitly stated a preference for clear technical explanations in LifeOS.',
+      }],
+    };
+    const call = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'sync_context', arguments: request } };
+    const applied = await callMcp(writeToken, call);
+    assertEqual(applied.status, 200);
+    assertEqual(applied.body?.result?.structuredContent?.status, 'applied');
+    const replay = await callMcp(writeToken, call);
+    assertEqual(replay.status, 200);
+    assertEqual(replay.body?.result?.structuredContent?.idempotent_replay, true);
+
+    const readback = await callMcp(oauth.accessToken, {
+      jsonrpc: '2.0', id: 4, method: 'tools/call',
+      params: { name: 'get_current_beliefs', arguments: { subject_type: 'preference', limit: 100 } },
+    });
+    assertEqual(readback.status, 200);
+    const beliefs = readback.body?.result?.structuredContent?.beliefs;
+    assert(Array.isArray(beliefs), 'belief readback missing beliefs array');
+    assert(beliefs.some((belief) => belief.subject_key === 'communication.style'
+      && belief.value?.value === 'clear technical explanations'), 'reconfirmed preference missing from readback');
+  });
+}
 
 for (const check of checks) {
   try {
@@ -147,6 +240,43 @@ function buildPkce() {
   const codeVerifier = base64url(crypto.randomBytes(32));
   const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
   return { codeVerifier, codeChallenge };
+}
+
+async function authorizeCode(pkce, scope = 'lifeos.read') {
+  const form = new URLSearchParams({
+    response_type: 'code', client_id: oauth.clientId, redirect_uri: oauth.redirectUri,
+    state: crypto.randomUUID(), code_challenge: pkce.codeChallenge,
+    code_challenge_method: 'S256', resource: `${BASE_URL}/api/mcp`, scope,
+    link_secret: LINK_SECRET,
+  });
+  const response = await fetch(oauth.authorizationEndpoint, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString(),
+  });
+  assertEqual(response.status, 302);
+  const code = new URL(response.headers.get('location')).searchParams.get('code');
+  assert(code, 'missing authorization code');
+  issuedCodes.push(code);
+  return code;
+}
+
+async function exchangeCode(code, codeVerifier) {
+  return fetchJson(oauth.tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code', code, client_id: oauth.clientId,
+      redirect_uri: oauth.redirectUri, code_verifier: codeVerifier,
+    }).toString(),
+  });
+}
+
+async function callMcp(token, body) {
+  return fetchJson(`${BASE_URL}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
 }
 
 async function fetchJson(url, options = {}) {
@@ -236,9 +366,8 @@ function assertEqual(actual, expected) {
 
 function safeError(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(LINK_SECRET, '[redacted]')
-    .replace(oauth.code || 'no-code', '[redacted-code]')
-    .replace(oauth.accessToken || 'no-token', '[redacted-token]')
-    .slice(0, 500);
+  let safe = message.replaceAll(LINK_SECRET, '[redacted]');
+  for (const code of issuedCodes) safe = safe.replaceAll(code, '[redacted-code]');
+  for (const token of issuedTokens) safe = safe.replaceAll(token, '[redacted-token]');
+  return safe.slice(0, 500);
 }
