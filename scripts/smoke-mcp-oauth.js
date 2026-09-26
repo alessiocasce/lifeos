@@ -169,16 +169,20 @@ test('read-only OAuth token cannot call sync_context', async () => {
   assertEqual(response.body?.error?.code, -32003);
 });
 
+test('write-scoped OAuth grant is issued without a data write', async () => {
+  const pkce = buildPkce();
+  const code = await authorizeCode(pkce, 'lifeos.read lifeos.write');
+  const exchange = await exchangeCode(code, pkce.codeVerifier);
+  assertEqual(exchange.status, 200);
+  assertEqual(exchange.body?.scope, 'lifeos.read lifeos.write');
+  oauth.writeToken = exchange.body?.access_token;
+  assert(oauth.writeToken, 'missing write-scoped access token');
+  issuedTokens.push(oauth.writeToken);
+});
+
 if (process.env.LIFEOS_RUN_LIVE_MCP_WRITE_SMOKE === 'true') {
   test('explicit write-scope sync is idempotent and visible to a read token', async () => {
-    const pkce = buildPkce();
-    const code = await authorizeCode(pkce, 'lifeos.read lifeos.write');
-    const exchange = await exchangeCode(code, pkce.codeVerifier);
-    assertEqual(exchange.status, 200);
-    assertEqual(exchange.body?.scope, 'lifeos.read lifeos.write');
-    const writeToken = exchange.body?.access_token;
-    assert(writeToken, 'missing write-scoped access token');
-    issuedTokens.push(writeToken);
+    assert(oauth.writeToken, 'write-scoped grant must succeed before sync');
 
     const auditKey = `codex-oauth-smoke-${crypto.randomUUID()}`;
     const request = {
@@ -196,10 +200,10 @@ if (process.env.LIFEOS_RUN_LIVE_MCP_WRITE_SMOKE === 'true') {
       }],
     };
     const call = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'sync_context', arguments: request } };
-    const applied = await callMcp(writeToken, call);
+    const applied = await callMcp(oauth.writeToken, call);
     assertEqual(applied.status, 200);
     assertEqual(applied.body?.result?.structuredContent?.status, 'applied');
-    const replay = await callMcp(writeToken, call);
+    const replay = await callMcp(oauth.writeToken, call);
     assertEqual(replay.status, 200);
     assertEqual(replay.body?.result?.structuredContent?.idempotent_replay, true);
 
