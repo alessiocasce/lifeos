@@ -20,6 +20,7 @@ const EXPECTED_TOOLS = [
   'get_whatsapp_proactive_debug',
   'get_monitors',
   'get_attention_debug',
+  'search_memory',
   'search_lifeos_vault',
   'get_open_loops',
 ];
@@ -188,6 +189,13 @@ test('get_monitors and get_attention_debug expose read-only Slice 4 shapes', asy
   assert(Array.isArray(attention.decisions), 'attention result missing decisions array');
   assertNoSecretLikeKeys(monitors);
   assertNoSecretLikeKeys(attention);
+});
+
+test('search_memory exposes bounded read-only autobiography', async () => {
+  const memory = parseToolText(await callTool('search_memory', { query: 'communication preferences', limit: 3 }));
+  assert(Array.isArray(memory.memories), 'memory search missing memories array');
+  assert(memory.returned_count <= 3, 'memory search exceeded requested limit');
+  assertNoSecretLikeKeys(memory);
 });
 
 test('Slice 4 MCP resources return JSON', async () => {
