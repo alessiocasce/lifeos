@@ -18,6 +18,8 @@ const EXPECTED_TOOLS = [
   'get_brain_debug_context',
   'get_whatsapp_outbox_recent',
   'get_whatsapp_proactive_debug',
+  'get_monitors',
+  'get_attention_debug',
   'search_lifeos_vault',
   'get_open_loops',
 ];
@@ -36,6 +38,8 @@ const EXPECTED_RESOURCES = [
   'lifeos://brain/recent-actions',
   'lifeos://whatsapp/outbox/recent',
   'lifeos://whatsapp/proactive-debug',
+  'lifeos://brain/monitors',
+  'lifeos://brain/attention-debug',
   'lifeos://vault/recent',
 ];
 
@@ -175,6 +179,25 @@ test('get_brain_debug_context returns compact trace context', async () => {
   assert(Array.isArray(parsed.traces), 'brain debug missing traces array');
   assert(Object.hasOwn(parsed, 'recent_action_logs'), 'brain debug missing action logs');
   assertNoSecretLikeKeys(parsed);
+});
+
+test('get_monitors and get_attention_debug expose read-only Slice 4 shapes', async () => {
+  const monitors = parseToolText(await callTool('get_monitors', { limit: 10 }));
+  const attention = parseToolText(await callTool('get_attention_debug', { limit: 10 }));
+  assert(Array.isArray(monitors.monitors), 'monitors result missing monitors array');
+  assert(Array.isArray(attention.decisions), 'attention result missing decisions array');
+  assertNoSecretLikeKeys(monitors);
+  assertNoSecretLikeKeys(attention);
+});
+
+test('Slice 4 MCP resources return JSON', async () => {
+  for (const uri of ['lifeos://brain/monitors', 'lifeos://brain/attention-debug']) {
+    const body = await rpc('resources/read', { uri });
+    const content = body.result.contents?.[0];
+    assertEqual(content?.uri, uri);
+    assertEqual(content?.mimeType, 'application/json');
+    assertNoSecretLikeKeys(JSON.parse(content.text));
+  }
 });
 
 test('resources/read lifeos://brain/debug returns JSON content', async () => {
