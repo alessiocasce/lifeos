@@ -4,7 +4,7 @@ import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabili
 import { applyBeliefTransition } from '../api/_utils/brainBeliefs.js';
 import { syncExternalContext } from '../api/_utils/brainExternalSync.js';
 import { loadMonitorPermissions, normalizeMonitorPermissions } from '../api/_utils/brainMonitorPermissions.js';
-import { createValidatedMonitor, loadDueMonitors, normalizeMonitorProposal, proposeProjectMonitorFromTurn, retireProjectMonitorFromTurn, transitionMonitorState } from '../api/_utils/brainMonitors.js';
+import { createValidatedMonitor, isClearProjectClosureStatement, loadDueMonitors, normalizeMonitorProposal, proposeProjectMonitorFromTurn, retireProjectMonitorFromTurn, transitionMonitorState } from '../api/_utils/brainMonitors.js';
 import { decideAttention, decideAccountabilityAttention, nextAvailableAttentionTime, recordAttentionDecision, recordAttentionOutbox } from '../api/_utils/brainAttentionEngine.js';
 import { evaluateDueMonitors, evaluateProjectMonitorSignal, nextMonitorCheckAt } from '../api/_utils/brainMonitorEvaluation.js';
 import { enqueueOutboxMessage, pollOutboxMessages, proactiveAssistantMetadata } from '../api/_utils/brainOutbox.js';
@@ -155,6 +155,12 @@ try {
     assistantMessage: { ...assistant, metadata: proactiveAssistantMetadata(followup.row) }, now });
   await resolveMonitorProactiveReply({ message: 'not now', selection: followupSelection, userId: fixtureUser, client, now });
   assert.equal((await client.from('brain_monitors').select('state').eq('id', created.monitor.id).single()).data.state, 'suspended');
+  for (const message of ["I haven't finished LifeOS.", 'Non ho finito LifeOS.', 'Did I finish LifeOS?',
+    'I completed another project. LifeOS is next.', 'I might finish LifeOS later.']) {
+    assert.equal(await retireProjectMonitorFromTurn({ message, userId: fixtureUser, client, now }), 0);
+  }
+  assert.equal((await client.from('brain_monitors').select('state').eq('id', created.monitor.id).single()).data.state, 'suspended');
+  assert.equal(isClearProjectClosureStatement('Ho finito LifeOS.', 'LifeOS'), true);
   assert.equal(await retireProjectMonitorFromTurn({ message: 'I completed LifeOS.', userId: fixtureUser, client, now }), 1);
   assert.equal((await loadDueMonitors({ userId: fixtureUser, client, now })).length, 0);
   assert.equal((await transitionMonitorState({ monitorId: created.monitor.id, state: 'active', userId: fixtureUser, client, now })).status, 'unchanged');

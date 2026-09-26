@@ -103,14 +103,29 @@ export async function proposeProjectMonitorFromTurn({ message, channel = 'app', 
 
 export async function retireProjectMonitorFromTurn({ message, userId = getActionUserId(), client = getSupabaseAdmin(), now = new Date() } = {}) {
   const text = String(message || '').trim();
-  if (!/\b(?:finished|completed|shipped|cancelled|stopped|finito|completato|chiuso|annullato|non.*piu|not relevant|no longer relevant)\b/i.test(text)) return 0;
+  if (!text || text.includes('?')
+    || !/\b(?:finished|completed|shipped|cancelled|stopped|finito|completato|chiuso|annullato|relevant)\b/i.test(text)) return 0;
   const result = await client.from('brain_monitors').select(MONITOR_SELECT).eq('user_id', userId)
     .eq('monitor_type', 'project_staleness').in('state', ['active', 'suspended']).limit(100);
   if (result.error) throw result.error;
-  const matches = (result.data || []).filter((row) => row.subject?.length >= 4 && text.toLowerCase().includes(row.subject.toLowerCase()));
+  const matches = (result.data || []).filter((row) => row.subject?.length >= 4
+    && isClearProjectClosureStatement(text, row.subject));
   if (matches.length !== 1) return 0;
   const retired = await transitionMonitorState({ monitorId: matches[0].id, state: 'retired', userId, client, now });
   return retired.status === 'updated' ? 1 : 0;
+}
+
+export function isClearProjectClosureStatement(message, subject) {
+  const name = String(subject || '').trim().toLowerCase();
+  const text = String(message || '').trim();
+  if (name.length < 4 || text.includes('?')) return false;
+  return text.split(/(?:[.!?;,]\s+|\n+)/).some((part) => {
+    const clause = part.toLowerCase();
+    if (!clause.includes(name)) return false;
+    if (/\b(?:no longer relevant|not relevant anymore)\b/.test(clause)) return true;
+    if (/\b(?:not|never|no|non|mai|haven't|hasn't|didn't|don't|doesn't|isn't|wasn't|might|maybe|if|wish|hope|forse|vorrei|spero)\b/.test(clause)) return false;
+    return /\b(?:finished|completed|shipped|cancelled|stopped|finito|completato|chiuso|annullato)\b/.test(clause);
+  });
 }
 
 function safeText(value, max) {
