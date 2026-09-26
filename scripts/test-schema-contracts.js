@@ -85,7 +85,7 @@ finally { await migrationDb.close(); }
 const companionMigrationDb = new PGlite();
 try {
   const migration = readFileSync(new URL('../supabase/migrations/20260919120000_companion_beliefs.sql', import.meta.url), 'utf8');
-  const syncMigration = readFileSync(new URL('../supabase/migrations/20260925120000_companion_external_sync.sql', import.meta.url), 'utf8');
+  const syncMigration = readFileSync(new URL('../supabase/migrations/20260926172636_companion_external_sync.sql', import.meta.url), 'utf8');
   const oauthMigration = readFileSync(new URL('../supabase/migrations/20260925130000_mcp_oauth_code_redemptions.sql', import.meta.url), 'utf8');
   const user = '33333333-3333-4333-8333-333333333333';
   await companionMigrationDb.exec(`

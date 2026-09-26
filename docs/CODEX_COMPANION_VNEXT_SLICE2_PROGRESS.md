@@ -33,7 +33,7 @@ Keep MCP reads on `lifeos.read`. A separately configured static write token or a
 - `api/_utils/brainBeliefs.js`
 - `api/_utils/lifeosContextCompiler.js`
 - `supabase/schema.sql`
-- `supabase/migrations/20260925120000_companion_external_sync.sql`
+- `supabase/migrations/20260926172636_companion_external_sync.sql` (renamed to the later applied production version)
 - `tests/brain/reliabilityDatabase.js`
 - `scripts/test-schema-contracts.js`
 - `scripts/test-mcp-write.js`
@@ -48,7 +48,7 @@ Keep MCP reads on `lifeos.read`. A separately configured static write token or a
 
 ## Migrations
 
-Added `20260925120000_companion_external_sync.sql`. Live read-only preflight found the Slice 1 table/RPC present, but SQL EXECUTE on the RPC remained granted to `anon`/`authenticated` through inherited/default grants. The new migration revokes those privileges, retains authenticated SELECT under RLS, adds `external_sync` provenance, and creates the audit table. No production mutation was performed.
+At this historical Slice 2 checkpoint the migration was authored under the earlier filename and not applied. A 2026-09-26 audit confirmed the table and `external_sync` constraint were genuinely missing; it was then explicitly applied, verified, and renamed in-repo to production version `20260926172636_companion_external_sync.sql`. It revokes `anon`/`authenticated` RPC execution, retains authenticated SELECT under RLS, adds `external_sync` provenance, and creates the audit table. The earlier no-production-mutation statement below describes this historical checkpoint only.
 
 ## Tests
 

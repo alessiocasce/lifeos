@@ -803,7 +803,7 @@ Local PGlite tests do not prove live Gemini extraction quality, deployed OAuth, 
 
 ## Companion Slice 4 Monitor Journey
 
-Prerequisite: explicitly apply/verify `20260926112420_companion_attention_monitors.sql` before deploying the backend. MONITOR and MESSAGE standing permissions default off. Production external-sync storage was absent in the 2026-09-26 audit, so reconcile that migration before trying `sync_context` permission grants.
+Prerequisite: production `20260926172705_companion_attention_monitors.sql` and `20260926172636_companion_external_sync.sql` were explicitly applied and verified on 2026-09-26. The new backend still needs deployment. MONITOR and MESSAGE standing permissions default off; grant only through an explicit authorized `sync_context` after deployment.
 
 1. With no MONITOR grant, state a focus on one existing active project. Confirm no `brain_monitors` row appears; a suggestion is acceptable.
 2. Explicitly grant MONITOR, state the same focus, and confirm one typed project-staleness monitor with source provenance. Repeat via WhatsApp; confirm no duplicate.

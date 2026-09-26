@@ -7,7 +7,7 @@ Current branch: `main`
 
 Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.
 
-**Deployment gate:** production migration history lists only the Slice 3 memory version. Physical reliability, belief, and OAuth objects exist, but `brain_external_sync_requests` is missing and the belief source constraint lacks `external_sync`. The new `20260926112420_companion_attention_monitors.sql` is not applied. Do not run blanket `supabase db push` or deploy this backend before explicitly reconciling the external-sync gap, applying/verifying the monitor migration, and checking OAuth credentials. No Oracle bridge code changed. See `docs/QA_DEPLOYMENT.md` for the live sequence.
+**Deployment gate:** production now records the Slice 3 memory migration plus explicitly applied `20260926172636_companion_external_sync` and `20260926172705_companion_attention_monitors`. Both new schemas were verified read-only. Older physical reliability/belief/OAuth objects still lack matching ledger rows; do not run blanket `supabase db push`. This backend has not been deployed, so monitor/WhatsApp behavior remains local-only. OAuth link-secret QA remains blocked. No Oracle bridge code changed. See `docs/QA_DEPLOYMENT.md` for the live sequence.
 
 
 ## Companion vNext Product Direction (2026-09-18)
@@ -44,7 +44,7 @@ Slice 2 adds one narrow mutating MCP tool, `sync_context`, while preserving exis
 
 Supported semantic families are intentionally limited to tracked routine state, four allowlisted preference keys, and four context fields attached to an existing user-scoped project. The complete request is validated and project-grounded before any write. The service stores a bounded request audit, digest and per-item belief idempotency keys; partial failures retry without duplicating applied transitions. The shared context compiler exposes current preference/project beliefs. The tool cannot expose arbitrary CRUD/SQL, create projects, mutate project progress/money/sessions, send WhatsApp, create monitors, execute Brain actions, or write calendar/memo/expense/Health operational records.
 
-Apply `supabase/migrations/20260925120000_companion_external_sync.sql` after the Slice 1 belief migration and before deploying this backend. It adds the audit table, `external_sync` provenance, and revokes unintended public/authenticated RPC execution; it does not alter operational data. No production migration has been applied by this Codex session. Ambient/background ChatGPT synchronization is not part of Slice 2.
+Apply `supabase/migrations/20260926172636_companion_external_sync.sql` after the Slice 1 belief migration in new environments. Production applied it explicitly on 2026-09-26. It adds the audit table, `external_sync` provenance, and revokes unintended public/authenticated RPC execution; it does not alter operational data. Ambient/background ChatGPT synchronization is not part of Slice 2.
 
 ### Companion vNext Slice 2.5 + Slice 3 — Current Execution Target
 
