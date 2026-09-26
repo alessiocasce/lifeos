@@ -24,7 +24,7 @@ export async function sourceIsResolved({ client, userId, sourceId, sourceType })
 
 export async function checkProactiveDelivery({ row, client = getSupabaseAdmin(), userId = getActionUserId(), now = new Date() }) {
   if (row.source_type === 'monitor') {
-    const monitorResult = await client.from('brain_monitors').select('id, user_id, monitor_type, topic_key, project_id, state, expires_at, subject')
+    const monitorResult = await client.from('brain_monitors').select('id, user_id, monitor_type, topic_key, project_id, permission_basis, state, expires_at, subject')
       .eq('user_id', userId).eq('id', row.source_id).maybeSingle();
     if (monitorResult.error) throw monitorResult.error;
     const monitor = monitorResult.data;
@@ -32,6 +32,9 @@ export async function checkProactiveDelivery({ row, client = getSupabaseAdmin(),
       return { eligible: false, reason: 'monitor_not_active' };
     }
     const permissions = await loadMonitorPermissions({ userId, client });
+    if (monitor.permission_basis === 'standing_monitor' && !permissions.monitor) {
+      return { eligible: false, reason: 'monitor_permission_absent' };
+    }
     if (!permissions.message) return { eligible: false, reason: 'message_permission_absent' };
     if (isAttentionQuietHour(new Date(now))) return { eligible: false, reason: 'quiet_hours' };
     const [project, sessions] = await Promise.all([

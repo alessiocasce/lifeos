@@ -9,6 +9,7 @@ import { decideAttention, decideAccountabilityAttention, nextAvailableAttentionT
 import { evaluateDueMonitors, evaluateProjectMonitorSignal, nextMonitorCheckAt } from '../api/_utils/brainMonitorEvaluation.js';
 import { enqueueOutboxMessage, pollOutboxMessages, proactiveAssistantMetadata } from '../api/_utils/brainOutbox.js';
 import { renderApprovedMonitorMessage } from '../api/_utils/brainButler.js';
+import { checkProactiveDelivery } from '../api/_utils/brainProactiveDelivery.js';
 import { selectProactiveReplyTarget, selectTrustedQuotedProactiveReplyTarget } from '../api/_utils/brainProactiveReplies.js';
 import { resolveMonitorProactiveReply } from '../api/_utils/brainMonitorReplies.js';
 import { selectBrainTurnInteraction } from '../api/_utils/brainInteractionSelection.js';
@@ -178,6 +179,24 @@ try {
   assert.equal((await db.query(`select count(*)::int as checked from brain_monitors
     where user_id = $1 and subject like 'Batch fixture %' and check_count > 0`, [fixtureUser])).rows[0].checked, 0);
   assert.equal((await client.from('brain_attention_events').select('id').eq('user_id', fixtureUser)).data.length, 2);
+  const standing = (await loadDueMonitors({ userId: fixtureUser, client, now, limit: 1 }))[0];
+  const deliveryRow = { source_type: 'monitor', source_id: standing.id };
+  assert.equal((await checkProactiveDelivery({ row: deliveryRow, userId: fixtureUser, client, now })).eligible, true);
+  await applyBeliefTransition({ userId: fixtureUser, client, subjectType: 'companion_permission',
+    subjectKey: 'companion.monitor', predicate: 'grant', value: { enabled: false },
+    sourceType: 'user_explicit', confidence: 1, idempotencyKey: 'monitor-revoke-1', effectiveFrom: now });
+  assert.equal((await loadMonitorPermissions({ userId: fixtureUser, client })).monitor, false);
+  const revokedPreview = await evaluateDueMonitors({ userId: fixtureUser, client, now, recipient: '111@c.us',
+    limit: 100, preview: true });
+  assert.equal(revokedPreview.candidates.length, 0);
+  assert.equal(revokedPreview.skipped.length, 30);
+  assert(revokedPreview.skipped.every((item) => item.reason === 'monitor_permission_absent'));
+  assert.equal((await checkProactiveDelivery({ row: deliveryRow, userId: fixtureUser, client, now })).reason,
+    'monitor_permission_absent');
+  const explicitlyCreated = await client.from('brain_monitors').update({ permission_basis: 'explicit_user', created_by: 'user' })
+    .eq('user_id', fixtureUser).eq('id', standing.id);
+  assert.ifError(explicitlyCreated.error);
+  assert.equal((await checkProactiveDelivery({ row: deliveryRow, userId: fixtureUser, client, now })).eligible, true);
   console.log('PASS monitor registry is typed, grounded, permission-gated, deduped and cross-channel resolvable');
 } finally {
   await db.close();

@@ -63,6 +63,10 @@ export async function evaluateDueMonitors({ userId = getActionUserId(), client =
       quietStart: globalRule.data?.quiet_hours_start || '23:00',
       quietEnd: globalRule.data?.quiet_hours_end || '08:00',
       dismissalCount: Number(monitor.metadata?.dismissal_count) || 0 });
+    if (monitor.permission_basis === 'standing_monitor' && !permissions.monitor) {
+      decision = { ...decision, decision: 'silent', reason_code: 'monitor_permission_absent',
+        cooldown_until: null, context_refs: [] };
+    }
     if (decision.decision === 'message' && (globalRule.data?.enabled === false || !recipient)) {
       decision = { ...decision, decision: 'silent', reason_code: !recipient ? 'missing_recipient' : 'global_proactive_disabled',
         cooldown_until: null };
