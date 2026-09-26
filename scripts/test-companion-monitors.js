@@ -14,7 +14,7 @@ import { resolveMonitorProactiveReply } from '../api/_utils/brainMonitorReplies.
 import { selectBrainTurnInteraction } from '../api/_utils/brainInteractionSelection.js';
 
 const { db, client } = await createReliabilityDatabase();
-const now = new Date();
+const now = new Date('2026-09-26T12:00:00.000Z');
 const project = (await db.query(`insert into projects(user_id,name,goal_type,current_value,target_value)
   values ($1,'LifeOS','units',0,10) returning id`, [fixtureUser])).rows[0];
 const proposal = { monitor_type: 'project_staleness', project_id: project.id,
