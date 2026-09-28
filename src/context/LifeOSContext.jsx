@@ -14,6 +14,7 @@ import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
 import { localDate, localTime } from '../utils/date';
 import { buildHabitUpdate, getHabitEntry, normalizeHygieneObject } from '../utils/habits';
+import { chooseWorkoutSession, clearTrainingUser, clearWorkoutDraft, readTrainingWorkspace, shouldResumeTraining, writeTrainingWorkspace } from '../utils/workoutContinuity';
 import {
   authApi,
   aiActionLogApi,
@@ -116,10 +117,16 @@ export function LifeOSProvider({ children }) {
   const lastExpenseMonthRange = useRef(null);
   const refreshPromiseRef = useRef(null);
   const activeAiThreadIdRef = useRef(null);
+  const activeWorkoutIdRef = useRef(activeWorkoutId);
+  activeWorkoutIdRef.current = activeWorkoutId;
+  const userNavigatedRef = useRef(false);
+  const workspaceRestoredFor = useRef(null);
 
   const setActiveTab = useCallback((tabId) => {
     const nextTab = isValidTabId(tabId) ? tabId : 'home';
+    userNavigatedRef.current = true;
     setActiveTabState(nextTab);
+    writeTrainingWorkspace(lastAuthUserId.current, { tab: nextTab, sessionId: activeWorkoutIdRef.current });
 
     if (typeof window === 'undefined') return;
     const nextPath = tabToPath(nextTab);
@@ -132,7 +139,10 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handlePopState = () => {
-      setActiveTabState(pathToTab(window.location.pathname));
+      const tab = pathToTab(window.location.pathname);
+      userNavigatedRef.current = true;
+      setActiveTabState(tab);
+      writeTrainingWorkspace(lastAuthUserId.current, { tab, sessionId: activeWorkoutIdRef.current });
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -231,6 +241,8 @@ export function LifeOSProvider({ children }) {
     const subscription = authApi.onAuthStateChange((_event, session) => {
       const nextUser = session?.user ?? null;
       if (lastAuthUserId.current !== (nextUser?.id ?? null)) {
+        if (lastAuthUserId.current) clearTrainingUser(lastAuthUserId.current);
+        workspaceRestoredFor.current = null;
         clearUserScopedState(nextUser ? 'idle' : 'no-session');
         lastAuthUserId.current = nextUser?.id ?? null;
       }
@@ -264,13 +276,19 @@ export function LifeOSProvider({ children }) {
       const rows = await workoutApi.list();
       if (lastAuthUserId.current !== authUser.id) return;
       setWorkoutSessions(rows ?? []);
-      setActiveWorkoutId((currentId) => {
-        if (currentId && rows.some((session) => session.id === currentId)) return currentId;
-        const liveSession = rows.find((session) => !session.ended_at);
-        if (liveSession) return liveSession.id;
-        const todaysSession = rows.find((session) => session.performed_on === today());
-        return todaysSession?.id ?? null;
-      });
+      const workspace = readTrainingWorkspace(authUser.id);
+      setActiveWorkoutId((currentId) => chooseWorkoutSession(rows, currentId, workspace, today()));
+      if (workspaceRestoredFor.current !== authUser.id) {
+        if (shouldResumeTraining({ pathname: window.location.pathname, workspace, sessions: rows, userNavigated: userNavigatedRef.current })) {
+          setActiveTabState('workout');
+          window.history.replaceState({}, '', '/workout');
+        }
+        workspaceRestoredFor.current = authUser.id;
+      }
+      for (const session of rows ?? []) {
+        if (session.ended_at) clearWorkoutDraft(authUser.id, session.id);
+      }
+      if (workspace?.sessionId && !rows.some((session) => session.id === workspace.sessionId)) clearWorkoutDraft(authUser.id, workspace.sessionId);
       setWorkoutSessionsStatus('ready');
     } catch (error) {
       setWorkoutSessionsError(error.message || 'Failed to load workout sessions.');
@@ -281,6 +299,31 @@ export function LifeOSProvider({ children }) {
   useEffect(() => {
     loadWorkoutSessions();
   }, [loadWorkoutSessions]);
+
+  useEffect(() => {
+    if (!authUser) return undefined;
+    let lastReconciled = Date.now();
+    const reconcile = (event) => {
+      if (document.visibilityState === 'hidden') return;
+      if (event.type !== 'online' && Date.now() - lastReconciled < 60000) return;
+      lastReconciled = Date.now();
+      loadWorkoutSessions();
+    };
+    window.addEventListener('online', reconcile);
+    window.addEventListener('pageshow', reconcile);
+    document.addEventListener('visibilitychange', reconcile);
+    return () => {
+      window.removeEventListener('online', reconcile);
+      window.removeEventListener('pageshow', reconcile);
+      document.removeEventListener('visibilitychange', reconcile);
+    };
+  }, [authUser, loadWorkoutSessions]);
+
+  useEffect(() => {
+    if (authUser && workoutSessionsStatus === 'ready' && workspaceRestoredFor.current === authUser.id) {
+      writeTrainingWorkspace(authUser.id, { tab: activeTab, sessionId: activeWorkoutId });
+    }
+  }, [authUser, activeTab, activeWorkoutId, workoutSessionsStatus]);
 
   const loadWorkoutTemplates = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -983,6 +1026,7 @@ export function LifeOSProvider({ children }) {
       },
       signOut: async () => {
         await authApi.signOut();
+        clearTrainingUser(authUser?.id);
         lastAuthUserId.current = null;
         setAuthUser(null);
         clearUserScopedState('no-session');
@@ -1000,16 +1044,19 @@ export function LifeOSProvider({ children }) {
       },
       updateWorkoutSession: async (id, patch) => {
         const updated = await workoutApi.update(id, patch);
+        if (updated.ended_at) clearWorkoutDraft(authUser?.id, id);
         setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
         return updated;
       },
       endWorkoutSession: async (id) => {
         const updated = await workoutApi.update(id, { ended_at: new Date().toISOString() });
+        clearWorkoutDraft(authUser?.id, id);
         setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
         return updated;
       },
       deleteWorkoutSession: async (id) => {
         await workoutApi.delete(id);
+        clearWorkoutDraft(authUser?.id, id);
         const remaining = workoutSessions.filter((session) => session.id !== id);
         setWorkoutSessions(remaining);
         if (activeWorkoutId === id) {
@@ -1026,6 +1073,7 @@ export function LifeOSProvider({ children }) {
         }
         setWorkoutSessionsError('');
         const created = await workoutSetApi.create(payload);
+        if (lastAuthUserId.current !== authUser.id) throw new Error('Account changed. Sign in to the original account to verify this set.');
         setWorkoutSessions((prev) =>
           prev.map((session) =>
             session.id === created.workout_id

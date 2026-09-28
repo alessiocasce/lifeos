@@ -1,5 +1,36 @@
 # LifeOS Workout QA
 
+## Training continuity (2026-09-28)
+
+`lifeos:training:v1:<user>:draft:<session>` stores a bounded, validated exercise,
+weight, reps, RPE, warmup flag, notes and set number. Inputs are persisted
+synchronously; records expire after 36 hours. The next set number is reconciled
+with returned server sets. Confirmed saves retain exercise/weight, clear reps/notes,
+and persist the next draft. Failed saves keep all input. This is not an offline
+write queue and never automatically resubmits a set.
+
+`lifeos:training:v1:<user>:workspace` remembers tab and selected session. A root
+launch resumes Training only when it was the last workspace and the saved session
+is still live in the authenticated server response. Explicit paths, browser back,
+and navigation during loading win. End/delete clear that session's draft; sign-out
+clears only that user's Training keys. Unavailable device storage is reported.
+Same-user auth refresh retains the mounted UI. Visible resume (after 60 seconds)
+and reconnect refresh sessions without discarding the current draft. A cold offline
+launch still needs server session confirmation before rendering the logger.
+
+Pull-to-refresh defers a service-worker update during active training, even after
+a set was saved. It also retains the existing unsaved-work protection.
+
+Run `npm run test:workout` for SSR/storage policy checks and `npm run test:ui`
+for the real App/Provider browser journeys against isolated test services.
+Install the pinned browser once with `npx playwright install chromium`.
+The QA fixture API is only substituted by `scripts/serve-ui-qa.js`, not production.
+
+Physical iPhone QA still required: select Barbell Curl, enter 25 x 8, save,
+background/lock/reopen, enter another unsaved draft, force process eviction,
+reopen, confirm context, then end the session. Browser page reload proves reload
+recovery, not iOS storage retention or OS eviction behavior.
+
 ## Reliability Checks
 
 Keep Workout open across Europe/Rome midnight: today's filter and an untouched new-session date should advance, not remain at module-import time or UTC yesterday. Existing edits remain attached to their session. In MCP, request a workout above the serializer cap and verify actual returned set counts and truncation flags. With null/empty or old sleep, intelligence must report unknown recovery rather than fake zero-hour sleep; a real logged zero remains valid data. Run `npm run test:mcp` and `npm run test:reliability`. See [release limitations](RELIABILITY_RELEASE.md) for live/browser QA not covered by those tests.

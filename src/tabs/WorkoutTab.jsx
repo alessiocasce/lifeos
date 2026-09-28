@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useLocalDay } from '../hooks/useLocalDay';
+import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
+import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 
@@ -23,6 +25,7 @@ export function WorkoutTab() {
   const today = useLocalDay();
   const priorDay = useRef(today);
   const {
+    authUser,
     activeWorkoutId,
     activeWorkoutSession,
     createWorkoutTemplate,
@@ -56,15 +59,8 @@ export function WorkoutTab() {
     priorDay.current = today;
     if (!showCustomSession) setSessionForm((form) => form.performed_on === previous ? { ...form, performed_on: today } : form);
   }, [today, showCustomSession]);
-  const [setForm, setSetForm] = useState({
-    exercise: '',
-    set_number: 1,
-    weight: '',
-    reps: '',
-    rpe: '',
-    is_warmup: false,
-    notes: '',
-  });
+  const [setForm, setSetForm, draftStorageUnavailable] = useWorkoutDraft(authUser?.id, activeWorkoutSession);
+  const savingSetRef = useRef(false);
   const [editingSetId, setEditingSetId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [savingSet, setSavingSet] = useState(false);
@@ -102,7 +98,7 @@ export function WorkoutTab() {
       ...prev,
       set_number: prev.is_warmup ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise) : nextSetNumber,
     }));
-  }, [activeWorkoutSession, nextSetNumber, setForm.is_warmup]);
+  }, [activeWorkoutSession, nextSetNumber, setForm.is_warmup, setSetForm]);
 
   useEffect(() => {
     if (!activeWorkoutSession || activeWorkoutSession.ended_at) {
@@ -179,6 +175,10 @@ export function WorkoutTab() {
 
   const fillLoggerFromTemplateExercise = (exercise, session = activeWorkoutSession) => {
     if (!exercise) return;
+    if (session?.id !== activeWorkoutSession?.id) {
+      writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise });
+      return;
+    }
     setSetForm((prev) => ({
       ...prev,
       exercise: exercise.exercise,
@@ -219,6 +219,7 @@ export function WorkoutTab() {
 
   const submitSet = async (event) => {
     event.preventDefault();
+    if (savingSetRef.current) return;
     setFormError('');
 
     if (activeWorkoutSession?.ended_at) {
@@ -239,6 +240,7 @@ export function WorkoutTab() {
     const weight = parseDecimal(setForm.weight);
     const reps = parseInteger(setForm.reps);
     const rpe = parseOptionalDecimal(setForm.rpe);
+    savingSetRef.current = true;
     setSavingSet(true);
     try {
       const createdSet = await createWorkoutSet({
@@ -258,17 +260,20 @@ export function WorkoutTab() {
         ...activeWorkoutSession,
         workout_sets: [...(activeWorkoutSession.workout_sets ?? []), createdSet],
       };
-      setSetForm((prev) => ({
-        ...prev,
-        set_number: prev.is_warmup
-          ? getNextWarmupSetNumber(projectedSession, prev.exercise)
-          : getNextSetNumber(projectedSession, prev.exercise),
+      const nextDraft = {
+        ...setForm,
+        set_number: setForm.is_warmup
+          ? getNextWarmupSetNumber(projectedSession, setForm.exercise)
+          : getNextSetNumber(projectedSession, setForm.exercise),
         reps: '',
         notes: '',
-      }));
+      };
+      writeWorkoutDraft(authUser?.id, activeWorkoutSession.id, nextDraft);
+      setSetForm(nextDraft);
     } catch (error) {
       setFormError(error.message || 'Failed to save set.');
     } finally {
+      savingSetRef.current = false;
       setSavingSet(false);
     }
   };
@@ -384,11 +389,12 @@ export function WorkoutTab() {
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4">
+      {draftStorageUnavailable ? <p role="status" className="col-span-12 text-sm text-amber-300">Device storage is unavailable. Keep this screen open until your set is saved.</p> : null}
       {activeWorkoutSession ? (
         <>
           <ActiveWorkoutHeader
             activeSession={activeWorkoutSession}
-            ending={endingSessionId === activeWorkoutSession.id}
+            ending={endingSessionId === activeWorkoutSession.id || savingSet}
             onEnd={() => endSession(activeWorkoutSession.id)}
             onReopen={() => reopenSession(activeWorkoutSession.id)}
             reopening={reopeningSessionId === activeWorkoutSession.id}
@@ -1114,7 +1120,8 @@ function SetLogger({
           </div>
         ) : activeSession ? (
           <div className="grid gap-3">
-            <form onSubmit={onSetSubmit} className="grid gap-2">
+            <form onSubmit={onSetSubmit}>
+              <fieldset disabled={savingSet} className="grid min-w-0 gap-2">
               <div className="grid gap-2 md:grid-cols-[1fr_132px]">
                 <ExerciseAutocomplete
                   suggestions={exerciseSuggestions}
@@ -1144,6 +1151,7 @@ function SetLogger({
                 {savingSet ? 'Saving Set' : setFormValue.is_warmup ? 'Save Warmup' : 'Save Set'}
               </button>
               {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
+              </fieldset>
             </form>
             <PreviousPerformanceCard performance={previousPerformance} />
           </div>

@@ -9,7 +9,7 @@ const REFRESH_HOLD_OFFSET = 56;
 const SNAP_BACK_DURATION = 220;
 
 export function PullToRefresh({ children }) {
-  const { meaningfulUnsavedWork, refreshLifeOS } = useLifeOS();
+  const { activeWorkoutSession, meaningfulUnsavedWork, refreshLifeOS } = useLifeOS();
   const containerRef = useRef(null);
   const gestureRef = useRef(null);
   const pullDistanceRef = useRef(0);
@@ -17,6 +17,8 @@ export function PullToRefresh({ children }) {
   const resetTimerRef = useRef(null);
   const fadeTimerRef = useRef(null);
   const unsavedWorkRef = useRef(meaningfulUnsavedWork);
+  const liveTrainingRef = useRef(activeWorkoutSession && !activeWorkoutSession.ended_at);
+  liveTrainingRef.current = activeWorkoutSession && !activeWorkoutSession.ended_at;
   const [state, setState] = useState('idle');
   const [contentOffset, setContentOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -137,9 +139,9 @@ export function PullToRefresh({ children }) {
 
       if (updateResult.available) {
         const blockingWork = unsavedWorkRef.current[0];
-        if (blockingWork) {
+        if (blockingWork || liveTrainingRef.current) {
           setState('update-ready');
-          setMessage(`Update ready - ${blockingWork.label}.`);
+          setMessage(blockingWork ? `Update ready - ${blockingWork.label}.` : 'Update ready - finish your workout first.');
           resultDisplayDuration = 4000;
         } else {
           setState('updating');
