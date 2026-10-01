@@ -19,7 +19,7 @@
     "test:workout": "node scripts/test-workout-render.js && node scripts/test-workout-continuity.js",
     "test:ui": "playwright test",
     "test:companion": "node scripts/test-companion-beliefs.js",
-    "test:attention": "node scripts/test-companion-monitors.js",
+    "test:attention": "node scripts/test-companion-monitors.js && node scripts/test-companion-app.js",
     "test:mcp-write": "node scripts/test-mcp-write.js",
     "test:schema": "node scripts/test-schema-contracts.js",
     "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-oauth && npm run test:mcp-write && npm run test:memory && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion && npm run test:attention",

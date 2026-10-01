@@ -60,7 +60,7 @@ export const healthLogApi = emptyApi;
 export const expenseApi = emptyApi;
 export const calendarEventApi = emptyApi;
 export const memoApi = emptyApi;
-export const projectApi = emptyApi;
+export const projectApi = { list: async () => JSON.parse(localStorage.getItem('qa-projects') || '[]') };
 export const projectSessionApi = emptyApi;
 export const projectMoneyEntryApi = emptyApi;
 export const dailyReviewApi = emptyApi;
@@ -70,3 +70,23 @@ export const aiChatThreadApi = emptyApi;
 export const aiInsightApi = emptyApi;
 export const aiMemoryApi = emptyApi;
 export const aiReportApi = emptyApi;
+
+const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
+export const companionAppApi = {
+  watch: async () => watchState(),
+  permissions: async () => ({ permissions: watchState().permissions }),
+  setPermission: async (permission, enabled) => {
+    const data = watchState();
+    data.permissions[permission] = enabled;
+    localStorage.setItem('qa-watch', JSON.stringify(data));
+    return { permissions: data.permissions };
+  },
+  setWatch: async (projectId, operation) => {
+    if (localStorage.getItem('qa-watch-fail')) throw new Error('Watch was not saved.');
+    const data = watchState();
+    if (operation === 'enable' && !data.permissions.monitor) throw new Error('Monitoring permission required.');
+    data.watch = { id: data.watch?.id || 'qa-watch-id', state: { enable: 'active', suspend: 'suspended', retire: 'retired' }[operation], last_checked_at: null, last_triggered_at: null };
+    localStorage.setItem('qa-watch', JSON.stringify(data));
+    return data;
+  },
+};

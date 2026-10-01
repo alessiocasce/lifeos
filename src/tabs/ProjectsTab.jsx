@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { localDate } from '../utils/date';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
+import { ProjectWatch } from '../components/ProjectWatch';
 
 const goalTypes = ['hours', 'units', 'tasks', 'content', 'custom'];
 const statuses = ['active', 'paused', 'completed', 'archived'];
@@ -594,6 +595,8 @@ function ProjectDetail({
           </div>
         </div>
       </Panel>
+
+      <ProjectWatch project={project} />
 
       <ProjectBalancePanel
         balance={balance}

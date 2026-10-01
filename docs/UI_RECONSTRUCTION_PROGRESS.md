@@ -9,7 +9,7 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] Navigation, shared visual foundation, mobile utility sheet, desktop rail.
 - [x] Focused active Training logger, templates/history secondary, save feedback.
 - [ ] Command, Companion, Health and lower-frequency screens.
-- [ ] Authenticated typed project Watch and permission controls through a consolidated route.
+- [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
 
 Existing local edits to `scripts/smoke-mcp-oauth.js` and `docs/QA_DEPLOYMENT.md`
@@ -85,7 +85,18 @@ edit/delete/end/reopen passed in addition to the continuity matrix. The isolated
 QA Vite server now uses its own dependency cache after a verified cache collision
 with the SSR harness produced a React dependency HTTP 504. Assertions were not relaxed.
 
-Remaining: Projects Watch/backend seam; Companion current state/permission controls;
+Remaining: Companion current state/permission controls;
 Command and utility-tab reconstruction; richer populated screen fixtures and QA;
 physical iOS keyboard/background/process-eviction testing; final full-scope audit.
 Do not treat this checkpoint as a completed redesign.
+
+## Project Watch checkpoint (2026-10-01)
+
+Project details have actual current-context and Watch status, explicit enable,
+suspend/resume/retire controls, plus independent Companion permission checkboxes.
+The existing actions endpoint accepts a small session-authenticated typed contract;
+automation tokens cannot use it. No browser protected-table writes, schema changes,
+new functions, evaluation or outbox writes. Schema-backed tests prove denied grants,
+cross-user rejection, lifecycle, expired/paused rejection, and no delivery side effects.
+Two browser journeys verify explicit grants/lifecycle and failed-save feedback.
+See `QA_COMPANION_UI.md` for deployed QA and the terminal Watch renewal limitation.

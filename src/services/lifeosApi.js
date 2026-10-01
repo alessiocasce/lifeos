@@ -850,6 +850,30 @@ export const aiActionLogApi = {
   },
 };
 
+export const companionAppApi = {
+  watch: (projectId, signal) => fetchCompanionApp(`/api/ai/actions?view=project_watch&project_id=${encodeURIComponent(projectId)}`, { signal }),
+  permissions: (signal) => fetchCompanionApp('/api/ai/actions?view=companion_permissions', { signal }),
+  setWatch: (projectId, operation, watchId) => fetchCompanionApp('/api/ai/actions', {
+    method: 'POST', body: JSON.stringify({ action: 'project_watch', project_id: projectId, operation, ...(watchId ? { watch_id: watchId } : {}) }),
+  }),
+  setPermission: (permission, enabled, requestId) => fetchCompanionApp('/api/ai/actions', {
+    method: 'POST', body: JSON.stringify({ action: 'companion_permission', permission, enabled, request_id: requestId }),
+  }),
+};
+
+async function fetchCompanionApp(url, options = {}) {
+  const { data, error } = await requireSupabase().auth.getSession();
+  if (error) throw error;
+  if (!data.session?.access_token) throw new Error('Sign in before using Companion controls.');
+  const response = await fetch(url, { ...options, headers: {
+    authorization: `Bearer ${data.session.access_token}`,
+    ...(options.body ? { 'content-type': 'application/json' } : {}),
+  } });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'Companion is unavailable. Try again.');
+  return payload.data;
+}
+
 export const aiChatThreadApi = {
   async list(limit = 50) {
     return throwIfError(

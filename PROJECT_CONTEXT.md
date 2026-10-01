@@ -3,6 +3,16 @@
 Last updated: 2026-09-26
 Current branch: `main`
 
+## Frontend reconstruction checkpoint (2026-10-01)
+
+Training continuity and the five-destination mobile shell are implemented locally;
+the full reconstruction is still in progress. Project details now have typed
+LifeOS Watch controls and separate Companion MONITOR/MESSAGE checkboxes through
+the existing `/api/ai/actions` route. These controls require the configured user's
+verified Supabase session, preserve standing permissions and never directly send
+WhatsApp. No schema rerun required. See [app-control QA](docs/QA_COMPANION_UI.md)
+and [remaining reconstruction scope](docs/UI_RECONSTRUCTION_PROGRESS.md).
+
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
 Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.
