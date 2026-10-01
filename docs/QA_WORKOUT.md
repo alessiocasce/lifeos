@@ -1,5 +1,26 @@
 # LifeOS Workout QA
 
+## Training Setup / Templates Checkpoint (2026-10-01)
+
+Setup and template management use unframed rows, readable labels and 44px
+controls. Exercise actions sit below the name instead of squeezing four buttons
+alongside it. Existing service contracts and immutable session snapshots are
+unchanged. Template saves disable other template controls and panel dismissal;
+delete confirmation explicitly preserves workout snapshots. Failed session
+starts now show an alert even when no active logger exists.
+
+`tests/ui/training-templates.spec.js` adds twelve isolated browser cases covering
+template start, warmup/working-set numbering, reload and snapshot preservation;
+template/exercise CRUD, notes, reordering and compaction; failed creates/deletes;
+failed exercise edits; delayed-save dismissal protection; failed/duplicate session
+starts; and setup/management screenshots at the seven required sizes. Mobile
+checks require Add exercise to scroll clear of bottom navigation.
+Run `npm run test:ui` and `npm run test:workout`.
+
+Manual checks still required: production template ordering under Supabase/RLS,
+real iPhone keyboard/lock/background/process eviction, and PWA update delivery.
+Browser fixtures do not substitute for those checks. No schema rerun required.
+
 ## Training interface (2026-10-01)
 
 Training is the central mobile destination. Command, Projects and Companion stay

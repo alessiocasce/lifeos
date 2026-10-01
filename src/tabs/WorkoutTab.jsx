@@ -119,6 +119,7 @@ export function WorkoutTab() {
 
   const startWorkout = async (event) => {
     event.preventDefault();
+    if (savingSession || startingTemplateId) return;
     setFormError('');
 
     if (!sessionForm.name.trim()) {
@@ -190,6 +191,7 @@ export function WorkoutTab() {
   };
 
   const startFromTemplate = async (templateId) => {
+    if (startingTemplateId || savingSession) return;
     const template = workoutTemplates.find((item) => item.id === templateId);
     if (!template) return;
 
@@ -459,6 +461,7 @@ export function WorkoutTab() {
             </div>
 
             <WorkoutSessionControl
+              formError={activeWorkoutSession.ended_at ? formError : ''}
               activeSession={activeWorkoutSession}
               activeWorkoutId={activeWorkoutId}
               createWorkoutTemplate={createWorkoutTemplate}
@@ -496,6 +499,7 @@ export function WorkoutTab() {
         <>
           <div className="col-span-12 grid gap-3 xl:grid-cols-[minmax(0,760px)_1fr]">
             <WorkoutSessionControl
+              formError={formError}
               activeSession={activeWorkoutSession}
               activeWorkoutId={activeWorkoutId}
               createWorkoutTemplate={createWorkoutTemplate}
@@ -567,6 +571,7 @@ function ActiveWorkoutHeader({ activeSession, ending, onEnd, onReopen, reopening
 }
 
 function WorkoutSessionControl({
+  formError,
   activeSession,
   activeWorkoutId,
   createWorkoutTemplate,
@@ -600,6 +605,7 @@ function WorkoutSessionControl({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [manageTemplatesOpen, setManageTemplatesOpen] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
@@ -612,43 +618,46 @@ function WorkoutSessionControl({
         title={activeSession ? 'Session Options' : 'Start Workout'}
         right={<SourceStatus status={workoutSessionsStatus} />}
       />
+      {formError ? <p role="alert" className="px-3 py-2 text-sm text-red-300">{formError}</p> : null}
       <button
         type="button"
         onClick={() => setMobileOpen((value) => !value)}
-        className="flex w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
+        disabled={templateBusy}
+        aria-expanded={contentOpen}
+        className="flex min-h-11 w-full items-center justify-between border-b border-white/5 px-3 py-2 text-left text-sm text-zinc-300 md:hidden"
       >
         <span>{activeSession ? 'Session options' : 'Start workout'}</span>
         <ChevronDown size={16} className={`text-zinc-500 transition ${contentOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`${contentOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
-        {activeSession ? <button className="flex min-h-11 w-full items-center gap-2 border-b border-white/10 text-sm text-zinc-200" onClick={() => setActiveWorkoutId(null)}><Plus size={16} />New session</button> : null}
+        {activeSession ? <button disabled={templateBusy} className="flex min-h-11 w-full items-center gap-2 border-b border-white/10 text-sm text-zinc-200" onClick={() => setActiveWorkoutId(null)}><Plus size={16} />New session</button> : null}
         {!activeSession ? (
           <div className="space-y-2">
-            <div className="rounded-md border border-cyan-400/10 bg-cyan-400/[0.04] p-2">
+            <div className="py-2">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-cyan-200">What are you training today?</p>
-                  <p className="text-[11px] text-zinc-500">Start from template or start empty.</p>
+                  <p className="text-sm font-semibold text-zinc-200">Choose a template</p>
                 </div>
                 <ClipboardList size={15} className="shrink-0 text-cyan-300" />
               </div>
               {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? (
                 <LoadingCard label="Loading workout templates" />
               ) : workoutTemplates.length ? (
-                <div className="grid gap-1.5">
+                <div className="grid divide-y divide-white/10">
                   {workoutTemplates.map((template) => {
                     const count = template.workout_template_exercises?.length ?? 0;
                     return (
-                      <div key={template.id} className="grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
+                      <div key={template.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-zinc-100">{template.name}</p>
-                          <p className="data-text text-[10px] text-zinc-500">{count} exercises</p>
+                          <p className="break-words text-sm font-medium text-zinc-100">{template.name}</p>
+                          <p className="mt-1 text-xs text-zinc-500">{count} exercises</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => onStartFromTemplate(template.id)}
-                          disabled={Boolean(startingTemplateId)}
-                          className="flex min-h-10 items-center justify-center gap-2 rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                          aria-label={`Start ${template.name}`}
+                          disabled={Boolean(startingTemplateId) || savingSession}
+                          className="primary-button flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-medium disabled:opacity-50"
                         >
                           {startingTemplateId === template.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                           Start
@@ -658,11 +667,11 @@ function WorkoutSessionControl({
                   })}
                 </div>
               ) : (
-                <p className="rounded border border-white/5 bg-[#121212] px-2 py-2 text-xs text-zinc-500">
-                  No templates yet. Create your first template or start empty.
+                <p className="py-2 text-sm text-zinc-500">
+                  No templates yet.
                 </p>
               )}
-              {workoutTemplatesError ? <p className="mt-2 data-text text-[11px] text-red-300">{workoutTemplatesError}</p> : null}
+              {workoutTemplatesError ? <p role="alert" className="mt-2 text-sm text-red-300">{workoutTemplatesError}</p> : null}
             </div>
 
             {todaysSessions.length ? (
@@ -686,28 +695,29 @@ function WorkoutSessionControl({
           <button
             type="button"
             onClick={() => setShowCustomSession((value) => !value)}
-            className="w-full rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-zinc-300"
+            disabled={savingSession || Boolean(startingTemplateId)}
+            aria-expanded={showCustomSession}
+            className="min-h-11 w-full border-y border-white/10 py-3 text-left text-sm font-medium text-zinc-300"
           >
             Start Empty Workout
           </button>
         ) : null}
 
         {!activeSession && showCustomSession ? (
-          <form onSubmit={onStartWorkout} className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2">
-            <p className="text-xs text-zinc-500">
-              Start empty. You can keep the default name or set a custom one.
-            </p>
+          <form aria-label="Start empty workout" onSubmit={onStartWorkout} className="grid gap-3 py-3">
+            <fieldset disabled={savingSession || Boolean(startingTemplateId)} className="grid min-w-0 gap-3">
             <CompactField label="Name" value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
             <CompactField label="Date" type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
             <CompactField label="Notes" value={sessionForm.notes} onChange={(value) => setSessionForm((prev) => ({ ...prev, notes: value }))} />
             <button
               type="submit"
-              disabled={savingSession}
-              className="flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              disabled={savingSession || Boolean(startingTemplateId)}
+              className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
             >
               {savingSession ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               {savingSession ? 'Starting' : 'Start Empty'}
             </button>
+            </fieldset>
           </form>
         ) : null}
 
@@ -715,8 +725,10 @@ function WorkoutSessionControl({
           open={manageTemplatesOpen}
           setOpen={setManageTemplatesOpen}
           title="Manage templates"
+          disabled={templateBusy}
         >
           <TemplateManager
+            onBusyChange={setTemplateBusy}
             createWorkoutTemplate={createWorkoutTemplate}
             createWorkoutTemplateExercise={createWorkoutTemplateExercise}
             deleteWorkoutTemplate={deleteWorkoutTemplate}
@@ -780,18 +792,20 @@ function WorkoutSessionControl({
   );
 }
 
-function CollapsedSection({ children, open, setOpen, title }) {
+function CollapsedSection({ children, disabled = false, open, setOpen, title }) {
   return (
-    <div className="rounded-md border border-white/5 bg-black/20">
+    <div className="border-t border-white/10">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-zinc-300"
+        disabled={disabled}
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-center justify-between py-3 text-left text-sm font-medium text-zinc-300"
       >
         <span>{title}</span>
         <ChevronDown size={15} className={`text-zinc-500 transition ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open ? <div className="space-y-2 border-t border-white/5 p-2">{children}</div> : null}
+      {open ? <div className="space-y-3 pb-3">{children}</div> : null}
     </div>
   );
 }
@@ -815,6 +829,7 @@ function formatTemplateManagerError(error, fallback) {
 }
 
 function TemplateManager({
+  onBusyChange,
   createWorkoutTemplate,
   createWorkoutTemplateExercise,
   deleteWorkoutTemplate,
@@ -833,6 +848,10 @@ function TemplateManager({
   const [exerciseDrafts, setExerciseDrafts] = useState({});
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [exerciseEditForm, setExerciseEditForm] = useState({ exercise: '', notes: '' });
+  useEffect(() => {
+    onBusyChange(Boolean(templateLoading));
+    return () => onBusyChange(false);
+  }, [onBusyChange, templateLoading]);
 
   const createTemplate = async (event) => {
     event.preventDefault();
@@ -911,6 +930,7 @@ function TemplateManager({
   };
 
   const removeTemplate = async (templateId) => {
+    if (!window.confirm('Delete this template and its exercises? Existing workout snapshots are kept.')) return;
     setTemplateError('');
     setTemplateLoading(`template-delete-${templateId}`);
     try {
@@ -923,6 +943,7 @@ function TemplateManager({
   };
 
   const removeExercise = async (exerciseId) => {
+    if (!window.confirm('Remove this exercise from the template? Existing workout snapshots are kept.')) return;
     setTemplateError('');
     setTemplateLoading(`exercise-delete-${exerciseId}`);
     try {
@@ -947,116 +968,90 @@ function TemplateManager({
   };
 
   return (
-    <div className="space-y-2">
-      <form onSubmit={createTemplate} className="grid gap-2 rounded-md border border-white/5 bg-[#121212] p-2">
+    <fieldset disabled={Boolean(templateLoading)} aria-label="Workout template management" className="grid min-w-0 gap-5">
+      {templateError ? <p role="alert" className="text-sm text-red-300">{templateError}</p> : null}
+      <form aria-label="Create workout template" onSubmit={createTemplate} className="grid min-w-0 gap-3">
         <CompactField label="Template name" value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
         <CompactField label="Notes" value={templateForm.notes} onChange={(value) => setTemplateForm((prev) => ({ ...prev, notes: value }))} />
-        <button
-          type="submit"
-          disabled={templateLoading === 'template-create'}
-          className="flex h-9 items-center justify-center gap-2 rounded border border-emerald-400/20 bg-emerald-400/10 text-xs font-medium text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-        >
-          {templateLoading === 'template-create' ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+        <button type="submit" disabled={Boolean(templateLoading)} className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50">
+          {templateLoading === 'template-create' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
           Create template
         </button>
       </form>
-
       {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? <LoadingCard label="Loading templates" /> : null}
-
-      <div className="grid gap-2">
+      <div className="grid min-w-0 divide-y divide-white/10">
         {workoutTemplates.map((template) => {
           const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
           const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
           return (
-            <div key={template.id} className="rounded-md border border-white/5 bg-black/25 p-2">
+            <article key={template.id} aria-label={'Template ' + template.name} className="grid min-w-0 gap-4 py-5">
               {editingTemplateId === template.id ? (
-                <div className="grid gap-2">
+                <div role="group" aria-label="Edit template" className="grid gap-3">
                   <CompactField label="Template name" value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
                   <CompactField label="Notes" value={templateEditForm.notes} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, notes: value }))} />
-                  <div className="flex gap-1">
-                    <IconButton icon={Check} loading={templateLoading === `template-${template.id}`} onClick={() => saveTemplate(template.id)} title="Save template" tone="emerald" size="sm" />
-                    <IconButton icon={X} onClick={() => setEditingTemplateId(null)} title="Cancel" tone="zinc" size="sm" />
+                  <div className="flex gap-2">
+                    <IconButton icon={Check} loading={templateLoading === 'template-' + template.id} onClick={() => saveTemplate(template.id)} title="Save template" tone="zinc" />
+                    <IconButton icon={X} onClick={() => setEditingTemplateId(null)} title="Cancel template edit" tone="zinc" />
                   </div>
                 </div>
               ) : (
-                <div className="flex items-start justify-between gap-2">
+                <header className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-zinc-100">{template.name}</p>
-                    <p className="data-text text-[10px] text-zinc-500">{exercises.length} exercises</p>
+                    <h3 className="break-words text-sm font-semibold text-zinc-100">{template.name}</h3>
+                    <p className="mt-1 text-xs text-zinc-500">{exercises.length} exercises</p>
+                    {template.notes ? <p className="mt-2 break-words text-sm text-zinc-400">{template.notes}</p> : null}
                   </div>
-                  <div className="flex gap-1">
-                    <IconButton
-                      icon={Pencil}
-                      onClick={() => {
-                        setEditingTemplateId(template.id);
-                        setTemplateEditForm({ name: template.name, notes: template.notes ?? '' });
-                      }}
-                      title="Edit template"
-                      tone="zinc"
-                      size="sm"
-                    />
-                    <IconButton icon={Trash2} loading={templateLoading === `template-delete-${template.id}`} onClick={() => removeTemplate(template.id)} title="Delete template" tone="red" size="sm" />
+                  <div className="flex shrink-0 gap-1">
+                    <IconButton icon={Pencil} onClick={() => { setEditingTemplateId(template.id); setTemplateEditForm({ name: template.name, notes: template.notes ?? '' }); }} title="Edit template" />
+                    <IconButton icon={Trash2} loading={templateLoading === 'template-delete-' + template.id} onClick={() => removeTemplate(template.id)} title="Delete template" tone="red" />
                   </div>
-                </div>
+                </header>
               )}
-
-              <div className="mt-2 grid gap-1">
+              <div className="grid divide-y divide-white/10">
                 {exercises.map((exercise, index) => (
-                  <div key={exercise.id} className="rounded border border-white/5 bg-[#121212] p-2">
+                  <div key={exercise.id} role="group" aria-label={'Template exercise ' + exercise.exercise} className="min-w-0 py-3">
                     {editingExerciseId === exercise.id ? (
-                      <div className="grid gap-2">
+                      <div className="grid gap-3">
                         <CompactField label="Exercise" value={exerciseEditForm.exercise} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, exercise: value }))} />
                         <CompactField label="Notes" value={exerciseEditForm.notes} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, notes: value }))} />
-                        <div className="flex gap-1">
-                          <IconButton icon={Check} loading={templateLoading === `exercise-${exercise.id}`} onClick={() => saveExercise(exercise.id)} title="Save exercise" tone="emerald" size="sm" />
-                          <IconButton icon={X} onClick={() => setEditingExerciseId(null)} title="Cancel" tone="zinc" size="sm" />
+                        <div className="flex gap-2">
+                          <IconButton icon={Check} loading={templateLoading === 'exercise-' + exercise.id} onClick={() => saveExercise(exercise.id)} title="Save exercise" />
+                          <IconButton icon={X} onClick={() => setEditingExerciseId(null)} title="Cancel exercise edit" />
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2">
-                        <span className="data-text text-xs text-zinc-500">{index + 1}</span>
-                        <span className="truncate text-xs text-zinc-200">{exercise.exercise}</span>
-                        <div className="flex gap-1">
-                          <IconButton disabled={index === 0} icon={ChevronDown} className={index === 0 ? '' : 'rotate-180'} loading={templateLoading === `exercise-move-${exercise.id}`} onClick={() => moveExercise(template.id, exercise.id, 'up')} title="Move up" tone="zinc" size="sm" />
-                          <IconButton disabled={index === exercises.length - 1} icon={ChevronDown} loading={templateLoading === `exercise-move-${exercise.id}`} onClick={() => moveExercise(template.id, exercise.id, 'down')} title="Move down" tone="zinc" size="sm" />
-                          <IconButton
-                            icon={Pencil}
-                            onClick={() => {
-                              setEditingExerciseId(exercise.id);
-                              setExerciseEditForm({ exercise: exercise.exercise, notes: exercise.notes ?? '' });
-                            }}
-                            title="Edit exercise"
-                            tone="zinc"
-                            size="sm"
-                          />
-                          <IconButton icon={Trash2} loading={templateLoading === `exercise-delete-${exercise.id}`} onClick={() => removeExercise(exercise.id)} title="Delete exercise" tone="red" size="sm" />
+                      <div className="grid min-w-0 gap-3">
+                        <div className="flex min-w-0 gap-3">
+                          <span className="data-text text-sm text-zinc-500">{index + 1}</span>
+                          <div className="min-w-0">
+                            <p className="break-words text-sm text-zinc-200">{exercise.exercise}</p>
+                            {exercise.notes ? <p className="mt-1 break-words text-xs text-zinc-500">{exercise.notes}</p> : null}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <IconButton disabled={index === 0} icon={ChevronDown} className="rotate-180" loading={templateLoading === 'exercise-move-' + exercise.id} onClick={() => moveExercise(template.id, exercise.id, 'up')} title="Move up" />
+                          <IconButton disabled={index === exercises.length - 1} icon={ChevronDown} loading={templateLoading === 'exercise-move-' + exercise.id} onClick={() => moveExercise(template.id, exercise.id, 'down')} title="Move down" />
+                          <IconButton icon={Pencil} onClick={() => { setEditingExerciseId(exercise.id); setExerciseEditForm({ exercise: exercise.exercise, notes: exercise.notes ?? '' }); }} title="Edit exercise" />
+                          <IconButton icon={Trash2} loading={templateLoading === 'exercise-delete-' + exercise.id} onClick={() => removeExercise(exercise.id)} title="Delete exercise" tone="red" />
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-
-              <div className="mt-2 grid gap-2 rounded border border-white/5 bg-[#121212] p-2">
+              <div role="group" aria-label="Add template exercise" className="grid min-w-0 gap-3 border-t border-white/10 pt-4">
                 <CompactField label="Add exercise" value={draft.exercise} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, exercise: value } }))} />
                 <CompactField label="Notes" value={draft.notes} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, notes: value } }))} />
-                <button
-                  type="button"
-                  onClick={() => addExercise(template)}
-                  disabled={templateLoading === `exercise-create-${template.id}`}
-                  className="flex h-9 items-center justify-center gap-2 rounded border border-cyan-400/20 bg-cyan-400/10 text-xs font-medium text-cyan-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-                >
-                  {templateLoading === `exercise-create-${template.id}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                <button type="button" onClick={() => addExercise(template)} disabled={Boolean(templateLoading)} className="flex min-h-11 items-center justify-center gap-2 rounded border border-white/15 text-sm text-zinc-200 disabled:opacity-50">
+                  {templateLoading === 'exercise-create-' + template.id ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                   Add exercise
                 </button>
               </div>
-            </div>
+            </article>
           );
         })}
       </div>
-
-      {templateError ? <p className="data-text text-[11px] text-red-300">{templateError}</p> : null}
-    </div>
+    </fieldset>
   );
 }
 
@@ -1410,16 +1405,16 @@ function WarmupToggle({ checked, compact = false, onChange }) {
 
 function CompactField({ inputMode, label, value, onChange, type = 'text', suffix, readOnly = false }) {
   return (
-    <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
-      <div className="mt-1 flex items-center gap-1">
+    <label className="grid min-w-0 gap-1 text-xs text-zinc-400">
+      <span>{label}</span>
+      <div className="flex min-h-11 min-w-0 items-center gap-1 rounded border border-white/10 bg-black/30 px-3">
         <input
           type={type}
           inputMode={inputMode}
           value={value}
           readOnly={readOnly}
           onChange={(event) => onChange(event.target.value)}
-          className={`data-text min-w-0 flex-1 bg-transparent text-base font-semibold text-zinc-100 outline-none ${readOnly ? 'text-cyan-300' : ''}`}
+          className={`h-11 min-w-0 max-w-full flex-1 bg-transparent text-base text-zinc-100 outline-none ${readOnly ? 'data-text text-zinc-400' : ''}`}
         />
         {suffix ? <span className="data-text text-xs text-zinc-500">{suffix}</span> : null}
       </div>

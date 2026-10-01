@@ -10,7 +10,8 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] Focused active Training logger, templates/history secondary, save feedback.
 - [x] Command, Companion, Health, Projects, Memos and Calendar reconstruction checkpoints.
 - [x] Finances reconstruction checkpoint.
-- [ ] Useful routine-state integration, Training template journeys and complete preservation audit.
+- [x] Training template/session-setup browser journeys and management hierarchy.
+- [ ] Useful routine-state integration and complete preservation audit.
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
 
@@ -224,3 +225,27 @@ were inspected at all seven sizes; mobile tests check Save expense is initially
 above the active Training dock and Save changes can be scrolled clear of it.
 Removing the unused category chart from this tab reduces the build precache to
 about 820 KiB. No production mutations or physical-device QA were performed.
+
+## Training Setup / Templates Checkpoint (2026-10-01)
+
+Template selection and management now use unframed rows, readable labels and
+44px controls. Exercise actions occupy a separate row so long names retain room.
+Existing templates, notes, ordering, immutable snapshots and session contracts
+remain intact. Busy template saves prevent collapse/sibling mutation, and failed
+session starts now have a visible alert without requiring an active logger.
+Delete confirmation preserves existing workout snapshots.
+
+Twelve new isolated browser cases cover template/exercise CRUD, order compaction,
+warmup/working-set numbering, snapshot preservation after deleting the template,
+reload, failure retention, delayed saves and setup/management at seven sizes.
+Mobile checks verify Add exercise can scroll clear of navigation. These fixtures
+do not prove production Supabase ordering/RLS or physical iOS/PWA behavior.
+
+Remaining full scope: useful Health routine-state integration, complete
+feature-preservation inventory, whole-app visual/workflow audit and physical
+iPhone background/keyboard/process-eviction QA. Keep the redesign goal active.
+
+Checkpoint gates: the full browser suite passes 117 tests; `npm test`, production
+build, changed-test syntax checks and diff checks pass. Function count remains
+seven. Setup and management/control captures were inspected at all seven sizes.
+No schema, environment, backend contract or production data changes were made.

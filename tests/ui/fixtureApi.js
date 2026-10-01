@@ -28,6 +28,8 @@ export const workoutApi = {
     return read().filter((row) => row.user_id === user()?.id);
   },
   create: async (payload) => {
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-session-delay') || 0)));
+    if (localStorage.getItem('qa-session-fail')) throw new Error('Workout session was not started.');
     const row = { ...payload, id: crypto.randomUUID(), user_id: user().id, workout_sets: [] };
     write([row, ...read()]); return row;
   },
@@ -54,8 +56,48 @@ export const workoutSetApi = {
   },
   delete: async (id) => write(read().map((session) => ({ ...session, workout_sets: session.workout_sets.filter((set) => set.id !== id) }))),
 };
-export const workoutTemplateApi = emptyApi;
-export const workoutTemplateExerciseApi = emptyApi;
+const templateRows = () => JSON.parse(localStorage.getItem('qa-templates') || '[]');
+const saveTemplates = (rows) => localStorage.setItem('qa-templates', JSON.stringify(rows));
+const templateMutation = async () => {
+  await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-template-delay') || 0)));
+  if (localStorage.getItem('qa-template-fail')) throw new Error('Template changes were not saved.');
+};
+export const workoutTemplateApi = {
+  list: async () => templateRows().filter((row) => row.user_id === user()?.id),
+  create: async (payload) => {
+    await templateMutation(); const row = { ...payload, id: crypto.randomUUID(), user_id: user().id, workout_template_exercises: [] };
+    saveTemplates([row, ...templateRows()]); return row;
+  },
+  update: async (id, patch) => {
+    await templateMutation(); const rows = templateRows().map((row) => row.id === id ? { ...row, ...patch } : row);
+    saveTemplates(rows); return rows.find((row) => row.id === id);
+  },
+  delete: async (id) => { await templateMutation(); saveTemplates(templateRows().filter((row) => row.id !== id)); },
+};
+export const workoutTemplateExerciseApi = {
+  create: async (payload) => {
+    await templateMutation(); const row = { ...payload, id: crypto.randomUUID(), user_id: user().id };
+    saveTemplates(templateRows().map((template) => template.id === row.template_id ? { ...template, workout_template_exercises: [...template.workout_template_exercises, row] } : template)); return row;
+  },
+  update: async (id, patch) => {
+    await templateMutation(); let updated;
+    saveTemplates(templateRows().map((template) => ({ ...template, workout_template_exercises: template.workout_template_exercises.map((row) => {
+      if (row.id !== id) return row;
+      updated = { ...row, ...patch }; return updated;
+    }) }))); return updated;
+  },
+  delete: async (id) => {
+    await templateMutation(); saveTemplates(templateRows().map((template) => ({ ...template, workout_template_exercises: template.workout_template_exercises.filter((row) => row.id !== id) })));
+  },
+  reorder: async (updates) => {
+    await templateMutation(); const result = [];
+    saveTemplates(templateRows().map((template) => ({ ...template, workout_template_exercises: template.workout_template_exercises.map((row) => {
+      const patch = updates.find((update) => update.id === row.id);
+      if (!patch) return row;
+      const next = { ...row, ...patch }; result.push(next); return next;
+    }) }))); return result;
+  },
+};
 export const healthLogApi = {
   list: async () => JSON.parse(localStorage.getItem('qa-health') || '[]'),
   getByDate: async (date) => (await healthLogApi.list()).find((row) => row.logged_on === date) ?? null,

@@ -65,6 +65,15 @@ remain required before the full reconstruction can be considered complete.
 
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
+Training setup/templates checkpoint (2026-10-01): readable unframed management
+rows and 44px actions preserve session/template/exercise CRUD and ordering.
+In-flight template mutations lock panel dismissal and sibling edits. Deletion
+asks confirmation while existing workout snapshots remain intact. Failed session
+starts now show an alert outside the active logger. Twelve isolated browser
+tests cover these journeys and seven viewport sizes; see `docs/QA_WORKOUT.md`.
+No API/schema changes. Full preservation audit, useful routine-state integration
+and whole-app/device QA remain outstanding; this is not full reconstruction completion.
+
 Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.
 
 **Deployment gate:** production now records the Slice 3 memory migration plus explicitly applied `20260926172636_companion_external_sync` and `20260926172705_companion_attention_monitors`. Both new schemas were verified read-only. Older physical reliability/belief/OAuth objects still lack matching ledger rows; do not run blanket `supabase db push`. This backend has not been deployed, so monitor/WhatsApp behavior remains local-only. OAuth link-secret QA remains blocked. No Oracle bridge code changed. See `docs/QA_DEPLOYMENT.md` for the live sequence.
