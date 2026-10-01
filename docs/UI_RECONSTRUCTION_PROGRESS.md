@@ -9,7 +9,7 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] Navigation, shared visual foundation, mobile utility sheet, desktop rail.
 - [x] Focused active Training logger, templates/history secondary, save feedback.
 - [x] Command, Companion, Health, Projects, Memos and Calendar reconstruction checkpoints.
-- [ ] Finances reconstruction.
+- [x] Finances reconstruction checkpoint.
 - [ ] Useful routine-state integration, Training template journeys and complete preservation audit.
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
@@ -203,3 +203,24 @@ Calendar checkpoint gates: `npm test`, build, syntax and diff checks pass;
 the complete browser suite passes 91 tests. Function count remains seven.
 Agenda and editor captures were inspected at all seven requested viewport sizes.
 These are isolated browser fixtures, not production Supabase or physical iOS QA.
+
+## Finances Ledger Checkpoint (2026-10-01)
+
+Capture and monthly records now lead. Removed oversized colored spending,
+four competing metrics and a duplicate category chart/cards. Category totals
+remain as secondary proportional rows; recent other-month records avoid ledger
+duplication. Preserved all fields/custom categories/comma decimals/CRUD/month
+selection. Added confirmed deletion, 44px controls, in-flight form protection,
+honest load/error/empty states and Rome-local rolling defaults. Fourteen isolated
+browser cases cover these workflows and seven sizes. No API/schema change.
+
+Remaining scope: richer Training template journeys, useful routine-state
+integration, full feature inventory/whole-app QA and physical iPhone/PWA QA.
+This is a checkpoint, not completion of the full redesign.
+
+Finances gates: `npm test`, build, test syntax and diff checks pass; the complete
+browser suite passes 105 tests. Function count remains seven. Capture/edit screens
+were inspected at all seven sizes; mobile tests check Save expense is initially
+above the active Training dock and Save changes can be scrolled clear of it.
+Removing the unused category chart from this tab reduces the build precache to
+about 820 KiB. No production mutations or physical-device QA were performed.

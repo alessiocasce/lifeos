@@ -72,7 +72,24 @@ export const healthLogApi = {
     return rows.find((row) => row.id === id);
   },
 };
-export const expenseApi = emptyApi;
+const expenseRows = () => JSON.parse(localStorage.getItem('qa-expenses') || '[]');
+const expenseMutation = async () => {
+  await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-expense-delay') || 0)));
+  if (localStorage.getItem('qa-expense-fail')) throw new Error('Expense changes were not saved.');
+};
+export const expenseApi = {
+  list: async () => { if (localStorage.getItem('qa-expense-load-fail')) throw new Error('Expense history unavailable'); return expenseRows(); },
+  listByDateRange: async (start, end) => (await expenseApi.list()).filter((row) => row.spent_on >= start && row.spent_on < end),
+  create: async (payload) => {
+    await expenseMutation(); const row = { ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    localStorage.setItem('qa-expenses', JSON.stringify([row, ...expenseRows()])); return row;
+  },
+  update: async (id, patch) => {
+    await expenseMutation(); const rows = expenseRows().map((row) => row.id === id ? { ...row, ...patch } : row);
+    localStorage.setItem('qa-expenses', JSON.stringify(rows)); return rows.find((row) => row.id === id);
+  },
+  delete: async (id) => { await expenseMutation(); localStorage.setItem('qa-expenses', JSON.stringify(expenseRows().filter((row) => row.id !== id))); },
+};
 export const calendarEventApi = {
   list: async () => JSON.parse(localStorage.getItem('qa-calendar') || '[]'),
   listByRange: async (start, end) => {

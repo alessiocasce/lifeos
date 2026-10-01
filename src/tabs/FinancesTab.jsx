@@ -1,488 +1,200 @@
 import { Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, Cell, ResponsiveContainer, XAxis } from 'recharts';
 import { useLifeOS } from '../context/LifeOSContext';
-import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
+import { useLocalDay } from '../hooks/useLocalDay';
+import { localDate } from '../utils/date';
 
-const today = new Date().toISOString().slice(0, 10);
 const defaultCategories = ['Food', 'Training', 'Transport', 'Rent', 'Software', 'Books', 'Health', 'Other'];
-const categoryColors = ['#22d3ee', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#a3e635', '#06b6d4', '#71717a'];
-
-const emptyForm = {
-  vendor: '',
-  category: 'Food',
-  amount: '',
-  spent_on: today,
-  notes: '',
-};
+const emptyForm = () => ({ vendor: '', category: 'Food', amount: '', spent_on: '', notes: '' });
 
 export function FinancesTab() {
   const {
-    createExpense,
-    deleteExpense,
-    expenses,
-    expensesError,
-    expensesStatus,
-    loadExpenseMonth,
-    monthlyExpenses,
-    monthlyExpensesError,
-    monthlyExpensesStatus,
-    reloadExpenses,
-    updateExpense,
+    createExpense, deleteExpense, expenses, expensesError, expensesStatus,
+    loadExpenseMonth, monthlyExpenses, monthlyExpensesError, monthlyExpensesStatus,
+    reloadExpenses, updateExpense,
   } = useLifeOS();
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
-  const selectedMonthRange = useMemo(() => getMonthRange(selectedMonth), [selectedMonth]);
-  const sortedExpenses = useMemo(() => sortExpenses(expenses), [expenses]);
-  const sortedMonthlyExpenses = useMemo(
-    () => sortExpenses(monthlyExpenses.filter((expense) => expense.spent_on >= selectedMonthRange.start && expense.spent_on < selectedMonthRange.end)),
-    [monthlyExpenses, selectedMonthRange.end, selectedMonthRange.start],
-  );
-  const monthlySpend = useMemo(() => sumExpenses(sortedMonthlyExpenses), [sortedMonthlyExpenses]);
-  const categorySpend = useMemo(() => buildCategorySpend(sortedMonthlyExpenses), [sortedMonthlyExpenses]);
-  const categories = useMemo(() => mergeCategories([...sortedExpenses, ...sortedMonthlyExpenses]), [sortedExpenses, sortedMonthlyExpenses]);
-  const recentInitialLoading = expensesStatus === 'loading' && sortedExpenses.length === 0;
-  const recentResolved = ['ready', 'error', 'not-configured', 'no-session'].includes(expensesStatus);
-  const monthlyInitialLoading = monthlyExpensesStatus === 'loading' && sortedMonthlyExpenses.length === 0;
-
+  const today = useLocalDay();
+  const [monthChoice, setMonthChoice] = useState(null);
+  const selectedMonth = monthChoice || today.slice(0, 7);
+  const range = useMemo(() => getMonthRange(selectedMonth), [selectedMonth]);
+  const rows = useMemo(() => sortExpenses(monthlyExpenses.filter((row) => row.spent_on >= range.start && row.spent_on < range.end)), [monthlyExpenses, range]);
+  const recent = useMemo(() => sortExpenses(expenses).filter((row) => row.spent_on < range.start || row.spent_on >= range.end).slice(0, 15), [expenses, range]);
+  const categories = useMemo(() => Array.from(new Set([...defaultCategories, ...expenses.map((row) => row.category).filter(Boolean), ...rows.map((row) => row.category).filter(Boolean)])).sort(), [expenses, rows]);
+  const categorySpend = useMemo(() => buildCategorySpend(rows), [rows]);
+  const total = rows.reduce((sum, row) => sum + Math.abs(Number(row.amount) || 0), 0);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+  const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
-  const [savingEditId, setSavingEditId] = useState(null);
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
-  useEffect(() => {
-    loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end);
-  }, [loadExpenseMonth, selectedMonthRange.end, selectedMonthRange.start]);
-
-  const updateForm = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    setFormError('');
-  };
-
+  useEffect(() => { loadExpenseMonth(range.start, range.end); }, [loadExpenseMonth, range]);
+  const refresh = () => Promise.all([reloadExpenses(), loadExpenseMonth(range.start, range.end)]);
+  const updateForm = (field, value) => { setForm((prev) => ({ ...prev, [field]: value })); setFormError(''); setSaved(false); };
   const submit = async (event) => {
     event.preventDefault();
-    setFormError('');
-
-    const validationError = validateExpenseForm(form);
-    if (validationError) {
-      setFormError(validationError);
-      return;
-    }
-
-    setSaving(true);
+    if (saving) return;
+    const resolved = { ...form, spent_on: form.spent_on || today };
+    const error = validateExpenseForm(resolved);
+    if (error) { setFormError(error); return; }
+    setSaving(true); setFormError(''); setSaved(false);
     try {
-      await createExpense(toPayload(form));
-      await Promise.all([
-        reloadExpenses(),
-        loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end),
-      ]);
-      setForm((prev) => ({ ...emptyForm, category: prev.category, spent_on: today }));
-    } catch (error) {
-      setFormError(error.message || 'Failed to save expense.');
-    } finally {
-      setSaving(false);
-    }
+      await createExpense(toPayload(resolved));
+      setForm({ ...emptyForm(), category: form.category });
+      setSaved(true);
+      await refresh();
+    } catch (error) { setFormError(error.message || 'Failed to save expense.'); }
+    finally { setSaving(false); }
   };
-
-  const beginEdit = (expense) => {
-    setEditingId(expense.id);
-    setEditForm(formFromExpense(expense));
-    setFormError('');
-  };
-
-  const saveEdit = async (id) => {
-    setFormError('');
-    const validationError = validateExpenseForm(editForm);
-    if (validationError) {
-      setFormError(validationError);
-      return;
-    }
-
-    setSavingEditId(id);
+  const beginEdit = (row) => { setEditingId(row.id); setEditForm(formFromExpense(row)); setEditError(''); };
+  const cancelEdit = () => { if (!savingEdit) { setEditingId(null); setEditForm(null); setEditError(''); } };
+  const saveEdit = async (event) => {
+    event.preventDefault();
+    if (savingEdit) return;
+    const error = validateExpenseForm(editForm);
+    if (error) { setEditError(error); return; }
+    setSavingEdit(true); setEditError('');
     try {
-      await updateExpense(id, toPayload(editForm));
-      await Promise.all([
-        reloadExpenses(),
-        loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end),
-      ]);
-      setEditingId(null);
-      setEditForm(null);
-    } catch (error) {
-      setFormError(error.message || 'Failed to update expense.');
-    } finally {
-      setSavingEditId(null);
-    }
+      await updateExpense(editingId, toPayload(editForm));
+      setEditingId(null); setEditForm(null);
+      await refresh();
+    } catch (error) { setEditError(error.message || 'Failed to update expense.'); }
+    finally { setSavingEdit(false); }
   };
-
-  const removeExpense = async (id) => {
-    setDeletingId(id);
-    setFormError('');
-    try {
-      await deleteExpense(id);
-      await Promise.all([
-        reloadExpenses(),
-        loadExpenseMonth(selectedMonthRange.start, selectedMonthRange.end),
-      ]);
-    } catch (error) {
-      setFormError(error.message || 'Failed to delete expense.');
-    } finally {
-      setDeletingId(null);
-    }
+  const remove = async (row) => {
+    if (deletingId || savingEdit || !window.confirm('Delete expense "' + row.vendor + '" permanently?')) return;
+    setDeletingId(row.id); setDeleteError('');
+    try { await deleteExpense(row.id); await refresh(); }
+    catch (error) { setDeleteError(error.message || 'Failed to delete expense.'); }
+    finally { setDeletingId(null); }
   };
-
-  return (
-    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
-      <Panel className="col-span-12">
-        <div className="grid gap-3 p-3 xl:grid-cols-[1fr_520px]">
-          <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Selected Month Spend</p>
-            <p className="data-text text-4xl font-black leading-none text-emerald-300 sm:text-6xl">
-              EUR {formatMoney(monthlySpend)}
-            </p>
-            <p className="data-text mt-2 text-[11px] text-zinc-500">
-              {monthlyInitialLoading
-                ? `Syncing ${formatMonthLabel(selectedMonth)} expenses`
-                : `${sortedMonthlyExpenses.length} persisted expenses / ${formatMonthLabel(selectedMonth)}`}
-            </p>
-          </div>
-
-          <form onSubmit={submit} className="grid gap-2 self-end">
-            <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
-              <LedgerField label="Vendor" value={form.vendor} placeholder="Vendor" onChange={(value) => updateForm('vendor', value)} />
-              <LedgerField label="Amount" inputMode="decimal" value={form.amount} placeholder="0.00" onChange={(value) => updateForm('amount', value)} />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[1fr_150px_48px]">
-              <LedgerField label="Category" value={form.category} list="expense-categories" onChange={(value) => updateForm('category', value)} />
-              <LedgerField label="Date" type="date" value={form.spent_on} onChange={(value) => updateForm('spent_on', value)} />
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex h-12 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-                title="Save expense"
-              >
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={17} />}
-                <span className="sm:hidden">Save</span>
-              </button>
-            </div>
-            <LedgerField label="Notes" value={form.notes} placeholder="Optional notes" onChange={(value) => updateForm('notes', value)} />
-            <datalist id="expense-categories">
-              {categories.map((category) => (
-                <option key={category} value={category} />
-              ))}
-            </datalist>
-            {formError || expensesError ? <p className="data-text text-[11px] text-red-300">{formError || expensesError}</p> : null}
-          </form>
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-7">
-        <PanelHeader
-          eyebrow="Month Analysis"
-          title="Spend By Category"
-          right={<SourceStatus status={monthlyExpensesStatus} />}
-        />
-        <div className="grid gap-3 p-3">
-          <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5 sm:max-w-56">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Selected Month</span>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(event) => setSelectedMonth(event.target.value || currentMonthValue())}
-              className="data-text mt-1 w-full bg-transparent text-base font-semibold text-zinc-100 outline-none"
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <MiniMetric label="Total Spend" value={`EUR ${formatMoney(monthlySpend)}`} tone="text-emerald-300" sub="month" />
-            <MiniMetric label="Entries" value={sortedMonthlyExpenses.length} tone="text-cyan-300" sub="persisted" />
-            <MiniMetric label="Avg Ticket" value={`EUR ${formatMoney(sortedMonthlyExpenses.length ? monthlySpend / sortedMonthlyExpenses.length : 0)}`} tone="text-amber-300" sub="expense" />
-            <MiniMetric label="Top Category" value={categorySpend[0]?.category ?? '--'} tone="text-zinc-100" sub={categorySpend[0] ? `EUR ${formatMoney(categorySpend[0].total)}` : 'none'} />
-          </div>
-
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={categorySpend}>
-                <XAxis dataKey="category" tick={{ fill: '#71717a', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-                  {categorySpend.map((entry, index) => (
-                    <Cell key={entry.category} fill={entry.color ?? categoryColors[index % categoryColors.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {monthlyInitialLoading ? (
-              <LoadingRow label="Loading selected month" />
-            ) : categorySpend.length ? (
-              categorySpend.map((item) => (
-                <div key={item.category} className="rounded border border-white/5 bg-black/25 p-2">
-                  <div className="mb-1 h-1.5 rounded" style={{ backgroundColor: item.color }} />
-                  <p className="truncate text-xs text-zinc-300">{item.category}</p>
-                  <p className="data-text text-[11px] text-zinc-500">EUR {formatMoney(item.total)}</p>
-                </div>
-              ))
-            ) : (
-              <p className="col-span-full rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-                No expenses logged for the selected month.
-              </p>
-            )}
-          </div>
-          {monthlyExpensesError ? <p className="data-text text-[11px] text-red-300">{monthlyExpensesError}</p> : null}
-        </div>
-      </Panel>
-
-      <Panel className="col-span-12 xl:col-span-5">
-        <PanelHeader eyebrow="Ledger" title="Recent Expenses" right={<SourceStatus status={expensesStatus} />} />
-        <div className="grid gap-2 p-3">
-          {recentInitialLoading ? (
-            <LoadingRow label="Loading expenses" />
-          ) : sortedExpenses.length ? (
-            sortedExpenses.slice(0, 15).map((expense) =>
-              editingId === expense.id ? (
-                <EditExpenseRow
-                  key={expense.id}
-                  categories={categories}
-                  editForm={editForm}
-                  loading={savingEditId === expense.id}
-                  onCancel={() => {
-                    setEditingId(null);
-                    setEditForm(null);
-                  }}
-                  onSave={() => saveEdit(expense.id)}
-                  setEditForm={setEditForm}
-                />
-              ) : (
-                <ExpenseRow
-                  key={expense.id}
-                  expense={expense}
-                  loadingDelete={deletingId === expense.id}
-                  onDelete={() => removeExpense(expense.id)}
-                  onEdit={() => beginEdit(expense)}
-                />
-              ),
-            )
-          ) : recentResolved ? (
-            <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-              No persisted expenses yet. Add one above to start the ledger.
-            </p>
-          ) : (
-            <LoadingRow label="Expense history pending" />
-          )}
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function LedgerField({ inputMode, label, list, onChange, placeholder = '', type = 'text', value }) {
-  return (
-    <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
-      <input
-        type={type}
-        inputMode={inputMode}
-        list={list}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-        className="data-text mt-1 w-full min-w-0 bg-transparent text-base font-semibold text-zinc-100 outline-none placeholder:text-zinc-700"
-      />
-    </label>
-  );
-}
-
-function ExpenseRow({ expense, loadingDelete, onDelete, onEdit }) {
-  return (
-    <div className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+  const renderRow = (row) => editingId === row.id ? (
+    <form key={row.id} aria-label={'Edit expense ' + row.vendor} onSubmit={saveEdit} className="grid gap-3 border-y border-white/15 py-4">
+      <fieldset disabled={savingEdit} className="grid min-w-0 gap-3"><ExpenseFields form={editForm} categories={categories} listId="expense-edit-categories" onChange={(field, value) => { setEditForm((prev) => ({ ...prev, [field]: value })); setEditError(''); }} /></fieldset>
+      {editError ? <p role="alert" className="text-sm text-red-300">{editError}</p> : null}
+      <div className="flex gap-2">
+        <button type="submit" disabled={savingEdit} className="primary-button inline-flex min-h-11 items-center gap-2 px-4 text-sm"><Save size={16} />{savingEdit ? 'Saving' : 'Save changes'}</button>
+        <button type="button" disabled={savingEdit} onClick={cancelEdit} className="inline-flex min-h-11 items-center gap-2 px-4 text-sm text-zinc-300"><X size={16} />Cancel</button>
+      </div>
+    </form>
+  ) : (
+    <article key={row.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 py-4">
       <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-sm font-medium text-zinc-100">{expense.vendor}</p>
-          <Tag tone="cyan">{expense.category}</Tag>
+        <h3 className="break-words text-sm font-semibold text-zinc-100">{row.vendor}</h3>
+        <p className="mt-1 break-words text-xs text-zinc-400">{row.category || 'Other'} <span className="text-zinc-600">/</span> {row.spent_on}</p>
+        {row.notes ? <p className="mt-2 break-words text-sm text-zinc-400">{row.notes}</p> : null}
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <span className="data-text whitespace-nowrap text-base font-semibold text-zinc-200">EUR {formatMoney(row.amount)}</span>
+        <div className="flex gap-1">
+          <IconButton icon={Pencil} label="Edit expense" disabled={!!deletingId || savingEdit} onClick={() => beginEdit(row)} />
+          <IconButton icon={deletingId === row.id ? Loader2 : Trash2} label="Delete expense" disabled={!!deletingId || savingEdit} onClick={() => remove(row)} />
         </div>
-        <p className="data-text mt-1 text-[10px] text-zinc-500">
-          {expense.spent_on} / {expense.notes || 'no notes'}
-        </p>
       </div>
-      <div className="flex items-center justify-between gap-2 sm:justify-end">
-        <span className="data-text text-sm font-bold text-zinc-100">EUR {formatMoney(expense.amount)}</span>
-        <IconButton icon={Pencil} onClick={onEdit} title="Edit expense" />
-        <IconButton icon={Trash2} loading={loadingDelete} onClick={onDelete} title="Delete expense" tone="red" />
+    </article>
+  );
+
+  return (
+    <div className="grid min-w-0 gap-6 pb-6">
+      <header className="grid min-w-0 grid-cols-[minmax(0,1fr)_144px] items-start gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="min-w-0">
+          <p className="text-xs text-zinc-500">{formatMonthLabel(selectedMonth)}</p>
+          <h2 className="mt-1 text-xl font-semibold text-zinc-100">Expense ledger</h2>
+          {rows.length ? <p className="data-text mt-2 text-xl text-zinc-200">EUR {formatMoney(total)} <span className="font-sans text-xs text-zinc-500">/ {rows.length} {rows.length === 1 ? 'entry' : 'entries'}{monthlyExpensesStatus === 'loading' ? ' / refreshing' : ''}</span></p> : null}
+        </div>
+        <label className="grid gap-1 text-xs text-zinc-400">Month
+          <input type="month" value={selectedMonth} onChange={(event) => { cancelEdit(); setMonthChoice(event.target.value || null); }} disabled={savingEdit} className="h-11 w-full min-w-0 rounded border border-white/10 bg-black/30 px-2 text-base text-zinc-100" />
+        </label>
+      </header>
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-10">
+        <section aria-label="Capture expense" className="min-w-0 border-t border-white/10 pt-4">
+          <h3 className="mb-4 text-sm font-semibold text-zinc-200">Add expense</h3>
+          <form onSubmit={submit} className="grid gap-3">
+            <fieldset disabled={saving} className="grid min-w-0 gap-3"><ExpenseFields form={{ ...form, spent_on: form.spent_on || today }} categories={categories} onChange={updateForm} /></fieldset>
+            {formError ? <p role="alert" className="text-sm text-red-300">{formError}</p> : null}
+            <button type="submit" disabled={saving} className="primary-button inline-flex min-h-12 items-center justify-center gap-2 text-sm font-semibold">{saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{saving ? 'Saving expense' : 'Save expense'}</button>
+            {saved ? <p role="status" className="text-sm text-zinc-300">Expense saved.</p> : null}
+          </form>
+        </section>
+        <section aria-label="Selected month ledger" className="min-w-0 border-t border-white/10 pt-4">
+          <h3 className="mb-2 text-sm font-semibold text-zinc-200">{formatMonthLabel(selectedMonth)}</h3>
+          {monthlyExpensesError ? <p role="alert" className="py-3 text-sm text-red-300">{monthlyExpensesError}</p> : null}
+          {deleteError ? <p role="alert" className="py-3 text-sm text-red-300">{deleteError}</p> : null}
+          <div className="divide-y divide-white/10">{rows.map(renderRow)}</div>
+          {!rows.length ? monthlyExpensesStatus === 'loading' || monthlyExpensesStatus === 'idle' ? <LoadingRow /> : monthlyExpensesError ? <button type="button" onClick={() => loadExpenseMonth(range.start, range.end)} className="min-h-11 text-sm text-zinc-200">Retry month</button> : <p className="py-6 text-sm text-zinc-500">No expenses this month.</p> : null}
+          {categorySpend.length ? (
+            <details className="mt-6 border-t border-white/10 pt-2">
+              <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">Category breakdown</summary>
+              <dl className="grid gap-4 py-3">{categorySpend.map(({ category, amount }) => (
+                <div key={category}>
+                  <div className="mb-2 flex justify-between gap-3 text-sm"><dt className="break-words text-zinc-400">{category}</dt><dd className="data-text shrink-0 text-zinc-200">EUR {formatMoney(amount)}</dd></div>
+                  <div className="h-1 bg-white/5"><div className="h-full bg-zinc-500" style={{ width: (total ? amount / total * 100 : 0) + '%' }} /></div>
+                </div>
+              ))}</dl>
+            </details>
+          ) : null}
+        </section>
       </div>
+      <details className="border-t border-white/10 pt-2">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-400">Recent expenses in other months</summary>
+        {expensesError ? <p role="alert" className="py-3 text-sm text-red-300">{expensesError}</p> : null}
+        <div className="divide-y divide-white/10">{recent.map(renderRow)}</div>
+        {!recent.length ? expensesStatus === 'loading' ? <LoadingRow /> : expensesError ? <button type="button" onClick={reloadExpenses} className="min-h-11 text-sm text-zinc-200">Retry recent expenses</button> : <p className="py-4 text-sm text-zinc-500">No recent expenses outside this month.</p> : null}
+      </details>
     </div>
   );
 }
 
-function EditExpenseRow({ categories, editForm, loading, onCancel, onSave, setEditForm }) {
-  const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }));
+function ExpenseFields({ form, onChange, categories, listId = 'expense-categories' }) {
   return (
-    <div className="grid gap-2 rounded-md border border-cyan-400/20 bg-cyan-400/[0.04] p-2">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <LedgerField label="Vendor" value={editForm.vendor} onChange={(value) => update('vendor', value)} />
-        <LedgerField label="Amount" inputMode="decimal" value={editForm.amount} onChange={(value) => update('amount', value)} />
+    <>
+      <LedgerField label="Vendor" value={form.vendor} onChange={(value) => onChange('vendor', value)} />
+      <div className="grid min-w-0 grid-cols-2 gap-3">
+        <LedgerField label="Amount" inputMode="decimal" value={form.amount} placeholder="0.00" onChange={(value) => onChange('amount', value)} />
+        <LedgerField label="Date" type="date" value={form.spent_on} onChange={(value) => onChange('spent_on', value)} />
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <LedgerField label="Category" list="expense-categories-edit" value={editForm.category} onChange={(value) => update('category', value)} />
-        <LedgerField label="Date" type="date" value={editForm.spent_on} onChange={(value) => update('spent_on', value)} />
-      </div>
-      <LedgerField label="Notes" value={editForm.notes} onChange={(value) => update('notes', value)} />
-      <datalist id="expense-categories-edit">
-        {categories.map((category) => (
-          <option key={category} value={category} />
-        ))}
-      </datalist>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={loading}
-          className="flex h-10 items-center justify-center gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 text-sm text-emerald-300 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-        >
-          {loading ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex h-10 items-center justify-center gap-2 rounded border border-white/10 bg-white/[0.03] text-sm text-zinc-300"
-        >
-          <X size={15} />
-          Cancel
-        </button>
-      </div>
-    </div>
+      <label className="grid min-w-0 gap-1 text-xs text-zinc-400">Category
+        <input list={listId} value={form.category} onChange={(event) => onChange('category', event.target.value)} className="h-11 min-w-0 rounded border border-white/10 bg-black/30 px-3 text-base text-zinc-100" />
+      </label>
+      <label className="grid min-w-0 gap-1 text-xs text-zinc-400">Notes
+        <textarea value={form.notes} onChange={(event) => onChange('notes', event.target.value)} rows={2} className="min-h-16 min-w-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-base text-zinc-100" />
+      </label>
+      <datalist id={listId}>{categories.map((category) => <option key={category} value={category} />)}</datalist>
+    </>
   );
 }
-
-function IconButton({ icon: Icon, loading = false, onClick, title, tone = 'zinc' }) {
-  const DisplayIcon = loading ? Loader2 : Icon;
-  const toneClass = tone === 'red'
-    ? 'border-red-400/20 bg-red-400/10 text-red-300'
-    : 'border-white/10 bg-white/[0.03] text-zinc-300';
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      disabled={loading}
-      className={`grid h-10 w-10 place-items-center rounded border sm:h-8 sm:w-8 ${toneClass} disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600`}
-    >
-      <DisplayIcon size={14} className={loading ? 'animate-spin' : ''} />
-    </button>
-  );
+function LedgerField({ label, inputMode, type = 'text', value, placeholder, onChange }) {
+  return <label className="grid min-w-0 gap-1 text-xs text-zinc-400">{label}<input type={type} inputMode={inputMode} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} className="h-11 min-w-0 max-w-full rounded border border-white/10 bg-black/30 px-3 text-base text-zinc-100" /></label>;
 }
-
-function LoadingRow({ label }) {
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-white/5 bg-black/25 p-3 data-text text-[11px] text-zinc-500">
-      <Loader2 size={15} className="animate-spin text-cyan-300" />
-      {label}
-    </div>
-  );
+function IconButton({ icon: Icon, label, disabled, onClick }) {
+  return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className="grid h-11 w-11 place-items-center rounded border border-white/10 text-zinc-400 hover:text-zinc-100 disabled:opacity-40"><Icon size={16} /></button>;
 }
-
-function SourceStatus({ status }) {
-  const label = status === 'loading' ? 'SYNCING' : status === 'error' ? 'ERROR' : 'LIVE';
-  const tone = status === 'error'
-    ? 'border-red-400/20 bg-red-400/10 text-red-300'
-    : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300';
-  return <span className={`data-text rounded border px-2 py-1 text-[10px] ${tone}`}>{label}</span>;
-}
-
-function formFromExpense(expense) {
-  return {
-    vendor: expense.vendor ?? '',
-    category: expense.category ?? 'Other',
-    amount: stringValue(expense.amount),
-    spent_on: expense.spent_on ?? today,
-    notes: expense.notes ?? '',
-  };
-}
-
-function toPayload(form) {
-  return {
-    vendor: form.vendor.trim(),
-    category: form.category.trim(),
-    amount: parseDecimal(form.amount),
-    spent_on: form.spent_on,
-    notes: form.notes.trim() || null,
-  };
-}
-
+function LoadingRow() { return <p role="status" className="flex items-center gap-2 py-6 text-sm text-zinc-500"><Loader2 size={16} className="animate-spin" />Loading expenses</p>; }
+function formFromExpense(row) { return { vendor: row.vendor ?? '', category: row.category ?? 'Other', amount: String(row.amount ?? ''), spent_on: row.spent_on ?? localDate(), notes: row.notes ?? '' }; }
+function toPayload(form) { return { vendor: form.vendor.trim(), category: form.category.trim(), amount: parseDecimal(form.amount), spent_on: form.spent_on, notes: form.notes.trim() || null }; }
 function validateExpenseForm(form) {
   if (!form.vendor.trim()) return 'Vendor is required.';
   if (!form.category.trim()) return 'Category is required.';
-  if (!isValidDate(form.spent_on)) return 'Expense date is invalid.';
-  const amount = parseDecimal(form.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return 'Amount must be greater than zero.';
+  const date = new Date(form.spent_on + 'T12:00:00Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.spent_on) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== form.spent_on) return 'Expense date is invalid.';
+  if (!Number.isFinite(parseDecimal(form.amount)) || parseDecimal(form.amount) <= 0) return 'Amount must be greater than zero.';
   return '';
 }
-
-function buildCategorySpend(expenses) {
-  const map = new Map();
-  expenses.forEach((expense) => {
-    const category = expense.category || 'Other';
-    map.set(category, (map.get(category) ?? 0) + Math.abs(Number(expense.amount) || 0));
-  });
-  return Array.from(map.entries())
-    .map(([category, total], index) => ({ category, total, color: categoryColors[index % categoryColors.length] }))
-    .sort((a, b) => b.total - a.total);
+function parseDecimal(value) { return Number(String(value ?? '').replace(',', '.')); }
+function formatMoney(value) { return Math.abs(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function sortExpenses(rows) { return rows.slice().sort((a, b) => String(b.spent_on).localeCompare(String(a.spent_on)) || String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))); }
+function buildCategorySpend(rows) {
+  const totals = new Map();
+  rows.forEach((row) => totals.set(row.category || 'Other', (totals.get(row.category || 'Other') || 0) + Math.abs(Number(row.amount) || 0)));
+  return [...totals].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
 }
-
-function mergeCategories(expenses) {
-  return Array.from(new Set([...defaultCategories, ...expenses.map((expense) => expense.category).filter(Boolean)])).sort();
+function getMonthRange(value) {
+  const [year, month] = value.split('-').map(Number);
+  return { start: value + '-01', end: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10) };
 }
-
-function sumExpenses(expenses) {
-  return expenses.reduce((total, expense) => total + Math.abs(Number(expense.amount) || 0), 0);
-}
-
-function sortExpenses(expenses) {
-  return expenses.slice().sort((a, b) => {
-    if (a.spent_on !== b.spent_on) return new Date(b.spent_on) - new Date(a.spent_on);
-    return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
-  });
-}
-
-function parseDecimal(value) {
-  return Number(String(value ?? '').replace(',', '.'));
-}
-
-function isValidDate(value) {
-  if (!value) return false;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isFinite(date.getTime());
-}
-
-function stringValue(value) {
-  return value === null || value === undefined ? '' : String(value);
-}
-
-function formatMoney(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '0.00';
-  return Math.abs(numeric).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function currentMonthValue() {
-  return new Date().toISOString().slice(0, 7);
-}
-
-function getMonthRange(monthValue) {
-  const [year, month] = monthValue.split('-').map(Number);
-  if (!year || !month) return getMonthRange(currentMonthValue());
-  const start = new Date(Date.UTC(year, month - 1, 1));
-  const end = new Date(Date.UTC(year, month, 1));
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
-}
-
-function formatMonthLabel(monthValue) {
-  const [year, month] = monthValue.split('-').map(Number);
-  if (!year || !month) return 'Selected month';
-  return new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
+function formatMonthLabel(value) { return new Date(value + '-01T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); }
