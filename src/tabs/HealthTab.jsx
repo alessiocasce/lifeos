@@ -2,6 +2,7 @@ import { Ban, Check, Coffee, Loader2, Minus, Moon, Plus, ShieldCheck, TriangleAl
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { Panel, PanelHeader, Tag } from '../components/ui';
+import { HealthRoutineState } from '../components/HealthRoutineState';
 import { localDate, localTime } from '../utils/date';
 import { useLocalDay } from '../hooks/useLocalDay';
 import {
@@ -219,6 +220,8 @@ export function HealthTab() {
               ))}
             </div>
           </section>
+
+          {selectedIsToday ? <HealthRoutineState /> : null}
 
           <HealthField
             label="Notes"

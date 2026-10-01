@@ -268,8 +268,9 @@ export const aiReportApi = emptyApi;
 const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
 export const companionAppApi = {
   context: async () => {
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-context-delay') || 0)));
     if (localStorage.getItem('qa-context-fail')) throw new Error('Current understanding is unavailable.');
-    return { permissions: watchState().permissions, assumptions: [{ label: 'Creatine', text: 'inactive', kind: 'routine', uncertain: false }], watches: [] };
+    return { permissions: watchState().permissions, assumptions: JSON.parse(localStorage.getItem('qa-assumptions') || '[{"label":"Creatine","text":"inactive","kind":"routine","uncertain":false}]'), watches: [] };
   },
   watch: async () => watchState(),
   permissions: async () => ({ permissions: watchState().permissions }),

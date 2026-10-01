@@ -11,7 +11,8 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] Command, Companion, Health, Projects, Memos and Calendar reconstruction checkpoints.
 - [x] Finances reconstruction checkpoint.
 - [x] Training template/session-setup browser journeys and management hierarchy.
-- [ ] Useful routine-state integration and complete preservation audit.
+- [x] Health current-routine integration through the authenticated Companion view.
+- [ ] Complete feature-preservation and whole-app/device audit.
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
 
@@ -249,3 +250,24 @@ Checkpoint gates: the full browser suite passes 117 tests; `npm test`, productio
 build, changed-test syntax checks and diff checks pass. Function count remains
 seven. Setup and management/control captures were inspected at all seven sizes.
 No schema, environment, backend contract or production data changes were made.
+
+## Health Routine State Checkpoint (2026-10-01)
+
+Today's check-in exposes bounded current routines independently of habit counts.
+States are Active / Paused / No longer current / Not certain; low confidence is
+shown as uncertain. Historical date selection removes this current-only surface.
+All logging remains available, including an inactive routine, without changing
+beliefs or granting permissions. Corrections remain in Companion and are unsent.
+Reads use the existing authenticated context API, scoped component lifetime and
+abort guards; refresh and visibility resume reload context, not health logs.
+Empty state is quiet and failures do not block daily log saves.
+
+Three new browser journeys cover state/count independence, unsent correction,
+read failure/retry, historical dates, empty routines and delayed response cleanup.
+No backend/API/schema or production permission changes. Full feature-preservation
+and whole-app/device QA still remain. This is not full reconstruction completion.
+
+Routine checkpoint gates: `npm test`, production build, changed-test syntax and
+diff checks pass; the complete browser suite passes 120 tests. Seven Health
+viewport captures were inspected with current routines present. Function count
+remains seven; no environment or production data changes were made.

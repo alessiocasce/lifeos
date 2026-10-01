@@ -65,6 +65,15 @@ remain required before the full reconstruction can be considered complete.
 
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
+Health routine-state checkpoint (2026-10-01): today's Health check-in now reads
+the existing authenticated Companion context projection and displays supported
+current routines separately from daily habit counts. Active, paused, inactive
+and uncertain states are human-readable; no belief is inferred from a daily log.
+Historical dates do not present today's current state. Empty routine context
+stays quiet; failed reads offer refresh without blocking logging. Companion is
+the correction surface and prepares unsent changes through its existing flow.
+No backend/schema changes. Full preservation and whole-app/device audits remain.
+
 Training setup/templates checkpoint (2026-10-01): readable unframed management
 rows and 44px actions preserve session/template/exercise CRUD and ordering.
 In-flight template mutations lock panel dismissal and sibling edits. Deletion

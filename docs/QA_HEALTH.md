@@ -2,6 +2,24 @@
 
 ## Reconstructed check-in (2026-10-01)
 
+### Current Routines
+
+Today's check-in includes read-only current routine state from the existing
+authenticated Companion context API. Daily counts do not imply a routine is
+active/inactive, and low-confidence state displays Not certain. History selection
+does not show today's assumptions. Empty context adds no empty-state nag.
+Refresh and visibility resume re-read context; failed reads leave logging usable.
+The Companion link opens conversation, where Context > Correct prepares an
+unsent message. There are no direct belief mutations or permission changes here.
+
+Manual QA: compare a paused/inactive routine with today's logged count; confirm
+all habit controls still work. Select a past date and confirm Current routines
+disappears. Return to today, refresh after a Companion correction, and confirm
+only persisted state is shown. Fail the context request and verify refresh and
+health autosave remain independent. Use `tests/ui/health.spec.js` for these
+isolated browser journeys and the existing seven-viewport checks. Physical
+iPhone resume/keyboard and production sleep recalculation remain unverified.
+
 The primary surface is the selected-date check-in: Sleep, daily counters, habits,
 and notes. Recent patterns are secondary and appear only when persisted logs exist.
 Patterns/history describe the latest seven records, not seven consecutive days.
