@@ -271,3 +271,22 @@ Routine checkpoint gates: `npm test`, production build, changed-test syntax and
 diff checks pass; the complete browser suite passes 120 tests. Seven Health
 viewport captures were inspected with current routines present. Function count
 remains seven; no environment or production data changes were made.
+
+## Cross-App Continuity Checkpoint (2026-10-01)
+
+A new browser regression reproduced navigation remaining visible when keyboard
+viewport resize preceded input focus. Shell now observes focus-in as well as
+resize, and focus-out reads its next target instead of the outgoing element.
+Four tests cover both keyboard event orders, delayed reconnect reads plus token
+refresh retaining the visible draft, back/forward and explicit Training resume,
+and actual pull-refresh code deferring a simulated waiting worker during a live
+empty logger. No production records, auth credentials or schema changes.
+
+Physical iOS keyboard/process eviction and production SW activation remain
+unverified. Full feature-preservation audit and whole-app visual QA still remain;
+this checkpoint does not complete the full reconstruction. See QA_FULL_APP.md.
+
+Checkpoint gates: all 124 browser cases pass; `npm test`, production build,
+changed-test syntax and diff checks pass. Function count remains seven. No new
+visual captures were needed for this event-handling change; prior tab captures
+remain separate evidence, not physical keyboard proof.

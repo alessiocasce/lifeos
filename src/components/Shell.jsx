@@ -36,18 +36,22 @@ export function Shell({ children }) {
 
   useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
-    const updateKeyboard = () => {
-      const inputFocused = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
+    const updateKeyboard = (event) => {
+      const focusedElement = event?.type === 'focusout' ? event.relatedTarget : document.activeElement;
+      const inputFocused = /INPUT|TEXTAREA|SELECT/.test(focusedElement?.tagName || '');
       setKeyboardOpen(inputFocused && Boolean(window.visualViewport) && window.innerHeight - window.visualViewport.height > 120);
     };
     window.addEventListener('online', updateOnline);
     window.addEventListener('offline', updateOnline);
     window.visualViewport?.addEventListener('resize', updateKeyboard);
+    document.addEventListener('focusin', updateKeyboard);
     document.addEventListener('focusout', updateKeyboard);
+    updateKeyboard();
     return () => {
       window.removeEventListener('online', updateOnline);
       window.removeEventListener('offline', updateOnline);
       window.visualViewport?.removeEventListener('resize', updateKeyboard);
+      document.removeEventListener('focusin', updateKeyboard);
       document.removeEventListener('focusout', updateKeyboard);
     };
   }, []);

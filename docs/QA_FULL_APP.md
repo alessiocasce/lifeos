@@ -11,11 +11,31 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 1. Run `npm run test:brain`.
 2. Confirm the Brain regression harness passes without live Gemini, WhatsApp, browser automation, or Supabase writes.
 3. Run `npm run test:mcp`.
-4. Run `npm run check:functions` and confirm the function count is at or below 12.
+4. Run `npm run check:functions` and confirm the function count remains seven.
 5. Run `npm run build`.
 6. Run `git diff --check`.
 
 ## Auth Gate
+
+### Reconstruction Cross-App Checks (2026-10-01)
+
+`npx playwright test tests/ui/shell-continuity.spec.js` uses isolated services,
+not production records. It verifies both keyboard focus/viewport event orders,
+delayed reconnect reads plus same-user token refresh without losing visible
+Training input, browser back/forward and explicit resume, and pull-to-refresh
+deferral of a waiting worker during an empty live workout. The worker API is
+simulated; this is not physical iOS keyboard/process-eviction or deployed service
+worker activation proof. Shell focus-in and focus-out now update dock visibility;
+focus-out uses its next target rather than the outgoing input.
+
+On an iPhone, additionally open Exercise with the keyboard, switch input fields,
+dismiss the keyboard and confirm navigation returns. Repeat in Companion and
+with a native editor open. Background/lock/unlock during a populated draft,
+reconnect, and verify the same session/exercise/draft remain. Offer a PWA update
+while Training is live: pull refresh may reconcile data but must not reload.
+End Training and explicitly pull again to apply. Physical QA remains outstanding.
+
+### Sign-In Journey
 
 1. Open the app while signed out.
 2. Confirm the LifeOS shell and tabs are not visible.

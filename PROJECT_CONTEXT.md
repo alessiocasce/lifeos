@@ -5,6 +5,14 @@ Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
 
+Cross-app continuity checkpoint: Shell now reacts to input focus even when the
+visual viewport shrank first; blur uses the next focus target to restore docks.
+Four isolated browser tests cover both event orders, delayed reconnect/token
+refresh with visible Training drafts, back/forward/resume, and waiting PWA update
+deferral during a live empty logger. This is browser-boundary simulation, not
+physical iOS/production service-worker evidence. No schema rerun required.
+Full feature-preservation audit and whole-app/device QA remain outstanding.
+
 Training continuity and the five-destination mobile shell are implemented locally;
 the full reconstruction is still in progress. Project details now have typed
 LifeOS Watch controls and separate Companion MONITOR/MESSAGE checkboxes through
