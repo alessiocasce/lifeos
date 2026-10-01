@@ -3,6 +3,8 @@ import { createServer } from 'vite';
 
 // Test-only service substitution. This server never talks to production Supabase.
 const server = await createServer({
+  // Other Vite-based regression suites use a different plugin graph.
+  cacheDir: 'node_modules/.vite-ui-qa',
   server: { host: '127.0.0.1', port: 4178, strictPort: true },
   plugins: [{
     name: 'lifeos-ui-qa-services', enforce: 'pre',

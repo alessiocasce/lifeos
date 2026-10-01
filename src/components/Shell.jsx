@@ -1,189 +1,144 @@
-import {
-  BrainCircuit,
-  Bell,
-  CalendarDays,
-  Dumbbell,
-  HeartPulse,
-  Home,
-  Landmark,
-  LogOut,
-  Target,
-} from 'lucide-react';
-import { useState } from 'react';
+import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Target, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { useLocalDay } from '../hooks/useLocalDay';
+import { readWorkoutDraft } from '../utils/workoutContinuity';
 import { LifeOSLogo } from './LifeOSLogo';
 import { PullToRefresh } from './PullToRefresh';
-import { localDate } from '../utils/date';
 
-const icons = {
-  home: Home,
-  calendar: CalendarDays,
-  memos: Bell,
-  projects: Target,
-  health: HeartPulse,
-  workout: Dumbbell,
-  finances: Landmark,
-  assistant: BrainCircuit,
+const destinations = {
+  home: { label: 'Command', icon: Command },
+  workout: { label: 'Training', icon: Dumbbell },
+  projects: { label: 'Projects', icon: Target },
+  assistant: { label: 'Companion', icon: MessageSquare },
+  health: { label: 'Health', icon: HeartPulse },
+  calendar: { label: 'Calendar', icon: CalendarDays },
+  memos: { label: 'Memos', icon: Bell },
+  finances: { label: 'Finances', icon: Landmark },
 };
+const primary = ['home', 'workout', 'projects', 'assistant'];
+const utilities = ['health', 'calendar', 'memos', 'finances'];
+const mobile = ['home', 'projects', 'workout', 'assistant', 'more'];
 
 export function Shell({ children }) {
-  const {
-    activeTab,
-    activeWorkoutSession,
-    authUser,
-    expenses,
-    healthLogs,
-    setActiveTab,
-    signOut,
-    tabs,
-    workoutSessions,
-  } = useLifeOS();
+  const { activeTab, activeWorkoutSession, authUser, setActiveTab, setActiveWorkoutId, signOut, workoutSessions } = useLifeOS();
   const [signingOut, setSigningOut] = useState(false);
-  const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label ?? 'Pulse';
-  const today = localDate();
-  const todaysHealthLog = healthLogs.find((log) => log.logged_on === today) ?? null;
-  const currentMonthSpend = expenses.filter(isCurrentMonthExpense).reduce((total, expense) => total + Math.abs(Number(expense.amount) || 0), 0);
-  const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
-  const liveWorkout = todaysSessions.find((session) => !session.ended_at) ?? null;
-  const trainingStatus = liveWorkout || (activeWorkoutSession?.performed_on === today && !activeWorkoutSession.ended_at)
-    ? { value: 'LIVE', tone: 'text-red-300' }
-    : todaysSessions.some((session) => session.ended_at)
-      ? { value: 'DONE', tone: 'text-emerald-300' }
-      : { value: 'NONE', tone: 'text-zinc-400' };
+  const [accountError, setAccountError] = useState('');
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const sheetRef = useRef(null);
+  const today = useLocalDay();
+  const destination = destinations[activeTab] || destinations.home;
+  const liveSession = activeWorkoutSession && !activeWorkoutSession.ended_at
+    ? activeWorkoutSession : workoutSessions.find((session) => !session.ended_at);
+  const currentDraft = liveSession ? readWorkoutDraft(authUser?.id, liveSession.id) : null;
 
+  useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine);
+    const updateKeyboard = () => {
+      const inputFocused = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '');
+      setKeyboardOpen(inputFocused && Boolean(window.visualViewport) && window.innerHeight - window.visualViewport.height > 120);
+    };
+    window.addEventListener('online', updateOnline);
+    window.addEventListener('offline', updateOnline);
+    window.visualViewport?.addEventListener('resize', updateKeyboard);
+    document.addEventListener('focusout', updateKeyboard);
+    return () => {
+      window.removeEventListener('online', updateOnline);
+      window.removeEventListener('offline', updateOnline);
+      window.visualViewport?.removeEventListener('resize', updateKeyboard);
+      document.removeEventListener('focusout', updateKeyboard);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (moreOpen) sheetRef.current?.showModal();
+    else sheetRef.current?.close();
+  }, [moreOpen]);
+
+  const navigate = (tab) => {
+    setMoreOpen(false);
+    setActiveTab(tab);
+    window.scrollTo({ top: 0 });
+  };
   const handleSignOut = async () => {
     setSigningOut(true);
-    try {
-      await signOut();
-    } finally {
-      setSigningOut(false);
-    }
+    setAccountError('');
+    try { await signOut(); } catch { setAccountError('Could not sign out. Try again.'); }
+    finally { setSigningOut(false); }
+  };
+  const resume = () => {
+    setActiveWorkoutId(liveSession.id);
+    navigate('workout');
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#0a0a0a] text-zinc-100">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[76px] flex-col border-r border-white/5 bg-black md:flex">
-        <div className="grid h-[72px] place-items-center border-b border-white/5">
-          <div className="grid h-10 w-10 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
-            <LifeOSLogo size={24} />
-          </div>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-1 px-2 py-3">
-          {tabs.map((tab) => {
-            const Icon = icons[tab.id];
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                title={tab.label}
-                onClick={() => setActiveTab(tab.id)}
-                className={`group flex h-12 flex-col items-center justify-center rounded-md border text-[9px] transition ${
-                  active
-                    ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300'
-                    : 'border-transparent text-zinc-500 hover:border-white/10 hover:bg-white/[0.03] hover:text-zinc-200'
-                }`}
-              >
-                <Icon size={18} />
-                <span className="mt-1 font-mono uppercase leading-none">{tab.label}</span>
-              </button>
-            );
-          })}
+    <div className="lifeos-shell">
+      <aside className="desktop-rail">
+        <div className="rail-brand"><LifeOSLogo size={26} /><span>LifeOS<span className="brand-detail">PERSONAL SYSTEM</span></span></div>
+        <nav aria-label="Primary navigation" className="rail-navigation">
+          {primary.map((id) => <NavigationButton key={id} id={id} active={activeTab === id} onClick={() => navigate(id)} />)}
+          <span className="rail-section-label">Records</span>
+          {utilities.map((id) => <NavigationButton key={id} id={id} active={activeTab === id} onClick={() => navigate(id)} />)}
         </nav>
-
-        <div className="border-t border-white/5 px-2 py-3" />
+        <div className="rail-account">
+          <span className="connection-label"><span className={online ? 'status-dot' : 'status-dot offline'} />{online ? 'Connected' : 'Offline'}</span>
+          <button className="rail-link" onClick={handleSignOut} disabled={signingOut} aria-label="Sign out"><LogOut size={18} /><span>Sign out</span></button>
+          {accountError ? <p role="alert" className="text-xs text-red-300">{accountError}</p> : null}
+        </div>
       </aside>
-
-      <main className="min-h-screen min-w-0 w-full md:ml-[76px] md:w-[calc(100%-76px)]">
-        <header className="sticky top-0 z-10 flex h-[calc(env(safe-area-inset-top)+56px)] items-center justify-between border-b border-white/5 bg-[#0a0a0a]/95 px-3 pt-[env(safe-area-inset-top)] backdrop-blur md:h-[72px] md:px-5 md:pt-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <LifeOSLogo size={22} />
-              <h1 className="text-lg font-semibold tracking-wide">LifeOS</h1>
-              <span className="data-text rounded border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-300 md:hidden">
-                {activeTabLabel}
-              </span>
-              <span className="data-text hidden rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-zinc-500 md:inline-flex">
-                MIDNIGHT OPS
-              </span>
-            </div>
+      <main className="workspace">
+        <header className="workspace-header">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="mobile-brand"><LifeOSLogo size={23} /></span>
+            <h1>{destination.label}</h1>
           </div>
-
-          <div className="flex items-center gap-2">
-            <div className={activeTab === 'home' || activeTab === 'assistant' ? 'hidden' : 'hidden grid-cols-3 gap-2 text-right md:grid'}>
-              <HeaderMetric label="Sleep" value={formatMetric(todaysHealthLog?.sleep_hours, 'h')} tone="text-cyan-300" />
-              <HeaderMetric label="Spend" value={`EUR ${Math.round(currentMonthSpend)}`} tone="text-amber-300" />
-              <HeaderMetric label="Training" value={trainingStatus.value} tone={trainingStatus.tone} />
-            </div>
-            <button
-              type="button"
-              title={authUser?.email ? `Sign out ${authUser.email}` : 'Sign out'}
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className="grid h-10 w-10 place-items-center rounded-md border border-white/10 bg-[#121212] text-zinc-400 transition hover:border-red-400/30 hover:bg-red-400/10 hover:text-red-300 disabled:cursor-not-allowed disabled:text-zinc-700 md:h-11 md:w-11"
-            >
-              <LogOut size={17} />
-            </button>
+          <div className="flex items-center gap-3">
+            {!online ? <span className="connection-label text-amber-300">Offline</span> : null}
+            <time className="header-date" dateTime={today}>{new Date(today + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</time>
+            {activeTab !== 'assistant' ? <button className="icon-button hidden md:inline-flex" title="Open Companion" aria-label="Open Companion" onClick={() => navigate('assistant')}><MessageSquare size={18} /></button> : null}
           </div>
         </header>
-
         <PullToRefresh>
-          <div className="p-2 pb-[calc(env(safe-area-inset-bottom)+80px)] md:p-4 md:pb-4">{children}</div>
+          <div className={'workspace-content ' + (liveSession && activeTab !== 'workout' ? 'has-training-dock' : '')}>{children}</div>
         </PullToRefresh>
       </main>
-
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-        <div className="grid h-16 grid-cols-8">
-          {tabs.map((tab) => {
-            const Icon = icons[tab.id];
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex min-w-0 flex-col items-center justify-center gap-1 border-t text-[9px] transition ${
-                  active
-                    ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300'
-                    : 'border-transparent text-zinc-500'
-                }`}
-              >
-                <Icon size={18} />
-                <span className="w-full truncate px-0.5 text-center font-mono uppercase leading-none">{mobileLabel(tab.id, tab.label)}</span>
-              </button>
-            );
-          })}
-        </div>
+      {liveSession && activeTab !== 'workout' ? (
+        <button className="training-dock" data-keyboard-open={keyboardOpen} onClick={resume}>
+          <span className="training-dock-icon"><Dumbbell size={20} /></span>
+          <span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">Training in progress</span><strong className="block truncate text-sm">{currentDraft?.exercise || liveSession.name}</strong></span>
+          <span className="flex items-center gap-2 text-sm font-semibold">Resume<ArrowUpRight size={18} /></span>
+        </button>
+      ) : null}
+      <nav className="mobile-dock" aria-label="Mobile navigation" data-keyboard-open={keyboardOpen}>
+        {mobile.map((id) => {
+          const item = destinations[id] || { label: 'More', icon: MoreHorizontal };
+          const Icon = item.icon;
+          const active = id === 'more' ? utilities.includes(activeTab) : activeTab === id;
+          return <button key={id} className={'mobile-destination ' + (id === 'workout' ? 'training-destination' : '')} aria-current={active ? 'page' : undefined} onClick={() => id === 'more' ? setMoreOpen(true) : navigate(id)}>
+            <span className="mobile-destination-icon"><Icon size={21} strokeWidth={active ? 2 : 1.65} /></span><span>{item.label}</span>
+          </button>;
+        })}
       </nav>
+      <dialog ref={sheetRef} className="utility-sheet" aria-labelledby="utility-title" onClose={() => setMoreOpen(false)} onClick={(event) => { if (event.target === sheetRef.current) setMoreOpen(false); }}>
+        <div className="utility-sheet-content">
+          <div className="flex items-center justify-between pb-4"><h2 id="utility-title" className="text-lg font-semibold">Your system</h2><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Close utilities"><X size={20} /></button></div>
+          <nav aria-label="Utilities">{utilities.map((id) => {
+            const Icon = destinations[id].icon;
+            return <button key={id} className="utility-link" aria-current={activeTab === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={20} /><span>{destinations[id].label}</span><ChevronRight size={16} /></button>;
+          })}</nav>
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <button className="utility-link" disabled={signingOut} onClick={handleSignOut}><LogOut size={20} /><span>Sign out</span></button>
+            {accountError ? <p role="alert" className="text-sm text-red-300">{accountError}</p> : null}
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }
 
-function isCurrentMonthExpense(expense) {
-  const spentOn = new Date(`${expense.spent_on}T00:00:00`);
-  const now = new Date();
-  return spentOn.getFullYear() === now.getFullYear() && spentOn.getMonth() === now.getMonth();
-}
-
-function formatMetric(value, suffix) {
-  if (value === null || value === undefined || value === '') return '--';
-  return `${value}${suffix}`;
-}
-
-function mobileLabel(id, label) {
-  if (id === 'assistant') return 'AI';
-  if (id === 'finances') return 'Money';
-  if (id === 'calendar') return 'Cal';
-  if (id === 'projects') return 'Ops';
-  return label;
-}
-
-function HeaderMetric({ label, value, tone }) {
-  return (
-    <div className="min-w-24 rounded-md border border-white/5 bg-[#121212] px-3 py-2">
-      <p className="text-[9px] uppercase tracking-wider text-zinc-500">{label}</p>
-      <p className={`data-text text-sm font-bold ${tone}`}>{value}</p>
-    </div>
-  );
+function NavigationButton({ id, active, onClick }) {
+  const { label, icon: Icon } = destinations[id];
+  return <button className={'rail-link ' + (id === 'workout' ? 'rail-training' : '')} aria-current={active ? 'page' : undefined} title={label} onClick={onClick}><Icon size={19} /><span>{label}</span></button>;
 }

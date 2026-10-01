@@ -6,8 +6,8 @@ User brief: `9807a46e-66d9-4dac-9880-1f7943a6112b/pasted-text-1.txt`.
 This is a full reconstruction; completing a checkpoint is not completion of the brief.
 
 - [x] User/session-scoped Training continuity and browser regression journeys.
-- [ ] Navigation, shared visual system, mobile utility sheet, desktop rail.
-- [ ] Focused active Training logger, templates/history secondary, save feedback.
+- [x] Navigation, shared visual foundation, mobile utility sheet, desktop rail.
+- [x] Focused active Training logger, templates/history secondary, save feedback.
 - [ ] Command, Companion, Health and lower-frequency screens.
 - [ ] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
@@ -63,6 +63,29 @@ Provider with isolated test APIs: full draft reload, exercise switch, confirmed
 save/root relaunch, failed save, end/new session, sign-out/user change, explicit
 navigation, selected-session recovery and deleted-session handling. Pure storage
 tests cover expiry/corruption/unavailable storage. Visual reconstruction remains
-pending; the 390px baseline capture confirms small telemetry and crowded navigation.
+in progress; the original 390px baseline confirmed small telemetry and crowded navigation.
 Physical iOS process-eviction verification is still required. Cold offline startup
 waits for authenticated server session confirmation; local drafts are retained.
+
+## Shell and Training checkpoint (2026-10-01)
+
+Implemented five mobile destinations with a native modal utility sheet, a labeled
+desktop rail, and a Resume dock showing the persisted current exercise outside
+Training. Keyboard viewport contraction hides mobile fixed controls while typing.
+The logger now leads with exercise and large weight/reps fields, optional RPE/notes,
+warmup checkbox, and confirmed-save feedback. Session management follows the logger
+on mobile and sits beside it on desktop. Edit/delete controls have 44px targets.
+Shared panels are unframed sections; colors use graphite/steel with semantic states.
+Existing canonical routes and APIs are unchanged.
+
+Seventeen Chromium journeys passed, including seven requested viewports (375x812,
+390x844, 393x852, 430x932, 1280x800, 1440x900, 1920x1080). Screenshots inspected for
+Training at every size; overflow assertions and Resume navigation passed. Set
+edit/delete/end/reopen passed in addition to the continuity matrix. The isolated
+QA Vite server now uses its own dependency cache after a verified cache collision
+with the SSR harness produced a React dependency HTTP 504. Assertions were not relaxed.
+
+Remaining: Projects Watch/backend seam; Companion current state/permission controls;
+Command and utility-tab reconstruction; richer populated screen fixtures and QA;
+physical iOS keyboard/background/process-eviction testing; final full-scope audit.
+Do not treat this checkpoint as a completed redesign.

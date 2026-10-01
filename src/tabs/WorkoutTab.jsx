@@ -74,6 +74,7 @@ export function WorkoutTab() {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [formError, setFormError] = useState('');
   const [startingTemplateId, setStartingTemplateId] = useState(null);
+  const [lastSavedSet, setLastSavedSet] = useState(null);
 
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
   const previousPerformance = useMemo(
@@ -270,6 +271,7 @@ export function WorkoutTab() {
       };
       writeWorkoutDraft(authUser?.id, activeWorkoutSession.id, nextDraft);
       setSetForm(nextDraft);
+      setLastSavedSet(createdSet);
     } catch (error) {
       setFormError(error.message || 'Failed to save set.');
     } finally {
@@ -400,21 +402,17 @@ export function WorkoutTab() {
             reopening={reopeningSessionId === activeWorkoutSession.id}
           />
 
-          <div className="col-span-12 grid gap-3 xl:grid-cols-[1fr_340px]">
-            <div className="grid gap-3">
-              <TemplatePlanCard
-                activeExercise={setForm.exercise}
-                onSelectExercise={(exercise) => fillLoggerFromTemplateExercise(exercise)}
-                plan={visibleTemplatePlan}
-              />
-
+          <div className="col-span-12 grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="grid min-w-0 gap-6">
               <SetLogger
+                key={activeWorkoutSession.id}
                 activeSession={activeWorkoutSession}
                 exerciseSuggestions={exerciseSuggestions}
                 formError={formError}
                 onSetSubmit={submitSet}
                 previousPerformance={previousPerformance}
                 savingSet={savingSet}
+                lastSavedSet={lastSavedSet?.workout_id === activeWorkoutSession.id ? lastSavedSet : null}
                 setFormValue={setForm}
                 updateSetForm={(field, value) => setSetForm((prev) => {
                   if (field === 'exercise') {
@@ -437,6 +435,12 @@ export function WorkoutTab() {
                   }
                   return { ...prev, [field]: value };
                 })}
+              />
+
+              <TemplatePlanCard
+                activeExercise={setForm.exercise}
+                onSelectExercise={(exercise) => fillLoggerFromTemplateExercise(exercise)}
+                plan={visibleTemplatePlan}
               />
 
               <TodaySetsLog
@@ -532,35 +536,33 @@ export function WorkoutTab() {
 
 function ActiveWorkoutHeader({ activeSession, ending, onEnd, onReopen, reopening }) {
   const ended = Boolean(activeSession.ended_at);
-  const status = ended ? 'ENDED' : 'LIVE';
-  const tone = ended ? 'zinc' : 'emerald';
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (ended) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, [ended]);
+  const elapsed = Math.max(0, Math.floor(((ended ? Date.parse(activeSession.ended_at) : now) - Date.parse(activeSession.started_at)) / 60000));
 
   return (
-    <Panel className="col-span-12">
-      <div className="flex items-center gap-3 p-2.5 md:p-3">
+    <section className="col-span-12 mb-3">
+      <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <Dumbbell size={18} className="text-cyan-300" />
-            <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-zinc-100 md:text-lg">{activeSession.name}</h2>
-            <Tag tone={tone}>{status}</Tag>
-          </div>
-          <p className="mt-0.5 data-text text-[10px] text-zinc-500">{activeSession.performed_on}</p>
+          <p className="mb-2 flex items-center gap-2 text-xs text-zinc-400"><span className={ended ? 'status-dot offline' : 'status-dot'} />{ended ? 'Session complete' : 'Session in progress'}{Number.isFinite(elapsed) ? ' · ' + elapsed + ' min' : ''}</p>
+          <h2 className="break-words text-xl font-semibold text-zinc-100 md:text-2xl">{activeSession.name}</h2>
+          <p className="mt-1 text-xs text-zinc-500">{activeSession.performed_on}</p>
         </div>
         <button
           type="button"
           onClick={ended ? onReopen : onEnd}
           disabled={ended ? reopening : ending}
-          className={`ml-auto flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
-            ended
-              ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
-              : 'border-amber-400/25 bg-amber-400/10 text-amber-300'
-          }`}
+          className="ml-auto flex min-h-11 shrink-0 items-center justify-center gap-2 rounded border border-white/15 px-3 text-xs font-semibold text-zinc-300 disabled:opacity-40"
         >
           {ending || reopening ? <Loader2 size={15} className="animate-spin" /> : ended ? <Plus size={15} /> : <Square size={15} />}
           {ended ? 'Reopen' : 'End Workout'}
         </button>
       </div>
-    </Panel>
+    </section>
   );
 }
 
@@ -619,6 +621,7 @@ function WorkoutSessionControl({
         <ChevronDown size={16} className={`text-zinc-500 transition ${contentOpen ? 'rotate-180' : ''}`} />
       </button>
       <div className={`${contentOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
+        {activeSession ? <button className="flex min-h-11 w-full items-center gap-2 border-b border-white/10 text-sm text-zinc-200" onClick={() => setActiveWorkoutId(null)}><Plus size={16} />New session</button> : null}
         {!activeSession ? (
           <div className="space-y-2">
             <div className="rounded-md border border-cyan-400/10 bg-cyan-400/[0.04] p-2">
@@ -1105,55 +1108,61 @@ function SetLogger({
   onSetSubmit,
   previousPerformance,
   savingSet,
+  lastSavedSet,
   setFormValue,
   updateSetForm,
 }) {
   const isEnded = Boolean(activeSession?.ended_at);
+  const [detailsOpen, setDetailsOpen] = useState(() => Boolean(setFormValue.rpe || setFormValue.notes));
 
   return (
-    <Panel>
-      <PanelHeader eyebrow="Active Logging" title="Set Logger" />
-      <div className="p-3">
+    <section className="training-logger" aria-label="Workout set logger">
+      <div>
         {activeSession && isEnded ? (
           <div className="rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-100">
             This workout is ended. Reopen it to add more sets.
           </div>
         ) : activeSession ? (
-          <div className="grid gap-3">
-            <form onSubmit={onSetSubmit}>
-              <fieldset disabled={savingSet} className="grid min-w-0 gap-2">
-              <div className="grid gap-2 md:grid-cols-[1fr_132px]">
+          <div className="grid gap-4">
+            <form onSubmit={onSetSubmit} aria-label="Log workout set">
+              <fieldset disabled={savingSet} className="grid min-w-0 gap-5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-zinc-400">Current exercise</span>
+                <span className="data-text text-sm text-zinc-100">{setFormValue.is_warmup ? 'Warmup' : 'Set ' + getSafeWorkingSetNumber(setFormValue.set_number)}</span>
+              </div>
+              <div className="logger-exercise">
                 <ExerciseAutocomplete
                   suggestions={exerciseSuggestions}
                   value={setFormValue.exercise}
                   onChange={(value) => updateSetForm('exercise', value)}
                 />
-                <WarmupToggle checked={Boolean(setFormValue.is_warmup)} onChange={(value) => updateSetForm('is_warmup', value)} />
               </div>
-              <div className="flex items-center justify-between rounded-md border border-white/5 bg-black/20 px-3 py-2">
-                <span className="text-xs text-zinc-500">Next set</span>
-                <span className={`data-text text-sm font-bold ${setFormValue.is_warmup ? 'text-amber-300' : 'text-cyan-300'}`}>
-                  {setFormValue.is_warmup ? 'W' : `Set ${getSafeWorkingSetNumber(setFormValue.set_number)}`}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
+              <PreviousPerformanceCard performance={previousPerformance} />
+              <div className="training-values grid grid-cols-2 gap-3">
                 <CompactField label="Weight" inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
                 <CompactField label="Reps" inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
-                <CompactField label="RPE optional" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
               </div>
-              <CompactField label="Notes optional" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-zinc-300"><input type="checkbox" className="h-5 w-5 accent-zinc-300" checked={Boolean(setFormValue.is_warmup)} onChange={(event) => updateSetForm('is_warmup', event.target.checked)} />Warmup set</label>
+              <details className="logger-details" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
+                <summary className="cursor-pointer py-2 text-sm text-zinc-400">RPE &amp; notes</summary>
+                <div className="mt-2 grid gap-3 sm:grid-cols-[140px_1fr]">
+                  <CompactField label="RPE optional" inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
+                  <CompactField label="Notes optional" value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
+                </div>
+              </details>
               <button
                 type="submit"
                 disabled={savingSet || !activeSession}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 text-base font-semibold text-emerald-300 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+                className="primary-button min-h-14 w-full text-base"
               >
                 {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                 {savingSet ? 'Saving Set' : setFormValue.is_warmup ? 'Save Warmup' : 'Save Set'}
               </button>
-              {formError ? <p className="data-text text-[11px] text-red-300">{formError}</p> : null}
+              <div role="status" aria-live="polite" className="min-h-5 text-sm">
+                {formError ? <p className="text-red-300">{formError}</p> : lastSavedSet ? <p className="flex items-center gap-2 text-emerald-300"><Check size={16} />Saved: {lastSavedSet.exercise} · {lastSavedSet.weight} kg × {lastSavedSet.reps}</p> : null}
+              </div>
               </fieldset>
             </form>
-            <PreviousPerformanceCard performance={previousPerformance} />
           </div>
         ) : (
           <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
@@ -1161,7 +1170,7 @@ function SetLogger({
           </div>
         )}
       </div>
-    </Panel>
+    </section>
   );
 }
 
@@ -1169,15 +1178,10 @@ function PreviousPerformanceCard({ performance }) {
   if (!performance) return null;
 
   return (
-    <div className="rounded-md border border-white/5 bg-black/25 px-3 py-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Previous</p>
-        <p className="data-text text-[10px] text-zinc-600">{performance.date}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <MiniMetric label="Heaviest" value={`${performance.heaviestSet.weight}kg`} tone="text-cyan-300" sub={`${performance.heaviestSet.reps} reps`} />
-        <MiniMetric label="Est 1RM" value={`${formatNumber(performance.bestEstimated1Rm.estimated1Rm)}kg`} tone="text-violet-300" sub="Epley best" />
-      </div>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-zinc-600 pl-3 text-sm">
+      <span className="text-zinc-400">Previous <span className="ml-2 data-text text-zinc-100">{performance.last.weight} kg × {performance.last.reps}</span></span>
+      <span className="text-xs text-zinc-500">{performance.date}</span>
+      <details className="w-full text-xs text-zinc-400"><summary className="cursor-pointer">Performance detail</summary><p className="py-2">Heaviest: {performance.heaviestSet.weight} kg × {performance.heaviestSet.reps}. Estimated 1RM: {formatNumber(performance.bestEstimated1Rm.estimated1Rm)} kg (Epley).</p></details>
     </div>
   );
 }
@@ -1316,7 +1320,7 @@ function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm 
         : getNextSetNumber(session, prev.exercise, prev.id),
     }));
   return (
-    <div className="grid grid-cols-2 gap-2 rounded border border-cyan-400/20 bg-cyan-400/[0.04] p-2 xl:grid-cols-[1.2fr_0.65fr_0.7fr_0.55fr_0.55fr_1fr_72px]">
+    <div role="group" aria-label="Edit workout set" className="grid grid-cols-2 gap-3 rounded border border-white/20 bg-white/[0.02] p-3 sm:grid-cols-3">
       <CompactField label="Exercise" value={editForm.exercise} onChange={(value) => update('exercise', value)} />
       <WarmupToggle checked={Boolean(editForm.is_warmup)} onChange={updateWarmup} compact />
       <CompactField label="Weight" inputMode="decimal" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
@@ -1430,7 +1434,7 @@ function IconButton({ className = '', disabled = false, icon: Icon, loading = fa
     red: 'border-red-400/20 bg-red-400/10 text-red-300',
     zinc: 'border-white/10 bg-white/[0.03] text-zinc-300',
   };
-  const dimensions = size === 'sm' ? 'h-8 w-8' : 'h-9 w-9';
+  const dimensions = 'h-11 w-11 shrink-0';
   const DisplayIcon = loading ? Loader2 : Icon;
   return (
     <button
@@ -1438,6 +1442,7 @@ function IconButton({ className = '', disabled = false, icon: Icon, loading = fa
       title={title}
       onClick={onClick}
       disabled={disabled || loading}
+      aria-label={title}
       className={`grid place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${tones[tone]} ${dimensions} ${className}`}
     >
       <DisplayIcon size={size === 'sm' ? 14 : 16} className={loading ? 'animate-spin' : ''} />

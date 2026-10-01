@@ -3,8 +3,20 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: dark;
+    --canvas: #0b0d0f;
+    --surface: #14171b;
+    --raised: #1b1f24;
+    --line: #2b3036;
+    --ink: #f1f3f5;
+    --muted: #939ba5;
+    --accent: #dce3eb;
+    --success: #88b7a1;
+  }
   * {
     box-sizing: border-box;
+    letter-spacing: 0;
   }
 
   html,
@@ -12,25 +24,37 @@
   #root {
     min-height: 100%;
     width: 100%;
-    overflow-x: hidden;
   }
 
   body {
     margin: 0;
-    background: #0a0a0a;
-    color: #f5f5f5;
+    background: var(--canvas);
+    color: var(--ink);
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   }
 
   ::selection {
-    background: rgba(34, 211, 238, 0.25);
+    background: #46586b;
     color: #fff;
+  }
+  html { scroll-padding-top: 84px; }
+  button, input, textarea, select { font: inherit; }
+  button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  button:disabled { cursor: not-allowed; }
+  input, textarea, select { scroll-margin-bottom: 110px; }
+  :focus-visible { outline: 2px solid #a5bed8; outline-offset: 3px; }
+  dialog { color: var(--ink); }
+  dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(4px); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   }
 }
 
 @layer components {
   .terminal-card {
-    @apply border border-white/5 bg-[#121212] shadow-glow;
+    border-top: 1px solid var(--line);
+    background: transparent;
+    box-shadow: none;
   }
 
   .data-text {
@@ -53,5 +77,78 @@
 
   .thin-scrollbar::-webkit-scrollbar-thumb {
     background: #3f3f46;
+  }
+}
+
+@layer components {
+  .training-logger { border-top: 1px solid var(--line); padding-top: 22px; }
+  .logger-exercise input { min-height: 56px; font-size: 20px; font-weight: 600; background: var(--surface); }
+  .logger-exercise label, .training-values label { background: var(--surface); border-color: var(--line); padding: 10px 14px; }
+  .logger-exercise label > span, .training-values label > span { font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .logger-exercise input { font-family: inherit; }
+  .training-values label { min-width: 0; }
+  .training-values input { height: 76px; font-size: 32px; font-weight: 600; font-variant-numeric: tabular-nums; background: var(--surface); }
+  .logger-details { border-top: 1px solid var(--line); }
+  .logger-details summary { min-height: 44px; padding-top: 12px; }
+  .logger-details input { min-height: 44px; font-size: 16px; }
+  .icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); background: transparent; }
+  .icon-button:hover { color: var(--ink); background: var(--raised); }
+  .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 18px; border-radius: 4px; background: var(--accent); color: #101317; font-weight: 650; }
+  .primary-button:disabled { opacity: .4; }
+  .lifeos-shell { min-height: 100dvh; background: var(--canvas); }
+  .desktop-rail { display: none; }
+  .workspace { min-width: 0; min-height: 100dvh; }
+  .workspace-header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; min-height: calc(60px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 18px 0; border-bottom: 1px solid var(--line); background: rgb(11 13 15 / 96%); backdrop-filter: blur(12px); }
+  .workspace-header h1 { font-size: 16px; font-weight: 600; }
+  .mobile-brand { color: #b4beca; }
+  .header-date { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .workspace-content { max-width: 1600px; margin: 0 auto; padding: 20px 16px calc(100px + env(safe-area-inset-bottom)); }
+  .workspace-content.has-training-dock { padding-bottom: calc(178px + env(safe-area-inset-bottom)); }
+  .mobile-dock { position: fixed; z-index: 40; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); min-height: 72px; padding: 4px 8px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #101216; }
+  .mobile-destination { display: flex; min-width: 0; min-height: 58px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #9098a3; font-size: 10px; }
+  .mobile-destination-icon { height: 28px; min-width: 42px; display: grid; place-items: center; border-radius: 4px; }
+  .mobile-destination[aria-current] { color: white; }
+  .mobile-destination[aria-current] .mobile-destination-icon { background: #252b32; }
+  .training-destination .mobile-destination-icon { background: #dce3eb; color: #15191d; min-width: 52px; height: 32px; }
+  .training-destination[aria-current] .mobile-destination-icon { background: white; color: #101317; }
+  .training-dock { position: fixed; z-index: 35; bottom: calc(84px + env(safe-area-inset-bottom)); left: 12px; right: 12px; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #424d58; border-radius: 4px; background: #1c2228; box-shadow: 0 8px 24px #0006; }
+  .training-dock-icon { display: grid; place-items: center; width: 34px; height: 34px; color: #c9d6e3; }
+  .mobile-dock[data-keyboard-open='true'], .training-dock[data-keyboard-open='true'] { display: none; }
+  .utility-sheet { position: fixed; inset: auto 0 0; margin: 0; width: 100%; max-width: none; max-height: 85dvh; padding: 0; border: 1px solid var(--line); border-radius: 8px 8px 0 0; background: var(--surface); }
+  .utility-sheet-content { padding: 18px 22px calc(22px + env(safe-area-inset-bottom)); }
+  .utility-link { display: flex; gap: 16px; align-items: center; width: 100%; min-height: 56px; border-bottom: 1px solid #ffffff0c; text-align: left; color: #c1c8d1; }
+  .utility-link span { flex: 1; }
+  .utility-link[aria-current] { color: white; }
+  .connection-label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .status-dot { width: 5px; height: 5px; border-radius: 100%; background: var(--success); }
+  .status-dot.offline { background: #d5ac74; }
+  @media (min-width: 768px) {
+    .desktop-rail { position: fixed; z-index: 30; inset: 0 auto 0 0; width: 80px; display: flex; flex-direction: column; padding: 0 12px; border-right: 1px solid var(--line); background: #101215; }
+    .rail-brand { min-height: 80px; display: flex; align-items: center; justify-content: center; gap: 13px; color: #dde4ec; font-size: 19px; font-weight: 600; }
+    .rail-brand > span, .rail-link > span, .rail-section-label, .rail-account .connection-label { display: none; }
+    .rail-navigation { flex: 1; display: flex; flex-direction: column; gap: 5px; padding-top: 18px; }
+    .rail-link { display: flex; min-height: 46px; align-items: center; justify-content: center; gap: 13px; width: 100%; padding: 10px; border-radius: 4px; color: #929aa5; text-align: left; font-size: 13px; }
+    .rail-link:hover { background: #ffffff05; color: white; }
+    .rail-link[aria-current] { background: #252b32; color: #fff; }
+    .rail-training { color: #e2e7ed; }
+    .rail-account { padding: 16px 0; border-top: 1px solid var(--line); }
+    .workspace { margin-left: 80px; }
+    .workspace-header { min-height: 80px; padding: 0 28px; }
+    .workspace-header h1 { font-size: 18px; }
+    .workspace-content { padding: 28px 28px 100px; }
+    .mobile-dock, .mobile-brand { display: none; }
+    .training-dock { left: auto; right: 28px; bottom: 24px; width: 350px; }
+  }
+  @media (min-width: 1100px) {
+    .desktop-rail { width: 216px; padding: 0 16px; }
+    .rail-brand { justify-content: flex-start; padding-left: 12px; }
+    .rail-brand > span, .rail-link > span, .rail-account .connection-label { display: block; }
+    .brand-detail { display: block; margin-top: 3px; color: #727c87; font-size: 9px; font-weight: 500; }
+    .rail-link { justify-content: flex-start; padding: 10px 14px; }
+    .rail-section-label { display: block; padding: 27px 14px 9px; font-size: 11px; color: #737d88; }
+    .rail-account .connection-label { display: flex; padding: 8px 14px 14px; }
+    .workspace { margin-left: 216px; }
+    .workspace-header { padding: 0 36px; }
+    .workspace-content { padding: 32px 36px 100px; }
   }
 }

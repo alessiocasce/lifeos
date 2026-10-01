@@ -1,15 +1,15 @@
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 
 export function Panel({ children, className = '' }) {
-  return <section className={`terminal-card min-w-0 rounded-md ${className}`}>{children}</section>;
+  return <section className={`terminal-card min-w-0 ${className}`}>{children}</section>;
 }
 
 export function PanelHeader({ eyebrow, title, right }) {
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/5 px-3 py-2">
+    <div className="flex min-w-0 items-center justify-between gap-3 px-3 py-4">
       <div className="min-w-0">
-        {eyebrow ? <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{eyebrow}</p> : null}
-        <h2 className="truncate text-sm font-semibold text-zinc-100">{title}</h2>
+        {eyebrow ? <p className="mb-1 text-[11px] text-zinc-400">{eyebrow}</p> : null}
+        <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
       </div>
       {right ? <div className="shrink-0">{right}</div> : null}
     </div>

@@ -19,10 +19,11 @@ test('unsaved full draft and exercise switch survive reload', async ({ page }, t
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await fillDraft(page);
+  await page.getByText('RPE & notes', { exact: true }).click();
   await page.getByRole('textbox', { name: 'RPE optional' }).fill('8');
   await page.getByRole('textbox', { name: 'Notes optional' }).fill('Controlled eccentric');
   await page.screenshot({ path: testInfo.outputPath('training-mobile.png'), fullPage: true });
-  await page.getByRole('button', { name: /Warmup WORKING/ }).click();
+  await page.getByRole('checkbox', { name: 'Warmup set' }).check();
   await page.reload();
   await expect(exercise(page)).toHaveValue('Barbell Curl');
   await expect(weight(page)).toHaveValue('25');
@@ -60,6 +61,25 @@ test('failed mutation keeps draft through reload and never pretends it saved', a
   await expect(exercise(page)).toHaveValue('Barbell Curl');
 });
 
+test('saved sets remain editable, deletable and session can reopen', async ({ page }) => {
+  await fillDraft(page);
+  await page.getByRole('button', { name: 'Save Set', exact: true }).click();
+  await expect(reps(page)).toHaveValue('');
+  await page.getByRole('button', { name: 'Edit set', exact: true }).click();
+  const editor = page.getByRole('group', { name: 'Edit workout set' });
+  await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('10');
+  await editor.getByRole('button', { name: 'Save edit', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].reps)).toBe(10);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'End Workout', exact: true }).click();
+  await page.getByRole('button', { name: 'Reopen', exact: true }).click();
+  await expect(exercise(page)).toBeVisible();
+  await page.getByRole('button', { name: 'Delete set', exact: true }).click();
+  await expect(page.getByText('No sets logged in this session.', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets)).toEqual([]);
+});
+
 test('confirmed end clears draft and new session starts clean', async ({ page }) => {
   await fillDraft(page);
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
@@ -77,6 +97,7 @@ test('confirmed end clears draft and new session starts clean', async ({ page })
 
 test('sign-out removes only the current user draft and another user cannot inherit it', async ({ page }) => {
   await fillDraft(page);
+  await page.getByRole('button', { name: 'More', exact: true }).click();
   await page.getByRole('button', { name: /Sign out/ }).click();
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('lifeos:training:')))).toEqual([]);
   await page.evaluate(() => window.__qaSignIn('qa-user-b'));
@@ -87,7 +108,7 @@ test('intentional Home navigation and direct routes win; auth refresh preserves 
   await fillDraft(page);
   await page.evaluate(() => window.__qaAuthRefresh());
   await expect(reps(page)).toHaveValue('8');
-  await page.getByRole('button', { name: 'Pulse', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Command', exact: true }).last().click();
   await expect(page).toHaveURL(/\/$/);
   await page.reload();
   await expect(page).toHaveURL(/\/$/);
@@ -131,6 +152,7 @@ test('navigation during initial session loading is never overridden', async ({ p
   await fillDraft(page);
   await page.evaluate(() => localStorage.setItem('qa-load-delay', '1000'));
   await page.goto('/');
+  await page.getByRole('button', { name: 'More', exact: true }).click();
   await page.getByRole('button', { name: 'Health', exact: true }).last().click();
   await expect(page).toHaveURL(/\/health$/);
   await page.waitForTimeout(1200);

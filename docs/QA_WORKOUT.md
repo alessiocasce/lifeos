@@ -1,5 +1,22 @@
 # LifeOS Workout QA
 
+## Training interface (2026-10-01)
+
+Training is the central mobile destination. Command, Projects and Companion stay
+primary; Health, Calendar, Memos, Finances and sign-out live in More. Desktop uses
+a labeled rail. A live workout has a Resume dock outside Training.
+
+The active logger precedes template/history controls. Weight/reps are primary;
+warmup is a checkbox and RPE/notes expand independently. Confirmed saves show the
+last set and preserve the next draft. Previous performance remains available,
+including heaviest set and estimated 1RM under Performance detail.
+
+`npm run test:ui` checks seven mobile/desktop sizes, overflow, Resume navigation,
+save/edit/delete/end/reopen and continuity. Screenshots are written under ignored
+`test-results/training-layout-*/training.png`. The browser QA server uses an isolated
+Vite cache so the SSR harness cannot invalidate its dependency graph.
+Physical iPhone keyboard behavior and process eviction remain manual QA.
+
 ## Training continuity (2026-09-28)
 
 `lifeos:training:v1:<user>:draft:<session>` stores a bounded, validated exercise,
