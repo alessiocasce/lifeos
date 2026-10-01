@@ -80,7 +80,22 @@ export const calendarEventApi = {
     return (await calendarEventApi.list()).filter((row) => row.event_date >= start && row.event_date <= end);
   },
 };
-export const memoApi = { list: async () => JSON.parse(localStorage.getItem('qa-memos') || '[]') };
+const checkMemoFailure = () => { if (localStorage.getItem('qa-memo-fail')) throw new Error('Memo changes were not saved.'); };
+export const memoApi = {
+  list: async () => JSON.parse(localStorage.getItem('qa-memos') || '[]'),
+  create: async (payload) => {
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-memo-delay') || 0)));
+    checkMemoFailure();
+    const row = { ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+    localStorage.setItem('qa-memos', JSON.stringify([row, ...await memoApi.list()])); return row;
+  },
+  update: async (id, patch) => {
+    checkMemoFailure();
+    const rows = (await memoApi.list()).map((row) => row.id === id ? { ...row, ...patch, updated_at: new Date().toISOString() } : row);
+    localStorage.setItem('qa-memos', JSON.stringify(rows)); return rows.find((row) => row.id === id);
+  },
+  delete: async (id) => { checkMemoFailure(); localStorage.setItem('qa-memos', JSON.stringify((await memoApi.list()).filter((row) => row.id !== id))); },
+};
 const readProjects = () => JSON.parse(localStorage.getItem('qa-projects') || '[]');
 const writeProjects = (rows) => localStorage.setItem('qa-projects', JSON.stringify(rows));
 const checkProjectFailure = () => { if (localStorage.getItem('qa-project-fail')) throw new Error('Project changes were not saved.'); };

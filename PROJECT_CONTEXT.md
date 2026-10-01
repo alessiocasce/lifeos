@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-Last updated: 2026-09-26
+Last updated: 2026-10-01
 Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
@@ -38,6 +38,13 @@ errors; switching projects cannot silently carry a session draft. Browser tests
 use isolated fixtures; production progress remains database-authoritative.
 See `docs/QA_PROJECTS.md`. Utility-screen reconstruction and whole-app QA remain
 in progress. No schema rerun required.
+
+Memos now presents each dated reminder once, with undated notes secondary and
+recent closed history collapsed. Equal colored metrics and duplicated next-up
+content are removed. Native editors retain date/time shortcuts, CRUD and status
+actions; focus returns and saves cannot be dismissed mid-flight. Twelve isolated
+browser cases cover persistence/failures and seven sizes. No backend/schema change.
+See `docs/QA_MEMOS.md`; Calendar/Finances and whole-app QA remain in progress.
 
 ## Current Companion Slice 4 Handoff (2026-09-26)
 

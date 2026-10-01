@@ -18,6 +18,8 @@
 .project-secondary > .terminal-card { border-top: 0; }
 .project-dialog[open] { display: flex; }
 .project-dialog::backdrop { background: rgb(0 0 0 / 0.75); }
+.memo-dialog[open] { display: flex; }
+.memo-dialog::backdrop { background: rgb(0 0 0 / 0.75); }
 
 @layer base {
   :root {

@@ -8,7 +8,9 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] User/session-scoped Training continuity and browser regression journeys.
 - [x] Navigation, shared visual foundation, mobile utility sheet, desktop rail.
 - [x] Focused active Training logger, templates/history secondary, save feedback.
-- [ ] Command, Companion, Health and lower-frequency screens.
+- [x] Command, Companion, Health, Projects and Memos reconstruction checkpoints.
+- [ ] Calendar and Finances reconstruction.
+- [ ] Useful routine-state integration, Training template journeys and complete preservation audit.
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
 
@@ -164,3 +166,21 @@ full feature preservation audit and whole-app/iPhone QA. Do not mark complete.
 Checkpoint validation: `npm test`, production build and seven-function check pass;
 the complete browser suite passes 66 tests. No schema or environment changes.
 No production mutations were used for these UI checks.
+
+## Memos queue checkpoint (2026-10-01)
+
+Each dated reminder appears once in the timeline, with quieter undated notes and
+collapsed closed history. Removed equal colored counters, duplicate Next Up and
+decorative timeline glow. Native modal editors use 44px controls, focus restoration
+and in-flight-save dismissal protection. CRUD, optional date/time, shortcuts,
+done/dismiss/reopen and error retention are preserved. Twelve browser cases cover
+these behaviors and list/editor captures at all seven sizes. Fixtures are isolated;
+physical iPhone keyboard and production data journeys remain unverified.
+
+Remaining scope: Calendar/Finances reconstruction, useful routine-state integration,
+Training template coverage, full feature inventory/whole-app QA and device QA.
+No schema rerun required; no new functions, environments or production mutations.
+
+Memos checkpoint gates: `npm test`, build, syntax checks and diff checks pass;
+the complete browser suite passes 78 tests. Function count remains seven.
+Queue/editor captures were inspected at all seven required viewport sizes.
