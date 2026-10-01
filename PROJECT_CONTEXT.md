@@ -46,6 +46,13 @@ actions; focus returns and saves cannot be dismissed mid-flight. Twelve isolated
 browser cases cover persistence/failures and seven sizes. No backend/schema change.
 See `docs/QA_MEMOS.md`; Calendar/Finances and whole-app QA remain in progress.
 
+Calendar now combines one selected-day agenda with a compact seven-day selector
+and week navigation. Neutral category labels and unframed rows replace colored
+cards. Native event editors protect in-flight saves and restore focus; identical
+start/end is rejected. Failed loads remain distinct from empty days. Thirteen
+isolated browser cases cover CRUD/status/date/error journeys and seven sizes.
+No API/schema change; see `docs/QA_CALENDAR.md`. Finances and whole-app QA remain.
+
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
 Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.

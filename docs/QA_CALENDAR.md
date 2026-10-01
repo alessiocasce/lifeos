@@ -1,13 +1,37 @@
 # LifeOS Calendar QA
 
-Run this after applying `supabase/schema.sql` and signing in through the global auth gate.
+Run this after signing in through the global auth gate. The 2026-10-01 UI
+reconstruction requires no schema rerun.
+
+## Reconstruction Checkpoint (2026-10-01)
+
+Selected-day agenda remains the primary content. A compact Monday-Sunday selector
+and previous/next-week icon controls change the selected date without duplicating
+events into a week board. Arbitrary dates and Today remain available. Event rows
+are unframed with neutral categories, clear times and semantic status controls.
+All planned/done/skipped/cancelled transitions and create/edit/delete remain.
+Status/delete in flight disables competing controls on that event.
+
+Editors are native modal dialogs: keyboard focus is contained/restored, save-in-
+flight blocks Escape/close/cancel, and failed saves retain the fields. Controls
+are at least 44px; Date/Status and Start/End share mobile rows. End time equal to
+start time is rejected (both may remain absent for an untimed event). Load failure
+is not labeled an empty day; Retry reloads the selected range.
+
+`npx playwright test tests/ui/calendar.spec.js` covers navigation/direct dates,
+CRUD and reload, all status transitions, invalid interval/failure retention,
+delayed submit, load recovery and seven viewport/editor captures. Test data is
+isolated browser storage, not live Supabase evidence. Run `npm run test:ui`,
+`npm test`, `npm run build`, `npm run check:functions` and `git diff --check`.
+Physical iPhone keyboard/safe-area/PWA QA remains unverified. Editor drafts are
+not persisted across process death; Training continuity is a separate contract.
 
 ## Day-First Layout
 
 1. Open Calendar.
-2. Confirm the first visible card is the selected day, not a week board.
+2. Confirm the first visible heading is the selected day, not a metric dashboard.
 3. Confirm the selected date defaults to today.
-4. Confirm the top card shows the day label, full date, selected-day event count, date picker, and Plus button.
+4. Confirm the header shows day/full date, date picker and Plus button; event count is shown only when events exist.
 5. Confirm no duplicate week-grid event display appears above or beside the selected-day agenda.
 
 ## Date Selection
@@ -21,7 +45,7 @@ Run this after applying `supabase/schema.sql` and signing in through the global 
 ## Create Event Modal
 
 1. Click the Plus button.
-2. Confirm the `New Schedule Item` create editor opens.
+2. Confirm the `New event` create editor opens.
 3. On mobile, confirm it opens as a full-screen editor instead of a bottom sheet.
 4. On desktop/tablet, confirm it still opens as a centered dialog.
 5. Confirm the editor date defaults to the currently selected date.

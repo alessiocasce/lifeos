@@ -79,6 +79,21 @@ export const calendarEventApi = {
     if (localStorage.getItem('qa-calendar-fail')) throw new Error('Test calendar unavailable');
     return (await calendarEventApi.list()).filter((row) => row.event_date >= start && row.event_date <= end);
   },
+  create: async (payload) => {
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-calendar-delay') || 0)));
+    if (localStorage.getItem('qa-calendar-fail')) throw new Error('Calendar changes were not saved.');
+    const row = { ...payload, id: crypto.randomUUID() };
+    localStorage.setItem('qa-calendar', JSON.stringify([row, ...await calendarEventApi.list()])); return row;
+  },
+  update: async (id, patch) => {
+    if (localStorage.getItem('qa-calendar-fail')) throw new Error('Calendar changes were not saved.');
+    const rows = (await calendarEventApi.list()).map((row) => row.id === id ? { ...row, ...patch } : row);
+    localStorage.setItem('qa-calendar', JSON.stringify(rows)); return rows.find((row) => row.id === id);
+  },
+  delete: async (id) => {
+    if (localStorage.getItem('qa-calendar-fail')) throw new Error('Calendar changes were not saved.');
+    localStorage.setItem('qa-calendar', JSON.stringify((await calendarEventApi.list()).filter((row) => row.id !== id)));
+  },
 };
 const checkMemoFailure = () => { if (localStorage.getItem('qa-memo-fail')) throw new Error('Memo changes were not saved.'); };
 export const memoApi = {

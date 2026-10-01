@@ -8,8 +8,8 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] User/session-scoped Training continuity and browser regression journeys.
 - [x] Navigation, shared visual foundation, mobile utility sheet, desktop rail.
 - [x] Focused active Training logger, templates/history secondary, save feedback.
-- [x] Command, Companion, Health, Projects and Memos reconstruction checkpoints.
-- [ ] Calendar and Finances reconstruction.
+- [x] Command, Companion, Health, Projects, Memos and Calendar reconstruction checkpoints.
+- [ ] Finances reconstruction.
 - [ ] Useful routine-state integration, Training template journeys and complete preservation audit.
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
@@ -184,3 +184,22 @@ No schema rerun required; no new functions, environments or production mutations
 Memos checkpoint gates: `npm test`, build, syntax checks and diff checks pass;
 the complete browser suite passes 78 tests. Function count remains seven.
 Queue/editor captures were inspected at all seven required viewport sizes.
+
+## Calendar agenda checkpoint (2026-10-01)
+
+Selected-day agenda leads, with compact date/week navigation and no duplicate
+event grid. Event rows are unframed; category colors no longer compete with status.
+CRUD, all four statuses, arbitrary dates and Today are preserved. Native modal
+editors contain/restore focus and cannot be dismissed during a save. Identical
+start/end is rejected; untimed events remain supported. Failed loading does not
+pretend the day is empty. Thirteen isolated browser tests cover these journeys
+and seven sizes, including reaching editor Cancel. No backend/schema changes.
+
+Remaining: Finances, useful routine-state integration, richer Training template
+coverage, complete feature-preservation audit, whole-app/device QA. This is not
+the completion of the full reconstruction brief.
+
+Calendar checkpoint gates: `npm test`, build, syntax and diff checks pass;
+the complete browser suite passes 91 tests. Function count remains seven.
+Agenda and editor captures were inspected at all seven requested viewport sizes.
+These are isolated browser fixtures, not production Supabase or physical iOS QA.
