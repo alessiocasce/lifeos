@@ -105,6 +105,20 @@ safe composer placement, focus restoration, explicit controls and chat continuit
 Full reconstruction remains open: Command, full Projects hierarchy, Health and
 utility screens, populated visual QA, and physical iOS verification.
 
+## Command checkpoint (2026-10-01)
+
+Replaced repeated metric pills and nested data cards with active work, a Today
+agenda and short dated-memo open-loop list, recorded context and tomorrow's
+calendar. Existing context data is the source; no AI call or new backend surface.
+Active Training opens the actual selected session. Recorded zero sleep remains
+data; missing sleep produces no nag. Cancelled events and closed memos stay out
+of open commitments. Failed agenda refresh is distinct from a quiet day.
+
+Nine browser checks cover quiet/failure states and populated real-shaped records
+at all seven required sizes. Screenshots were inspected. Lower-frequency utility
+screens, full Projects hierarchy and Health/routine presentation remain pending,
+along with final whole-app validation and physical iPhone QA.
+
 ## Project Watch checkpoint (2026-10-01)
 
 Project details have actual current-context and Watch status, explicit enable,

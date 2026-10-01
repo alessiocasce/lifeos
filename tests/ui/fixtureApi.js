@@ -56,10 +56,16 @@ export const workoutSetApi = {
 };
 export const workoutTemplateApi = emptyApi;
 export const workoutTemplateExerciseApi = emptyApi;
-export const healthLogApi = emptyApi;
+export const healthLogApi = { list: async () => JSON.parse(localStorage.getItem('qa-health') || '[]') };
 export const expenseApi = emptyApi;
-export const calendarEventApi = emptyApi;
-export const memoApi = emptyApi;
+export const calendarEventApi = {
+  list: async () => JSON.parse(localStorage.getItem('qa-calendar') || '[]'),
+  listByRange: async (start, end) => {
+    if (localStorage.getItem('qa-calendar-fail')) throw new Error('Test calendar unavailable');
+    return (await calendarEventApi.list()).filter((row) => row.event_date >= start && row.event_date <= end);
+  },
+};
+export const memoApi = { list: async () => JSON.parse(localStorage.getItem('qa-memos') || '[]') };
 export const projectApi = { list: async () => JSON.parse(localStorage.getItem('qa-projects') || '[]') };
 export const projectSessionApi = emptyApi;
 export const projectMoneyEntryApi = emptyApi;

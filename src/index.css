@@ -51,6 +51,17 @@
 }
 
 @layer components {
+  .command-surface { max-width: 1280px; min-width: 0; }
+  .command-intro { padding: 10px 0 30px; }
+  .command-active { border-top: 1px solid #66717e; border-bottom: 1px solid var(--line); background: #14191f; padding: 0 18px; margin-bottom: 28px; }
+  .command-active-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 94px; padding: 18px 0; }
+  .command-active-row + .command-active-row { border-top: 1px solid var(--line); }
+  .command-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .command-section { min-width: 0; border-top: 1px solid var(--line); margin-bottom: 28px; }
+  .command-record { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px; padding: 14px 0; border-bottom: 1px solid #ffffff08; }
+  .command-record-time { flex-shrink: 0; width: 70px; text-align: left; color: #9faab7; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .command-quiet { border-top: 1px solid var(--line); padding: 26px 0 42px; font-size: 14px; }
+  @media (min-width: 1000px) { .command-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; } }
   .companion-workspace { display: flex; min-width: 0; height: calc(100dvh - 164px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   .has-training-dock .companion-workspace { height: calc(100dvh - 242px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
   .companion-context-dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(100%, 520px); max-width: 100%; height: 100dvh; max-height: 100dvh; overflow-y: auto; overscroll-behavior: contain; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); border: 0; border-left: 1px solid var(--line); background: var(--surface); color: var(--ink); }

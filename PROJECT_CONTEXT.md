@@ -20,6 +20,12 @@ current-state corrections prepare an unsent message. The existing authenticated
 actions route adds a read-only `companion_context` view. No schema rerun required.
 This is a local UI checkpoint; the full reconstruction is still in progress.
 
+Command/Home now leads with active work, today's calendar and dated open memos,
+followed by recorded health/training/project context and tomorrow's commitments.
+Empty data stays quiet; calendar/memo refresh failures are distinguished from an
+empty day. There are no writes or new backend reads on Home. Rome-local dates
+and times use shared helpers. Displayed items navigate to their existing screens.
+
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
 Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.
