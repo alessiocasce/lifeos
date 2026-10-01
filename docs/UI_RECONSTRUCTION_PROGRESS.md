@@ -129,3 +129,17 @@ new functions, evaluation or outbox writes. Schema-backed tests prove denied gra
 cross-user rejection, lifecycle, expired/paused rejection, and no delivery side effects.
 Two browser journeys verify explicit grants/lifecycle and failed-save feedback.
 See `QA_COMPANION_UI.md` for deployed QA and the terminal Watch renewal limitation.
+
+## Health check-in checkpoint (2026-10-01)
+
+Health now prioritizes selected-date Sleep, daily counters, habits and notes in
+unframed bands. Habit/counter controls are named 44px targets. Patterns are secondary
+and omitted for empty data; latest-seven-record history is no longer mislabeled as
+seven consecutive days. Existing serialized autosave and sleep-date semantics stay
+unchanged. Browser fixtures support isolated health mutations and failure testing.
+Seven viewport captures, habit persistence/decrement, historical-date isolation,
+rapid saves, failed-save retention, notes retry and empty behavior are covered.
+
+Remaining full scope: full Projects hierarchy and utility screens, routine-state
+integration where useful, feature-preservation audit, whole-app visual/workflow QA,
+and physical iPhone keyboard/process-eviction testing. This is not completion.

@@ -26,6 +26,13 @@ Empty data stays quiet; calendar/memo refresh failures are distinguished from an
 empty day. There are no writes or new backend reads on Home. Rome-local dates
 and times use shared helpers. Displayed items navigate to their existing screens.
 
+Health's local reconstruction checkpoint prioritizes selected-date check-in and
+44px habit/counter controls, with secondary recent-record summaries and history.
+Empty logs do not produce invented patterns. Existing autosave and canonical
+sleep-date behavior are unchanged; browser QA covers isolated persistence and
+failure journeys, not production sleep recalculation. See `docs/QA_HEALTH.md`.
+Full Projects/utility-screen reconstruction and whole-app QA remain in progress.
+
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
 Slice 3.1 memory hardening is committed at `adf31f5`; typed monitor/permission checkpoint B is committed at `677dc40`. Slice 4 Attention/WhatsApp work is tracked in [the live progress handoff](docs/CODEX_COMPANION_VNEXT_SLICE31_4_PROGRESS.md). Code now has one bounded project-staleness monitor type, separate default-off MONITOR/MESSAGE standing permissions, a deterministic silent/message Attention Engine, a reason-code ledger, and read-only MCP monitor/attention diagnostics. The existing outbox remains the only WhatsApp delivery path. `npm test`, build and seven-function check pass locally; this is not live production verification.

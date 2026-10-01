@@ -1,7 +1,7 @@
-import { Ban, Check, Coffee, Loader2, Minus, Moon, Plus, ShieldCheck, TriangleAlert, Users } from 'lucide-react';
+import { Ban, Check, Coffee, Loader2, Minus, Moon, Plus, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
-import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
+import { Panel, PanelHeader, Tag } from '../components/ui';
 import { localDate, localTime } from '../utils/date';
 import { useLocalDay } from '../hooks/useLocalDay';
 import {
@@ -165,17 +165,17 @@ export function HealthTab() {
   };
 
   return (
-    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
+    <div className="health-workspace grid min-w-0 grid-cols-12 gap-x-8 gap-y-6 pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel className="col-span-12 xl:col-span-8">
-        <PanelHeader eyebrow="Daily Check-In" title={panelTitle} right={<AutosaveStatus saveState={saveState} sourceStatus={healthLogsStatus} />} />
-        <div className="grid gap-3 p-3">
-          <section className="rounded-md border border-white/5 bg-black/25 p-2">
-            <div className="mb-2 flex items-center gap-2">
-              <Moon size={15} className="text-cyan-300" />
-              <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Sleep</p>
+        <PanelHeader eyebrow="Health" title={panelTitle} right={<AutosaveStatus saveState={saveState} sourceStatus={healthLogsStatus} />} />
+        <div className="grid gap-6 px-3 pb-5">
+          <div className="max-w-64"><HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} /></div>
+          <section aria-label="Sleep" className="health-band">
+            <div className="mb-4 flex items-center gap-2">
+              <Moon size={17} className="text-zinc-400" />
+              <h3 className="text-sm font-semibold text-zinc-200">Sleep</h3>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <HealthField
                 label="Wake Time"
                 helper="Used for this selected day."
@@ -196,20 +196,19 @@ export function HealthTab() {
             </div>
           </section>
 
-          <section className="grid gap-2 sm:grid-cols-2">
+          <section aria-label="Daily counters" className="grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-2">
             <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
             <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
           </section>
 
-          <section className="rounded-md border border-white/5 bg-black/25 p-2">
-            <div className="mb-2 flex items-center justify-between gap-2">
+          <section aria-label="Daily habits" className="health-band">
+            <div className="mb-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <ShieldCheck size={15} className="text-emerald-300" />
-                <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">Daily Habits</p>
+                <ShieldCheck size={17} className="text-zinc-400" />
+                <h3 className="text-sm font-semibold text-zinc-200">Daily habits</h3>
               </div>
-              <span className="data-text text-[10px] text-zinc-500">tracked separately</span>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-3 sm:gap-4">
               {HEALTH_HABITS.map((habit) => (
                 <HabitTracker
                   key={habit.id}
@@ -229,33 +228,35 @@ export function HealthTab() {
             onCommit={() => commitField('notes')}
           />
 
-          {formError || healthLogsError ? <p className="data-text text-[11px] text-red-300">{formError || healthLogsError}</p> : null}
+          {formError || healthLogsError ? <p role="alert" className="text-sm text-red-300">{formError || healthLogsError}</p> : null}
         </div>
       </Panel>
 
-      <Panel className="col-span-12 xl:col-span-4">
-        <PanelHeader eyebrow="7-Day Summary" title="Measurable Signals" />
-        <div className="grid grid-cols-2 gap-2 p-3">
-          <MiniMetric label="Avg Sleep" value={formatSummary(summary.avgSleep, 'h')} tone="text-cyan-300" sub={`${visibleLogs.length} logs`} />
-          <MiniMetric label="Coffee" value={`${summary.totalCoffee}`} tone="text-amber-300" sub="total" />
-          <MiniMetric label="ADC" value={`${summary.totalAdc}`} tone="text-red-300" sub="total" />
-          <div className="col-span-2 rounded-md border border-white/5 bg-black/25 p-3">
-            <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">Habits</p>
-            <div className="grid grid-cols-3 gap-2 text-xs xl:grid-cols-1 2xl:grid-cols-3">
+      {visibleLogs.length > 0 ? <Panel className="col-span-12 xl:col-span-4">
+        <PanelHeader eyebrow={`${visibleLogs.length} recent logs`} title="Recorded patterns" />
+        <div className="px-3 pb-5">
+          <dl className="health-summary">
+            <div><dt>Average sleep</dt><dd>{formatSummary(summary.avgSleep, 'h')}</dd></div>
+            <div><dt>Coffee</dt><dd>{summary.totalCoffee}</dd></div>
+            <div><dt>ADC</dt><dd>{summary.totalAdc}</dd></div>
+          </dl>
+          <div className="mt-6 border-t border-white/10 pt-4">
+            <p className="mb-3 text-xs text-zinc-400">Habit entries</p>
+            <div className="grid grid-cols-3 gap-2 text-sm">
               {summary.habits.counts.map((habit) => (
                 <div key={habit.id} className="min-w-0">
                   <p className="truncate text-zinc-500">{habit.label}</p>
-                  <p className="data-text font-semibold text-emerald-300">{habit.total}</p>
+                  <p className="data-text mt-1 text-lg font-semibold text-zinc-200">{habit.total}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </Panel>
+      </Panel> : null}
 
       <Panel className="col-span-12">
-        <PanelHeader eyebrow="Persisted Logs" title="7-Day History" right={<Users size={16} className="text-cyan-300" />} />
-        <div className="grid gap-2 p-3">
+        <PanelHeader title="Recent history" />
+        <div className="grid px-3 pb-3">
           {historyInitialLoading ? (
             <LoadingRow label="Loading health logs" />
           ) : visibleLogs.length ? (
@@ -275,8 +276,8 @@ export function HealthTab() {
 
 function HealthField({ helper, inputMode, label, onChange, onCommit, placeholder = '', suffix, type = 'text', value }) {
   return (
-    <label className="rounded-md border border-white/5 bg-[#121212] px-2 py-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+    <label className="health-field">
+      <span className="text-xs text-zinc-400">{label}</span>
       <div className="mt-1 flex items-center gap-1">
         <input
           type={type}
@@ -288,21 +289,21 @@ function HealthField({ helper, inputMode, label, onChange, onCommit, placeholder
           onKeyDown={(event) => {
             if (event.key === 'Enter' && onCommit) event.currentTarget.blur();
           }}
-          className="data-text min-w-0 flex-1 bg-transparent text-base font-semibold text-zinc-100 outline-none placeholder:text-zinc-700"
+          className={`${type === 'text' ? '' : 'data-text'} min-h-11 min-w-0 w-full flex-1 bg-transparent text-base font-semibold text-zinc-100 outline-none placeholder:text-zinc-500`}
         />
         {suffix ? <span className="data-text text-xs text-zinc-500">{suffix}</span> : null}
       </div>
-      {helper ? <span className="mt-1 block text-[10px] leading-4 text-zinc-600">{helper}</span> : null}
+      {helper ? <span className="mt-1 block text-xs leading-4 text-zinc-500">{helper}</span> : null}
     </label>
   );
 }
 
 function CalculatedSleepHours({ value }) {
   return (
-    <div className="rounded-md border border-cyan-400/15 bg-cyan-400/[0.05] px-2 py-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">Sleep Hours</span>
-      <p className="data-text mt-1 text-base font-semibold text-cyan-200">{value === '' ? '--' : `${value}h`}</p>
-      <p className="mt-1 text-[10px] leading-4 text-zinc-500">Previous day&apos;s sleep start + this day&apos;s wake time</p>
+    <div className="col-span-2 px-3 py-2 sm:col-span-1">
+      <span className="text-xs text-zinc-400">Sleep Hours</span>
+      <p className="data-text my-2 text-3xl font-semibold text-zinc-100">{value === '' ? '--' : `${value}h`}</p>
+      <p className="text-xs leading-4 text-zinc-500">Previous day&apos;s sleep start + this day&apos;s wake time</p>
     </div>
   );
 }
@@ -328,7 +329,7 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
   const currentTone = tones[tone] ?? tones.cyan;
 
   return (
-    <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-2">
+    <div className="min-w-0 py-1">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-zinc-300">
           <Icon size={15} className={currentTone.icon} />
@@ -337,10 +338,10 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
         <span className={`data-text text-2xl font-black ${currentTone.value}`}>{value || 0}</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onStep(-1)} className="grid h-10 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
+        <button type="button" aria-label={`Decrease ${label}`} title={`Decrease ${label}`} onClick={() => onStep(-1)} className="grid h-11 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
           <Minus size={15} />
         </button>
-        <button type="button" onClick={() => onStep(1)} className={`grid h-10 place-items-center rounded border ${currentTone.button}`}>
+        <button type="button" aria-label={`Increase ${label}`} title={`Increase ${label}`} onClick={() => onStep(1)} className={`grid h-11 place-items-center rounded border ${currentTone.button}`}>
           <Plus size={15} />
         </button>
       </div>
@@ -351,19 +352,19 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
 function HabitTracker({ habit, entry, onStep }) {
   const times = formatHabitTimes(entry.times);
   return (
-    <div className="rounded-md border border-white/10 bg-[#121212] p-2">
+    <div className="health-habit">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="truncate text-xs text-zinc-300">{habit.label}</span>
-        <span className="data-text text-lg font-black text-emerald-300">{entry.count}</span>
+        <span className="text-sm text-zinc-200">{habit.label}</span>
+        <span className={`data-text text-xl font-semibold ${entry.count ? 'text-emerald-300' : 'text-zinc-400'}`}>{entry.count}</span>
       </div>
-      <p className={`data-text mb-2 min-h-4 text-[10px] ${entry.count ? 'text-emerald-300' : 'text-zinc-600'}`}>
+      <p className={`data-text mb-3 min-h-4 text-xs ${entry.count ? 'text-zinc-300' : 'text-zinc-500'}`}>
         {entry.count ? `${entry.count} logged${times ? ` | ${times}` : ''}` : 'Not logged'}
       </p>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onStep(-1)} className="grid h-9 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
+        <button type="button" aria-label={`Remove ${habit.label} entry`} title={`Remove ${habit.label} entry`} onClick={() => onStep(-1)} className="grid h-11 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
           <Minus size={14} />
         </button>
-        <button type="button" onClick={() => onStep(1)} className="grid h-9 place-items-center rounded border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
+        <button type="button" aria-label={`Log ${habit.label}`} title={`Log ${habit.label}`} onClick={() => onStep(1)} className="grid h-11 place-items-center rounded border border-white/20 bg-white/[0.06] text-zinc-100">
           <Plus size={14} />
         </button>
       </div>
@@ -374,10 +375,10 @@ function HabitTracker({ habit, entry, onStep }) {
 function HistoryRow({ current, log }) {
   const hygiene = normalizeHygieneObject(log.hygiene);
   return (
-    <div className="grid gap-2 rounded-md border border-white/5 bg-black/25 p-3 sm:grid-cols-[120px_1fr] sm:items-center">
+    <div className="grid gap-3 border-t border-white/10 py-4 sm:grid-cols-[160px_1fr] sm:items-center">
       <div>
         <div className="flex items-center gap-2">
-          <p className="data-text text-sm font-bold text-zinc-100">{log.logged_on}</p>
+          <p className="data-text whitespace-nowrap text-sm font-bold text-zinc-100">{log.logged_on}</p>
           {current ? <Tag tone="cyan">TODAY</Tag> : null}
         </div>
         <p className="data-text text-[10px] text-zinc-500">updated {formatShortDate(log.updated_at)}</p>
@@ -386,7 +387,7 @@ function HistoryRow({ current, log }) {
         <HistoryMetric icon={Moon} label="Sleep" value={`${formatNumber(log.sleep_hours)}h`} tone="text-cyan-300" />
         <HistoryMetric icon={Coffee} label="Coffee" value={String(log.coffee ?? 0)} tone="text-amber-300" />
         <HistoryMetric icon={Ban} label="ADC" value={String(log.adc ?? 0)} tone="text-red-300" />
-        <div className="col-span-2 min-w-0 rounded border border-white/5 bg-[#121212] px-2 py-1 sm:col-span-3">
+        <div className="col-span-2 min-w-0 px-2 py-1 sm:col-span-3">
           <p className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-500">
             <ShieldCheck size={11} />
             Habits
@@ -400,7 +401,7 @@ function HistoryRow({ current, log }) {
 
 function HistoryMetric({ icon: Icon, label, tone, value }) {
   return (
-    <div className="min-w-0 rounded border border-white/5 bg-[#121212] px-2 py-1">
+    <div className="min-w-0 px-2 py-1">
       <p className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-500">
         {Icon ? <Icon size={11} /> : null}
         {label}

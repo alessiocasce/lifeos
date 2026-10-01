@@ -56,7 +56,22 @@ export const workoutSetApi = {
 };
 export const workoutTemplateApi = emptyApi;
 export const workoutTemplateExerciseApi = emptyApi;
-export const healthLogApi = { list: async () => JSON.parse(localStorage.getItem('qa-health') || '[]') };
+export const healthLogApi = {
+  list: async () => JSON.parse(localStorage.getItem('qa-health') || '[]'),
+  getByDate: async (date) => (await healthLogApi.list()).find((row) => row.logged_on === date) ?? null,
+  create: async (payload) => {
+    if (localStorage.getItem('qa-health-fail')) throw new Error('Health changes were not saved.');
+    const row = { ...payload, id: crypto.randomUUID(), updated_at: new Date().toISOString() };
+    localStorage.setItem('qa-health', JSON.stringify([row, ...await healthLogApi.list()]));
+    return row;
+  },
+  update: async (id, patch) => {
+    if (localStorage.getItem('qa-health-fail')) throw new Error('Health changes were not saved.');
+    const rows = (await healthLogApi.list()).map((row) => row.id === id ? { ...row, ...patch, updated_at: new Date().toISOString() } : row);
+    localStorage.setItem('qa-health', JSON.stringify(rows));
+    return rows.find((row) => row.id === id);
+  },
+};
 export const expenseApi = emptyApi;
 export const calendarEventApi = {
   list: async () => JSON.parse(localStorage.getItem('qa-calendar') || '[]'),

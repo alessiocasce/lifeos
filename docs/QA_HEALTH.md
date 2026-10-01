@@ -1,5 +1,24 @@
 # Health Tab Manual QA
 
+## Reconstructed check-in (2026-10-01)
+
+The primary surface is the selected-date check-in: Sleep, daily counters, habits,
+and notes. Recent patterns are secondary and appear only when persisted logs exist.
+Patterns/history describe the latest seven records, not seven consecutive days.
+Time fields keep their existing selected-day/following-morning semantics; sleep
+hours remain read-only. All step controls have named 44px targets. Existing
+serialized autosave, dirty-field reconciliation and failure retention are unchanged.
+
+Run `npm run test:ui -- tests/ui/health.spec.js` for habit increment/decrement,
+reload, rapid edits, failed-save retention, notes retry, historical-date isolation,
+empty-state behavior and seven viewport captures. Fixtures are isolated from
+production and do not simulate database sleep recalculation; use the sleep QA
+below for the deployed integration. Verify mobile scrolling reaches Notes and
+history above the bottom navigation, including with an active Training dock.
+Physical iOS keyboard/safe-area verification remains required.
+
+No schema rerun required.
+
 Run this after signing in through the global auth gate. For the reliability release, first apply the targeted SQL and deployment sequence in [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md).
 
 ## Reliability Semantics
