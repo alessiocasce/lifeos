@@ -81,9 +81,61 @@ export const calendarEventApi = {
   },
 };
 export const memoApi = { list: async () => JSON.parse(localStorage.getItem('qa-memos') || '[]') };
-export const projectApi = { list: async () => JSON.parse(localStorage.getItem('qa-projects') || '[]') };
-export const projectSessionApi = emptyApi;
-export const projectMoneyEntryApi = emptyApi;
+const readProjects = () => JSON.parse(localStorage.getItem('qa-projects') || '[]');
+const writeProjects = (rows) => localStorage.setItem('qa-projects', JSON.stringify(rows));
+const checkProjectFailure = () => { if (localStorage.getItem('qa-project-fail')) throw new Error('Project changes were not saved.'); };
+export const projectApi = {
+  list: async () => readProjects(),
+  create: async (payload) => {
+    checkProjectFailure();
+    const row = { ...payload, id: crypto.randomUUID(), project_sessions: [] };
+    writeProjects([row, ...readProjects()]); return row;
+  },
+  update: async (id, patch) => {
+    checkProjectFailure();
+    const rows = readProjects().map((row) => row.id === id ? { ...row, ...patch } : row);
+    writeProjects(rows); return rows.find((row) => row.id === id);
+  },
+  delete: async (id) => { checkProjectFailure(); writeProjects(readProjects().filter((row) => row.id !== id)); },
+};
+export const projectSessionApi = {
+  create: async (payload) => {
+    checkProjectFailure();
+    const row = { ...payload, id: crypto.randomUUID() };
+    writeProjects(readProjects().map((project) => project.id === row.project_id ? { ...project, project_sessions: [row, ...(project.project_sessions || [])] } : project));
+    return row;
+  },
+  update: async (id, patch) => {
+    checkProjectFailure();
+    let updated;
+    writeProjects(readProjects().map((project) => ({ ...project, project_sessions: (project.project_sessions || []).map((row) => {
+      if (row.id !== id) return row;
+      updated = { ...row, ...patch }; return updated;
+    }) })));
+    return updated;
+  },
+  delete: async (id) => {
+    checkProjectFailure();
+    writeProjects(readProjects().map((project) => ({ ...project, project_sessions: (project.project_sessions || []).filter((row) => row.id !== id) })));
+  },
+};
+export const projectMoneyEntryApi = {
+  list: async () => JSON.parse(localStorage.getItem('qa-project-money') || '[]'),
+  create: async (payload) => {
+    checkProjectFailure();
+    const row = { ...payload, id: crypto.randomUUID() };
+    localStorage.setItem('qa-project-money', JSON.stringify([row, ...await projectMoneyEntryApi.list()])); return row;
+  },
+  update: async (id, patch) => {
+    checkProjectFailure();
+    const rows = (await projectMoneyEntryApi.list()).map((row) => row.id === id ? { ...row, ...patch } : row);
+    localStorage.setItem('qa-project-money', JSON.stringify(rows)); return rows.find((row) => row.id === id);
+  },
+  delete: async (id) => {
+    checkProjectFailure();
+    localStorage.setItem('qa-project-money', JSON.stringify((await projectMoneyEntryApi.list()).filter((row) => row.id !== id)));
+  },
+};
 export const dailyReviewApi = emptyApi;
 export const aiActionLogApi = emptyApi;
 export const aiChatMessageApi = { list: async (threadId) => JSON.parse(localStorage.getItem('qa-chat-messages') || '[]').filter((row) => row.thread_id === threadId) };

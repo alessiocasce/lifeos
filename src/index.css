@@ -9,6 +9,15 @@
 .health-summary > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgb(255 255 255 / 0.08); }
 .health-summary dt { font-size: 14px; color: #a1a1aa; }
 .health-summary dd { font-size: 24px; font-variant-numeric: tabular-nums; color: #f4f4f5; }
+.project-resume { display: flex; align-items: center; gap: 16px; padding: 16px; border-left: 2px solid #bdc3cc; background: #16191d; min-height: 64px; }
+.project-telemetry { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 0; }
+.project-telemetry dt { color: #a1a1aa; font-size: 12px; }
+.project-telemetry dd { margin-top: 4px; color: #e4e4e7; font-size: 16px; font-variant-numeric: tabular-nums; }
+.project-secondary { min-width: 0; border-top: 1px solid rgb(255 255 255 / 0.12); }
+.project-secondary > summary { cursor: pointer; min-height: 52px; padding: 16px 12px; font-size: 14px; font-weight: 600; }
+.project-secondary > .terminal-card { border-top: 0; }
+.project-dialog[open] { display: flex; }
+.project-dialog::backdrop { background: rgb(0 0 0 / 0.75); }
 
 @layer base {
   :root {

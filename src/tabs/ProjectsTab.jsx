@@ -13,7 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { localDate } from '../utils/date';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -65,6 +65,7 @@ export function ProjectsTab() {
   } = useLifeOS();
 
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [projectFilter, setProjectFilter] = useState('all');
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [projectForm, setProjectForm] = useState(emptyProjectForm());
@@ -101,8 +102,20 @@ export function ProjectsTab() {
   const activeProjects = projects.filter((project) => project.status === 'active');
   const sessionsThisWeek = projectSessions.filter((session) => isThisWeek(session.started_at));
   const hoursThisWeek = sessionsThisWeek.reduce((sum, session) => sum + getSessionMinutes(session) / 60, 0);
-  const totalSessions = projectSessions.length;
+  const visibleProjects = projectFilter === 'active' ? activeProjects : projects;
   const projectsLoading = isInitialLoading(projectsStatus, projects);
+
+  const selectProject = (id) => {
+    if (id === selectedProjectId) return;
+    if ((sessionTarget.trim() || sessionProof.trim() || sessionDelta || progressInput)
+      && !window.confirm('Discard the unsaved project session/progress draft?')) return;
+    setSessionTarget('');
+    setSessionProof('');
+    setSessionDelta('');
+    setProgressInput('');
+    setSessionError('');
+    setSelectedProjectId(id);
+  };
 
   useEffect(() => {
     const hasMeaningfulDraft = activeSession
@@ -145,6 +158,7 @@ export function ProjectsTab() {
   };
 
   const closeProjectModal = () => {
+    if (projectSaveStatus === 'saving') return;
     setProjectModalOpen(false);
     setEditingProjectId(null);
     setProjectForm(emptyProjectForm());
@@ -193,9 +207,12 @@ export function ProjectsTab() {
   const removeProject = async (project) => {
     if (!window.confirm(`Delete project "${project.name}" and its sessions?`)) return;
     setBusyId(`project:${project.id}:delete`);
+    setSessionError('');
     try {
       await deleteProject(project.id);
       if (selectedProjectId === project.id) setSelectedProjectId(null);
+    } catch (error) {
+      setSessionError(error.message || 'Failed to delete project.');
     } finally {
       setBusyId('');
     }
@@ -248,8 +265,11 @@ export function ProjectsTab() {
   const removeSession = async (session) => {
     if (!window.confirm('Delete this project session?')) return;
     setBusyId(`session:${session.id}:delete`);
+    setSessionError('');
     try {
       await deleteProjectSession(session.id);
+    } catch (error) {
+      setSessionError(error.message || 'Failed to delete session.');
     } finally {
       setBusyId('');
     }
@@ -287,6 +307,7 @@ export function ProjectsTab() {
   };
 
   const closeMoneyModal = () => {
+    if (moneySaveStatus === 'saving') return;
     setMoneyModalOpen(false);
     setEditingMoneyEntryId(null);
     setMoneyForm(emptyMoneyForm());
@@ -334,8 +355,11 @@ export function ProjectsTab() {
   const removeMoneyEntry = async (entry) => {
     if (!window.confirm('Delete this project money entry?')) return;
     setBusyId(`money:${entry.id}:delete`);
+    setSessionError('');
     try {
       await deleteProjectMoneyEntry(entry.id);
+    } catch (error) {
+      setSessionError(error.message || 'Failed to delete money entry.');
     } finally {
       setBusyId('');
     }
@@ -348,7 +372,7 @@ export function ProjectsTab() {
           activeSession={activeSession}
           busyId={busyId}
           onAddProgress={addProgress}
-          onBack={() => setSelectedProjectId(null)}
+          onBack={() => selectProject(null)}
           onDeleteProject={removeProject}
           onDeleteMoneyEntry={removeMoneyEntry}
           onDeleteSession={removeSession}
@@ -401,15 +425,12 @@ export function ProjectsTab() {
   }
 
   return (
-    <div className="grid min-w-0 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
+    <div className="project-workspace grid min-w-0 gap-6 pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel>
         <div className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-cyan-300">Project Ops</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-100">Projects</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500">
-              Serious execution tracked through goals, effort sessions, and proof of work.
-            </p>
+            <p className="text-xs text-zinc-400">Execution</p>
+            <h2 className="mt-1 text-2xl font-semibold text-zinc-100">Projects</h2>
           </div>
           <button
             type="button"
@@ -422,33 +443,34 @@ export function ProjectsTab() {
         </div>
       </Panel>
 
-      <div className="grid min-w-0 grid-cols-2 gap-2 xl:grid-cols-4">
-        <MiniMetric label="Active Projects" value={activeProjects.length} tone="text-cyan-300" sub={`${projects.length} total`} />
-        <MiniMetric label="Active Sessions" value={activeSession ? 1 : 0} tone={activeSession ? 'text-red-300' : 'text-zinc-100'} sub={activeSessionProject?.name ?? 'none'} />
-        <MiniMetric label="Hours This Week" value={formatNumber(hoursThisWeek)} tone="text-emerald-300" sub="project work" />
-        <MiniMetric label="Sessions" value={totalSessions} tone="text-violet-300" sub="proof logs" />
-      </div>
+      {activeSessionProject ? <button type="button" onClick={() => selectProject(activeSessionProject.id)} className="project-resume">
+        <Play size={18} /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">Session in progress</span><span className="block break-words font-semibold">{activeSessionProject.name}</span></span><ArrowLeft size={18} className="rotate-180" />
+      </button> : null}
+      {projectSessions.length ? <p className="px-3 text-sm text-zinc-400"><span className="data-text text-zinc-200">{formatNumber(hoursThisWeek)}h</span> recorded this week · {sessionsThisWeek.length} sessions</p> : null}
+      {projects.length ? <div className="flex gap-1 px-3" role="group" aria-label="Project filter">
+        {['all', 'active'].map((filter) => <button key={filter} type="button" aria-pressed={projectFilter === filter} onClick={() => setProjectFilter(filter)} className={`min-h-11 border-b-2 px-4 text-sm capitalize ${projectFilter === filter ? 'border-zinc-200 text-zinc-100' : 'border-transparent text-zinc-500'}`}>{filter === 'all' ? 'All projects' : 'Active'}</button>)}
+      </div> : null}
 
-      {(projectsError || projectSessionsError) ? (
-        <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-          {projectsError || projectSessionsError}
+      {(projectsError || projectSessionsError || sessionError) ? (
+        <div role="alert" className="px-3 py-2 text-sm text-red-200">
+          {sessionError || projectsError || projectSessionsError}
         </div>
       ) : null}
 
       {projectsLoading ? (
         <LoadingState label="Loading projects..." />
-      ) : projects.length ? (
+      ) : visibleProjects.length ? (
         <div className="grid min-w-0 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-          {projects.map((project) => (
+          {visibleProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               sessions={project.project_sessions ?? []}
-              onOpen={() => setSelectedProjectId(project.id)}
+              onOpen={() => selectProject(project.id)}
             />
           ))}
         </div>
-      ) : (
+      ) : projects.length ? <p className="px-3 py-8 text-sm text-zinc-500">No active projects.</p> : (
         <EmptyProjects onCreate={openCreateProject} />
       )}
 
@@ -474,7 +496,7 @@ function ProjectCard({ onOpen, project, sessions }) {
     <button
       type="button"
       onClick={onOpen}
-      className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3 text-left transition hover:border-cyan-400/25 hover:bg-cyan-400/[0.03]"
+      className="min-w-0 rounded border border-white/10 bg-[#111315] p-4 text-left transition hover:border-white/30 hover:bg-[#17191c]"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
@@ -495,11 +517,8 @@ function ProjectCard({ onOpen, project, sessions }) {
         <span className="data-text text-xs text-cyan-300">{Math.round(stats.percent)}%</span>
       </div>
 
-      <div className="mt-3 grid gap-2">
-        <MiniStat label="Sessions" value={sessions.length} />
-      </div>
-      <p className="mt-3 truncate text-xs text-zinc-500">
-        {lastSession ? `Last: ${formatDateTime(lastSession.started_at)} · ${formatDuration(getSessionMinutes(lastSession))}` : 'No sessions logged yet'}
+      <p className="mt-4 break-words text-xs leading-5 text-zinc-400">
+        {lastSession ? `${sessions.length} sessions · Last ${formatDateTime(lastSession.started_at)}` : 'No sessions logged yet'}
       </p>
     </button>
   );
@@ -543,14 +562,14 @@ function ProjectDetail({
   const balance = getProjectBalance(projectMoneyEntries);
 
   return (
-    <div className="grid min-w-0 gap-3 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+16px)]">
+    <div className="project-workspace grid min-w-0 gap-6 pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel>
         <div className="grid gap-3 p-3">
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-zinc-300"
+              className="inline-flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-zinc-300"
             >
               <ArrowLeft size={16} />
               Back
@@ -570,8 +589,8 @@ function ProjectDetail({
             {project.notes ? <p className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-zinc-500">{project.notes}</p> : null}
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+          <div className="min-w-0">
+            <div className="min-w-0 py-3">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
                   <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Progress</p>
@@ -586,46 +605,26 @@ function ProjectDetail({
                 {formatNumber(Math.max(0, stats.target - stats.completed))} {stats.unit} remaining
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <MiniMetric label="Total Hours" value={formatNumber(stats.totalHours)} tone="text-cyan-300" sub="all sessions" />
-              <MiniMetric label="This Week" value={formatNumber(stats.weekHours)} tone="text-emerald-300" sub="sessions" />
-              <MiniMetric label="Sessions" value={sessions.length} tone="text-violet-300" sub="proof logs" />
-              <MiniMetric label="Started" value={formatShortDate(project.started_on)} tone="text-zinc-100" sub="project date" />
-            </div>
           </div>
         </div>
       </Panel>
 
-      <ProjectWatch project={project} />
-
-      <ProjectBalancePanel
-        balance={balance}
-        busyId={busyId}
-        entries={projectMoneyEntries}
-        error={projectMoneyEntriesError}
-        loading={isInitialLoading(projectMoneyEntriesStatus, projectMoneyEntries)}
-        onAddExpense={() => onOpenMoneyModal('expense')}
-        onAddRevenue={() => onOpenMoneyModal('revenue')}
-        onDelete={onDeleteMoneyEntry}
-        onEdit={onEditMoneyEntry}
-      />
-
       {(sessionError || projectsError) ? (
-        <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
+        <div role="alert" className="px-3 py-2 text-sm text-red-200">
           {sessionError || projectsError}
         </div>
       ) : null}
 
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Panel>
-          <PanelHeader eyebrow="Execution" title={projectActiveSession ? 'Active Session' : 'Start Session'} right={<Clock3 size={16} className="text-red-300" />} />
+          <PanelHeader title={projectActiveSession ? 'Active Session' : 'Start Session'} right={<Clock3 size={16} className="text-zinc-400" />} />
           <div className="grid gap-3 p-3">
             {projectActiveSession ? (
               <div className="grid gap-3">
-                <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3">
+                <div className="border-l-2 border-zinc-400 pl-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Tag tone="red">active</Tag>
-                    <span className="data-text text-xl font-black text-red-200">{formatDuration(activeMinutes)}</span>
+                    <Tag>In progress</Tag>
+                    <span className="data-text text-2xl font-semibold text-zinc-100">{formatDuration(activeMinutes)}</span>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-zinc-100">{projectActiveSession.target_output || 'Project work session'}</p>
                   <p className="data-text mt-1 text-[11px] text-zinc-500">Started {formatDateTime(projectActiveSession.started_at)}</p>
@@ -656,7 +655,7 @@ function ProjectDetail({
                   type="button"
                   onClick={() => onStartSession(project)}
                   disabled={busyId === `project:${project.id}:start`}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="primary-button w-full disabled:cursor-not-allowed"
                 >
                   {busyId === `project:${project.id}:start` ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                   Start Session
@@ -666,7 +665,12 @@ function ProjectDetail({
           </div>
         </Panel>
 
-        {project.goal_type !== 'hours' ? (
+        <div className="min-w-0"><ProjectWatch project={project} /></div>
+      </div>
+
+      {project.goal_type !== 'hours' ? (
+        <details className="project-secondary">
+          <summary>Update progress</summary>
           <Panel>
             <PanelHeader eyebrow="Manual Progress" title="Add Progress" />
             <div className="grid gap-3 p-3">
@@ -680,12 +684,18 @@ function ProjectDetail({
                 {busyId === `project:${project.id}:progress` ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                 Add Progress
               </button>
-              <p className="text-xs leading-5 text-zinc-500">Non-hour projects progress from current value. Sessions still track effort and proof.</p>
             </div>
           </Panel>
+        </details>
         ) : null}
-      </div>
 
+      <details className="project-secondary">
+        <summary>Project records</summary>
+        <dl className="project-telemetry px-3"><div><dt>Recorded effort</dt><dd>{formatNumber(stats.totalHours)}h</dd></div><div><dt>This week</dt><dd>{formatNumber(stats.weekHours)}h</dd></div><div><dt>Sessions</dt><dd>{sessions.length}</dd></div><div><dt>Started</dt><dd>{formatShortDate(project.started_on)}</dd></div></dl>
+      </details>
+
+      <details className="project-secondary" open={sessions.length > 0}>
+      <summary>Session history <span className="text-zinc-500">({sessions.length})</span></summary>
       <Panel>
         <PanelHeader eyebrow={`${sessions.length} logs`} title="Recent Sessions" />
         <div className="grid gap-2 p-3">
@@ -707,6 +717,11 @@ function ProjectDetail({
           )}
         </div>
       </Panel>
+      </details>
+      <details className="project-secondary">
+        <summary>Project money <span className="text-zinc-500">{projectMoneyEntries.length ? formatSignedMoney(balance.netBalance) : ''}</span></summary>
+        <ProjectBalancePanel balance={balance} busyId={busyId} entries={projectMoneyEntries} error={projectMoneyEntriesError} loading={isInitialLoading(projectMoneyEntriesStatus, projectMoneyEntries)} onAddExpense={() => onOpenMoneyModal('expense')} onAddRevenue={() => onOpenMoneyModal('revenue')} onDelete={onDeleteMoneyEntry} onEdit={onEditMoneyEntry} />
+      </details>
     </div>
   );
 }
@@ -722,7 +737,7 @@ function ProjectBalancePanel({ balance, busyId, entries, error, loading, onAddEx
     : balance.netBalance < 0
       ? 'Investment phase'
       : 'No money entries yet';
-  const recentEntries = entries.slice(0, 6);
+  const recentEntries = entries;
 
   return (
     <Panel>
@@ -833,6 +848,7 @@ function SessionRow({ busyId, onDelete, project, session }) {
 }
 
 function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveStatus }) {
+  const dialogRef = useProjectDialog();
   useEffect(() => {
     const bodyStyle = document.body.style;
     const rootStyle = document.documentElement.style;
@@ -850,30 +866,20 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-50 flex min-w-0 items-stretch justify-stretch overflow-hidden bg-[#0f0f0f] backdrop-blur sm:items-center sm:justify-center sm:bg-black/70 sm:p-4">
+    <dialog ref={dialogRef} aria-labelledby="project-editor-title" onCancel={(event) => { event.preventDefault(); if (saveStatus !== 'saving') onClose(); }} className="project-dialog fixed inset-0 z-50 m-0 h-[100dvh] max-h-none w-full max-w-none min-w-0 items-stretch justify-stretch overflow-hidden border-0 bg-[#0f0f0f] p-0 text-zinc-100 sm:items-center sm:justify-center sm:bg-transparent sm:p-4">
       <div
-        className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-full flex-col overflow-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[min(84dvh,680px)] sm:max-w-2xl sm:rounded-xl sm:border"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="project-editor-title"
+        className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-full flex-col overflow-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[min(84dvh,680px)] sm:max-w-2xl sm:rounded sm:border"
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
             <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Project' : 'Create Project'}</p>
-            <h3 id="project-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Update Ops Target' : 'New Ops Target'}</h3>
+            <h3 id="project-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Edit project' : 'New project'}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
+            disabled={saveStatus === 'saving'}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
             aria-label="Close project editor"
           >
@@ -903,7 +909,7 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
             <div className="sm:col-span-2">
               <TextAreaField label="Notes" value={form.notes} onChange={(value) => onChange('notes', value)} placeholder="Scope, constraints, strategy..." />
             </div>
-            {error ? <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
+            {error ? <div role="alert" className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
             <div className="grid min-w-0 gap-2 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:hidden">
               <ProjectFormActions editing={editing} onClose={onClose} saveStatus={saveStatus} />
             </div>
@@ -913,11 +919,12 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 }
 
 function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, saveStatus }) {
+  const dialogRef = useProjectDialog();
   useEffect(() => {
     const bodyStyle = document.body.style;
     const rootStyle = document.documentElement.style;
@@ -935,23 +942,12 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
   const title = form.type === 'revenue' ? 'Revenue' : 'Expense';
 
   return (
-    <div className="fixed inset-0 z-50 flex min-w-0 items-stretch justify-stretch overflow-hidden bg-[#0f0f0f] backdrop-blur sm:items-center sm:justify-center sm:bg-black/70 sm:p-4">
+    <dialog ref={dialogRef} aria-labelledby="project-money-editor-title" onCancel={(event) => { event.preventDefault(); if (saveStatus !== 'saving') onClose(); }} className="project-dialog fixed inset-0 z-50 m-0 h-[100dvh] max-h-none w-full max-w-none min-w-0 items-stretch justify-stretch overflow-hidden border-0 bg-[#0f0f0f] p-0 text-zinc-100 sm:items-center sm:justify-center sm:bg-transparent sm:p-4">
       <div
-        className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-full flex-col overflow-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[min(82dvh,520px)] sm:max-w-lg sm:rounded-xl sm:border"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="project-money-editor-title"
+        className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full max-w-full flex-col overflow-hidden border-0 border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[min(82dvh,520px)] sm:max-w-lg sm:rounded sm:border"
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
@@ -963,6 +959,7 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
             onClick={onClose}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
             aria-label="Close project money editor"
+            disabled={saveStatus === 'saving'}
           >
             <X size={18} />
           </button>
@@ -978,7 +975,7 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
             <div className="sm:col-span-2">
               <Field label="Description" value={form.description} onChange={(value) => onChange('description', value)} placeholder="ChatGPT Plus, first payment..." />
             </div>
-            {error ? <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
+            {error ? <div role="alert" className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
           </div>
           <div className="grid min-w-0 gap-2 border-t border-white/5 p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:grid-cols-[minmax(0,1fr)_auto] sm:p-3">
             <button
@@ -999,7 +996,7 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -1023,6 +1020,20 @@ function ProjectFormActions({ editing, onClose, saveStatus }) {
       </button>
     </>
   );
+}
+
+function useProjectDialog() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    const previousFocus = document.activeElement;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+  return ref;
 }
 
 function Field({ label, onChange, placeholder = '', type = 'text', value }) {
@@ -1081,7 +1092,7 @@ function IconButton({ busy, children, label, onClick, tone = 'zinc' }) {
       title={label}
       onClick={onClick}
       disabled={busy}
-      className={`grid h-10 w-10 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-60 ${toneClass}`}
+      className={`grid h-11 w-11 place-items-center rounded border transition disabled:cursor-not-allowed disabled:opacity-60 ${toneClass}`}
     >
       {busy ? <Loader2 size={15} className="animate-spin" /> : children}
     </button>
@@ -1090,8 +1101,8 @@ function IconButton({ busy, children, label, onClick, tone = 'zinc' }) {
 
 function ProgressBar({ value }) {
   return (
-    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
-      <div className="h-full rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.3)]" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+    <div className="mt-3 h-1 overflow-hidden bg-white/10">
+      <div className="h-full bg-zinc-300" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );
 }

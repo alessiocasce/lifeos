@@ -143,3 +143,24 @@ rapid saves, failed-save retention, notes retry and empty behavior are covered.
 Remaining full scope: full Projects hierarchy and utility screens, routine-state
 integration where useful, feature-preservation audit, whole-app visual/workflow QA,
 and physical iPhone keyboard/process-eviction testing. This is not completion.
+
+## Projects execution checkpoint (2026-10-01)
+
+All/Active filtering and a real active-session resume row replace equal metric
+cards. Details lead with execution and Watch; desktop shows them together.
+Progress updates, records, sessions and money remain accessible below. All loaded
+money entries can now be edited, including those after the former six-row cutoff.
+Editors are native modal dialogs; regression coverage caught and fixed explicit
+focus restoration on removal. Failed deletion reports an error without rejecting
+unhandled. Switching project/back confirms before clearing a session draft.
+Existing authenticated Watch/Attention paths and database progress remain intact.
+
+Fifteen project browser cases cover CRUD/session/progress/money/draft journeys and
+list/detail/editor/money at all seven sizes. These fixture-based tests do not
+replace production schema/RLS validation or physical iPhone keyboard QA. Remaining
+scope is utility-tab reconstruction, routine-state integration where useful, the
+full feature preservation audit and whole-app/iPhone QA. Do not mark complete.
+
+Checkpoint validation: `npm test`, production build and seven-function check pass;
+the complete browser suite passes 66 tests. No schema or environment changes.
+No production mutations were used for these UI checks.

@@ -31,7 +31,13 @@ Health's local reconstruction checkpoint prioritizes selected-date check-in and
 Empty logs do not produce invented patterns. Existing autosave and canonical
 sleep-date behavior are unchanged; browser QA covers isolated persistence and
 failure journeys, not production sleep recalculation. See `docs/QA_HEALTH.md`.
-Full Projects/utility-screen reconstruction and whole-app QA remain in progress.
+Projects now prioritize session execution and Watch, with All/Active filtering,
+active-session resume and secondary progress/records/history/money sections.
+Native project/money editors retain CRUD and return focus. Failed deletes report
+errors; switching projects cannot silently carry a session draft. Browser tests
+use isolated fixtures; production progress remains database-authoritative.
+See `docs/QA_PROJECTS.md`. Utility-screen reconstruction and whole-app QA remain
+in progress. No schema rerun required.
 
 ## Current Companion Slice 4 Handoff (2026-09-26)
 
