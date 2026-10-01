@@ -85,10 +85,25 @@ edit/delete/end/reopen passed in addition to the continuity matrix. The isolated
 QA Vite server now uses its own dependency cache after a verified cache collision
 with the SSR harness produced a React dependency HTTP 504. Assertions were not relaxed.
 
-Remaining: Companion current state/permission controls;
+Remaining at this checkpoint: Companion current state/permission controls;
 Command and utility-tab reconstruction; richer populated screen fixtures and QA;
 physical iOS keyboard/background/process-eviction testing; final full-scope audit.
 Do not treat this checkpoint as a completed redesign.
+
+## Companion checkpoint (2026-10-01)
+
+Conversation now occupies the primary workspace at every width, with a context
+side sheet accessible from mobile and desktop. Current routines/preferences,
+project Watches and independent permissions use a bounded authenticated read on
+the existing actions route. Saved memories are reachable without diagnostics;
+memory failures retain the editor. Corrections create an unsent composer draft.
+Saved conversations are selectable and survive tab navigation. Chat retry retains
+the same request identity. The composer reserves space for the Training dock.
+
+All seven viewport screenshots were inspected; browser tests assert no overflow,
+safe composer placement, focus restoration, explicit controls and chat continuity.
+Full reconstruction remains open: Command, full Projects hierarchy, Health and
+utility screens, populated visual QA, and physical iOS verification.
 
 ## Project Watch checkpoint (2026-10-01)
 

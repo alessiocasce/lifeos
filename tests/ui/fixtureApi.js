@@ -65,14 +65,50 @@ export const projectSessionApi = emptyApi;
 export const projectMoneyEntryApi = emptyApi;
 export const dailyReviewApi = emptyApi;
 export const aiActionLogApi = emptyApi;
-export const aiChatMessageApi = emptyApi;
-export const aiChatThreadApi = emptyApi;
+export const aiChatMessageApi = { list: async (threadId) => JSON.parse(localStorage.getItem('qa-chat-messages') || '[]').filter((row) => row.thread_id === threadId) };
+export const aiChatThreadApi = {
+  list: async () => JSON.parse(localStorage.getItem('qa-chat-threads') || '[]'),
+  create: async () => {
+    const thread = { id: crypto.randomUUID(), title: 'New conversation', status: 'active', updated_at: new Date().toISOString() };
+    localStorage.setItem('qa-chat-threads', JSON.stringify([thread, ...await aiChatThreadApi.list()]));
+    return thread;
+  },
+};
+export async function sendLifeOSAiMessage(message, threadId, { clientRequestId }) {
+  const requests = JSON.parse(localStorage.getItem('qa-brain-requests') || '[]');
+  localStorage.setItem('qa-brain-requests', JSON.stringify([...requests, { message, threadId, clientRequestId }]));
+  if (localStorage.getItem('qa-brain-fail')) throw new Error('Test Brain unavailable.');
+  const rows = JSON.parse(localStorage.getItem('qa-chat-messages') || '[]');
+  const answer = 'Recorded in this test conversation.';
+  if (!rows.some((row) => row.client_request_id === clientRequestId)) {
+    for (const [role, content] of [['user', message], ['assistant', answer]]) rows.push({ id: crypto.randomUUID(), thread_id: threadId, role, content, client_request_id: clientRequestId, created_at: new Date().toISOString() });
+    localStorage.setItem('qa-chat-messages', JSON.stringify(rows));
+  }
+  return { answer, thread_id: threadId, actions: [] };
+}
 export const aiInsightApi = emptyApi;
-export const aiMemoryApi = emptyApi;
+export const aiMemoryApi = {
+  list: async () => JSON.parse(localStorage.getItem('qa-memories') || '[]'),
+  update: async (id, patch) => {
+    if (localStorage.getItem('qa-memory-fail')) throw new Error('Memory was not saved.');
+    const rows = JSON.parse(localStorage.getItem('qa-memories') || '[]').map((row) => row.id === id ? { ...row, ...patch } : row);
+    localStorage.setItem('qa-memories', JSON.stringify(rows)); return rows.find((row) => row.id === id);
+  },
+  archive: async (id) => {
+    const rows = JSON.parse(localStorage.getItem('qa-memories') || '[]');
+    const row = rows.find((item) => item.id === id);
+    localStorage.setItem('qa-memories', JSON.stringify(rows.filter((item) => item.id !== id)));
+    return row;
+  },
+};
 export const aiReportApi = emptyApi;
 
 const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
 export const companionAppApi = {
+  context: async () => {
+    if (localStorage.getItem('qa-context-fail')) throw new Error('Current understanding is unavailable.');
+    return { permissions: watchState().permissions, assumptions: [{ label: 'Creatine', text: 'inactive', kind: 'routine', uncertain: false }], watches: [] };
+  },
   watch: async () => watchState(),
   permissions: async () => ({ permissions: watchState().permissions }),
   setPermission: async (permission, enabled) => {

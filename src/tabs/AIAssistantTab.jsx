@@ -9,11 +9,13 @@ import {
   RefreshCw,
   Save,
   Send,
+  SlidersHorizontal,
   Sparkles,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AiActionHistoryList, AssistantMarkdown } from '../components/AiActionHistory';
+import { CompanionState } from '../components/CompanionState';
 import { Panel, PanelHeader, Tag } from '../components/ui';
 import { useLifeOS } from '../context/LifeOSContext';
 import { sendLifeOSAiMessage } from '../services/aiApi';
@@ -26,6 +28,7 @@ export function AIAssistantTab() {
     aiActionLogs,
     aiActionLogsStatus,
     aiChatMessagesStatus,
+    aiChatThreads,
     aiInsights,
     aiMemories,
     aiMemoriesStatus,
@@ -49,15 +52,21 @@ export function AIAssistantTab() {
     reembedAiVaultDocuments,
     saveBrainMessageToVault,
     startNewAiChatDraft,
+    selectAiChatThread,
     updateAiMemory,
   } = useLifeOS();
   const [aiInput, setAiInput] = useState('');
+  const [contextOpen, setContextOpen] = useState(false);
+  const contextDialogRef = useRef(null);
   const [pendingMessages, setPendingMessages] = useState([]);
   const [aiStatus, setAiStatus] = useState('idle');
   const [aiError, setAiError] = useState(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [editingMemoryId, setEditingMemoryId] = useState(null);
   const [memoryDraft, setMemoryDraft] = useState({ title: '', content: '' });
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [memoryError, setMemoryError] = useState('');
+  const memoryMutationRef = useRef(false);
   const [recentActionsExpanded, setRecentActionsExpanded] = useState(false);
   const [showActionErrors, setShowActionErrors] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
@@ -93,10 +102,9 @@ export function AIAssistantTab() {
   const brainActionLogs = showActionErrors ? aiActionLogs : successfulActionLogs;
 
   useEffect(() => {
-    startNewAiChatDraft?.();
-    setPendingMessages([]);
-    setAiError(null);
-  }, []);
+    if (contextOpen) contextDialogRef.current?.showModal();
+    else contextDialogRef.current?.close();
+  }, [contextOpen]);
 
   useEffect(() => {
     const updatePinnedState = () => {
@@ -313,10 +321,12 @@ export function AIAssistantTab() {
     setAiError(null);
     setPendingMessages([]);
     setAiInput('');
+    setLastFailedMessage(null);
     startNewAiChatDraft?.();
   };
 
   const beginMemoryEdit = (memory) => {
+    setMemoryError('');
     setEditingMemoryId(memory.id);
     setMemoryDraft({ title: memory.title, content: memory.content });
   };
@@ -325,28 +335,46 @@ export function AIAssistantTab() {
     const title = memoryDraft.title.trim();
     const content = memoryDraft.content.trim();
     if (!title || !content) return;
-    await updateAiMemory(memoryId, { title, content, source: 'manual' });
-    setEditingMemoryId(null);
+    if (memoryMutationRef.current) return;
+    memoryMutationRef.current = true;
+    setMemoryBusy(true);
+    setMemoryError('');
+    try {
+      await updateAiMemory(memoryId, { title, content, source: 'manual' });
+      setEditingMemoryId(null);
+    } catch (error) { setMemoryError(error.message || 'Memory was not saved.'); }
+    finally { memoryMutationRef.current = false; setMemoryBusy(false); }
+  };
+
+  const forgetMemory = async (memoryId) => {
+    if (memoryMutationRef.current) return;
+    memoryMutationRef.current = true;
+    setMemoryBusy(true);
+    setMemoryError('');
+    try { await archiveAiMemory(memoryId); }
+    catch (error) { setMemoryError(error.message || 'Memory was not forgotten.'); }
+    finally { memoryMutationRef.current = false; setMemoryBusy(false); }
   };
 
   return (
-    <div className="grid h-[calc(100dvh_-_env(safe-area-inset-top)_-_144px_-_env(safe-area-inset-bottom))] min-h-0 min-w-0 grid-cols-12 gap-3 overflow-hidden md:h-[calc(100dvh_-_104px)]">
-      <Panel className="col-span-12 flex min-h-0 flex-col overflow-hidden xl:col-span-9">
-        <div className="flex min-w-0 items-center gap-2 border-b border-white/5 bg-gradient-to-r from-cyan-400/[0.05] via-transparent to-transparent px-3 py-2">
-          <div className="min-w-0 sm:mr-auto">
-            <p className="data-text text-[10px] uppercase tracking-wider text-cyan-400">Brain</p>
-            <h1 className="mt-0.5 truncate text-sm font-semibold text-zinc-100">Command chat</h1>
+    <div className="companion-workspace">
+      <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 items-center gap-2 border-b border-white/10 px-3 py-2">
+          <div className="mr-auto min-w-0">
+            <h2 className="truncate text-sm font-semibold text-zinc-100">{aiChatThreads.find((thread) => thread.id === activeAiThreadId)?.title || 'New conversation'}</h2>
           </div>
           <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
             onClick={handleNewChat}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-cyan-400/25 bg-cyan-400/10 text-cyan-200 hover:border-cyan-300/50"
+            disabled={aiStatus === 'loading'}
+            className="icon-button disabled:opacity-40"
             aria-label="New Brain chat"
             title="New chat"
           >
             <MessageSquarePlus size={17} />
           </button>
+          <button type="button" className="icon-button" aria-label="Open Companion context" title="Companion context" onClick={() => setContextOpen(true)}><SlidersHorizontal size={17} /></button>
           </div>
         </div>
 
@@ -363,13 +391,12 @@ export function AIAssistantTab() {
           ) : messages.length ? (
             messages.map((message) => <AssistantMessage key={message.id} message={message} />)
           ) : (
-            <div className="grid min-h-full place-items-center rounded-lg border border-cyan-400/10 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.08),rgba(0,0,0,0.14)_42%,rgba(0,0,0,0.04))] p-4 text-center">
+            <div className="grid min-h-64 place-items-center p-4 text-center">
               <div className="max-w-sm">
-                <div className="mx-auto grid h-10 w-10 place-items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-glow">
+                <div className="mx-auto grid h-10 w-10 place-items-center text-zinc-500">
                   <BrainCircuit size={21} />
                 </div>
-                <p className="mt-3 text-lg font-semibold text-zinc-50">What do we solve?</p>
-                <p className="mt-1 text-sm text-zinc-500">Ask, log, analyze, plan.</p>
+                <p className="mt-3 text-lg font-semibold text-zinc-200">What's on your mind?</p>
               </div>
             </div>
           )}
@@ -408,10 +435,10 @@ export function AIAssistantTab() {
                   }
                 }
               }}
-              placeholder="Message LifeOS Brain..."
+              placeholder="Message Companion..."
               aria-label="Brain message input"
               data-testid="brain-message-input"
-              className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-md border border-white/10 bg-black/50 px-3 py-2.5 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/40"
+              className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-md border border-white/10 bg-black/50 px-3 py-2.5 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-400/40"
             />
             <button
               type="submit"
@@ -428,7 +455,27 @@ export function AIAssistantTab() {
         </form>
       </Panel>
 
-      <div className="col-span-12 hidden min-h-0 min-w-0 content-start gap-3 overflow-y-auto overscroll-contain xl:col-span-3 xl:grid">
+      <dialog ref={contextDialogRef} className="companion-context-dialog" aria-labelledby="companion-context-title" onCancel={() => setContextOpen(false)} onClose={() => setContextOpen(false)}>
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[#15181c] p-4">
+          <h2 id="companion-context-title" className="text-lg font-semibold">Companion context</h2>
+          <button type="button" className="icon-button" aria-label="Close Companion context" onClick={() => setContextOpen(false)}><X size={18} /></button>
+        </header>
+        <div className="grid min-w-0 gap-5 p-4">
+        {contextOpen ? <CompanionState onCorrect={(item) => {
+          setAiInput(`LifeOS, update your understanding of ${item.label.toLowerCase()}: `);
+          setContextOpen(false);
+          window.requestAnimationFrame(() => document.querySelector('[data-testid="brain-message-input"]')?.focus());
+        }} /> : null}
+        <section aria-label="Recent conversations">
+          <h3 className="mb-2 text-sm font-semibold">Conversations</h3>
+          {aiChatThreads.length ? aiChatThreads.slice(0, 20).map((thread) => <button key={thread.id} type="button" disabled={aiStatus === 'loading'} aria-current={thread.id === activeAiThreadId ? 'true' : undefined} className="flex min-h-11 w-full items-center border-b border-white/10 py-3 text-left text-sm text-zinc-300 disabled:opacity-40" onClick={() => {
+            selectAiChatThread(thread.id);
+            setPendingMessages([]);
+            setAiError(null);
+            setLastFailedMessage(null);
+            setContextOpen(false);
+          }}>{thread.title || 'Untitled conversation'}</button>) : <p className="py-3 text-sm text-zinc-500">No saved conversations.</p>}
+        </section>
         <Panel>
           <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
@@ -514,7 +561,7 @@ export function AIAssistantTab() {
                       <VaultDocumentCard
                         key={document.id}
                         document={document}
-                        onOpen={() => setVaultDetail(document)}
+                        onOpen={() => { setContextOpen(false); setVaultDetail(document); }}
                         onArchive={() => archiveAiVaultDocument(document.id)}
                       />
                     ))
@@ -526,17 +573,22 @@ export function AIAssistantTab() {
                   {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
                 </div>
               ) : null}
-
+            </div>
+          ) : null}
+        </Panel>
+        <Panel>
+            <div className="grid gap-3 py-3">
               <DiagnosticsSection
                 count={aiMemories.length}
                 label="Memory"
                 open={memoryOpen}
                 tone="violet"
-                title="What LifeOS Knows"
+                title="Saved memories"
                 onToggle={() => setMemoryOpen((open) => !open)}
               />
               {memoryOpen ? (
                 <div className="grid gap-2 rounded-md border border-white/5 bg-black/20 p-2">
+                  {memoryError ? <p role="alert" className="text-sm text-red-300">{memoryError}</p> : null}
                   <div className="flex items-center justify-end">
                     <button
                       type="button"
@@ -556,11 +608,12 @@ export function AIAssistantTab() {
                         memory={memory}
                         editing={editingMemoryId === memory.id}
                         draft={memoryDraft}
+                        busy={memoryBusy}
                         onDraftChange={setMemoryDraft}
                         onEdit={() => beginMemoryEdit(memory)}
                         onCancel={() => setEditingMemoryId(null)}
                         onSave={() => saveMemoryEdit(memory.id)}
-                        onArchive={() => archiveAiMemory(memory.id)}
+                        onArchive={() => forgetMemory(memory.id)}
                       />
                     ))
                   ) : (
@@ -587,9 +640,9 @@ export function AIAssistantTab() {
                 </div>
               ) : null}
             </div>
-          ) : null}
         </Panel>
-      </div>
+        </div>
+      </dialog>
 
       {vaultSaveMessage ? (
         <VaultSaveModal
@@ -637,7 +690,7 @@ function DiagnosticsSection({ count, label, onToggle, open, title, tone }) {
   );
 }
 
-function MemoryCard({ memory, editing, draft, onDraftChange, onEdit, onCancel, onSave, onArchive }) {
+function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCancel, onSave, onArchive }) {
   if (editing) {
     return (
       <div className="grid gap-2 rounded-md border border-violet-400/20 bg-violet-400/[0.05] p-3">
@@ -655,10 +708,10 @@ function MemoryCard({ memory, editing, draft, onDraftChange, onEdit, onCancel, o
           aria-label="Memory content"
         />
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-400" aria-label="Cancel memory edit">
+          <button type="button" disabled={busy} onClick={onCancel} className="icon-button" aria-label="Cancel memory edit">
             <X size={15} />
           </button>
-          <button type="button" onClick={onSave} className="grid h-9 w-9 place-items-center rounded-md border border-violet-400/25 bg-violet-400/10 text-violet-200" aria-label="Save memory">
+          <button type="button" disabled={busy || !draft.title.trim() || !draft.content.trim()} onClick={onSave} className="icon-button" aria-label="Save memory">
             <Save size={15} />
           </button>
         </div>
@@ -674,10 +727,10 @@ function MemoryCard({ memory, editing, draft, onDraftChange, onEdit, onCancel, o
           <h3 className="mt-2 text-sm font-semibold text-zinc-100">{memory.title}</h3>
         </div>
         <div className="flex shrink-0 gap-1">
-          <button type="button" onClick={onEdit} className="h-8 rounded-md border border-white/10 px-2 text-[11px] text-zinc-400 hover:text-zinc-200">
+          <button type="button" disabled={busy} onClick={onEdit} className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400 hover:text-zinc-200">
             Edit
           </button>
-          <button type="button" onClick={onArchive} className="grid h-8 w-8 place-items-center rounded-md border border-white/10 text-zinc-500 hover:border-red-400/25 hover:text-red-200" aria-label={`Forget ${memory.title}`}>
+          <button type="button" disabled={busy} onClick={onArchive} className="icon-button" aria-label={`Forget ${memory.title}`}>
             <Archive size={14} />
           </button>
         </div>

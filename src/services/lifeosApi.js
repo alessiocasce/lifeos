@@ -851,6 +851,7 @@ export const aiActionLogApi = {
 };
 
 export const companionAppApi = {
+  context: (signal) => fetchCompanionApp('/api/ai/actions?view=companion_context', { signal }),
   watch: (projectId, signal) => fetchCompanionApp(`/api/ai/actions?view=project_watch&project_id=${encodeURIComponent(projectId)}`, { signal }),
   permissions: (signal) => fetchCompanionApp('/api/ai/actions?view=companion_permissions', { signal }),
   setWatch: (projectId, operation, watchId) => fetchCompanionApp('/api/ai/actions', {

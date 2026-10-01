@@ -7,6 +7,42 @@ import { applyBeliefTransition } from './brainBeliefs.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WATCH_FIELDS = 'id, project_id, state, last_checked_at, last_triggered_at, next_check_at, expires_at, check_count, max_checks, created_at';
 
+// A product projection, never raw belief provenance or monitor conditions.
+export async function readCompanionContext({ userId, client = getSupabaseAdmin(), now = new Date() }) {
+  const instant = new Date(now).toISOString();
+  const [permissions, beliefs, monitors, projects] = await Promise.all([
+    loadMonitorPermissions({ client, userId }),
+    client.from('brain_beliefs').select('subject_type, subject_key, predicate, value, confidence, effective_until')
+      .eq('user_id', userId).eq('record_status', 'current').in('subject_type', ['routine', 'preference'])
+      .lte('effective_from', instant).order('effective_from', { ascending: false }).limit(40),
+    client.from('brain_monitors').select(WATCH_FIELDS).eq('user_id', userId).eq('monitor_type', 'project_staleness')
+      .in('state', ['active', 'suspended']).order('created_at', { ascending: false }).limit(20),
+    client.from('projects').select('id, name').eq('user_id', userId).limit(200),
+  ]);
+  for (const result of [beliefs, monitors, projects]) if (result.error) throw result.error;
+  const routineNames = { 'health.habit.shower': 'Shower', 'health.habit.creatine': 'Creatine', 'health.habit.skin': 'Skincare' };
+  const preferenceNames = { 'communication.style': 'Communication', 'accountability.style': 'Accountability', 'voice.preference': 'Voice', 'communication.avoid_terms': 'Words to avoid' };
+  const assumptions = (beliefs.data || []).filter((row) => !row.effective_until || new Date(row.effective_until) > new Date(now)).flatMap((row) => {
+    if (row.subject_type === 'routine' && row.predicate === 'status' && routineNames[row.subject_key]
+      && ['active', 'inactive', 'suspended', 'uncertain'].includes(row.value?.state)) {
+      return [{ label: routineNames[row.subject_key], text: row.value.state, kind: 'routine', uncertain: Number(row.confidence) < 0.8 || row.value.state === 'uncertain' }];
+    }
+    const preference = row.value?.value;
+    if (row.subject_type === 'preference' && row.predicate === 'value' && preferenceNames[row.subject_key]
+      && (typeof preference === 'string' || (Array.isArray(preference) && preference.every((item) => typeof item === 'string')))) {
+      return [{ label: preferenceNames[row.subject_key], text: (Array.isArray(preference) ? preference.join(', ') : preference).slice(0, 400), kind: 'preference', uncertain: Number(row.confidence) < 0.8 }];
+    }
+    return [];
+  });
+  const names = new Map((projects.data || []).map((project) => [project.id, project.name]));
+  const watches = (monitors.data || []).filter((row) => names.has(row.project_id)).map((row) => ({
+    project_name: String(names.get(row.project_id)).slice(0, 160),
+    state: new Date(row.expires_at) <= new Date(now) || row.check_count >= row.max_checks ? 'expired' : row.state,
+    last_checked_at: row.last_checked_at, last_triggered_at: row.last_triggered_at,
+  }));
+  return { permissions, assumptions, watches };
+}
+
 function requireUuid(value) {
   if (!UUID.test(String(value || ''))) throw new HttpError(400, 'Invalid identifier.');
   return value;

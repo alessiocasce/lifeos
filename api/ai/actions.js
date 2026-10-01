@@ -10,11 +10,11 @@ import {
 } from '../_utils/http.js';
 import { getActionUserId, requireConfiguredUserAccess } from '../_utils/supabaseAdmin.js';
 import { listAiActionLogs } from '../_utils/lifeosTools.js';
-import { readProjectWatch, mutateCompanionApp } from '../_utils/companionApp.js';
+import { readProjectWatch, readCompanionContext, mutateCompanionApp } from '../_utils/companionApp.js';
 import { loadMonitorPermissions } from '../_utils/brainMonitorPermissions.js';
 
 export function createActionsHandler({ requireUser = requireConfiguredUserAccess, readWatch = readProjectWatch,
-  mutate = mutateCompanionApp, permissions = loadMonitorPermissions } = {}) {
+  mutate = mutateCompanionApp, permissions = loadMonitorPermissions, readContext = readCompanionContext } = {}) {
   return async function handler(req, res) {
     const context = createRequestContext(req, res);
     res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
@@ -31,6 +31,7 @@ export function createActionsHandler({ requireUser = requireConfiguredUserAccess
         if (req.method === 'POST') result = await mutate({ userId: user.id, body: await readJsonBody(req) });
         else if (url.searchParams.get('view') === 'project_watch') result = await readWatch({ userId: user.id, projectId: url.searchParams.get('project_id') });
         else if (url.searchParams.get('view') === 'companion_permissions') result = { permissions: await permissions({ userId: user.id }) };
+        else if (url.searchParams.get('view') === 'companion_context') result = await readContext({ userId: user.id });
         else throw new HttpError(400, 'Unknown view.');
         res.setHeader('cache-control', 'no-store');
         return sendSuccess(res, 200, result, context);

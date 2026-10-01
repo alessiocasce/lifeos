@@ -1,5 +1,40 @@
 # Companion app controls
 
+## Conversation and current understanding
+
+Companion stays a full-height conversation on mobile and desktop. Returning from
+another tab keeps the selected conversation; only New Chat clears it. The context
+icon opens a native modal side sheet, with Escape dismissal and browser focus
+containment. The Training Resume dock has reserved space below the composer.
+
+Current understanding shows bounded, non-expired routine states and the four
+supported preference keys. It is separate from saved autobiographical memories.
+No assumptions are invented when the data is empty. Current-state corrections
+prefill the message composer and require the user to finish and send the message.
+Opening the sheet or clicking Correct does not write a belief or invoke Brain.
+The sheet also exposes active/suspended project Watches, independent monitoring
+and messaging grants, saved conversations, memory edit/forget, and secondary
+action history/Vault diagnostics. Failed memory saves preserve the editor.
+
+`GET /api/ai/actions?view=companion_context` uses the same verified configured-user
+session as Watch. It maps routine/preference rows and project Watch summaries to
+human fields; no raw provenance, monitor conditions, database identifiers or
+private cross-user rows are returned. Responses use no-store. No schema rerun
+required; backend/frontend deploy together. No Oracle restart is needed.
+
+Local QA: ten Companion Chromium checks cover selected-thread navigation,
+corrections remaining unsent, independent permission controls, failed memory
+edit recovery, chat retry request identity, Escape/focus restoration and seven
+required viewport sizes. Tests use isolated services; they do not call Gemini or
+production Supabase. Physical iPhone keyboard/process eviction remains manual.
+
+Manual deployed QA: select a saved conversation, navigate to Training and back;
+open context, verify real current state, prepare a correction and confirm it is
+not sent automatically. Test a disposable memory edit and verify reload. Change
+permissions only intentionally; opening the sheet must leave both unchanged.
+Open a saved Vault report and confirm its detail modal can be used and closed.
+Check the composer with an active workout, keyboard open and phone rotation.
+
 ## Project Watch
 
 Project details show the persisted typed project-staleness Watch, current project

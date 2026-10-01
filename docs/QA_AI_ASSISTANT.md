@@ -1,5 +1,14 @@
 # LifeOS AI Assistant QA
 
+## Companion frontend reconstruction
+
+See [Companion UI QA](QA_COMPANION_UI.md) for current-state/permission controls.
+Run `npm run test:ui` for isolated browser journeys. A selected conversation must
+survive navigation away and back; New Chat is the explicit reset. Context-sheet
+corrections only prefill the composer. Memory-save failures must keep the editor
+and entered values; retrying chat must retain its request ID. Verify the composer
+is reachable above navigation and the active Training dock at phone widths.
+
 ## Reliability Release Gate
 
 For the WhatsApp interaction patch, apply `supabase/migrations/20260908231937_whatsapp_interaction_reliability.sql` if it is not already present, then deploy the checked-in `bridge/whatsapp/wts.js` and `bridge/whatsapp/providerMessageContract.cjs` to Oracle as described in [WHATSAPP_BRIDGE_RELIABILITY_PATCH.md](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md). Run `npm run test:bridge`. The inbound response must include `assistant_message_id`; every physical normal reply bubble must be recorded with `action=record_reply_delivery` before it can become an exact native-quote target.

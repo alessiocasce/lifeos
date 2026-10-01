@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { createReliabilityDatabase, fixtureUser } from '../tests/brain/reliabilityDatabase.js';
-import { readProjectWatch, mutateCompanionApp } from '../api/_utils/companionApp.js';
+import { readProjectWatch, readCompanionContext, mutateCompanionApp } from '../api/_utils/companionApp.js';
 import { applyBeliefTransition } from '../api/_utils/brainBeliefs.js';
 import { createActionsHandler } from '../api/ai/actions.js';
 import { HttpError } from '../api/_utils/http.js';
@@ -54,6 +54,23 @@ try {
     action: 'project_watch', project_id: paused.id, operation: 'enable', watch_id: expiring.watch.id,
   } }), { status: 409 });
   await db.query('insert into auth.users values ($1)', [other]);
+  await applyBeliefTransition({ userId, client, subjectType: 'routine', subjectKey: 'health.habit.creatine', predicate: 'status',
+    value: { state: 'inactive' }, sourceType: 'user_explicit', confidence: 1, effectiveFrom: now,
+    provenance: { private_detail: 'must not reach UI' }, idempotencyKey: 'companion-ui-routine' });
+  await applyBeliefTransition({ userId, client, subjectType: 'preference', subjectKey: 'communication.style', predicate: 'value',
+    value: { value: 'Clear technical explanations' }, sourceType: 'user_explicit', confidence: 1, effectiveFrom: now,
+    idempotencyKey: 'companion-ui-preference' });
+  const context = await readCompanionContext({ userId, client, now });
+  assert(context.assumptions.some((row) => row.label === 'Creatine' && row.text === 'inactive'));
+  assert(context.assumptions.some((row) => row.label === 'Communication' && row.text === 'Clear technical explanations'));
+  assert.equal(context.watches.length, 1);
+  assert.equal(JSON.stringify(context).includes('private_detail'), false);
+  assert.equal(JSON.stringify(context).includes(project.id), false);
+  const otherContext = await readCompanionContext({ userId: other, client, now });
+  assert.deepEqual(otherContext.assumptions, []);
+  assert.deepEqual(otherContext.watches, []);
+  await db.query("update brain_beliefs set effective_until=$1 where subject_key='health.habit.creatine'", [new Date(now.getTime() + 1000).toISOString()]);
+  assert.equal((await readCompanionContext({ userId, client, now: new Date(now.getTime() + 2000) })).assumptions.some((row) => row.label === 'Creatine'), false);
   await assert.rejects(readProjectWatch({ userId: other, projectId: project.id, client, now }), { status: 404 });
   await assert.rejects(mutateCompanionApp({ userId: other, client, now, body: { action: 'project_watch', project_id: project.id, operation: 'suspend', watch_id: id } }), { status: 404 });
   for (const table of ['brain_outbox_messages', 'brain_attention_events', 'ai_action_logs']) {
@@ -66,6 +83,7 @@ try {
     requireUser: async (token) => { if (token !== 'test-session') throw new HttpError(403, 'Wrong account.'); return { id: userId }; },
     mutate: async (args) => { assert.equal(args.userId, userId); writes += 1; return { watch: null }; },
     readWatch: async (args) => { assert.equal(args.userId, userId); return { watch: null }; },
+    readContext: async (args) => { assert.equal(args.userId, userId); return { assumptions: [], watches: [], permissions: {} }; },
   });
   async function call(token, method = 'POST', url = '/api/ai/actions') {
     const res = { headers: {}, setHeader(key, value) { this.headers[key] = value; }, end(value) { this.body = value ? JSON.parse(value) : null; } };
@@ -84,5 +102,7 @@ try {
   const readResponse = await call('test-session', 'GET', `/api/ai/actions?view=project_watch&project_id=${project.id}`);
   assert.equal(readResponse.statusCode, 200);
   assert.equal(readResponse.headers['cache-control'], 'no-store');
+  assert.equal((await call(null, 'GET', '/api/ai/actions?view=companion_context')).statusCode, 401);
+  assert.equal((await call('test-session', 'GET', '/api/ai/actions?view=companion_context')).statusCode, 200);
   console.log('PASS app route: absent/invalid/automation credentials denied, verified user scoped, successful reads never cached');
 } finally { await db.close(); }
