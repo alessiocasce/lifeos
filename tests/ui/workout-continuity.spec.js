@@ -129,9 +129,10 @@ test('session switching isolates fields and restores selected session ahead of n
   });
   await page.reload();
   await expect(exercise(page)).toHaveValue('Barbell Curl');
-  await page.getByRole('button', { name: 'Session options', exact: true }).click();
-  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Switch session' }).selectOption('other');
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.getByRole('button', { name: /Other workout/ }).click();
+  await page.getByText('Session actions', { exact: true }).click();
+  await page.getByRole('button', { name: 'Select for logging', exact: true }).click();
   await expect(exercise(page)).toHaveValue('');
   await exercise(page).fill('Squat');
   await page.reload();

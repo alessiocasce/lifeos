@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   ClipboardList,
@@ -75,6 +76,8 @@ export function WorkoutTab() {
   const [formError, setFormError] = useState('');
   const [startingTemplateId, setStartingTemplateId] = useState(null);
   const [lastSavedSet, setLastSavedSet] = useState(null);
+  const [trainingView, setTrainingView] = useState('live');
+  const [historySessionId, setHistorySessionId] = useState(null);
 
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
   const previousPerformance = useMemo(
@@ -393,8 +396,26 @@ export function WorkoutTab() {
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4">
+      <div role="group" aria-label="Training view" className="col-span-12 flex gap-1 border-b border-white/10 pb-3">
+        {['live', 'history'].map((view) => (
+          <button key={view} type="button" aria-pressed={trainingView === view} onClick={() => setTrainingView(view)} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
+            {view === 'live' ? 'Live' : 'History'}
+          </button>
+        ))}
+      </div>
       {draftStorageUnavailable ? <p role="status" className="col-span-12 text-sm text-amber-300">Device storage is unavailable. Keep this screen open until your set is saved.</p> : null}
-      {activeWorkoutSession ? (
+      {trainingView === 'history' ? (
+        <WorkoutHistory
+          sessions={workoutSessions}
+          activeSession={activeWorkoutSession}
+          selectedId={historySessionId}
+          onSelect={setHistorySessionId}
+          onResume={() => setTrainingView('live')}
+          onEdit={(id) => { setActiveWorkoutId(id); setTrainingView('live'); }}
+          status={workoutSessionsStatus}
+          error={workoutSessionsError}
+        />
+      ) : activeWorkoutSession ? (
         <>
           <ActiveWorkoutHeader
             activeSession={activeWorkoutSession}
@@ -606,7 +627,6 @@ function WorkoutSessionControl({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [manageTemplatesOpen, setManageTemplatesOpen] = useState(false);
   const [templateBusy, setTemplateBusy] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
   const contentOpen = !activeSession || mobileOpen;
@@ -739,29 +759,6 @@ function WorkoutSessionControl({
             workoutTemplates={workoutTemplates}
             workoutTemplatesStatus={workoutTemplatesStatus}
           />
-        </CollapsedSection>
-
-        <CollapsedSection
-          open={advancedOpen}
-          setOpen={setAdvancedOpen}
-          title="Advanced"
-        >
-          <label className="block rounded-md border border-white/5 bg-black/25 p-2">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Switch session</span>
-            <select
-              value={activeWorkoutId ?? ''}
-              onChange={(event) => setActiveWorkoutId(event.target.value || null)}
-              disabled={!workoutSessions.length}
-              className="mt-1 w-full rounded border border-white/10 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-cyan-400/40 disabled:text-zinc-600 md:text-xs"
-            >
-              <option value="">No session selected</option>
-              {workoutSessions.map((session) => (
-                <option key={session.id} value={session.id}>
-                  {session.performed_on} / {session.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </CollapsedSection>
 
         {activeSession ? (
@@ -1173,12 +1170,54 @@ function PreviousPerformanceCard({ performance }) {
   if (!performance) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-zinc-600 pl-3 text-sm">
-      <span className="text-zinc-400">Previous <span className="ml-2 data-text text-zinc-100">{performance.last.weight} kg × {performance.last.reps}</span></span>
-      <span className="text-xs text-zinc-500">{performance.date}</span>
-      <details className="w-full text-xs text-zinc-400"><summary className="min-h-11 cursor-pointer py-3 text-sm">Performance detail</summary><p className="py-2">Heaviest: {performance.heaviestSet.weight} kg × {performance.heaviestSet.reps}. Estimated 1RM: {formatNumber(performance.bestEstimated1Rm.estimated1Rm)} kg (Epley).</p></details>
-    </div>
+    <section aria-label="Last time" className="min-w-0 border-l-2 border-zinc-600 pl-3 text-sm">
+      <div className="flex flex-wrap justify-between gap-2 text-xs text-zinc-400"><span>LAST TIME</span><time>{performance.date}</time></div>
+      <p className="my-2 break-words text-zinc-300">{performance.sessionName}</p>
+      <HistoricalSets sets={performance.sets} />
+    </section>
   );
+}
+
+function HistoricalSets({ sets }) {
+  return <div className="grid gap-2">{sortSetsForDisplay(sets).map((set) => (
+    <div key={set.id} className={`grid min-w-0 grid-cols-[3rem_minmax(0,1fr)_auto] gap-x-2 text-sm ${isWarmupSet(set) ? 'text-zinc-400' : 'text-zinc-100'}`}>
+      <span className="data-text">{formatSetLabel(set, sets)}</span>
+      <span className="data-text">{formatNumber(set.weight)} kg × {set.reps}</span>
+      {parseOptionalDecimal(set.rpe) !== null ? <span className="data-text text-xs text-zinc-400">RPE {formatRpe(set.rpe)}</span> : <span />}
+      {set.notes?.trim() ? <p className="col-start-2 col-span-2 whitespace-pre-wrap break-words text-xs text-zinc-400">{set.notes}</p> : null}
+    </div>
+  ))}</div>;
+}
+
+function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResume, onEdit, status, error }) {
+  const selected = sessions.find((session) => session.id === selectedId);
+  const history = sessions.filter((session) => session.id !== activeSession?.id || session.ended_at).slice().sort(compareSessionsDescending);
+  return <section aria-label="Workout history" className="col-span-12 min-w-0 max-w-3xl">
+    {activeSession && !activeSession.ended_at ? <div className="mb-5 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+      <div className="min-w-0"><p className="text-xs text-zinc-400">Training in progress</p><p className="break-words text-sm text-zinc-100">{activeSession.name}</p></div>
+      <button type="button" className="min-h-11 px-3 text-sm text-zinc-200" onClick={onResume}>Resume</button>
+    </div> : null}
+    {error ? <p role="alert" className="mb-3 text-sm text-red-300">{error}</p> : null}
+    {selected ? <>
+      <button type="button" onClick={() => onSelect(null)} className="mb-4 flex min-h-11 items-center gap-2 text-sm text-zinc-300"><ArrowLeft size={16} />Back to History</button>
+      <h2 className="break-words text-xl font-semibold text-zinc-100">{selected.name}</h2>
+      <time className="text-sm text-zinc-400">{selected.performed_on}</time>
+      <details className="mt-2 text-sm text-zinc-400"><summary className="min-h-11 cursor-pointer py-3">Session actions</summary>
+        <button type="button" className="flex min-h-11 items-center gap-2 text-zinc-200" onClick={() => onEdit(selected.id)}><Pencil size={16} />{selected.ended_at ? 'Edit / reopen workout' : 'Select for logging'}</button>
+      </details>
+      <div className="mt-4 grid gap-6">{Object.entries(groupSetsByExercise(selected.workout_sets ?? [])).map(([exercise, sets]) => <section key={exercise} className="min-w-0 border-t border-white/10 pt-3"><h3 className="mb-3 break-words text-sm font-semibold text-zinc-200">{exercise}</h3><HistoricalSets sets={sets} /></section>)}</div>
+      {!selected.workout_sets?.length ? <p className="py-4 text-sm text-zinc-400">No sets recorded.</p> : null}
+    </> : <>
+      <h2 className="mb-3 text-sm font-semibold text-zinc-200">Recent workouts</h2>
+      {status === 'loading' && !history.length ? <LoadingCard label="Loading workout history" /> : null}
+      {history.map((session) => <button type="button" key={session.id} onClick={() => onSelect(session.id)} className="grid min-h-20 w-full gap-1 border-b border-white/10 py-4 text-left">
+        <time className="text-xs text-zinc-400">{session.performed_on}</time>
+        <span className="break-words text-sm font-medium text-zinc-100">{session.name}</span>
+        <span className="text-xs text-zinc-400">{Object.keys(groupSetsByExercise(session.workout_sets ?? [])).length} exercises · {session.workout_sets?.length ?? 0} sets</span>
+      </button>)}
+      {status !== 'loading' && !history.length ? <p className="py-4 text-sm text-zinc-400">No past workouts yet.</p> : null}
+    </>}
+  </section>;
 }
 
 function TodaySetsLog({
@@ -1769,30 +1808,18 @@ function getPreviousPerformance(sessions, activeSession, exercise) {
     .filter((session) => session.id !== activeSession.id)
     .filter((session) => compareSessionPosition(session, activeSession) < 0)
     .sort(compareSessionsDescending)
-    .find((session) => (session.workout_sets ?? []).some((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key));
+    .find((session) => (session.workout_sets ?? []).some((set) => normalizeExercise(set.exercise) === key));
 
   if (!previousSession) return null;
 
   const sets = previousSession.workout_sets
-    .filter((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key)
+    .filter((set) => normalizeExercise(set.exercise) === key)
     .map(normalizeSet)
-    .sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
-  const totalVolume = sets.reduce((total, set) => total + set.volume, 0);
-  const bestVolumeSet = sets.reduce((best, set) => (set.volume > best.volume ? set : best), sets[0]);
-  const heaviestSet = sets.reduce((best, set) => (set.weight > best.weight ? set : best), sets[0]);
-  const bestEstimated1Rm = sets.reduce((best, set) => (set.estimated1Rm > best.estimated1Rm ? set : best), sets[0]);
-  const last = sets[sets.length - 1];
-
+    .sort(compareSetsForDisplay);
   return {
     sessionName: previousSession.name,
     date: previousSession.performed_on,
     sets,
-    last,
-    bestSet: bestVolumeSet,
-    bestVolumeSet,
-    heaviestSet,
-    bestEstimated1Rm,
-    totalVolume,
   };
 }
 

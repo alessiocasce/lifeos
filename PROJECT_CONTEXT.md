@@ -1,5 +1,17 @@
 # LifeOS Project Context
 
+## Training Live / History (2026-10-02)
+
+Training has direct Live and History subviews. History selection is local UI
+state, never `activeWorkoutId`; inspecting records is read-only. Session actions
+explicitly select a record in Live, where ended sessions still require Reopen.
+Live Last Time shows every set (warmups, working sets, RPE and notes) from the
+latest prior session containing the exact normalized exercise. No live 1RM or
+heaviest-set summaries. Parent-owned drafts, storage keys, root resume and PWA
+update protection remain unchanged; reloading defaults to Live.
+Focused QA: `npx playwright test tests/ui/training-history.spec.js` and the
+session-switching case in `tests/ui/workout-continuity.spec.js`. No schema rerun required.
+
 Last updated: 2026-10-02
 Current branch: `main`
 

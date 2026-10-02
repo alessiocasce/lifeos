@@ -1,5 +1,30 @@
 # LifeOS Workout QA
 
+## Live / History and Full Last Time (2026-10-02)
+
+- Training exposes Live and History directly; no Advanced / Switch session.
+- History lists sessions newest-first with date, name, exercise and set counts.
+  Details are read-only, including warmups, working sets, RPE and wrapped notes.
+- Browsing does not change `activeWorkoutId` or persist a different workspace.
+  Session actions / Edit or reopen explicitly selects the record in Live;
+  ended records require Reopen before writes. Reload returns to Live.
+- Last Time uses the latest earlier session containing the exact normalized
+  selected exercise, includes warmups, and excludes current/future sessions.
+  Estimated 1RM and heaviest-set summaries are no longer in the logger.
+- Draft hook, continuity storage and PWA update deferral were not modified.
+
+Focused checks: `npx playwright test tests/ui/training-history.spec.js`,
+`npx playwright test tests/ui/workout-continuity.spec.js -g "session switching"`,
+`npm run test:workout`, `npm run build`, `git diff --check`.
+Do not run the full reconstruction viewport matrix for this bounded change.
+
+Manual: enter exercise/load/reps/RPE/notes, browse multiple History records,
+return Live and verify every field and session. Switch exercise and verify Last
+Time changes. Inspect missing RPE, long notes/names and an empty session at
+390x844. Explicitly select/reopen an ended workout and verify editing still works.
+Owner confirmed physical iPhone continuity before this patch; repeat the new
+History round-trip on-device after deployment. No schema rerun required.
+
 ## Training Setup / Templates Checkpoint (2026-10-01)
 
 Setup and template management use unframed rows, readable labels and 44px
@@ -30,7 +55,7 @@ a labeled rail. A live workout has a Resume dock outside Training.
 The active logger precedes template/history controls. Weight/reps are primary;
 warmup is a checkbox and RPE/notes expand independently. Confirmed saves show the
 last set and preserve the next draft. Previous performance remains available,
-including heaviest set and estimated 1RM under Performance detail.
+now showing full Last Time sets, warmups, RPE and notes instead of live analytics.
 
 `npm run test:ui` checks seven mobile/desktop sizes, overflow, Resume navigation,
 save/edit/delete/end/reopen and continuity. Screenshots are written under ignored
