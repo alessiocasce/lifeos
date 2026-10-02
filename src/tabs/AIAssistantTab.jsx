@@ -71,6 +71,8 @@ export function AIAssistantTab() {
   const [showActionErrors, setShowActionErrors] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [visibleReportCount, setVisibleReportCount] = useState(5);
+  const [visibleConversationCount, setVisibleConversationCount] = useState(20);
   const [vaultDetail, setVaultDetail] = useState(null);
   const vaultDetailOpenerRef = useRef(null);
   const [vaultSaveMessage, setVaultSaveMessage] = useState(null);
@@ -97,7 +99,7 @@ export function AIAssistantTab() {
     const latest = messages[messages.length - 1];
     return [messages.length, latest?.id, latest?.created_at, latest?.content?.length, aiStatus, aiError?.message].join('|');
   }, [messages, aiStatus, aiError?.message]);
-  const actionLimit = recentActionsExpanded ? 10 : 3;
+  const actionLimit = recentActionsExpanded ? aiActionLogs.length : 3;
   const successfulActionLogs = useMemo(
     () => aiActionLogs.filter((log) => log.status !== 'error'),
     [aiActionLogs],
@@ -485,13 +487,15 @@ export function AIAssistantTab() {
         }} /> : null}
         <section aria-label="Recent conversations">
           <h3 className="mb-2 text-sm font-semibold">Conversations</h3>
-          {aiChatThreads.length ? aiChatThreads.slice(0, 20).map((thread) => <button key={thread.id} type="button" disabled={aiStatus === 'loading'} aria-current={thread.id === activeAiThreadId ? 'true' : undefined} className="flex min-h-11 w-full items-center border-b border-white/10 py-3 text-left text-sm text-zinc-300 disabled:opacity-40" onClick={() => {
+          {aiChatThreads.length ? aiChatThreads.slice(0, visibleConversationCount).map((thread) => <button key={thread.id} type="button" disabled={aiStatus === 'loading'} aria-current={thread.id === activeAiThreadId ? 'true' : undefined} className="flex min-h-11 w-full items-center border-b border-white/10 py-3 text-left text-sm text-zinc-300 disabled:opacity-40" onClick={() => {
             selectAiChatThread(thread.id);
             setPendingMessages([]);
             setAiError(null);
             setLastFailedMessage(null);
             setContextOpen(false);
           }}>{thread.title || 'Untitled conversation'}</button>) : <p className="py-3 text-sm text-zinc-500">No saved conversations.</p>}
+          {aiChatThreads.length > visibleConversationCount ? <button type="button" className="min-h-11 text-sm text-zinc-300" onClick={() => setVisibleConversationCount((count) => count + 20)}>View more conversations</button> : null}
+          {visibleConversationCount > 20 ? <button type="button" className="min-h-11 text-sm text-zinc-400" onClick={() => setVisibleConversationCount(20)}>Show fewer conversations</button> : null}
         </section>
         <Panel>
           <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
@@ -502,7 +506,7 @@ export function AIAssistantTab() {
                 <button
                   type="button"
                   onClick={() => setRecentActionsExpanded((expanded) => !expanded)}
-                  className="h-9 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-400 hover:border-violet-400/25 hover:text-violet-200"
+                  className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400"
                 >
                   {recentActionsExpanded ? 'Show less' : 'View more'}
                 </button>
@@ -511,7 +515,7 @@ export function AIAssistantTab() {
                 <button
                   type="button"
                   onClick={() => setShowActionErrors((shown) => !shown)}
-                  className="h-9 rounded-md border border-white/10 bg-white/[0.03] px-3 text-xs text-zinc-500 hover:border-red-400/20 hover:text-red-200"
+                  className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400"
                 >
                   {showActionErrors ? 'Hide errors' : `Errors (${failedActionCount})`}
                 </button>
@@ -574,7 +578,7 @@ export function AIAssistantTab() {
                   {aiVaultStatus === 'loading' && !aiVaultDocuments.length ? (
                     <p className="py-3 text-center text-sm text-zinc-500">Loading Vault...</p>
                   ) : aiVaultDocuments.length ? (
-                    aiVaultDocuments.slice(0, 5).map((document) => (
+                    aiVaultDocuments.slice(0, visibleReportCount).map((document) => (
                       <VaultDocumentCard
                         key={document.id}
                         document={document}
@@ -588,6 +592,8 @@ export function AIAssistantTab() {
                       Valuable long-form answers save here automatically.
                     </p>
                   )}
+                  {aiVaultDocuments.length > visibleReportCount ? <button type="button" disabled={vaultArchiveBusy} className="min-h-11 text-left text-sm text-zinc-300" onClick={() => setVisibleReportCount((count) => count + 5)}>View more reports</button> : null}
+                  {visibleReportCount > 5 ? <button type="button" disabled={vaultArchiveBusy} className="min-h-11 text-left text-sm text-zinc-400" onClick={() => setVisibleReportCount(5)}>Show fewer reports</button> : null}
                   {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
                   {vaultArchiveError ? <p role="alert" className="text-sm text-red-300">{vaultArchiveError}</p> : null}
                 </div>

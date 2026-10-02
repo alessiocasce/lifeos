@@ -21,6 +21,21 @@ belong to the authorized production permission smoke. Keep them out of UI commit
 
 ## Current feature inventory to preserve
 
+History access audit (2026-10-02): current APIs load up to 50 conversations and
+20 reports, but the reconstructed UI exposed only 20/five without continuation.
+Progressive disclosure now reveals older loaded rows without inflating the
+default view. Expanded action history likewise exposes all loaded entries.
+A regression first failed on the absent continuation control, then verified
+selecting conversation 25, reading report eight and collapsing reports again.
+This does not add server pagination or prove archives beyond the loaded bounds.
+
+History checkpoint gates: all 135 browser tests pass; `npm test`, production
+build, changed-test syntax and diff checks pass. Function count stays seven.
+Four focused mobile/desktop captures were inspected for continuation-control
+placement. The seven-size report/Companion checks also pass. Remaining audit
+findings include nested report containers, raw routine-state wording in Companion
+and action-detail modal accessibility; physical iPhone behavior remains unverified.
+
 Preservation audit finding (2026-10-02): Companion's Save to Vault callback was
 missing from rendered assistant messages. The remaining save code alone was not
 proof of preservation. It is restored, with native save/detail dialogs and

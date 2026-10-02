@@ -5,6 +5,13 @@ Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
 
+Companion history access checkpoint (2026-10-02): loaded conversations and reports
+now have progressive disclosure instead of unreachable rows after the twentieth
+conversation/fifth report. Expanded action history exposes all loaded entries.
+Default views stay bounded; no API limits or database queries changed. Browser
+coverage selects the twenty-fifth conversation and opens the eighth report.
+No schema rerun required. Whole-app preservation/device audit remains open.
+
 Companion report-preservation checkpoint (2026-10-02): restored the missing
 assistant-message Save to Vault callback, which made the preserved modal
 unreachable after reconstruction. Save/detail now use native modal dialogs with

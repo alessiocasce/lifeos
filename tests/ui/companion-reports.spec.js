@@ -27,6 +27,30 @@ async function openReports(page) {
   return context;
 }
 
+test('older loaded conversations and reports remain reachable behind progressive disclosure', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('qa-chat-threads', JSON.stringify(Array.from({ length: 25 }, (_, index) => ({ id: `thread-${index}`, title: `Saved conversation ${index + 1}`, status: 'active', updated_at: new Date().toISOString() }))));
+    localStorage.setItem('qa-reports', JSON.stringify(Array.from({ length: 8 }, (_, index) => ({ id: `report-${index}`, title: `Saved analysis ${index + 1}`, document_type: 'brain_answer', content_md: `Persisted analysis ${index + 1}`, created_at: new Date().toISOString() }))));
+  });
+  await page.goto('/assistant');
+  const context = await openReports(page);
+  await expect(context.getByRole('button', { name: 'Saved conversation 25', exact: true })).toHaveCount(0);
+  await context.getByRole('button', { name: 'View more conversations', exact: true }).click();
+  await expect(context.getByRole('button', { name: 'Saved conversation 25', exact: true })).toBeVisible();
+  await expect(context.getByRole('button', { name: /^brain answer Saved analysis 8/ })).toHaveCount(0);
+  await context.getByRole('button', { name: 'View more reports', exact: true }).click();
+  await context.getByRole('button', { name: /^brain answer Saved analysis 8/ }).click();
+  const detail = page.getByRole('dialog', { name: 'Saved analysis 8', exact: true });
+  await expect(detail).toContainText('Persisted analysis 8');
+  await page.keyboard.press('Escape');
+  await context.getByRole('button', { name: 'Show fewer reports', exact: true }).click();
+  await expect(context.getByRole('button', { name: /^brain answer Saved analysis 8/ })).toHaveCount(0);
+  await context.getByRole('button', { name: 'Saved conversation 25', exact: true }).click();
+  await expect(context).not.toBeVisible();
+  await page.getByRole('button', { name: 'Open Companion context' }).click();
+  await expect(context.getByRole('button', { name: 'Saved conversation 25', exact: true })).toHaveAttribute('aria-current', 'true');
+});
+
 test('report save retains failed fields, succeeds once, persists and repairs embeddings', async ({ page }) => {
   const modal = await openAnswer(page);
   await modal.getByRole('textbox', { name: 'Title', exact: true }).fill('Pull session analysis');

@@ -88,6 +88,16 @@ round trip. No production Watch was created during implementation.
 
 ## Saved Reports Preservation (2026-10-02)
 
+- Conversations show 20 initially, then expand in groups of 20; reports show five
+  initially, then expand in groups of five. Show fewer restores the compact view.
+  This reveals already-loaded records only (current APIs load 50 conversations
+  and 20 reports), not an unbounded or server-paginated archive.
+- Expanded action history shows all loaded filtered entries rather than ten;
+  View more and Errors controls have 44px touch targets.
+- The older-record regression seeds 25 conversations/eight reports, selects the
+  twenty-fifth conversation, opens the eighth report and collapses reports again.
+  After deploy, verify an older loaded record can still be reached and read.
+
 - An assistant answer has a 44px Save to Vault icon; the reconstruction had
   accidentally omitted its callback despite retaining the modal code.
 - Save/detail use native modal dialogs, bounded scrolling and focus return.
