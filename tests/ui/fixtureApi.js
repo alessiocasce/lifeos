@@ -226,7 +226,7 @@ export const projectMoneyEntryApi = {
   },
 };
 export const dailyReviewApi = emptyApi;
-export const aiActionLogApi = emptyApi;
+export const aiActionLogApi = { list: async () => JSON.parse(localStorage.getItem('qa-action-logs') || '[]') };
 export const aiChatMessageApi = { list: async (threadId) => JSON.parse(localStorage.getItem('qa-chat-messages') || '[]').filter((row) => row.thread_id === threadId) };
 export const aiChatThreadApi = {
   list: async () => JSON.parse(localStorage.getItem('qa-chat-threads') || '[]'),

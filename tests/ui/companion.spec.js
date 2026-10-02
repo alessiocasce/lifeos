@@ -13,7 +13,7 @@ test('Companion conversation survives navigation and corrections remain unsent',
   await page.goto('/assistant');
   await page.getByRole('button', { name: 'Open Companion context' }).click();
   const panel = page.getByRole('dialog', { name: 'Companion context' });
-  await expect(panel.getByText('inactive', { exact: true })).toBeVisible();
+  await expect(panel.getByText('No longer current', { exact: true })).toBeVisible();
   await panel.getByRole('button', { name: 'Training decisions' }).click();
   await expect(page.getByTestId('brain-message-list')).toContainText('25 kg for 8 reps');
   await page.getByRole('button', { name: 'Command', exact: true }).click();

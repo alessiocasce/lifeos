@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { companionAppApi } from '../services/lifeosApi';
 import { useLifeOS } from '../context/LifeOSContext';
 import { CompanionPermissionControls } from './ProjectWatch';
+import { formatRoutineState } from '../utils/routineState';
 
 export function CompanionState({ onCorrect }) {
   const { authUser } = useLifeOS();
@@ -46,7 +47,7 @@ function CompanionStateContent({ onCorrect }) {
     {error ? <p role="alert" className="text-sm text-red-300">{error}</p> : null}
     {data ? <>
       {data.assumptions.length ? <dl>{data.assumptions.map((item) => <div key={`${item.kind}:${item.label}`} className="flex items-start gap-3 border-b border-white/10 py-3">
-        <div className="min-w-0 flex-1"><dt className="text-xs text-zinc-500">{item.label}{item.uncertain ? ' · Not certain' : ''}</dt><dd className="mt-1 break-words text-sm text-zinc-200">{item.text}</dd></div>
+        <div className="min-w-0 flex-1"><dt className="text-xs text-zinc-500">{item.label}{item.kind !== 'routine' && item.uncertain ? ' · Not certain' : ''}</dt><dd className="mt-1 break-words text-sm text-zinc-200">{item.kind === 'routine' ? formatRoutineState(item.text, item.uncertain) : item.text}</dd></div>
         <button type="button" className="icon-button" title={`Correct ${item.label}`} aria-label={`Correct ${item.label}`} onClick={() => onCorrect(item)}><Pencil size={15} /></button>
       </div>)}</dl> : <p className="text-sm text-zinc-500">No current assumptions recorded.</p>}
       <section aria-label="Project Watches"><h3 className="text-sm font-semibold">Project Watches</h3>

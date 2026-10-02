@@ -2,8 +2,7 @@ import { ArrowUpRight, Loader2, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { companionAppApi } from '../services/lifeosApi';
-
-const states = { active: 'Active', inactive: 'No longer current', suspended: 'Paused', uncertain: 'Not certain' };
+import { formatRoutineState, routineStateLabels } from '../utils/routineState';
 
 export function HealthRoutineState() {
   const { authUser, setActiveTab } = useLifeOS();
@@ -21,7 +20,7 @@ function RoutineStateContent({ onOpenCompanion }) {
     setLoading(true);
     setError(false);
     companionAppApi.context(controller.signal).then((data) => {
-      if (!controller.signal.aborted) setRoutines((data.assumptions || []).filter((item) => item.kind === 'routine' && Object.hasOwn(states, item.text)));
+      if (!controller.signal.aborted) setRoutines((data.assumptions || []).filter((item) => item.kind === 'routine' && Object.hasOwn(routineStateLabels, item.text)));
     }).catch(() => { if (!controller.signal.aborted) setError(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -42,7 +41,7 @@ function RoutineStateContent({ onOpenCompanion }) {
     {error ? <p role="alert" className="mt-2 text-sm text-amber-300">Routine state is unavailable.</p> : <dl className="mt-1 divide-y divide-white/10">
       {(routines || []).map((item) => <div key={item.label} className="flex min-w-0 items-start justify-between gap-4 py-3">
         <dt className="break-words text-sm text-zinc-300">{item.label}</dt>
-        <dd className="text-right text-sm text-zinc-400">{item.uncertain ? states.uncertain : states[item.text]}</dd>
+        <dd className="text-right text-sm text-zinc-400">{formatRoutineState(item.text, item.uncertain)}</dd>
       </div>)}
     </dl>}
     {!error && routines?.length ? <button type="button" onClick={onOpenCompanion} className="mt-1 flex min-h-11 items-center gap-2 text-sm text-zinc-300">Companion<ArrowUpRight size={16} /></button> : null}

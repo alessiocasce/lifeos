@@ -115,3 +115,24 @@ round trip. No production Watch was created during implementation.
   deployed report authorization and physical iOS behavior remain unverified here.
 
 No backend/API/schema or bridge changes; no schema rerun required.
+
+## Action Details And Current-State Language (2026-10-02)
+
+- Action details use a native dialog above the context sheet. Opening focuses
+  Close; background controls are inert. Escape/Close dismiss only the detail and
+  return focus to its history row. Parent dialog handlers ignore child events.
+- Request, response, errors, record references and expandable sanitized action
+  data remain available. Long content scrolls inside the bounded dialog while
+  the header/Close stay visible. No new actions execute from this read surface.
+- Routine states share the Health labels: Active, Paused, No longer current,
+  Not certain. Uncertain routine state never presents a confident active claim.
+  Saved preferences remain their actual text; this display does not alter beliefs.
+- Reports and memory use secondary unframed lists with 44px disclosure/refresh
+  controls. Existing Save/archive/edit/forget/embedding behavior stays intact.
+- `tests/ui/companion-details.spec.js` covers focus return, parent dismissal
+  isolation, human labels, all loaded success/error history, long responses and
+  seven viewport captures. Tests substitute isolated APIs, not production data.
+- After deploy, open an existing success and failed action from context, inspect
+  its actual details, expand actions, scroll a long response and close by keyboard
+  and touch. Verify the context sheet remains open and selected chat is unchanged.
+  Physical iPhone keyboard and deployed data QA remain separate requirements.

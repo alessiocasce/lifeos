@@ -21,6 +21,7 @@
 .memo-dialog[open] { display: flex; }
 .memo-dialog::backdrop { background: rgb(0 0 0 / 0.75); }
 .calendar-dialog[open] { display: flex; }
+.action-detail-dialog[open] { display: flex; }
 .calendar-dialog::backdrop { background: rgb(0 0 0 / 0.75); }
 
 @layer base {

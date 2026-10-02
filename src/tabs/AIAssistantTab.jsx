@@ -474,7 +474,7 @@ export function AIAssistantTab() {
         </form>
       </Panel>
 
-      <dialog ref={contextDialogRef} className="companion-context-dialog" aria-labelledby="companion-context-title" onCancel={() => setContextOpen(false)} onClose={() => setContextOpen(false)}>
+      <dialog ref={contextDialogRef} className="companion-context-dialog" aria-labelledby="companion-context-title" onCancel={(event) => { if (event.target === event.currentTarget) setContextOpen(false); }} onClose={(event) => { if (event.target === event.currentTarget) setContextOpen(false); }}>
         <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[#15181c] p-4">
           <h2 id="companion-context-title" className="text-lg font-semibold">Companion context</h2>
           <button type="button" className="icon-button" aria-label="Close Companion context" onClick={() => setContextOpen(false)}><X size={18} /></button>
@@ -549,7 +549,7 @@ export function AIAssistantTab() {
                 onToggle={() => setVaultOpen((open) => !open)}
               />
               {vaultOpen ? (
-                <div className="grid gap-2 rounded-md border border-white/5 bg-black/20 p-2">
+                <div className="grid gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-zinc-500">Auto-saved reports and semantic context.</p>
                     <div className="flex shrink-0 flex-wrap gap-2">
@@ -612,13 +612,13 @@ export function AIAssistantTab() {
                 onToggle={() => setMemoryOpen((open) => !open)}
               />
               {memoryOpen ? (
-                <div className="grid gap-2 rounded-md border border-white/5 bg-black/20 p-2">
+                <div className="grid gap-2">
                   {memoryError ? <p role="alert" className="text-sm text-red-300">{memoryError}</p> : null}
                   <div className="flex items-center justify-end">
                     <button
                       type="button"
                       onClick={() => Promise.allSettled([reloadAiMemories?.(), reloadAiInsights?.()].filter(Boolean))}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 hover:border-cyan-400/25"
+                      className="inline-flex min-h-11 items-center gap-2 rounded border border-white/10 px-3 text-sm text-zinc-300"
                     >
                       <RefreshCw size={13} />
                       Refresh
@@ -648,13 +648,13 @@ export function AIAssistantTab() {
                   )}
 
                   {aiInsights.length ? (
-                    <details className="rounded-md border border-white/5 bg-black/20 p-3">
-                      <summary className="cursor-pointer data-text text-[10px] uppercase tracking-wider text-zinc-500">
+                    <details className="border-t border-white/10 py-3">
+                      <summary className="min-h-11 cursor-pointer text-sm text-zinc-400">
                         Recent insights
                       </summary>
                       <div className="mt-3 grid gap-2">
                         {aiInsights.slice(0, 3).map((insight) => (
-                          <div key={insight.id} className="rounded border border-white/5 bg-black/25 p-2">
+                          <div key={insight.id} className="border-b border-white/10 py-3">
                             <p className="text-xs font-semibold text-zinc-200">{insight.title}</p>
                             <p className="mt-1 text-xs leading-5 text-zinc-500">{insight.content}</p>
                           </div>
@@ -694,21 +694,20 @@ export function AIAssistantTab() {
   );
 }
 
-function DiagnosticsSection({ count, label, onToggle, open, title, tone }) {
-  const toneClass = tone === 'emerald' ? 'text-emerald-300' : tone === 'violet' ? 'text-violet-300' : 'text-zinc-300';
+function DiagnosticsSection({ count, label, onToggle, open, title }) {
   return (
     <button
       type="button"
       onClick={onToggle}
-      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-md border border-white/5 bg-black/20 px-3 py-2 text-left hover:border-white/10"
+      className="flex min-h-11 w-full min-w-0 items-center justify-between gap-3 border-b border-white/10 py-3 text-left"
       aria-expanded={open}
     >
       <div className="min-w-0">
-        <p className={`data-text text-[10px] uppercase tracking-wider ${toneClass}`}>{label}</p>
+        <p className="text-xs text-zinc-400">{label}</p>
         <h3 className="truncate text-sm font-semibold text-zinc-100">{title}</h3>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Tag tone={tone}>{count}</Tag>
+        <Tag>{count}</Tag>
         <ChevronDown size={15} className={`text-zinc-500 transition ${open ? 'rotate-180' : ''}`} />
       </div>
     </button>
@@ -718,7 +717,7 @@ function DiagnosticsSection({ count, label, onToggle, open, title, tone }) {
 function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCancel, onSave, onArchive }) {
   if (editing) {
     return (
-      <div className="grid gap-2 rounded-md border border-violet-400/20 bg-violet-400/[0.05] p-3">
+      <div className="grid gap-2 border-b border-white/10 py-3">
         <input
           value={draft.title}
           onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
@@ -745,10 +744,10 @@ function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCan
   }
 
   return (
-    <article className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+    <article className="min-w-0 border-b border-white/10 py-3">
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
-          <Tag tone="violet">{String(memory.category || 'other').replaceAll('_', ' ')}</Tag>
+          <Tag>{String(memory.category || 'other').replaceAll('_', ' ')}</Tag>
           <h3 className="mt-2 text-sm font-semibold text-zinc-100">{memory.title}</h3>
         </div>
         <div className="flex shrink-0 gap-1">
@@ -768,10 +767,10 @@ function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCan
 
 function VaultDocumentCard({ document, busy, onOpen, onArchive }) {
   return (
-    <article className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
+    <article className="min-w-0 border-b border-white/10 py-3">
       <div className="flex min-w-0 items-start justify-between gap-2">
         <button type="button" disabled={busy} onClick={onOpen} className="min-h-11 min-w-0 flex-1 text-left">
-          <Tag tone="emerald">{formatDocumentType(document.document_type)}</Tag>
+          <Tag>{formatDocumentType(document.document_type)}</Tag>
           <h3 className="mt-2 truncate text-sm font-semibold text-zinc-100">{document.title}</h3>
           {document.summary ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{document.summary}</p> : null}
         </button>

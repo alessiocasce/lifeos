@@ -2,6 +2,12 @@
 
 ## Companion frontend reconstruction
 
+Action details open a native modal above the context sheet. Focus must enter it,
+background controls must remain inert, and Escape must close only the detail,
+returning focus to its history row. Long responses scroll without hiding Close.
+Routine state uses the same human labels as Health without changing preferences
+or beliefs. `tests/ui/companion-details.spec.js` exercises these invariants.
+
 Report preservation: every assistant answer retains its Save to Vault action.
 Save opens a native modal with title/type/tags. A failed save must retain all
 fields; in-flight Save locks fields, close and Escape. Context -> Brain Data ->

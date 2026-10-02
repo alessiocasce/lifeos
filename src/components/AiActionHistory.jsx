@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X } from 'lucide-react';
 
@@ -93,6 +93,7 @@ export function AssistantMarkdown({ content }) {
 
 export function AiActionHistoryList({ logs = [], status, limit = 10, quietErrors = false }) {
   const [selectedLog, setSelectedLog] = useState(null);
+  const openerRef = useRef(null);
   const shownLogs = logs.slice(0, limit);
 
   if (status === 'loading' && !logs.length) {
@@ -110,10 +111,10 @@ export function AiActionHistoryList({ logs = [], status, limit = 10, quietErrors
   return (
     <>
       {shownLogs.map((log) => (
-        <ActionLogCard key={log.id} log={log} quietErrors={quietErrors} onClick={() => setSelectedLog(log)} />
+        <ActionLogCard key={log.id} log={log} quietErrors={quietErrors} onClick={(event) => { openerRef.current = event.currentTarget; setSelectedLog(log); }} />
       ))}
       {selectedLog ? (
-        <ActionLogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
+        <ActionLogDetailModal log={selectedLog} returnFocus={openerRef.current} onClose={() => setSelectedLog(null)} />
       ) : null}
     </>
   );
@@ -127,10 +128,10 @@ function ActionLogCard({ log, onClick, quietErrors = false }) {
     <button
       type="button"
       onClick={onClick}
-      className={`min-w-0 rounded-md border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-400/30 ${
+      className={`min-h-11 min-w-0 border-b border-white/10 py-3 text-left transition ${
         isError && quietErrors
-          ? 'border-white/5 bg-black/15 opacity-80 hover:border-red-400/15'
-          : 'border-white/5 bg-black/25 hover:border-cyan-400/25'
+          ? 'text-zinc-400'
+          : 'text-zinc-200'
       }`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -147,34 +148,33 @@ function ActionLogCard({ log, onClick, quietErrors = false }) {
   );
 }
 
-function ActionLogDetailModal({ log, onClose }) {
+function ActionLogDetailModal({ log, returnFocus, onClose }) {
+  const dialogRef = useRef(null);
   const title = getActionLogTitle(log);
   const refs = Array.isArray(log.record_refs) ? log.record_refs : [];
   const shownRefs = refs.slice(0, 10);
 
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose();
+    const dialog = dialogRef.current;
+    const previousFocus = returnFocus || document.activeElement;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      queueMicrotask(() => { if (previousFocus?.isConnected) previousFocus.focus(); });
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid bg-black/75 p-0 sm:place-items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
+      className="action-detail-dialog max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded border border-white/10 bg-[#111] p-0 text-zinc-100"
       aria-label="AI action detail"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
     >
-      <div className="flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col overflow-hidden border-white/10 bg-[#0f0f0f] shadow-2xl sm:h-auto sm:max-h-[86dvh] sm:max-w-3xl sm:rounded-xl sm:border">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:pt-3">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-violet-300">AI Action Detail</p>
-            <h3 className="mt-1 truncate text-base font-semibold text-zinc-100" title={title}>{title}</h3>
+            <p className="text-xs text-zinc-400">Action detail</p>
+            <h3 className="mt-1 break-words text-base font-semibold text-zinc-100">{title}</h3>
           </div>
           <button
             type="button"
@@ -241,15 +241,14 @@ function ActionLogDetailModal({ log, onClose }) {
             </details>
           ) : null}
         </div>
-      </div>
-    </div>
+    </dialog>
   );
 }
 
 function DetailSection({ children, title }) {
   return (
-    <section className="mt-3 min-w-0 rounded-md border border-white/5 bg-black/20 p-3">
-      <p className="data-text mb-2 text-[10px] uppercase tracking-wider text-zinc-500">{title}</p>
+    <section className="mt-4 min-w-0 border-t border-white/10 pt-3">
+      <p className="mb-2 text-xs font-medium text-zinc-400">{title}</p>
       {children}
     </section>
   );
@@ -257,9 +256,9 @@ function DetailSection({ children, title }) {
 
 function DetailMetric({ label, value }) {
   return (
-    <div className="min-w-0 rounded-md border border-white/5 bg-black/25 p-2">
-      <p className="data-text text-[10px] uppercase text-zinc-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-zinc-100" title={value}>{value || '--'}</p>
+    <div className="min-w-0 py-2">
+      <p className="text-xs text-zinc-400">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-zinc-100">{value || '--'}</p>
     </div>
   );
 }

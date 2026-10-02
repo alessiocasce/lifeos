@@ -5,6 +5,15 @@ Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
 
+Companion detail/state checkpoint (2026-10-02): action history details are native
+modal dialogs with contained focus, explicit focus return and independent Escape
+dismissal. The parent context ignores child-dialog close/cancel events (including
+Strict Mode cleanup). Request/response/error/reference/action data are preserved.
+Routine labels now share Health's human-readable Active/Paused/No longer current/
+Not certain language; preference text remains unchanged. Report/memory sections
+use unframed rows and 44px controls instead of nested decorative containers.
+No schema rerun required. Full preservation and whole-app/device audit remain.
+
 Companion history access checkpoint (2026-10-02): loaded conversations and reports
 now have progressive disclosure instead of unreachable rows after the twentieth
 conversation/fifth report. Expanded action history exposes all loaded entries.
