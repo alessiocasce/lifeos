@@ -263,7 +263,30 @@ export const aiMemoryApi = {
     return row;
   },
 };
-export const aiReportApi = emptyApi;
+const reportRows = () => JSON.parse(localStorage.getItem('qa-reports') || '[]');
+const reportMutation = async () => {
+  await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-report-delay') || 0)));
+  if (localStorage.getItem('qa-report-fail')) throw new Error('Report was not saved or archived.');
+};
+export const aiReportApi = {
+  list: async () => reportRows(),
+  saveMessage: async (payload) => {
+    await reportMutation();
+    const row = { ...payload, id: crypto.randomUUID(), status: 'active', created_at: new Date().toISOString() };
+    localStorage.setItem('qa-reports', JSON.stringify([row, ...reportRows()]));
+    return row;
+  },
+  archive: async (id) => {
+    await reportMutation();
+    const row = reportRows().find((item) => item.id === id);
+    localStorage.setItem('qa-reports', JSON.stringify(reportRows().filter((item) => item.id !== id)));
+    return { ...row, status: 'archived' };
+  },
+  reembed: async () => {
+    await reportMutation();
+    return { processed_count: 1, ready_count: 1, configured: true };
+  },
+};
 
 const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
 export const companionAppApi = {

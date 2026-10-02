@@ -2,6 +2,14 @@
 
 ## Companion frontend reconstruction
 
+Report preservation: every assistant answer retains its Save to Vault action.
+Save opens a native modal with title/type/tags. A failed save must retain all
+fields; in-flight Save locks fields, close and Escape. Context -> Brain Data ->
+Saved Reports still provides reading, archive and embedding repair. Report
+details are a separate native modal above Context; closing it returns focus to
+its opener. Failed archive leaves the report visible with an error; retry must
+not remove chat history or memories. See `tests/ui/companion-reports.spec.js`.
+
 See [Companion UI QA](QA_COMPANION_UI.md) for current-state/permission controls.
 Run `npm run test:ui` for isolated browser journeys. A selected conversation must
 survive navigation away and back; New Chat is the explicit reset. Context-sheet

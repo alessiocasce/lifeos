@@ -85,3 +85,23 @@ restart or new environment variable is needed. Vercel function count remains sev
 
 Local schema/browser tests do not prove a deployed session or physical WhatsApp
 round trip. No production Watch was created during implementation.
+
+## Saved Reports Preservation (2026-10-02)
+
+- An assistant answer has a 44px Save to Vault icon; the reconstruction had
+  accidentally omitted its callback despite retaining the modal code.
+- Save/detail use native modal dialogs, bounded scrolling and focus return.
+  Title, existing report types, comma-separated tags and markdown are preserved.
+- During save/archive, duplicate mutations and dismissal are blocked. Failed
+  saves retain inputs; failed archive remains visible with a concise alert.
+- Context -> Brain Data -> Saved Reports retains reading/archive/refresh and
+  Re-embed. This stays secondary; conversation remains the primary surface.
+- `tests/ui/companion-reports.spec.js` checks save/failure/reload, field locking,
+  focused return, background-control inertness, archive/retry without chat loss,
+  embedding repair and both dialogs at all seven required viewport sizes.
+- Tests use isolated services. After deploy, save a disposable answer, reload,
+  open the report and archive it explicitly. Confirm content/types/tags match;
+  test keyboard dismissal and long content on iPhone. Real Gemini embeddings,
+  deployed report authorization and physical iOS behavior remain unverified here.
+
+No backend/API/schema or bridge changes; no schema rerun required.

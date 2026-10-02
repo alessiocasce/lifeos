@@ -21,6 +21,21 @@ belong to the authorized production permission smoke. Keep them out of UI commit
 
 ## Current feature inventory to preserve
 
+Preservation audit finding (2026-10-02): Companion's Save to Vault callback was
+missing from rendered assistant messages. The remaining save code alone was not
+proof of preservation. It is restored, with native save/detail dialogs and
+guarded archive errors. Ten browser cases exercise three report workflows and
+seven viewport sizes; a test-only report API models persistence/failure/delay.
+Full inventory evidence for remaining advanced Companion and app workflows is
+still required; this is a concrete repaired gap, not full audit completion.
+
+Report checkpoint gates: the complete browser suite passes 134 tests; `npm test`,
+production build, changed-test syntax checks and diff checks pass. Function count
+remains seven. Save and detail captures were inspected at all seven required
+sizes (14 images), including long-title wrapping and modal controls. Fixtures
+are isolated; these checks do not prove production Vault/Gemini or physical iOS
+behavior. No schema rerun required.
+
 | Surface | Existing capabilities | Intended home |
 | --- | --- | --- |
 | Workout | Start/select, templates and exercise order, warmups, weight/reps/RPE/notes, previous performance, edit/delete sets, end/reopen/delete sessions, history | Training, with live logger first and management secondary |

@@ -72,10 +72,14 @@ export function AIAssistantTab() {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultDetail, setVaultDetail] = useState(null);
+  const vaultDetailOpenerRef = useRef(null);
   const [vaultSaveMessage, setVaultSaveMessage] = useState(null);
   const [vaultSaveDraft, setVaultSaveDraft] = useState({ title: '', documentType: 'brain_answer', tags: '' });
   const [vaultSaveStatus, setVaultSaveStatus] = useState('idle');
   const [vaultSaveError, setVaultSaveError] = useState('');
+  const vaultMutationRef = useRef(false);
+  const [vaultArchiveBusy, setVaultArchiveBusy] = useState(false);
+  const [vaultArchiveError, setVaultArchiveError] = useState('');
   const [vaultRepairStatus, setVaultRepairStatus] = useState('idle');
   const [vaultRepairMessage, setVaultRepairMessage] = useState('');
   const [lastFailedMessage, setLastFailedMessage] = useState(null);
@@ -256,7 +260,8 @@ export function AIAssistantTab() {
   };
 
   const saveVaultDraft = async () => {
-    if (!vaultSaveMessage) return;
+    if (!vaultSaveMessage || vaultMutationRef.current) return;
+    vaultMutationRef.current = true;
     setVaultSaveStatus('saving');
     setVaultSaveError('');
     try {
@@ -289,7 +294,19 @@ export function AIAssistantTab() {
     } catch (error) {
       setVaultSaveError(error.message || 'Could not save to Vault.');
       setVaultSaveStatus('error');
-    }
+    } finally { vaultMutationRef.current = false; }
+  };
+
+  const archiveVaultReport = async (documentId) => {
+    if (vaultMutationRef.current) return;
+    vaultMutationRef.current = true;
+    setVaultArchiveBusy(true);
+    setVaultArchiveError('');
+    try {
+      await archiveAiVaultDocument(documentId);
+      setVaultDetail(null);
+    } catch (error) { setVaultArchiveError(error.message || 'Report was not archived.'); }
+    finally { vaultMutationRef.current = false; setVaultArchiveBusy(false); }
   };
 
   const repairVaultEmbeddings = async () => {
@@ -389,7 +406,7 @@ export function AIAssistantTab() {
               <Loader2 size={20} className="animate-spin" aria-label="Loading Brain messages" />
             </div>
           ) : messages.length ? (
-            messages.map((message) => <AssistantMessage key={message.id} message={message} />)
+            messages.map((message) => <AssistantMessage key={message.id} message={message} onSaveToVault={openVaultSave} />)
           ) : (
             <div className="grid min-h-64 place-items-center p-4 text-center">
               <div className="max-w-sm">
@@ -536,7 +553,7 @@ export function AIAssistantTab() {
                         type="button"
                         onClick={repairVaultEmbeddings}
                         disabled={vaultRepairStatus === 'loading'}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-zinc-300 hover:border-emerald-400/25 disabled:opacity-50"
+                        className="inline-flex min-h-11 items-center gap-2 rounded border border-white/10 px-3 text-sm text-zinc-300 disabled:opacity-50"
                       >
                         {vaultRepairStatus === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
                         Re-embed
@@ -544,7 +561,7 @@ export function AIAssistantTab() {
                       <button
                         type="button"
                         onClick={() => reloadAiVaultDocuments?.()}
-                        className="grid h-8 w-8 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-300 hover:border-emerald-400/25"
+                        className="icon-button"
                         aria-label="Refresh Vault documents"
                       >
                         <RefreshCw size={13} />
@@ -561,8 +578,9 @@ export function AIAssistantTab() {
                       <VaultDocumentCard
                         key={document.id}
                         document={document}
-                        onOpen={() => { setContextOpen(false); setVaultDetail(document); }}
-                        onArchive={() => archiveAiVaultDocument(document.id)}
+                        onOpen={(event) => { vaultDetailOpenerRef.current = event.currentTarget; setVaultArchiveError(''); setVaultDetail(document); }}
+                        busy={vaultArchiveBusy}
+                        onArchive={() => archiveVaultReport(document.id)}
                       />
                     ))
                   ) : (
@@ -571,6 +589,7 @@ export function AIAssistantTab() {
                     </p>
                   )}
                   {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
+                  {vaultArchiveError ? <p role="alert" className="text-sm text-red-300">{vaultArchiveError}</p> : null}
                 </div>
               ) : null}
             </div>
@@ -658,11 +677,11 @@ export function AIAssistantTab() {
       {vaultDetail ? (
         <VaultDetailModal
           document={vaultDetail}
+          returnFocus={vaultDetailOpenerRef.current}
+          busy={vaultArchiveBusy}
+          error={vaultArchiveError}
           onClose={() => setVaultDetail(null)}
-          onArchive={async () => {
-            await archiveAiVaultDocument(vaultDetail.id);
-            setVaultDetail(null);
-          }}
+          onArchive={() => archiveVaultReport(vaultDetail.id)}
         />
       ) : null}
     </div>
@@ -741,16 +760,16 @@ function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCan
   );
 }
 
-function VaultDocumentCard({ document, onOpen, onArchive }) {
+function VaultDocumentCard({ document, busy, onOpen, onArchive }) {
   return (
     <article className="min-w-0 rounded-md border border-white/5 bg-black/25 p-3">
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <button type="button" disabled={busy} onClick={onOpen} className="min-h-11 min-w-0 flex-1 text-left">
           <Tag tone="emerald">{formatDocumentType(document.document_type)}</Tag>
           <h3 className="mt-2 truncate text-sm font-semibold text-zinc-100">{document.title}</h3>
           {document.summary ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{document.summary}</p> : null}
         </button>
-        <button type="button" onClick={onArchive} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/10 text-zinc-500 hover:border-red-400/25 hover:text-red-200" aria-label={`Archive ${document.title}`}>
+        <button type="button" disabled={busy} onClick={onArchive} className="icon-button shrink-0" aria-label={`Archive ${document.title}`}>
           <Archive size={14} />
         </button>
       </div>
@@ -763,19 +782,29 @@ function VaultDocumentCard({ document, onOpen, onArchive }) {
 }
 
 function VaultSaveModal({ draft, status, error, onDraftChange, onClose, onSave }) {
+  const dialogRef = useRef(null);
+  const busy = status === 'saving';
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const dialog = dialogRef.current;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4" role="dialog" aria-modal="true">
-      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-md border border-white/10 bg-[#111] p-4 shadow-2xl sm:max-w-lg sm:rounded-md">
+    <dialog ref={dialogRef} aria-labelledby="vault-save-title" onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); }} className="vault-dialog w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded border border-white/10 bg-[#111] p-4 text-zinc-100">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="data-text text-[10px] uppercase tracking-wider text-emerald-300">Vault</p>
-            <h2 className="text-base font-semibold text-zinc-100">Save Brain Answer</h2>
+            <h2 id="vault-save-title" className="text-base font-semibold text-zinc-100">Save Brain Answer</h2>
           </div>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-400" aria-label="Close Vault save">
+          <button type="button" disabled={busy} onClick={onClose} className="icon-button" aria-label="Close Vault save">
             <X size={16} />
           </button>
         </div>
-        <div className="grid gap-3">
+        <fieldset disabled={busy} className="grid min-w-0 gap-3">
           <label className="grid gap-1 text-sm text-zinc-300">
             Title
             <input
@@ -809,42 +838,50 @@ function VaultSaveModal({ draft, status, error, onDraftChange, onClose, onSave }
               className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-emerald-400/40"
             />
           </label>
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm text-red-300">{error}</p> : null}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="h-10 rounded-md border border-white/10 px-3 text-sm text-zinc-400">
+            <button type="button" onClick={onClose} className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400">
               Cancel
             </button>
             <button
               type="button"
               onClick={onSave}
               disabled={status === 'saving' || !draft.title.trim()}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-200 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-2 rounded bg-zinc-100 px-4 text-sm font-semibold text-zinc-950 disabled:opacity-50"
             >
               {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
               Save
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </fieldset>
+    </dialog>
   );
 }
 
-function VaultDetailModal({ document, onClose, onArchive }) {
+function VaultDetailModal({ document, busy, error, returnFocus, onClose, onArchive }) {
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    const previousFocus = returnFocus || document.activeElement;
+    const dialog = dialogRef.current;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      queueMicrotask(() => { if (previousFocus?.isConnected) previousFocus.focus(); });
+    };
+  }, []);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end bg-black/70 p-0 backdrop-blur-sm sm:place-items-center sm:p-4" role="dialog" aria-modal="true">
-      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-md border border-white/10 bg-[#111] p-4 shadow-2xl sm:max-w-3xl sm:rounded-md">
+    <dialog ref={dialogRef} aria-labelledby="vault-detail-title" onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); }} className="vault-dialog w-full max-w-3xl max-h-[90dvh] overflow-y-auto rounded border border-white/10 bg-[#111] p-4 text-zinc-100">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <Tag tone="emerald">{formatDocumentType(document.document_type)}</Tag>
-            <h2 className="mt-2 truncate text-lg font-semibold text-zinc-100">{document.title}</h2>
+            <h2 id="vault-detail-title" className="mt-2 break-words text-lg font-semibold text-zinc-100">{document.title}</h2>
             <p className="data-text mt-1 text-[10px] text-zinc-600">{formatShortDate(document.created_at)}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={onArchive} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-500 hover:border-red-400/25 hover:text-red-200" aria-label="Archive Vault document">
+            <button type="button" disabled={busy} onClick={onArchive} className="icon-button" aria-label="Archive Vault document">
               <Archive size={16} />
             </button>
-            <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md border border-white/10 text-zinc-400" aria-label="Close Vault document">
+            <button type="button" disabled={busy} onClick={onClose} className="icon-button" aria-label="Close Vault document">
               <X size={16} />
             </button>
           </div>
@@ -853,11 +890,11 @@ function VaultDetailModal({ document, onClose, onArchive }) {
           {(document.tags ?? []).map((tag) => <Tag key={tag}>{tag}</Tag>)}
           {(document.links ?? []).slice(0, 8).map((link) => <Tag key={link} tone="cyan">[[{link}]]</Tag>)}
         </div>
-        <div className="rounded-md border border-white/5 bg-black/25 p-3">
+        {error ? <p role="alert" className="mb-3 text-sm text-red-300">{error}</p> : null}
+        <div className="min-w-0 border-t border-white/10 pt-3">
           <AssistantMarkdown content={document.content_md || ''} />
         </div>
-      </div>
-    </div>
+    </dialog>
   );
 }
 
@@ -905,7 +942,7 @@ function AssistantMessage({ message, onSaveToVault }) {
             <button
               type="button"
               onClick={() => onSaveToVault?.(message)}
-              className="grid h-7 w-7 place-items-center rounded border border-white/10 bg-white/[0.03] text-zinc-500 hover:border-emerald-400/25 hover:text-emerald-200"
+              className="icon-button"
               aria-label="Save assistant answer to Vault"
               title="Save to Vault"
             >

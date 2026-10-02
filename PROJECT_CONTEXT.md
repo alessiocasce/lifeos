@@ -1,9 +1,18 @@
 # LifeOS Project Context
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
+
+Companion report-preservation checkpoint (2026-10-02): restored the missing
+assistant-message Save to Vault callback, which made the preserved modal
+unreachable after reconstruction. Save/detail now use native modal dialogs with
+focus return, 44px controls and in-flight dismissal protection. Report failures
+retain input/content; archive failures are caught and shown, not unhandled.
+Existing report types/tags/markdown/archive/embedding repair contracts are kept.
+Browser fixtures exercise these paths without production or Gemini calls.
+No schema rerun required. Full feature-preservation and final whole-app audit remain.
 
 Cross-app continuity checkpoint: Shell now reacts to input focus even when the
 visual viewport shrank first; blur uses the next focus target to restore docks.
