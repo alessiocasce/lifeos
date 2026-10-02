@@ -18,6 +18,8 @@ No Brain/proactive/API/schema behavior changes. No schema rerun required.
 `npx playwright test tests/ui/memos.spec.js` covers CRUD, done/dismiss/reopen and
 reload, optional date/time, failed saves/status, delayed-submit protection, empty
 state and list/editor captures at 375/390/393/430/1280/1440/1920 widths.
+An undated-only queue regression measures Add Dated Memo at least 44px and opens
+the editor with Enter; initial focus is Close, then Tab reaches Remember.
 Fixtures are isolated browser storage, not live Supabase or WhatsApp verification.
 Run `npm run test:ui`, `npm test`, `npm run build`, `npm run check:functions` and
 `git diff --check` for shared-shell/reliability gates.

@@ -2,6 +2,12 @@
 
 ## Companion frontend reconstruction
 
+Retry and Memory title have 44px minimum targets. Memory input focus is neutral
+and visible. Seven viewport journeys exercise keyboard Retry, title -> content
+tab order, scrolling Save clear of the viewport edge and successful memory edit.
+These tests first reproduced a 36px Retry target before the fix. Run
+`npm run test:ui`; physical iPhone keyboard behavior remains manual QA.
+
 Preservation coverage in `tests/ui/companion.spec.js` also verifies a failed
 Forget keeps the chosen memory until successful retry, without deleting the
 conversation. Populated insights remain secondary under Saved memories, bounded

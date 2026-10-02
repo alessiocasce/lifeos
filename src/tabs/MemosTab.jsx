@@ -642,7 +642,7 @@ function SmallEmptyTimeline({ onCreate }) {
       <button
         type="button"
         onClick={onCreate}
-        className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-200"
+        className="mt-3 inline-flex min-h-11 items-center gap-2 rounded border border-white/20 bg-white/[0.04] px-3 text-sm font-semibold text-zinc-200"
       >
         <Plus size={16} />
         Add Dated Memo

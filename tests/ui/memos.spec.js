@@ -30,6 +30,22 @@ test('memo queue shows each reminder once and preserves done/dismiss/reopen', as
   await expect(dated.getByText('dismissed', { exact: true })).toBeVisible();
 });
 
+test('undated-only memo queue keeps dated capture touch-sized and keyboard reachable', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('qa-memos', JSON.stringify([
+    { id: 'qa-loose', title: 'Compare travel options', memo_date: null, memo_time: null, status: 'open' },
+  ])));
+  await page.goto('/memos');
+  const add = page.getByRole('button', { name: 'Add Dated Memo', exact: true });
+  await expect(add).toBeVisible();
+  expect((await add.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await add.focus();
+  await add.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close memo editor', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('textbox', { name: 'Remember', exact: true })).toBeFocused();
+});
+
 test('memo editor preserves create/edit/delete, optional date and focus', async ({ page }) => {
   await page.goto('/memos');
   const create = page.getByRole('button', { name: 'Create memo', exact: true });

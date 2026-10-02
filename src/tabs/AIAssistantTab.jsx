@@ -721,14 +721,14 @@ function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCan
         <input
           value={draft.title}
           onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
-          className="h-10 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none focus:border-violet-400/40"
+          className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3 text-base text-zinc-100 outline-none focus:border-zinc-400"
           aria-label="Memory title"
         />
         <textarea
           rows={3}
           value={draft.content}
           onChange={(event) => onDraftChange((current) => ({ ...current, content: event.target.value }))}
-          className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-base text-zinc-100 outline-none focus:border-violet-400/40"
+          className="rounded border border-white/15 bg-[#14171b] px-3 py-2 text-base text-zinc-100 outline-none focus:border-zinc-400"
           aria-label="Memory content"
         />
         <div className="flex justify-end gap-2">
@@ -917,7 +917,7 @@ function AssistantError({ error, onRetry }) {
         <button
           type="button"
           onClick={onRetry}
-          className="mt-3 h-9 rounded-md border border-red-300/20 bg-red-300/10 px-3 text-xs font-semibold text-red-100 hover:border-red-200/40"
+          className="mt-3 min-h-11 rounded border border-red-300/20 bg-red-300/10 px-4 text-sm font-semibold text-red-100 hover:border-red-200/40"
         >
           Retry
         </button>

@@ -5,6 +5,13 @@ Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
 
+Control audit checkpoint (2026-10-02): regressions measured Companion Retry at
+36px and the undated-only Add Dated Memo control at 40px. Both now have 44px
+minimum targets. Memory title/content use neutral, visible focus treatment;
+keyboard retry, editor tab order and reachable Save are covered at all seven
+requested viewport sizes. The full isolated browser suite passes 169 tests.
+This does not prove physical iOS or production behavior. No schema rerun required.
+
 Preservation checkpoint (2026-10-02): Training exercise suggestions now retain
 focus within the group, support arrow/Home/End selection and Escape dismissal,
 and use 44px targets without changing the draft/session contracts. A prior-session

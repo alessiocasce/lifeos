@@ -107,6 +107,45 @@ test('populated insights stay secondary, bounded and separate from conversation 
 });
 
 for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [1280, 800], [1440, 900], [1920, 1080]]) {
+  test(`Companion recovery and memory controls fit ${width}x${height}`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height });
+    await page.goto('/assistant');
+    await page.evaluate(() => localStorage.setItem('qa-brain-fail', 'true'));
+    const input = page.getByTestId('brain-message-input');
+    await input.fill('Review my training decision');
+    await page.getByTestId('brain-send-button').click();
+    const retry = page.getByRole('button', { name: 'Retry', exact: true });
+    await expect(retry).toBeVisible();
+    await retry.scrollIntoViewIfNeeded();
+    expect((await retry.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await retry.focus();
+    await expect(retry).toBeFocused();
+    await page.screenshot({ path: info.outputPath('companion-recovery.png') });
+    await page.evaluate(() => localStorage.removeItem('qa-brain-fail'));
+    await retry.press('Enter');
+    await expect(page.getByTestId('brain-message-list')).toContainText('Recorded in this test conversation.');
+    await page.getByRole('button', { name: 'Open Companion context' }).click();
+    const panel = page.getByRole('dialog', { name: 'Companion context' });
+    await panel.getByRole('button', { name: /Saved memories/ }).click();
+    await panel.getByRole('button', { name: 'Edit', exact: true }).click();
+    const title = panel.getByRole('textbox', { name: 'Memory title', exact: true });
+    expect((await title.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await title.fill('Training communication');
+    await title.focus();
+    await page.keyboard.press('Tab');
+    await expect(panel.getByRole('textbox', { name: 'Memory content', exact: true })).toBeFocused();
+    const save = panel.getByRole('button', { name: 'Save memory', exact: true });
+    await save.scrollIntoViewIfNeeded();
+    const saveBox = await save.boundingBox();
+    expect(saveBox.height).toBeGreaterThanOrEqual(44);
+    expect(saveBox.y + saveBox.height).toBeLessThanOrEqual(height);
+    await page.screenshot({ path: info.outputPath('memory-editor.png') });
+    await save.click();
+    await expect(panel.getByText('Training communication', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
+
   test(`Companion fits ${width}x${height}`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });
     const errors = [];

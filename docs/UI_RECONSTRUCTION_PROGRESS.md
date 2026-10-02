@@ -21,6 +21,15 @@ belong to the authorized production permission smoke. Keep them out of UI commit
 
 ## Current feature inventory to preserve
 
+Control/focus audit checkpoint (2026-10-02): tests reproduced a 36px Companion
+Retry and 40px undated-only Add Dated Memo. Both are now 44px minimum. Memory
+title/content use neutral focus styling. Eight new browser cases cover keyboard
+retry, editor tab order, reachable Save and undated-only capture. Recovery/editor
+captures were reviewed at all seven requested sizes without control/dock overlap.
+The complete suite passes 169 tests; `npm test`, build and the seven-function
+check pass. Fixture browser evidence is not physical iOS or production evidence.
+The final whole-brief reconciliation remains open; no schema rerun required.
+
 Preservation audit (2026-10-02): `UI_FEATURE_PRESERVATION.md` now maps every named
 existing workflow to its current location, source implementation and actual
 regression coverage, separating code evidence from browser/production evidence.
