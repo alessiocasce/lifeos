@@ -161,3 +161,24 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 9. Confirm Save Set / Save Warmup remains above the bottom navigation.
 10. Confirm logged set edit/delete controls remain tappable.
 11. Refresh and background/reopen the app during a live template workout and confirm the active session and plan persist.
+
+## Training suggestion/history audit (2026-10-02)
+
+The same `training-history.spec.js` suite checks warmup editing to working set 3
+and back to warmup 1001 without losing load/RPE/notes, and two-step session deletion
+with a failed request/retry. After deleting today's live session, reload shows the
+start surface; previous sessions remain selectable under Advanced. It does not
+automatically open an old ended session. The deletion button is at least 44px.
+
+Exercise suggestions are ordinary labeled buttons, not a fake ARIA combobox.
+From a focused Exercise input with matches, ArrowDown enters the first suggestion
+and ArrowUp the last. Within suggestions, arrows/Home/End move focus; Enter/Space
+selects and returns to input. Escape closes without changing text; leaving the
+group closes it. Pointer selection still works. Rows and Performance detail use
+44px targets. No delayed blur timer can dismiss a keyboard-focused suggestion.
+
+`tests/ui/training-history.spec.js` proves selection/dismissal/reload and checks
+previous performance against prior working sets, excluding warmups/future data.
+It also selects an ended historical session and checks sets/Reopen remain visible.
+Run `npm run test:ui -- tests/ui/training-history.spec.js` and `npm run test:workout`.
+This is isolated browser evidence, not physical iPhone or production Supabase QA.

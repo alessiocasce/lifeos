@@ -2,6 +2,12 @@
 
 ## Companion frontend reconstruction
 
+Preservation coverage in `tests/ui/companion.spec.js` also verifies a failed
+Forget keeps the chosen memory until successful retry, without deleting the
+conversation. Populated insights remain secondary under Saved memories, bounded
+to the existing three-record view; they do not create memory or change chat.
+These are fixture browser checks, not live Brain/Supabase/WhatsApp evidence.
+
 Action details open a native modal above the context sheet. Focus must enter it,
 background controls must remain inert, and Escape must close only the detail,
 returning focus to its history row. Long responses scroll without hiding Close.

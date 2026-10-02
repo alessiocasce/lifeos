@@ -47,7 +47,11 @@ export const workoutApi = {
     const rows = read().map((row) => row.id === id ? { ...row, ...patch } : row);
     write(rows); return rows.find((row) => row.id === id);
   },
-  delete: async (id) => write(read().filter((row) => row.id !== id)),
+  delete: async (id) => {
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-session-delete-delay') || 0)));
+    if (localStorage.getItem('qa-session-delete-fail')) throw new Error('Workout session was not deleted.');
+    write(read().filter((row) => row.id !== id));
+  },
 };
 export const workoutSetApi = {
   create: async (payload) => {
@@ -258,7 +262,7 @@ export async function sendLifeOSAiMessage(message, threadId, { clientRequestId }
   }
   return { answer, thread_id: threadId, actions: [] };
 }
-export const aiInsightApi = emptyApi;
+export const aiInsightApi = { list: async () => JSON.parse(localStorage.getItem('qa-insights') || '[]') };
 export const aiMemoryApi = {
   list: async () => JSON.parse(localStorage.getItem('qa-memories') || '[]'),
   update: async (id, patch) => {
@@ -267,6 +271,8 @@ export const aiMemoryApi = {
     localStorage.setItem('qa-memories', JSON.stringify(rows)); return rows.find((row) => row.id === id);
   },
   archive: async (id) => {
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-memory-delay') || 0)));
+    if (localStorage.getItem('qa-memory-fail')) throw new Error('Memory was not forgotten.');
     const rows = JSON.parse(localStorage.getItem('qa-memories') || '[]');
     const row = rows.find((item) => item.id === id);
     localStorage.setItem('qa-memories', JSON.stringify(rows.filter((item) => item.id !== id)));

@@ -12,7 +12,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useId, useMemo, useState, useRef } from 'react';
 import { useLocalDay } from '../hooks/useLocalDay';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
 import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
@@ -774,7 +774,7 @@ function WorkoutSessionControl({
               type="button"
               onClick={() => onDeleteSession(activeSession.id)}
               disabled={deletingSessionId === activeSession.id}
-              className={`flex h-10 w-full items-center justify-center gap-2 rounded-md border text-xs font-medium disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
+              className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-md border text-sm font-medium disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600 ${
                 deleteConfirmId === activeSession.id
                   ? 'border-red-400/40 bg-red-400/20 text-red-200'
                   : 'border-red-400/20 bg-red-400/10 text-red-300'
@@ -1176,7 +1176,7 @@ function PreviousPerformanceCard({ performance }) {
     <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-zinc-600 pl-3 text-sm">
       <span className="text-zinc-400">Previous <span className="ml-2 data-text text-zinc-100">{performance.last.weight} kg × {performance.last.reps}</span></span>
       <span className="text-xs text-zinc-500">{performance.date}</span>
-      <details className="w-full text-xs text-zinc-400"><summary className="cursor-pointer">Performance detail</summary><p className="py-2">Heaviest: {performance.heaviestSet.weight} kg × {performance.heaviestSet.reps}. Estimated 1RM: {formatNumber(performance.bestEstimated1Rm.estimated1Rm)} kg (Epley).</p></details>
+      <details className="w-full text-xs text-zinc-400"><summary className="min-h-11 cursor-pointer py-3 text-sm">Performance detail</summary><p className="py-2">Heaviest: {performance.heaviestSet.weight} kg × {performance.heaviestSet.reps}. Estimated 1RM: {formatNumber(performance.bestEstimated1Rm.estimated1Rm)} kg (Epley).</p></details>
     </div>
   );
 }
@@ -1332,22 +1332,55 @@ function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm 
 
 function ExerciseAutocomplete({ onChange, suggestions, value }) {
   const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
+  const suggestionsRef = useRef(null);
+  const suggestionsId = useId();
   const normalizedValue = normalizeExercise(value);
   const visibleSuggestions = suggestions
     .filter((exercise) => !normalizedValue || normalizeExercise(exercise).includes(normalizedValue))
     .filter((exercise) => normalizeExercise(exercise) !== normalizedValue)
     .slice(0, 8);
 
+  const dismiss = () => {
+    inputRef.current?.focus();
+    setOpen(false);
+  };
+  const moveSuggestionFocus = (event, index) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      dismiss();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const buttons = suggestionsRef.current?.querySelectorAll('button');
+    if (!buttons?.length) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next]?.focus();
+  };
+
   return (
-    <div className="relative min-w-0">
-      <label className="block rounded-md border border-white/5 bg-[#121212] px-2 py-1.5 focus-within:border-cyan-400/30">
+    <div className="relative min-w-0" onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+    }}>
+      <label className="block rounded border border-white/15 bg-[#14171b] px-2 py-1.5 focus-within:border-zinc-400">
         <span className="text-[10px] uppercase tracking-wider text-zinc-500">Exercise</span>
         <input
+          ref={inputRef}
           type="text"
           value={value}
           autoComplete="off"
           onFocus={() => setOpen(true)}
-          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          aria-controls={open && visibleSuggestions.length ? suggestionsId : undefined}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setOpen(false);
+            } else if (open && visibleSuggestions.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+              moveSuggestionFocus(event, event.key === 'ArrowDown' ? -1 : 0);
+            }
+          }}
           onChange={(event) => {
             onChange(event.target.value);
             setOpen(true);
@@ -1356,17 +1389,18 @@ function ExerciseAutocomplete({ onChange, suggestions, value }) {
         />
       </label>
       {open && visibleSuggestions.length ? (
-        <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-md border border-cyan-400/20 bg-[#0d0d0d] p-1 shadow-2xl">
-          {visibleSuggestions.map((exercise) => (
+        <div ref={suggestionsRef} id={suggestionsId} role="group" aria-label="Exercise suggestions" className="absolute inset-x-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded border border-white/20 bg-[#14171b] p-1 shadow-xl">
+          {visibleSuggestions.map((exercise, index) => (
             <button
               key={normalizeExercise(exercise)}
               type="button"
+              onKeyDown={(event) => moveSuggestionFocus(event, index)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onChange(exercise);
-                setOpen(false);
+                dismiss();
               }}
-              className="block min-h-10 w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-cyan-400/10 hover:text-cyan-200"
+              className="block min-h-11 w-full rounded px-3 py-3 text-left text-sm text-zinc-200 hover:bg-white/5 focus-visible:bg-white/5"
             >
               {exercise}
             </button>
@@ -1382,6 +1416,7 @@ function WarmupToggle({ checked, compact = false, onChange }) {
     <button
       type="button"
       onClick={() => onChange(!checked)}
+      aria-pressed={checked}
       className={`flex min-h-11 items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition ${
         checked
           ? 'border-amber-400/30 bg-amber-400/10 text-amber-200'

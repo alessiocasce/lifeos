@@ -66,6 +66,46 @@ test('chat failure keeps input and retries the same request without duplicate bu
   expect(requests[0].threadId).toBe(requests[1].threadId);
 });
 
+test('forget memory retains failed records and retry removes only the chosen memory', async ({ page }) => {
+  await page.goto('/assistant');
+  await page.getByRole('button', { name: 'Open Companion context' }).click();
+  const panel = page.getByRole('dialog', { name: 'Companion context' });
+  await panel.getByRole('button', { name: /Saved memories/ }).click();
+  await page.evaluate(() => {
+    localStorage.setItem('qa-memory-fail', 'true');
+    localStorage.setItem('qa-memory-delay', '500');
+  });
+  const forget = panel.getByRole('button', { name: 'Forget Communication', exact: true });
+  await forget.click();
+  await expect(forget).toBeDisabled();
+  await expect(panel.getByRole('alert')).toContainText('Memory was not forgotten.');
+  await expect(panel.getByText('Clear technical explanations', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-memories')).length)).toBe(1);
+  await page.evaluate(() => localStorage.removeItem('qa-memory-fail'));
+  await forget.click();
+  await expect(forget).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-memories')))).toEqual([]);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-chat-messages')).length)).toBe(1);
+});
+
+test('populated insights stay secondary, bounded and separate from conversation and memory', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('qa-insights', JSON.stringify(
+    Array.from({ length: 4 }, (_, i) => ({ id: `qa-insight-${i}`, title: `Recorded insight ${i + 1}`, content: `Recorded observation ${i + 1}` })),
+  )));
+  await page.goto('/assistant');
+  await expect(page.getByText('Recorded insight 1', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open Companion context' }).click();
+  const panel = page.getByRole('dialog', { name: 'Companion context' });
+  await panel.getByRole('button', { name: /Saved memories/ }).click();
+  await panel.getByText('Recent insights', { exact: true }).click();
+  await expect(panel.getByText('Recorded observation 1', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Recorded observation 3', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Recorded insight 4', { exact: true })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Training decisions' }).click();
+  await expect(page.getByTestId('brain-message-list')).toContainText('25 kg for 8 reps');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-memories')).length)).toBe(1);
+});
+
 for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [1280, 800], [1440, 900], [1920, 1080]]) {
   test(`Companion fits ${width}x${height}`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });

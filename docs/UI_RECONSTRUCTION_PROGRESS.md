@@ -21,6 +21,30 @@ belong to the authorized production permission smoke. Keep them out of UI commit
 
 ## Current feature inventory to preserve
 
+Preservation audit (2026-10-02): `UI_FEATURE_PRESERVATION.md` now maps every named
+existing workflow to its current location, source implementation and actual
+regression coverage, separating code evidence from browser/production evidence.
+The audit found 40px Exercise suggestions with no keyboard selection path.
+A regression failed before the fix; the group now uses scoped focus ownership,
+arrow/Home/End selection, Escape dismissal and 44px targets without a blur timer.
+New journeys also verify prior working-set performance and ended-history access,
+plus failed memory Forget followed by safe retry. Remaining dedicated evidence
+gaps are stated in the matrix; full reconstruction is still active.
+
+Dedicated journeys now cover warmup-to-working conversion and back with correct
+numbering/load/notes, session deletion confirmation and failure/retry cleanup,
+and populated secondary insights. The deletion control is 44px and Warmup exposes
+its pressed state. Training and suggestion captures were inspected at all seven
+required dimensions; no logger/save overlap was observed. This is fixture browser
+evidence, not physical iOS or production verification. Whole-app control/contrast
+audit and the final requirement-by-requirement report remain outstanding.
+
+Preservation checkpoint gates: all 161 browser cases pass. `npm test` (including
+Brain, MCP/write/OAuth, memory, schema, reliability, bridge, Workout, Companion and
+Attention), production build, changed-test syntax and diff checks pass. Function
+count remains seven. No backend, schema, environment or production writes were
+made by this reconstruction checkpoint; existing deployment-smoke edits stay out.
+
 Entry-path audit (2026-10-02): `AuthScreen` was still using the old cyan/glow
 treatment with a small account-switch control and editable credentials during a
 request. It now uses unframed neutral sections, 44px+ controls, autocomplete for

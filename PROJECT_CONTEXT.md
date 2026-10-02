@@ -5,6 +5,17 @@ Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
 
+Preservation checkpoint (2026-10-02): Training exercise suggestions now retain
+focus within the group, support arrow/Home/End selection and Escape dismissal,
+and use 44px targets without changing the draft/session contracts. A prior-session
+regression verifies warmups/future sessions cannot replace previous performance.
+Memory Forget failure/retry is covered without deleting the conversation.
+Warmup edit classification now has reload/numbering coverage; session deletion
+has confirmation/failure/retry/draft-cleanup coverage and a 44px control.
+Populated insights retain the existing secondary three-record view.
+See docs/UI_FEATURE_PRESERVATION.md for the source/test evidence map and explicit
+remaining gaps; this is not full reconstruction completion. No schema rerun required.
+
 Entry-path checkpoint (2026-10-02): authentication and lazy workspace loading now
 use the same neutral visual grammar as the reconstructed app. Credential fields
 have explicit autocomplete semantics; in-flight submissions lock fields and mode
