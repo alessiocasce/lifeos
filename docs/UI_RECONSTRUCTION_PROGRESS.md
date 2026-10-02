@@ -21,6 +21,25 @@ belong to the authorized production permission smoke. Keep them out of UI commit
 
 ## Current feature inventory to preserve
 
+Entry-path audit (2026-10-02): `AuthScreen` was still using the old cyan/glow
+treatment with a small account-switch control and editable credentials during a
+request. It now uses unframed neutral sections, 44px+ controls, autocomplete for
+email/current/new passwords, a locked fieldset and synchronous submission guard.
+Failures preserve credentials; email-confirmation signup remains signed out.
+Lazy workspace loading is an unframed announced status. No auth API behavior or
+session persistence contracts changed. Ten fixture browser checks cover retry,
+signup confirmation, keyboard navigation and all seven requested dimensions.
+Seven captured entry screens were inspected for fit/hierarchy/contrast. The
+in-app browser's existing 5185 preview returned a blank document; it was not
+accepted as visual evidence. Captures came from the isolated UI QA server.
+Production authentication and physical iOS keyboard behavior remain unverified.
+This checkpoint does not complete the full reconstruction/preservation audit.
+
+Entry checkpoint gates: all 155 browser cases pass; `npm test`, production build,
+test/fixture syntax checks and diff checks pass. Function count remains seven.
+No environment, backend, schema or production mutations were made. The unrelated
+deployment-QA/OAuth-smoke edits remain outside this UI commit.
+
 Companion detail/state audit (2026-10-02): a browser regression reproduced action
 details leaving focus on the history opener. Native modal ownership fixes it;
 parent close/cancel handlers now ignore child events, including Strict Mode

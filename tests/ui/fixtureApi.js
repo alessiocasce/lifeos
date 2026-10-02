@@ -19,7 +19,17 @@ export const authApi = {
   getSession: async () => ({ session: user() ? { user: user() } : null }),
   onAuthStateChange: (fn) => { authListener = fn; return { unsubscribe() { authListener = null; } }; },
   signOut: async () => { localStorage.setItem('qa-user', 'null'); authListener?.('SIGNED_OUT', null); },
-  signInWithPassword: async () => { window.__qaSignIn('qa-user-b'); return { session: { user: user() } }; },
+  signInWithPassword: async () => {
+    localStorage.setItem('qa-auth-attempts', String(Number(localStorage.getItem('qa-auth-attempts') || 0) + 1));
+    await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-auth-delay') || 0)));
+    if (localStorage.getItem('qa-auth-fail')) throw new Error('Test sign-in failed. Try again.');
+    window.__qaSignIn('qa-user-b'); return { session: { user: user() } };
+  },
+  signUp: async () => {
+    localStorage.setItem('qa-auth-attempts', String(Number(localStorage.getItem('qa-auth-attempts') || 0) + 1));
+    if (localStorage.getItem('qa-auth-fail')) throw new Error('Test account creation failed. Try again.');
+    return { session: null, user: { id: 'qa-unconfirmed' } };
+  },
 };
 export const workoutApi = {
   list: async () => {

@@ -5,6 +5,15 @@ Current branch: `main`
 
 ## Frontend reconstruction checkpoint (2026-10-01)
 
+Entry-path checkpoint (2026-10-02): authentication and lazy workspace loading now
+use the same neutral visual grammar as the reconstructed app. Credential fields
+have explicit autocomplete semantics; in-flight submissions lock fields and mode
+switching, with a synchronous duplicate-submit guard. Failures retain input and
+announce an alert; email-confirmation signup announces a status and stays signed
+out. The existing Supabase auth/session contracts are unchanged. Ten isolated
+browser checks cover retry, confirmation, keyboard order and seven viewport sizes.
+No schema rerun required. Full feature-preservation/whole-app audit remains open.
+
 Companion detail/state checkpoint (2026-10-02): action history details are native
 modal dialogs with contained focus, explicit focus return and independent Escape
 dismissal. The parent context ignores child-dialog close/cancel events (including

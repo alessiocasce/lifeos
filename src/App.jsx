@@ -50,8 +50,8 @@ function LifeOSApp() {
 
 function TabLoadingFallback() {
   return (
-    <div className="rounded-md border border-cyan-400/10 bg-cyan-400/[0.03] p-4">
-      <p className="data-text text-sm font-semibold text-cyan-300">Loading module...</p>
+    <div role="status" className="border-t border-white/10 py-6">
+      <p className="text-sm text-zinc-400">Loading workspace...</p>
     </div>
   );
 }

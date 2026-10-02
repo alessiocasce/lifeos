@@ -474,3 +474,23 @@ Before live QA, run `npm run test:brain` and confirm the outbox state machine, p
 ## Known Non-Failing Build Warning
 
 The production build may warn that one JavaScript chunk is larger than 500 kB. This is currently expected and non-fatal; future tab-level code splitting can address it.
+
+## Private Entry QA (2026-10-02)
+
+- Signed out: LifeOS entry uses the neutral app palette without cyan/glow panels.
+- Email/password inputs and both account commands are at least 44px high; tab
+  order is email, password, submit, account switch. Focus remains visible.
+- During sign-in, fields/account switch are disabled and duplicate submission
+  cannot issue another request. A failure announces an alert and preserves input.
+- Retry after a failed request enters the existing deep-linked workspace.
+- Signup without a session announces email confirmation, returns to sign-in,
+  retains email, clears password and does not pretend the user is authenticated.
+- Inputs expose email/current-password/new-password autocomplete appropriately.
+- Session restoration and lazy workspace loading expose announced status text;
+  no new credentials, session tokens or production data are stored by this change.
+
+Automated: `npm run test:ui -- tests/ui/auth.spec.js` (10 cases). Seven entry
+captures under `test-results/auth-private-entry-fits-*/private-entry.png` cover
+375x812, 390x844, 393x852, 430x932, 1280x800, 1440x900 and 1920x1080. Tests use
+the isolated fixture service and abort external requests. They do not verify
+production Supabase emails/authentication, password managers or physical iOS.
