@@ -5,6 +5,23 @@
 User brief: `9807a46e-66d9-4dac-9880-1f7943a6112b/pasted-text-1.txt`.
 This is a full reconstruction; completing a checkpoint is not completion of the brief.
 
+## Final Local Audit (2026-10-02)
+
+The original 45-section brief is reconciled in UI_RECONSTRUCTION_AUDIT.md; the
+23-part requested report is UI_RECONSTRUCTION_REPORT.md. Full local implementation
+and browser audit are complete. The final combined browser run passed 225 tests;
+full npm test, build and seven-function check passed. Shared muted-text checks
+first failed in six workspaces, then passed across all 56 route/size combinations
+after a text-only contrast correction. No layout, API or surface colors changed
+in that correction. Current QA reflects the new Command/Companion rather than
+the old metric dashboard. Earlier remaining-scope notes below are historical.
+
+Physical iPhone/PWA process eviction/keyboard, live Supabase mutations and Watch
+delivery remain unverified; the brief explicitly permits documenting this limit.
+No deployment, push or production UI acceptance is claimed. No schema rerun required.
+
+## Historical Checkpoint Inventory
+
 - [x] User/session-scoped Training continuity and browser regression journeys.
 - [x] Navigation, shared visual foundation, mobile utility sheet, desktop rail.
 - [x] Focused active Training logger, templates/history secondary, save feedback.
@@ -12,9 +29,9 @@ This is a full reconstruction; completing a checkpoint is not completion of the 
 - [x] Finances reconstruction checkpoint.
 - [x] Training template/session-setup browser journeys and management hierarchy.
 - [x] Health current-routine integration through the authenticated Companion view.
-- [ ] Complete feature-preservation and whole-app/device audit.
+- [x] Complete feature-preservation and whole-app browser audit; physical-device limits documented.
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
-- [ ] Full automated gates, seven-function check, all required viewport QA, final documentation.
+- [x] Full automated gates, seven-function check, all required viewport QA, final documentation.
 
 Existing local edits to `scripts/smoke-mcp-oauth.js` and `docs/QA_DEPLOYMENT.md`
 belong to the authorized production permission smoke. Keep them out of UI commits.

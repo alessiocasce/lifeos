@@ -3,7 +3,30 @@
 Last updated: 2026-10-02
 Current branch: `main`
 
+## Frontend reconstruction local completion (2026-10-02)
+
+All eight workspaces, Training continuity, revised navigation/design system,
+authenticated typed Watch controls and Companion state/permission surfaces are
+implemented and audited locally. The complete post-correction browser run passed
+225 tests; `npm test`, production build and function-count gate passed (seven).
+The original 45-section evidence map and 23-part report are in
+docs/UI_RECONSTRUCTION_AUDIT.md and docs/UI_RECONSTRUCTION_REPORT.md.
+Older checkpoint notes below describe the sequence, not current unfinished scope.
+Physical iPhone lock/keyboard/process eviction, production CRUD/Watch delivery and
+production PWA activation remain explicitly unverified. No schema rerun required.
+No reconstruction deployment or unauthorized push is claimed. Existing local
+deployment-QA/OAuth-smoke edits remain outside reconstruction commits.
+
 ## Frontend reconstruction checkpoint (2026-10-01)
+
+Cross-workspace audit (2026-10-02): rendered muted date/unit/status/empty-state
+text failed a 4.5:1 reading-contrast check on six screens. Shared text-only
+utilities now use readable steel values; surface and disabled-control colors
+are unchanged. `tests/ui/workspace-audit.spec.js` waits for each actual workspace,
+then checks visible button/summary heights, muted-text contrast, horizontal fit
+and runtime exceptions on all eight routes at seven required sizes. This is a
+bounded browser audit, not WCAG certification or physical-device verification.
+See docs/UI_RECONSTRUCTION_AUDIT.md for the remaining brief reconciliation.
 
 Control audit checkpoint (2026-10-02): regressions measured Companion Retry at
 36px and the undated-only Add Dated Memo control at 40px. Both now have 44px

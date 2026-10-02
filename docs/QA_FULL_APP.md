@@ -8,6 +8,15 @@ Run this after applying `supabase/schema.sql` to a Supabase project and setting 
 
 ## Pre-Release Automated Checks
 
+For the reconstructed frontend, also run `npm run test:ui`. The cross-workspace
+audit waits for the real lazy-loaded screen (not just the Shell heading) on each
+of eight routes at all seven requested dimensions. It measures visible enabled
+buttons/summaries at least 44px high, checks text-zinc-500/600 against composed
+solid ancestor backgrounds at least 4.5:1, checks horizontal fit and records
+runtime exceptions. This intentionally bounded contrast test is not a complete
+accessibility audit; dialogs, failures and populated journeys have separate
+feature tests. See UI_RECONSTRUCTION_AUDIT.md for exact evidence boundaries.
+
 1. Run `npm run test:brain`.
 2. Confirm the Brain regression harness passes without live Gemini, WhatsApp, browser automation, or Supabase writes.
 3. Run `npm run test:mcp`.
@@ -62,7 +71,7 @@ End Training and explicitly pull again to apply. Physical QA remains outstanding
 15. Create one active project.
 16. Start a project session, add target output, end it with Proof of Work, and confirm it appears in recent sessions.
 17. Open Assistant.
-18. Send an analysis prompt and confirm Recent Actions remains available where visible, currently as a compact desktop secondary panel.
+18. Send an analysis prompt; open Companion context and confirm Recent Actions remains available as secondary history.
 
 ## Home Integration
 
@@ -70,19 +79,20 @@ End Training and explicitly pull again to apply. Physical QA remains outstanding
 2. Confirm the initial viewport has a clear signal-first hierarchy and only meaningful logged lanes.
 3. Confirm Home does not show giant empty `No events planned today`, `No workout today`, `No memos due`, or `No project work logged today` panels.
 4. Confirm Home does not show zero-value widgets such as `0`, `0m`, `0 sets`, `0 volume`, or `today 0m project work`.
-5. Confirm the command strip only shows meaningful logged values such as Sleep, Habits, and Memos.
-6. Confirm Today Signal appears only when a real signal exists and combines at most two high-priority deterministic signals.
-7. Confirm Agenda appears only when today's visible calendar events exist.
-8. Confirm Memos appears only when overdue/today/upcoming reminders matter.
-9. Confirm Daily Signals shows only logged values: calculated Sleep, logged Shower/Creatine/Skin counts/times, Coffee, or ADC. Brush, Journal, Energy, and Water are absent.
-10. Confirm Training appears only for a live or completed workout and excludes warmups from working set count and volume.
-11. Confirm Ops appears only for an active project session or project work greater than 0 today.
-12. Confirm an active project with 0m logged today does not show Ops, active project count, latest project, or an Ops nag.
+5. Confirm the opening sentence follows active Training, active project session, next event or due memo; a quiet day has no metric strip.
+6. Confirm Active work appears only for a live workout/project session and opens the corresponding workspace.
+7. Confirm Today appears only when today's non-cancelled calendar events exist, with a link to all if more than five.
+8. Confirm Open loops shows dated open overdue/today memos, not done/dismissed or undated notes.
+9. Confirm Recorded today shows only logged sleep/habits or completed workout/project sessions. A recorded zero sleep is real data, not missing data.
+10. Confirm Training remains available through the resume affordance without adding a volume dashboard to Command.
+11. Confirm completed project blocks refer to recorded sessions, not invented progress.
+12. Confirm an active project without a live session/completed block does not produce a missing-work nag.
 13. Confirm Home does not show Money, Finance, Spend, expense totals, or category/vendor summaries.
 14. Confirm Home does not show AI Recent Writes, Recent AI Activity, or Recent Actions.
 15. Confirm top-right shell metric boxes and bottom-left mini stat boxes do not clutter Home.
 16. Confirm mobile Home is readable and has no horizontal overflow.
 17. Confirm no fake dashboard values are shown as real data.
+18. Confirm Coming tomorrow is bounded to two non-cancelled events and links to Calendar.
 
 ## Refresh Persistence
 

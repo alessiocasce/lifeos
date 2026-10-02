@@ -1,7 +1,8 @@
 # Reconstruction preservation evidence
 
 Audit date: 2026-10-02. Compare against pre-reconstruction `4358a76`.
-This is a workflow evidence map, not a declaration that the entire brief is done.
+This is a workflow evidence map; the full scope is reconciled separately in
+UI_RECONSTRUCTION_AUDIT.md and UI_RECONSTRUCTION_REPORT.md.
 The source of truth is the current component/context/service code and executed
 tests. Browser fixtures exercise the real React app while replacing transport;
 they do not prove production Supabase, Gemini, Oracle or physical iOS behavior.
@@ -66,9 +67,10 @@ remain explicit. App controls do not evaluate Attention or send WhatsApp.
   secondary. No table names, raw state enums or database IDs are primary UI.
 - Finances replaces a chart with real category totals and a month ledger.
 
-## Remaining audit evidence
+## Verification limits
 
-Before full-goal completion, finish the whole-app control/focus/contrast review
-and reconcile the final brief evidence/report. Keep physical iOS/Supabase/
-Oracle/production SW items explicitly unverified rather than substituting browser
-viewport screenshots. No schema rerun required.
+The whole-brief reconciliation and local control/focus/contrast review are now
+recorded in the requirement audit/report. The post-correction browser suite
+passed 225 tests. Keep physical iOS/Supabase/Oracle/production SW items explicitly
+unverified rather than substituting browser viewport screenshots. No schema rerun
+required. This is preservation evidence, not a claim of production deployment.

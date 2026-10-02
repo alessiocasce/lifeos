@@ -72,6 +72,12 @@
   }
 }
 
+@layer utilities {
+  /* Muted text still needs reading contrast on the raised operational surfaces. */
+  .text-zinc-500 { color: var(--muted); }
+  .text-zinc-600 { color: #89919b; }
+}
+
 @layer components {
   .auth-entry { padding-top: max(32px, env(safe-area-inset-top)); padding-bottom: max(32px, env(safe-area-inset-bottom)); }
   .command-surface { max-width: 1280px; min-width: 0; }
