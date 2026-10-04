@@ -18,17 +18,20 @@ begin
   if tg_op = 'INSERT' then
     if exists (select 1 from public.brain_outbox_messages b where b.user_id = new.user_id and b.idempotency_key = new.idempotency_key) then return new; end if;
     if (select count(*) from public.brain_outbox_messages b where b.user_id = new.user_id and b.channel = new.channel
+      and b.source_type is distinct from 'workout_rest_timer'
       and b.created_at >= (date_trunc('day', now() at time zone 'Europe/Rome') at time zone 'Europe/Rome')
       and b.status <> 'cancelled') >= daily_max then
       raise exception 'attention_deferred';
     end if;
     if coalesce((new.metadata->>'exact_due_reminder')::boolean, false) or new.rule_key like '%_snooze' then return new; end if;
     select exists(select 1 from public.brain_outbox_messages b where b.user_id = new.user_id and b.channel = new.channel
+      and b.source_type is distinct from 'workout_rest_timer'
       and b.status in ('queued','claimed','sent') and b.created_at > now() - make_interval(mins => gap_minutes)) into recent;
     if recent then raise exception 'attention_deferred'; end if;
   elsif old.status = 'queued' and new.status = 'claimed' then
     if coalesce((new.metadata->>'exact_due_reminder')::boolean, false) then return new; end if;
     select exists(select 1 from public.brain_outbox_messages b where b.user_id = new.user_id and b.channel = new.channel and b.id <> new.id
+      and b.source_type is distinct from 'workout_rest_timer'
       and ((b.status = 'sent' and b.sent_at > now() - make_interval(mins => gap_minutes))
         or (b.status = 'claimed' and b.claimed_at > now() - make_interval(mins => gap_minutes)))) into recent;
     if recent then return null; end if;

@@ -369,7 +369,7 @@ export function proactiveAssistantMetadata(outboxMessage) {
   const accountability = normalizeAccountabilityTarget(metadata.accountability);
   return {
     metadata_version: 2,
-    proactive_message: true,
+    proactive_message: outboxMessage.source_type !== 'workout_rest_timer',
     outbox_message_id: outboxMessage.id,
     rule_key: outboxMessage.rule_key,
     source_type: outboxMessage.source_type,
@@ -388,7 +388,6 @@ async function findExistingProactiveAssistantMessage({ userId, threadId, outboxM
     .eq('thread_id', threadId)
     .eq('role', 'assistant')
     .contains('metadata', {
-      proactive_message: true,
       outbox_message_id: outboxMessageId,
     })
     .order('created_at', { ascending: false })

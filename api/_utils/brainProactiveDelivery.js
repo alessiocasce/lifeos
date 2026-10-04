@@ -23,6 +23,20 @@ export async function sourceIsResolved({ client, userId, sourceId, sourceType })
 }
 
 export async function checkProactiveDelivery({ row, client = getSupabaseAdmin(), userId = getActionUserId(), now = new Date() }) {
+  if (row.source_type === 'workout_rest_timer') {
+    const target = row.metadata?.workout_rest;
+    const [preferences, set, workout] = await Promise.all([
+      client.from('workout_rest_preferences').select('enabled,recipient,last_set_id').eq('user_id', userId).maybeSingle(),
+      client.from('workout_sets').select('id,workout_id').eq('user_id', userId).eq('id', row.source_id).maybeSingle(),
+      client.from('workouts').select('id,ended_at').eq('user_id', userId).eq('id', target?.workout_id).maybeSingle(),
+    ]);
+    for (const result of [preferences, set, workout]) if (result.error) throw result.error;
+    const eligible = row.rule_key === 'workout.rest_timer' && row.metadata?.user_armed === true
+      && preferences.data?.enabled && preferences.data.recipient === row.recipient
+      && preferences.data.last_set_id === row.source_id && set.data?.workout_id === workout.data?.id
+      && Boolean(workout.data) && !workout.data.ended_at;
+    return { eligible: Boolean(eligible), reason: eligible ? null : 'rest_timer_no_longer_active' };
+  }
   if (row.source_type === 'monitor') {
     const monitorResult = await client.from('brain_monitors').select('id, user_id, monitor_type, topic_key, project_id, permission_basis, state, expires_at, subject')
       .eq('user_id', userId).eq('id', row.source_id).maybeSingle();

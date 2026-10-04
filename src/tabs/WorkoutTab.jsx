@@ -16,6 +16,8 @@ import {
 import { useEffect, useId, useMemo, useState, useRef } from 'react';
 import { useLocalDay } from '../hooks/useLocalDay';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
+import { useWorkoutRestTimer } from '../hooks/useWorkoutRestTimer';
+import { prefillWorkoutTargets } from '../utils/workoutPrefill';
 import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -78,6 +80,7 @@ export function WorkoutTab() {
   const [lastSavedSet, setLastSavedSet] = useState(null);
   const [trainingView, setTrainingView] = useState('live');
   const [historySessionId, setHistorySessionId] = useState(null);
+  const restTimer = useWorkoutRestTimer(authUser?.id, activeWorkoutSession);
 
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
   const previousPerformance = useMemo(
@@ -184,13 +187,13 @@ export function WorkoutTab() {
       writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise });
       return;
     }
-    setSetForm((prev) => ({
+    setSetForm((prev) => prefillWorkoutTargets({
       ...prev,
       exercise: exercise.exercise,
       set_number: prev.is_warmup
         ? getNextWarmupSetNumber(session, exercise.exercise)
         : getNextSetNumber(session, exercise.exercise),
-    }));
+    }, getPreviousPerformance(workoutSessions, session, exercise.exercise)?.sets));
   };
 
   const startFromTemplate = async (templateId) => {
@@ -266,14 +269,12 @@ export function WorkoutTab() {
         ...activeWorkoutSession,
         workout_sets: [...(activeWorkoutSession.workout_sets ?? []), createdSet],
       };
-      const nextDraft = {
+      const nextDraft = prefillWorkoutTargets({
         ...setForm,
         set_number: setForm.is_warmup
           ? getNextWarmupSetNumber(projectedSession, setForm.exercise)
           : getNextSetNumber(projectedSession, setForm.exercise),
-        reps: '',
-        notes: '',
-      };
+      }, previousPerformance?.sets, { afterSave: true, savedSet: createdSet });
       writeWorkoutDraft(authUser?.id, activeWorkoutSession.id, nextDraft);
       setSetForm(nextDraft);
       setLastSavedSet(createdSet);
@@ -424,6 +425,7 @@ export function WorkoutTab() {
             onReopen={() => reopenSession(activeWorkoutSession.id)}
             reopening={reopeningSessionId === activeWorkoutSession.id}
           />
+          {!activeWorkoutSession.ended_at ? <RestTimerControl rest={restTimer} /> : null}
 
           <div className="col-span-12 grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
             <div className="grid min-w-0 gap-6">
@@ -438,6 +440,11 @@ export function WorkoutTab() {
                 lastSavedSet={lastSavedSet?.workout_id === activeWorkoutSession.id ? lastSavedSet : null}
                 setFormValue={setForm}
                 updateSetForm={(field, value) => setSetForm((prev) => {
+                  if (field === 'exercise_commit') {
+                    const draft = { ...prev, exercise: value, set_number: prev.is_warmup
+                      ? getNextWarmupSetNumber(activeWorkoutSession, value) : getNextSetNumber(activeWorkoutSession, value) };
+                    return prefillWorkoutTargets(draft, getPreviousPerformance(workoutSessions, activeWorkoutSession, value)?.sets);
+                  }
                   if (field === 'exercise') {
                     return {
                       ...prev,
@@ -448,13 +455,13 @@ export function WorkoutTab() {
                     };
                   }
                   if (field === 'is_warmup') {
-                    return {
+                    return prefillWorkoutTargets({
                       ...prev,
                       is_warmup: value,
                       set_number: value
                         ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise)
                         : getNextSetNumber(activeWorkoutSession, prev.exercise),
-                    };
+                    }, previousPerformance?.sets);
                   }
                   return { ...prev, [field]: value };
                 })}
@@ -1127,6 +1134,7 @@ function SetLogger({
                   suggestions={exerciseSuggestions}
                   value={setFormValue.exercise}
                   onChange={(value) => updateSetForm('exercise', value)}
+                  onCommit={(value) => updateSetForm('exercise_commit', value)}
                 />
               </div>
               <PreviousPerformanceCard performance={previousPerformance} />
@@ -1164,6 +1172,28 @@ function SetLogger({
       </div>
     </section>
   );
+}
+
+function RestTimerControl({ rest }) {
+  const [open, setOpen] = useState(false);
+  const [duration, setDuration] = useState(rest.preferences.duration_seconds);
+  useEffect(() => setDuration(rest.preferences.duration_seconds), [rest.preferences.duration_seconds]);
+  const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  return <section aria-label="Rest timer" className="col-span-12 min-w-0 border-b border-white/10 pb-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 items-center gap-3 text-sm text-zinc-300">
+        Rest timer <span className="data-text text-zinc-100">{rest.preferences.enabled ? 'On' : 'Off'} · {clock(rest.preferences.duration_seconds)}</span><ChevronDown size={14} />
+      </button>
+      {rest.timer ? <div className="flex items-center gap-3"><span role="timer" className="data-text text-lg text-zinc-100">{rest.remaining ? clock(rest.remaining) : 'Alert due'}</span><button type="button" disabled={rest.busy} onClick={() => rest.control({ operation: 'cancel' })} className="min-h-11 px-2 text-sm text-zinc-400">Cancel</button></div> : null}
+    </div>
+    {rest.timer ? <p className="break-words text-xs text-zinc-400">{rest.timer.exercise} · {rest.timer.next_set_number ? `next set ${rest.timer.next_set_number}` : 'next set'}</p> : null}
+    {open ? <div className="mt-2 flex flex-wrap items-end gap-3">
+      <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={rest.preferences.enabled} disabled={rest.busy} onChange={(event) => rest.control({ operation: 'configure', enabled: event.target.checked, duration_seconds: rest.preferences.duration_seconds })} />WhatsApp rest alerts</label>
+      <label className="grid gap-1 text-xs text-zinc-400">Seconds<input aria-label="Rest duration seconds" className="min-h-11 w-24 rounded border border-white/15 bg-[#14171b] px-3 text-base text-zinc-100" type="number" min="15" max="900" value={duration} onChange={(event) => setDuration(event.target.value)} /></label>
+      <button type="button" disabled={rest.busy || !Number.isInteger(Number(duration)) || Number(duration) < 15 || Number(duration) > 900} onClick={() => rest.control({ operation: 'configure', enabled: rest.preferences.enabled, duration_seconds: Number(duration) })} className="min-h-11 px-3 text-sm text-zinc-200">Save duration</button>
+    </div> : null}
+    {rest.error ? <div role="alert" className="flex items-center gap-2 text-sm text-amber-300">{rest.error}<button type="button" className="min-h-11 px-2" onClick={rest.refresh}>Retry</button></div> : null}
+  </section>;
 }
 
 function PreviousPerformanceCard({ performance }) {
@@ -1369,7 +1399,7 @@ function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm 
   );
 }
 
-function ExerciseAutocomplete({ onChange, suggestions, value }) {
+function ExerciseAutocomplete({ onChange, onCommit, suggestions, value }) {
   const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
@@ -1413,7 +1443,13 @@ function ExerciseAutocomplete({ onChange, suggestions, value }) {
           onFocus={() => setOpen(true)}
           aria-controls={open && visibleSuggestions.length ? suggestionsId : undefined}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              onCommit?.(value);
+              setOpen(false);
+            } else if (event.key === 'Tab') {
+              onCommit?.(value);
+            } else if (event.key === 'Escape') {
               event.preventDefault();
               setOpen(false);
             } else if (open && visibleSuggestions.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
@@ -1436,7 +1472,7 @@ function ExerciseAutocomplete({ onChange, suggestions, value }) {
               onKeyDown={(event) => moveSuggestionFocus(event, index)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
-                onChange(exercise);
+                (onCommit || onChange)(exercise);
                 dismiss();
               }}
               className="block min-h-11 w-full rounded px-3 py-3 text-left text-sm text-zinc-200 hover:bg-white/5 focus-visible:bg-white/5"

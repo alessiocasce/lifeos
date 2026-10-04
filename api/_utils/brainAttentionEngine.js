@@ -30,7 +30,7 @@ export function decideAttention({ signal, permissions, recentEvents = [], recent
     && Date.parse(row.sent_at || row.created_at) > time.getTime() - 30 * DAY_MS);
   if (unanswered.length >= 2) return { ...base, reason_code: 'unanswered_suppression' };
   const localStart = Date.parse(startOfLocalDayUtcIso(time));
-  const todayMessages = recentOutbox.filter((row) => ['queued', 'claimed', 'sent'].includes(row.status)
+  const todayMessages = recentOutbox.filter((row) => row.source_type !== 'workout_rest_timer' && ['queued', 'claimed', 'sent'].includes(row.status)
     && Date.parse(row.created_at) >= localStart);
   if (todayMessages.length >= 3) return { ...base, reason_code: 'daily_interruption_cap' };
   const latest = todayMessages.reduce((max, row) => Math.max(max, Date.parse(row.created_at) || 0), 0);
@@ -49,7 +49,7 @@ export function decideAccountabilityAttention({ candidate, now = new Date(), dai
     topic: `accountability:${candidate?.rule_key || 'unknown'}`, cooldown_until: null, context_refs: [] };
   if (isAttentionQuietHour(time, quietStart, quietEnd)) return { ...base, decision: 'silent', reason_code: 'quiet_hours' };
   if (dailyCount >= 4) return { ...base, decision: 'silent', reason_code: 'daily_interruption_cap' };
-  const recent = recentRows.filter((row) => ['queued', 'claimed', 'sent'].includes(row.status));
+  const recent = recentRows.filter((row) => row.source_type !== 'workout_rest_timer' && ['queued', 'claimed', 'sent'].includes(row.status));
   const dismissals = recentRows.filter((row) => row.rule_key === candidate.rule_key
     && ['no', 'unknown', 'later'].includes(row.metadata?.resolution?.type));
   if (dismissals.length >= 2) return { ...base, decision: 'silent', reason_code: 'repeated_dismissal' };
@@ -92,6 +92,7 @@ export async function loadRecentAttentionState({ userId = getActionUserId(), cli
     client.from('brain_attention_events').select('id, topic_key, decision, reason_code, outbox_message_id, created_at')
       .eq('user_id', userId).gte('created_at', since).order('created_at', { ascending: false }).limit(100),
     client.from('brain_outbox_messages').select('id, source_type, source_id, status, metadata, created_at, sent_at')
+      .neq('source_type', 'workout_rest_timer')
       .eq('user_id', userId).eq('channel', 'whatsapp').gte('created_at', since)
       .order('created_at', { ascending: false }).limit(100),
   ]);

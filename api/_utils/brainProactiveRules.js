@@ -257,6 +257,7 @@ export async function shouldSuppressProactiveCandidate({ userId = getActionUserI
   if (candidate.source_type === 'accountability') {
     const since = new Date(nowDate.getTime() - 7 * 86400000).toISOString();
     const recent = await client.from('brain_outbox_messages')
+      .neq('source_type', 'workout_rest_timer')
       .select('rule_key, status, created_at, sent_at, metadata').eq('user_id', userId).eq('channel', candidate.channel)
       .gte('created_at', since).order('created_at', { ascending: false }).limit(100);
     if (recent.error) throw recent.error;
@@ -312,6 +313,7 @@ export async function getAttentionBudget({ userId = getActionUserId(), channel =
   const daily = await client
     .from('brain_outbox_messages')
     .select('id', { count: 'exact', head: true })
+    .neq('source_type', 'workout_rest_timer')
     .eq('user_id', userId)
     .eq('channel', channel)
     .gte('created_at', dayStart)
@@ -324,6 +326,7 @@ export async function getAttentionBudget({ userId = getActionUserId(), channel =
     const recentResult = await client
       .from('brain_outbox_messages')
       .select('id, rule_key, created_at, status')
+      .neq('source_type', 'workout_rest_timer')
       .eq('user_id', userId)
       .eq('channel', channel)
       .gte('created_at', since)

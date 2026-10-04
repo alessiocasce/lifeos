@@ -850,6 +850,11 @@ export const aiActionLogApi = {
   },
 };
 
+export const workoutRestApi = {
+  status: () => fetchCompanionApp('/api/ai/actions?view=workout_rest_timer'),
+  control: (body) => fetchCompanionApp('/api/ai/actions', { method: 'POST', body: JSON.stringify({ ...body, action: 'workout_rest_timer' }) }),
+};
+
 export const companionAppApi = {
   context: (signal) => fetchCompanionApp('/api/ai/actions?view=companion_context', { signal }),
   watch: (projectId, signal) => fetchCompanionApp(`/api/ai/actions?view=project_watch&project_id=${encodeURIComponent(projectId)}`, { signal }),

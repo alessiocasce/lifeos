@@ -17,6 +17,7 @@
     "test:reliability": "node scripts/test-reliability.js",
     "test:bridge": "node scripts/test-whatsapp-bridge-contract.js",
     "test:workout": "node scripts/test-workout-render.js && node scripts/test-workout-continuity.js",
+    "test:workout:rest": "node scripts/test-workout-rest.js",
     "test:ui": "playwright test",
     "test:companion": "node scripts/test-companion-beliefs.js",
     "test:attention": "node scripts/test-companion-monitors.js && node scripts/test-companion-app.js",

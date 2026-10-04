@@ -26,7 +26,7 @@ test('template starts immutable plan, warmup and working sets, and resumes after
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.getByRole('checkbox', { name: 'Warmup set' }).check();
   await page.getByRole('button', { name: 'Save Warmup', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Reps', exact: true })).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: 'Reps', exact: true })).toHaveValue('8');
   await page.getByRole('checkbox', { name: 'Warmup set' }).uncheck();
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('6');
   await page.getByRole('button', { name: 'Save Set', exact: true }).click();

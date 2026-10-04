@@ -1,5 +1,32 @@
 # LifeOS Project Context
 
+## Training targets / durable rest timer (2026-10-04)
+
+Set-trigger scheduling is best-effort: a protected subtransaction catches timer
+errors (SQLSTATE-only warning), preserves the saved set and restores any prior
+timer if replacement fails. Notification availability must never block logging.
+
+Exercise suggestion selection or keyboard Enter/Tab prefills only empty weight/reps
+from the matching Last Time set. No blur-time writes. Confirmed saves prefer the
+next historical set, otherwise repeat saved targets; RPE/notes always clear.
+Warmups and working sets keep separate numbering. Draft/storage/history remain intact.
+
+Rest timer is OFF by default; compact Live controls persist user-scoped server
+preferences. Existing authenticated `/api/ai/actions` handles timer controls;
+no new function. The `workout_sets` INSERT trigger queues the durable notification
+in the same transaction as the saved set, even if the PWA dies immediately.
+Source `workout_rest_timer` bypasses autonomous attention/MONITOR/MESSAGE, does
+not acquire reply ownership, and uses existing provider mappings. OFF/end/delete
+cancel queued/claimed rows; already handed-to-bridge sends cannot be recalled.
+Five-minute late grace; actual arrival is bounded by bridge poll cadence/availability.
+
+Requires `20261004134735_workout_rest_timer.sql` before backend/frontend deployment.
+Applied to production in this rollout (Supabase-assigned version; original local
+filename was `20261002175702_workout_rest_timer.sql`). No historical ledger repair.
+Physical WhatsApp/iPhone acceptance remains pending. Run
+`npm run test:workout:rest`, targeted `training-prefill-rest.spec.js`, History and
+continuity browser cases. See QA_WORKOUT for physical background/WhatsApp QA.
+
 ## Training Live / History (2026-10-02)
 
 Training has direct Live and History subviews. History selection is local UI

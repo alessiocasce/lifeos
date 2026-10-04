@@ -1,5 +1,28 @@
 # WhatsApp Proactive Architecture
 
+## User-Armed Training Rest Alerts
+
+`workout_rest_timer` / `workout.rest_timer` is a notification, not a monitor/rule
+family. Authenticated Training controls set server-only user preferences and a
+configured canonical personal destination (one allowlisted non-group recipient).
+No arbitrary destination/copy enters from the browser. No Companion permission
+is mutated or required. Quiet hours and autonomous caps/spacing do not apply;
+timer rows also do not consume the autonomous attention budget.
+
+Migration `20261004134735_workout_rest_timer.sql` schedules on actual set INSERT
+in the same transaction. User advisory locking + a partial unique index allow
+one queued/claimed timer. Set ID is the idempotency key; newer saves cancel old
+timers, including warmups. OFF and workout end/delete cancel pending rows.
+Poll revalidates enabled preference, latest source set, recipient and live workout.
+Expires five minutes after due. Existing claim/retry/ACK/provider mapping remains
+in use. Assistant metadata is `proactive_message:false`,
+`expected_reply_type:notification_only`: rest alerts never own Health/memo replies.
+
+No bridge code change. Arrival is due-time plus polling/network latency, not an
+exact second guarantee. Already claimed/physically sending notifications have
+an unavoidable cancellation race. Physical background/lock delivery needs QA;
+isolated SQL/browser tests do not prove Oracle/WhatsApp operation.
+
 ## Interaction Ownership And Transport Receipts
 
 The current reply target is no longer inferred from every unresolved historical message. One versioned `brain_interaction_state` row owns the thread after the outgoing message has a validated delivery mapping. Native replies use `(user, channel, canonical recipient, provider message id)` in `brain_whatsapp_message_deliveries`; unknown or cross-recipient quote IDs produce a read-only clarification.

@@ -396,6 +396,7 @@ export function looksLikeIndependentProactiveCommand(message) {
 }
 
 export function buildProactiveWorkingContextFromOutbox(outboxMessage) {
+  if (outboxMessage?.source_type === 'workout_rest_timer') return null;
   const metadata = outboxMessage?.metadata && typeof outboxMessage.metadata === 'object' ? outboxMessage.metadata : {};
   if (metadata.expected_reply_type === MONITOR_REPLY_TYPE) {
     return { language: metadata.language === 'en' ? 'en' : 'it', last_subject: {

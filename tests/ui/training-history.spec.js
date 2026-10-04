@@ -95,7 +95,7 @@ test('editing warmup classification preserves load, notes and separate set numbe
   await editor.getByRole('button', { name: 'Save edit', exact: true }).click();
   const row = () => page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))
     .find((session) => session.id === 'qa-prior').workout_sets.find((set) => set.id === 'qa-warmup'));
-  expect(await row()).toMatchObject({ is_warmup: false, set_number: 3, weight: 100, reps: 1, rpe: 8, notes: 'Controlled' });
+  expect(await row()).toMatchObject({ is_warmup: false, set_number: 3, weight: 100, reps: 1, rpe: null, notes: 'Controlled' });
   await page.reload();
   await page.getByRole('button', { name: 'Edit set', exact: true }).last().click();
   await expect(editor.getByRole('textbox', { name: 'Weight kg', exact: true })).toHaveValue('100');

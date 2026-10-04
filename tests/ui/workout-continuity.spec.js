@@ -40,7 +40,7 @@ test('unsaved full draft and exercise switch survive reload', async ({ page }, t
 test('confirmed save preserves exercise and load, advances set, and survives root relaunch', async ({ page }) => {
   await fillDraft(page);
   await page.getByRole('button', { name: 'Save Set', exact: true }).click();
-  await expect(reps(page)).toHaveValue('');
+  await expect(reps(page)).toHaveValue('8');
   await page.goto('/');
   await expect(page).toHaveURL(/\/workout$/);
   await expect(exercise(page)).toHaveValue('Barbell Curl');
@@ -64,7 +64,7 @@ test('failed mutation keeps draft through reload and never pretends it saved', a
 test('saved sets remain editable, deletable and session can reopen', async ({ page }) => {
   await fillDraft(page);
   await page.getByRole('button', { name: 'Save Set', exact: true }).click();
-  await expect(reps(page)).toHaveValue('');
+  await expect(reps(page)).toHaveValue('8');
   await page.getByRole('button', { name: 'Edit set', exact: true }).click();
   const editor = page.getByRole('group', { name: 'Edit workout set' });
   await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('10');

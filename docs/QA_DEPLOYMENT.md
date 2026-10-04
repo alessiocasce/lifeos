@@ -1,5 +1,34 @@
 # LifeOS Deployment QA
 
+## User-Armed Workout Rest Timer
+
+Apply only `20261004134735_workout_rest_timer.sql` before deploying this slice.
+Production applied it via targeted Supabase `apply_migration` on 2026-10-04.
+The connector assigned version `20261004134735`; the original local filename was
+`20261002175702_workout_rest_timer.sql`. Repository identity matches the applied
+version; historical ledger gaps are untouched. Never replay the original filename.
+Production rollback-scoped SQL passed OFF, exact due/expiry, duplicate, warmup,
+replacement, duration change, Cancel/OFF/End/Delete and non-timer source isolation.
+Cleanup verified zero test workouts/sets/preferences/outbox rows. Missing recipient
+preserves production sets; unexpected outbox failure was fault-injected locally only.
+Advisors: new preferences table has intentional RLS/no policies (service-only);
+new functions have fixed search paths and no anon/authenticated execution grants.
+Historical advisor warnings were not changed. Physical iPhone/WhatsApp QA remains.
+It adds server-only user preferences, restricted RPC, best-effort set-insert scheduling,
+one-pending-timer uniqueness and workout end/delete cancellation triggers. No
+existing workout rows are rewritten; OFF default means no historical timer backfill.
+Fresh `schema.sql` mirrors the migration; do not rerun all schema on production.
+Scheduling has a protected exception block: timer/outbox failure must not roll back
+the saved set. Local fault injection verifies both set survival and prior-timer restoration.
+
+Deploy Vercel after migration. Function count stays seven; existing actions and
+outbox routes are reused. Oracle bridge code is unchanged, no restart required.
+Check outbox polling enabled and PM2 healthy; current 60-second cadence adds up
+to roughly one minute to due-time arrival. Do not promise second-precise delivery.
+Enable timer in Training, save set, lock/close PWA and verify physical WhatsApp.
+Test early second save, OFF, Cancel, End/Delete and five-minute offline expiry.
+Queued/claimed cancellation cannot recall a physically in-flight bubble. See QA_WORKOUT.
+
 ## WhatsApp Interaction Reliability Migration
 
 This is separate from the already-applied `supabase/releases/reliability.sql` source-id/project release. Before deploying this backend patch:

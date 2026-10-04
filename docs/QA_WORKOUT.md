@@ -1,5 +1,37 @@
 # LifeOS Workout QA
 
+## Prefill / Rest Timer (2026-10-04)
+
+Select a suggested exercise or press Enter/Tab after typing it. Only empty
+weight/reps use the matching historical warmup/working set. Confirmed save
+prepares the next historical set, or repeats the saved load/reps if absent.
+Every save clears RPE and notes. Manual fields, reload and History remain intact.
+Rest controls sit in Live: explicit opt-in (OFF default), 15–900 second duration,
+cancel. Changing duration affects the next save only. Preferences are user-scoped
+in Supabase, not semantic memory or browser credentials.
+
+Apply `20261004134735_workout_rest_timer.sql` before deploying. Successful set
+insertion attempts durable scheduling; timer failures cannot roll back the set.
+Protected subtransactions also restore the prior timer on replacement failure;
+local fault injection covers this. Failed set inserts cannot queue one. The PWA
+countdown is timestamp-derived and never sends the alert. Bridge polling does;
+60-second polling can add roughly a minute of normal delivery latency. Five-minute
+expiry prevents long-offline gym alerts. Physical delivery is not exactly-once.
+Cancel/OFF/end/delete cannot unsend a bubble already handed to WhatsApp.
+
+Focused automation: `npm run test:workout:rest`, `npm run test:workout`,
+`npx playwright test tests/ui/training-prefill-rest.spec.js tests/ui/training-history.spec.js`.
+The new timer script executes actual migration/triggers on isolated PGlite, plus
+outbox claim/ACK/provider mapping and non-ownership tests. Browser API fixtures
+test UX only, not actual WhatsApp or Supabase authorization.
+
+After deploy: enable 120 seconds, log a warmup/working set, lock/close LifeOS and
+verify the WhatsApp bubble arrives. Save another set early: only the latest alert
+should arrive. Change duration during rest: old due time stays fixed. Test OFF,
+Cancel, End and Delete before expiry. Simulate bridge offline beyond five minutes:
+alert expires, not delivered. Verify a pending Brain clarification retains ownership
+after a rest alert. Confirm Live/History and iPhone draft recovery still work.
+
 ## Live / History and Full Last Time (2026-10-02)
 
 - Training exposes Live and History directly; no Advanced / Switch session.
