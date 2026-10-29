@@ -314,6 +314,12 @@ export const aiReportApi = {
 };
 
 const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
+export const userSettingsApi = {
+  read: async () => JSON.parse(localStorage.getItem(`qa-settings:${user().id}`) || JSON.stringify({ profile: localStorage.getItem('qa-profile-incomplete') ? null : { username: 'qa_user', display_name: 'QA User' }, preferences: { language: 'en', workout_sharing: false, share_workout_notes: false } })),
+  async save(profile, preferences) { const next = { profile, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); return next; },
+  async savePreferences(preferences) { const next = { ...await this.read(), preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); return preferences; },
+};
+
 export const workoutRestApi = {
   status: async () => ({ preferences: JSON.parse(localStorage.getItem('qa-rest-preferences') || '{"enabled":false,"duration_seconds":120}'), timer: JSON.parse(localStorage.getItem('qa-rest-timer') || 'null') }),
   control: async (body) => {

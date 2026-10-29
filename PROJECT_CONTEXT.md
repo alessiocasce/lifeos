@@ -1,5 +1,15 @@
 # LifeOS Project Context
 
+## Social Training identity foundation (2026-10-29, local only)
+
+Settings `/settings` is available from Records/More. Public profiles are explicitly
+authored; no email/auth metadata is copied. Private user preferences default to
+English and both sharing flags OFF; these flags publish no workouts. Invoker RPCs
+derive ownership from auth.uid(), with two-user RLS tests. Existing owner-only
+Companion/rest APIs and all private-table policies remain unchanged. Training
+works without completed onboarding. See docs/SOCIAL_TRAINING_FOUNDATION.md.
+Migration `20261029200856_social_training_identity.sql` is NOT applied to production.
+
 ## Training targets / durable rest timer (2026-10-04)
 
 Set-trigger scheduling is best-effort: a protected subtransaction catches timer

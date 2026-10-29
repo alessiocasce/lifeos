@@ -11,6 +11,7 @@ import {
   workoutData,
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { useUserSettings } from '../hooks/useUserSettings';
 import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
 import { localDate, localTime } from '../utils/date';
 import { buildHabitUpdate, getHabitEntry, normalizeHygieneObject } from '../utils/habits';
@@ -53,6 +54,7 @@ export function LifeOSProvider({ children }) {
   const [finance, setFinance] = useState(financeData);
   const [expandedWorkout, setExpandedWorkout] = useState(workoutData.history[0].date);
   const [authUser, setAuthUser] = useState(null);
+  const userSettings = useUserSettings(authUser?.id);
   const [authStatus, setAuthStatus] = useState(isSupabaseConfigured ? 'loading' : 'not-configured');
   const [authError, setAuthError] = useState('');
   const [workoutSessions, setWorkoutSessions] = useState([]);
@@ -1779,7 +1781,7 @@ export function LifeOSProvider({ children }) {
     ...actions,
   };
 
-  return <LifeOSContext.Provider value={value}>{children}</LifeOSContext.Provider>;
+  return <LifeOSContext.Provider value={{ ...value, userSettings }}>{children}</LifeOSContext.Provider>;
 }
 
 function sortHealthLogs(rows = []) {

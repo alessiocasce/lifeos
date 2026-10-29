@@ -1,4 +1,4 @@
-import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Target, X } from 'lucide-react';
+import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { useLocalDay } from '../hooks/useLocalDay';
@@ -7,6 +7,7 @@ import { LifeOSLogo } from './LifeOSLogo';
 import { PullToRefresh } from './PullToRefresh';
 
 const destinations = {
+  settings: { label: 'Settings', icon: Settings },
   home: { label: 'Command', icon: Command },
   workout: { label: 'Training', icon: Dumbbell },
   projects: { label: 'Projects', icon: Target },
@@ -17,11 +18,11 @@ const destinations = {
   finances: { label: 'Finances', icon: Landmark },
 };
 const primary = ['home', 'workout', 'projects', 'assistant'];
-const utilities = ['health', 'calendar', 'memos', 'finances'];
+const utilities = ['health', 'calendar', 'memos', 'finances', 'settings'];
 const mobile = ['home', 'projects', 'workout', 'assistant', 'more'];
 
 export function Shell({ children }) {
-  const { activeTab, activeWorkoutSession, authUser, setActiveTab, setActiveWorkoutId, signOut, workoutSessions } = useLifeOS();
+  const { activeTab, activeWorkoutSession, authUser, userSettings, setActiveTab, setActiveWorkoutId, signOut, workoutSessions } = useLifeOS();
   const [signingOut, setSigningOut] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -105,7 +106,10 @@ export function Shell({ children }) {
           </div>
         </header>
         <PullToRefresh>
-          <div className={'workspace-content ' + (liveSession && activeTab !== 'workout' ? 'has-training-dock' : '')}>{children}</div>
+          <div className={'workspace-content ' + (liveSession && activeTab !== 'workout' ? 'has-training-dock' : '')}>
+            {userSettings?.status === 'ready' && !userSettings.profile && activeTab !== 'settings' ? <button className="mb-5 min-h-11 border-b border-white/10 text-sm text-zinc-300" onClick={() => navigate('settings')}>Set up your profile and language</button> : null}
+            {children}
+          </div>
         </PullToRefresh>
       </main>
       {liveSession && activeTab !== 'workout' ? (

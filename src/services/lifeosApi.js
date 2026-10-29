@@ -267,6 +267,32 @@ export const authApi = {
   },
 };
 
+export const userSettingsApi = {
+  async read() {
+    const client = requireSupabase();
+    const { data, error } = await client.auth.getUser();
+    if (error || !data.user) throw new Error('Sign in before loading settings.');
+    const [profile, preferences] = await Promise.all([
+      client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', data.user.id).maybeSingle(),
+      client.from('user_preferences').select('language,workout_sharing,share_workout_notes').eq('user_id', data.user.id).maybeSingle(),
+    ]);
+    return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'en', workout_sharing: false, share_workout_notes: false } };
+  },
+  async save(profile, preferences) {
+    const client = requireSupabase();
+    const { data, error } = await client.auth.getUser();
+    if (error || !data.user) throw new Error('Sign in before saving settings.');
+    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(profile.username || '') || !profile.display_name?.trim() || profile.display_name.trim().length > 60) throw new Error('Use a 3–24 character username and a display name.');
+    throwIfError(await client.rpc('save_user_settings', { p_username: profile.username.trim(), p_display_name: profile.display_name.trim(),
+      p_language: preferences.language, p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true }));
+    return this.read();
+  },
+  async savePreferences(preferences) {
+    return throwIfError(await requireSupabase().rpc('set_user_preferences', { p_language: preferences.language,
+      p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true }));
+  },
+};
+
 export const workoutApi = {
   async list(limit = 25) {
     const rows = throwIfError(
