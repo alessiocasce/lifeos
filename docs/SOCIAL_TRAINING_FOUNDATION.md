@@ -42,7 +42,7 @@ The existing 25-session history bound remains; no all-history leaderboard is
 computed from that bounded client dataset. Rest scheduling keeps the same trigger,
 expiry/idempotency/permissions; only next-set exercise matching becomes ID-aware.
 
-Migration order: identity `20261029200856`, then catalog `20261029201131`.
+Migration order: identity `20261029211252`, then catalog `20261029211303`.
 Backfill may advance updated_at triggers but never changes performed_at/date,
 authored exercise text, loads, reps or notes. Review `exercise_legacy_mapping_report()`
 before/after rollout; ambiguous rows need explicit user/curator confirmation.
@@ -52,7 +52,8 @@ before/after rollout; ambiguous rows need explicit user/curator confirmation.
 Apply only approved targeted migrations in timestamp order before deploying code.
 Never run a broad production `db push`; the historical ledger has gaps.
 Forward fixes should preserve authored names and private workout policies.
-Physical iPhone acceptance and production rollout remain separate authorization.
+Physical iPhone acceptance remains owner QA. The authorized production schema
+rollout passed; see `SOCIAL_TRAINING_DEPLOYMENT.md` for verification boundaries.
 
 ## English / Italian Interface
 
@@ -87,10 +88,10 @@ translation updates require review: no automatic translation of private records.
   user, preserve an unsaved set through Settings, use Other, inspect History and
   verify warmup/working prefills and RPE/notes reset. Physical iPhone remains required.
 
-Production rollout requires separate authorization:
+Approved rollout sequence (also the order for any future authorized rollout):
 1. Snapshot/review current schema and legacy mapping inventory read-only.
-2. Apply only `20261029200856_social_training_identity.sql`, then
-   `20261029201131_social_training_catalog.sql` through targeted migration execution.
+2. Apply only `20261029211252_social_training_identity.sql`, then
+   `20261029211303_social_training_catalog.sql` through targeted migration execution.
    Do not replay historical migrations. If tooling assigns another version, align
    checked-in identity with the applied ledger before any future CLI push.
 3. Verify physical objects, grants/RLS, catalog count, nullable FKs, mapping report,

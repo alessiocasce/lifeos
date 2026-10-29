@@ -27,7 +27,7 @@ try {
     create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     grant usage on schema auth,public to authenticated,anon;
     create function public.set_updated_at() returns trigger language plpgsql set search_path='' as $$ begin new.updated_at=now(); return new; end $$;`);
-  await db.exec(fs.readFileSync('supabase/migrations/20261029200856_social_training_identity.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261029211252_social_training_identity.sql','utf8'));
   const as = async (id, sql) => { await db.exec('reset role'); await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]); await db.exec('set role authenticated'); return db.query(sql); };
   await as(A,"select save_user_settings('alpha','Alpha','it',false,false)");
   await as(B,"select save_user_settings('bravo','Bravo','en',false,false)");
@@ -67,7 +67,7 @@ try {
   assert.equal((await as(B,`update workout_sets set weight=999 where workout_id='${w}' returning id`)).rows.length,0);
   assert.equal((await as(B,'select * from workouts')).rows.length,0);
   await db.exec('reset role');
-  await db.exec(fs.readFileSync('supabase/migrations/20261029201131_social_training_catalog.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261029211303_social_training_catalog.sql','utf8'));
   const mapped=await as(A,'select exercise,exercise_id from workout_sets order by set_number');
   assert.equal(mapped.rows[0].exercise_id,resolveExercise('Panca piana con manubri').id);
   assert.equal(mapped.rows[1].exercise_id,null);

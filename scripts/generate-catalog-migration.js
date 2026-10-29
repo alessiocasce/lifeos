@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { catalog } from './generate-exercise-catalog.js';
-const file='supabase/migrations/20261029201131_social_training_catalog.sql';
+const file='supabase/migrations/20261029211303_social_training_catalog.sql';
 const marker='-- Catalog seed and cautious backfill are generated below by generate-catalog-migration.js.';
 const prefix=fs.readFileSync(file,'utf8').split(marker)[0]+marker+'\n';
 const quote = value => `'${String(value).replaceAll("'","''")}'`;

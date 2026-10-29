@@ -1,6 +1,6 @@
 # LifeOS Project Context
 
-## Social Training identity foundation (2026-10-29, local only)
+## Social Training identity foundation (2026-10-29)
 
 English/Italian UI now uses `src/i18n` and private per-user language preferences.
 Settings saves language immediately without remounting Training. Authored content
@@ -8,15 +8,19 @@ is never translated; canonical exercise display labels change, stored IDs/text d
 not. Settings requests bind a captured auth token and expected identity to prevent
 cross-account stale-form writes. Guest language is temporary. Focused browser QA
 is `tests/ui/social-training.spec.js`; database/security QA is `test:social-training`.
-Both new migrations remain unapplied to production; all three milestones are local.
+Production schema migrations `20261029211252` and `20261029211303` are applied and
+verified. These Supabase-assigned versions replace the original local filenames.
+Historical content hashes/counts, rest preferences and private policies match
+before/after. A rollback-only authenticated A/B role smoke passed in production;
+this is not physical iPhone or real second-account browser acceptance.
 Full rollout order, privacy rules and generation checks are in
 `docs/SOCIAL_TRAINING_FOUNDATION.md`. No social feed or ranking is implemented.
 
 Catalog milestone adds 217 curated bilingual IDs, aliases, load conventions,
 nullable set/template IDs, snapshot backfill and catalog-first/custom selection.
 Legacy text is preserved; ambiguous shorthand stays unmapped. Rest scheduling
-only gains ID-aware next-set matching. Catalog migration `20261029201131` follows
-identity. No feed, leaderboard or cross-user workout reads. No production changes.
+only gains ID-aware next-set matching. Catalog migration `20261029211303` follows
+identity. No feed, leaderboard or cross-user workout reads.
 
 Settings `/settings` is available from Records/More. Public profiles are explicitly
 authored; no email/auth metadata is copied. Private user preferences default to
@@ -24,7 +28,10 @@ English and both sharing flags OFF; these flags publish no workouts. Invoker RPC
 derive ownership from auth.uid(), with two-user RLS tests. Existing owner-only
 Companion/rest APIs and all private-table policies remain unchanged. Training
 works without completed onboarding. See docs/SOCIAL_TRAINING_FOUNDATION.md.
-Migration `20261029200856_social_training_identity.sql` is NOT applied to production.
+The final mapping audit deliberately leaves equipment-ambiguous shorthand unmapped.
+Coverage is 131/442 sets, 6/16 template exercises and 24/61 snapshot entries. Added
+aliases do not change existing canonical IDs. See the foundation handoff and
+`docs/SOCIAL_TRAINING_DEPLOYMENT.md` for production verification boundaries.
 
 ## Training targets / durable rest timer (2026-10-04)
 

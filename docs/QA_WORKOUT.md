@@ -1,6 +1,6 @@
 # LifeOS Workout QA
 
-## Social Training Foundation (local only, 2026-10-29)
+## Social Training Foundation (2026-10-29)
 
 Catalog-first selection supports bilingual names, muscle filters, recent choices
 and keyboard Enter/Tab/arrows/Escape. Other/Altro keeps custom movements private
@@ -18,10 +18,11 @@ cross users. Missing profile does not block Training. Sharing switches expose no
 workouts yet. Rest/Companion owner-only APIs remain restricted to the configured
 owner; this feature does not provision WhatsApp for other users.
 
-Requires two targeted migrations before any separately authorized deployment:
-identity `20261029200856`, catalog `20261029201131`. See
+Production schema has both targeted migrations:
+identity `20261029211252`, catalog `20261029211303`. See
 `SOCIAL_TRAINING_FOUNDATION.md` for exact rollout and privacy boundaries.
-No production writes or physical iPhone verification are part of local QA.
+Production rollback-only role/fixture smoke passed separately from local browser
+QA. No physical iPhone verification is claimed; see SOCIAL_TRAINING_DEPLOYMENT.
 
 ## Prefill / Rest Timer (2026-10-04)
 
