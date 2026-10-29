@@ -73,7 +73,7 @@ export function clearWorkoutDraft(userId, sessionId, { storage } = {}) {
 export function readTrainingWorkspace(userId, { storage, now = Date.now() } = {}) {
   if (!userId) return null;
   const row = read(keyFor(userId, 'workspace'), storage, now);
-  if (!row || typeof row.tab !== 'string' || !['home', 'workout', 'projects', 'health', 'assistant', 'calendar', 'memos', 'finances'].includes(row.tab)) return null;
+  if (!row || typeof row.tab !== 'string' || !['home', 'workout', 'projects', 'health', 'assistant', 'calendar', 'memos', 'finances', 'settings'].includes(row.tab)) return null;
   return { tab: row.tab, sessionId: typeof row.sessionId === 'string' ? row.sessionId.slice(0, 100) : null };
 }
 

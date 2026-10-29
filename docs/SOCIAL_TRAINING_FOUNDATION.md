@@ -16,8 +16,6 @@ Neither these settings nor language grant any WhatsApp/Companion permission.
 The configured-owner backend guard and rest recipient contract are unchanged.
 Other members can use their own Training but do not inherit the owner's WhatsApp.
 
-## Local Validation / Rollout
-
 ## Canonical Exercises
 
 217 curated movements have stable deterministic UUIDs and immutable slugs. The
@@ -53,3 +51,55 @@ Apply only approved targeted migrations in timestamp order before deploying code
 Never run a broad production `db push`; the historical ledger has gaps.
 Forward fixes should preserve authored names and private workout policies.
 Physical iPhone acceptance and production rollout remain separate authorization.
+
+## English / Italian Interface
+
+`src/i18n/index.js` owns the runtime language store, interpolation and Rome-aware
+date formatting. English source keys and the generated Italian dictionary cover
+navigation, Settings, Training/History/templates/rest controls, Home, Health,
+Calendar, Memos, Projects, Finances, Companion chrome and authentication screens.
+Record names, notes, chat responses and other authored content are not translated.
+Canonical exercise labels change language without rewriting stored exercise text
+or IDs; explicit custom exercises retain their authored labels.
+
+Settings saves language immediately, independently of profile completion. The
+private per-user preference wins after login; guest language selection is temporary.
+Requests capture and validate an auth token and expected identity, then bind that
+token to the database request to prevent a stale form writing into another account.
+Result revisions separately fence stale UI responses. Language changes do not
+remount Training or replace the existing persisted draft/active-session contract.
+
+Translation source: `src/i18n/italian-source.js`; regenerate with
+`node scripts/generate-italian.js`, verify with `--check`. Catalog generation and
+translation updates require review: no automatic translation of private records.
+
+## Focused QA / Rollout
+
+- Run `npm run test:social-training` for actual PGlite migrations, two-user RLS,
+  canonical backfill, timer numbering, locale/custom labels and account-token fencing.
+- Run `tests/ui/social-training.spec.js`; retain targeted Training History,
+  keyboard picker, prefill/rest and session-switching regressions.
+- Run `npm run test:workout`, `npm run test:workout:rest`, `npm run build`, generator
+  parity checks and `git diff --check`. Do not substitute the full UI suite.
+- Mobile acceptance: switch English/Italian and back, reload/sign in as a different
+  user, preserve an unsaved set through Settings, use Other, inspect History and
+  verify warmup/working prefills and RPE/notes reset. Physical iPhone remains required.
+
+Production rollout requires separate authorization:
+1. Snapshot/review current schema and legacy mapping inventory read-only.
+2. Apply only `20261029200856_social_training_identity.sql`, then
+   `20261029201131_social_training_catalog.sql` through targeted migration execution.
+   Do not replay historical migrations. If tooling assigns another version, align
+   checked-in identity with the applied ledger before any future CLI push.
+3. Verify physical objects, grants/RLS, catalog count, nullable FKs, mapping report,
+   untouched authored values and existing timer triggers. Review ambiguous/unmapped
+   names; do not infer their equipment or automatically force a canonical ID.
+4. Only then push authorized code and verify automatic Vercel production deployment,
+   two-account privacy, language persistence, Training and owner rest-timer QA.
+
+The migrations are additive. Prefer code rollback/forward fixes over dropping IDs,
+catalogs or private policies. Sharing preferences do not authorize public workout
+reads. Phase 2 needs an explicit completed-workout public projection, per-workout
+sharing decisions and full-history server queries, not relaxed private-table RLS.
+Known limits: 25-session client history, a bundled catalog mirror, no feed/ranking,
+no new-member WhatsApp recipient provisioning and no physical-device verification.

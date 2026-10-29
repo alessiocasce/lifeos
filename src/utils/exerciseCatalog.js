@@ -1,4 +1,5 @@
 import catalog from '../data/exerciseCatalog.json' with { type: 'json' };
+import { getLanguage } from '../i18n/index.js';
 export const exerciseCatalog = catalog;
 export const normalizeExerciseText = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 const byId = new Map(catalog.map(e => [e.id,e]));
@@ -20,7 +21,8 @@ export function exerciseIdentityKey(value) {
   const exercise=resolveExercise(text);
   return exercise ? `catalog:${exercise.id}` : `legacy:${normalizeExerciseText(text)}`;
 }
-export function exerciseLabel(value, language='en') {
+export function exerciseLabel(value, language=getLanguage()) {
+  if (value && typeof value==='object' && value.exercise_id===null) return value.exercise || '';
   const exercise = value?.exercise_id ? byId.get(value.exercise_id) : resolveExercise(typeof value==='object' ? value?.exercise : value);
   return exercise?.[language==='it' ? 'name_it' : 'name_en'] || (typeof value==='string' ? value : value?.exercise) || '';
 }

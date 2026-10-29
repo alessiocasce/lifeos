@@ -1,5 +1,28 @@
 # LifeOS Workout QA
 
+## Social Training Foundation (local only, 2026-10-29)
+
+Catalog-first selection supports bilingual names, muscle filters, recent choices
+and keyboard Enter/Tab/arrows/Escape. Other/Altro keeps custom movements private
+with a null canonical ID. Legacy text stays unchanged; only exact unambiguous
+aliases map. Last Time/grouping/prefills and timer numbering use canonical IDs
+with conservative legacy fallback; warmups remain separate.
+
+Run `npm run test:social-training` and `tests/ui/social-training.spec.js`, plus
+targeted Training History, prefill/rest and session-switching cases. Check at
+390x844: select a canonical exercise, edit load/RPE/notes, visit Settings, switch
+Italian and back, return Live and reload. Preserve the entire draft and session.
+History should localize known exercise labels, never authored workout names/notes.
+Custom labels stay authored. Switch accounts: language and private data must not
+cross users. Missing profile does not block Training. Sharing switches expose no
+workouts yet. Rest/Companion owner-only APIs remain restricted to the configured
+owner; this feature does not provision WhatsApp for other users.
+
+Requires two targeted migrations before any separately authorized deployment:
+identity `20261029200856`, catalog `20261029201131`. See
+`SOCIAL_TRAINING_FOUNDATION.md` for exact rollout and privacy boundaries.
+No production writes or physical iPhone verification are part of local QA.
+
 ## Prefill / Rest Timer (2026-10-04)
 
 Select a suggested exercise or press Enter/Tab after typing it. Only empty

@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { Loader2, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { companionAppApi } from '../services/lifeosApi';
@@ -39,24 +40,24 @@ function CompanionStateContent({ onCorrect }) {
     } catch (failure) { if (started === generation.current) setError(failure.message); }
     finally { mutation.current = false; if (started === generation.current) setBusy(false); }
   };
-  return <section aria-label="Current Companion state" className="grid gap-5">
-    <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Current understanding</h3>
-      <button type="button" className="icon-button" title="Refresh current understanding" aria-label="Refresh current understanding" disabled={busy} onClick={() => setRevision((value) => value + 1)}><RefreshCw size={16} /></button>
+  return <section aria-label={t("Current Companion state")} className="grid gap-5">
+    <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">{t("Current understanding")}</h3>
+      <button type="button" className="icon-button" title={t("Refresh current understanding")} aria-label={t("Refresh current understanding")} disabled={busy} onClick={() => setRevision((value) => value + 1)}><RefreshCw size={16} /></button>
     </div>
-    {!data && !error ? <Loader2 size={18} className="animate-spin text-zinc-400" aria-label="Loading Companion state" /> : null}
+    {!data && !error ? <Loader2 size={18} className="animate-spin text-zinc-400" aria-label={t("Loading Companion state")} /> : null}
     {error ? <p role="alert" className="text-sm text-red-300">{error}</p> : null}
     {data ? <>
       {data.assumptions.length ? <dl>{data.assumptions.map((item) => <div key={`${item.kind}:${item.label}`} className="flex items-start gap-3 border-b border-white/10 py-3">
-        <div className="min-w-0 flex-1"><dt className="text-xs text-zinc-500">{item.label}{item.kind !== 'routine' && item.uncertain ? ' · Not certain' : ''}</dt><dd className="mt-1 break-words text-sm text-zinc-200">{item.kind === 'routine' ? formatRoutineState(item.text, item.uncertain) : item.text}</dd></div>
-        <button type="button" className="icon-button" title={`Correct ${item.label}`} aria-label={`Correct ${item.label}`} onClick={() => onCorrect(item)}><Pencil size={15} /></button>
-      </div>)}</dl> : <p className="text-sm text-zinc-500">No current assumptions recorded.</p>}
-      <section aria-label="Project Watches"><h3 className="text-sm font-semibold">Project Watches</h3>
+        <div className="min-w-0 flex-1"><dt className="text-xs text-zinc-500">{t(item.label)}{item.kind !== 'routine' && item.uncertain ? t(" · Not certain") : ''}</dt><dd className="mt-1 break-words text-sm text-zinc-200">{item.kind === 'routine' ? t(formatRoutineState(item.text, item.uncertain)) : item.text}</dd></div>
+        <button type="button" className="icon-button" title={t("Correct {v0}", { v0: item.label })} aria-label={t("Correct {v0}", { v0: item.label })} onClick={() => onCorrect(item)}><Pencil size={15} /></button>
+      </div>)}</dl> : <p className="text-sm text-zinc-500">{t("No current assumptions recorded.")}</p>}
+      <section aria-label={t("Project Watches")}><h3 className="text-sm font-semibold">{t("Project Watches")}</h3>
         {data.watches.length ? data.watches.map((watch, index) => <div key={`${watch.project_name}:${index}`} className="border-b border-white/10 py-3">
           <p className="break-words text-sm text-zinc-200">{watch.project_name}</p>
-          <p className="mt-1 text-xs text-zinc-400">{watch.state === 'active' ? (data.permissions.monitor ? 'Watching' : 'Permission paused') : watch.state === 'suspended' ? 'Suspended' : 'Expired'}</p>
-        </div>) : <p className="mt-2 text-sm text-zinc-500">No active project Watches.</p>}
+          <p className="mt-1 text-xs text-zinc-400">{watch.state === 'active' ? (data.permissions.monitor ? t("Watching") : t("Permission paused")) : watch.state === 'suspended' ? t("Suspended") : t("Expired")}</p>
+        </div>) : <p className="mt-2 text-sm text-zinc-500">{t("No active project Watches.")}</p>}
       </section>
-      <section aria-label="Companion permissions"><h3 className="text-sm font-semibold">Allowed without asking each time</h3>
+      <section aria-label={t("Companion permissions")}><h3 className="text-sm font-semibold">{t("Allowed without asking each time")}</h3>
         <CompanionPermissionControls permissions={data.permissions} disabled={busy} onChange={changePermission} />
       </section>
     </> : null}

@@ -2,6 +2,16 @@
 
 ## Social Training identity foundation (2026-10-29, local only)
 
+English/Italian UI now uses `src/i18n` and private per-user language preferences.
+Settings saves language immediately without remounting Training. Authored content
+is never translated; canonical exercise display labels change, stored IDs/text do
+not. Settings requests bind a captured auth token and expected identity to prevent
+cross-account stale-form writes. Guest language is temporary. Focused browser QA
+is `tests/ui/social-training.spec.js`; database/security QA is `test:social-training`.
+Both new migrations remain unapplied to production; all three milestones are local.
+Full rollout order, privacy rules and generation checks are in
+`docs/SOCIAL_TRAINING_FOUNDATION.md`. No social feed or ranking is implemented.
+
 Catalog milestone adds 217 curated bilingual IDs, aliases, load conventions,
 nullable set/template IDs, snapshot backfill and catalog-first/custom selection.
 Legacy text is preserved; ambiguous shorthand stays unmapped. Rest scheduling

@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { X } from 'lucide-react';
@@ -97,13 +99,13 @@ export function AiActionHistoryList({ logs = [], status, limit = 10, quietErrors
   const shownLogs = logs.slice(0, limit);
 
   if (status === 'loading' && !logs.length) {
-    return <LoadingActionHistory label="Loading recent AI actions" />;
+    return <LoadingActionHistory label={t("Loading recent AI actions")} />;
   }
 
   if (!shownLogs.length) {
     return (
       <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-        <p className="text-sm font-medium text-zinc-100">No AI actions yet.</p>
+        <p className="text-sm font-medium text-zinc-100">{t("No AI actions yet.")}</p>
       </div>
     );
   }
@@ -135,15 +137,15 @@ function ActionLogCard({ log, onClick, quietErrors = false }) {
       }`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <Chip tone="cyan">{log.source || 'app'}</Chip>
-        <Chip tone={isError ? (quietErrors ? 'zinc' : 'red') : 'emerald'}>{log.status || 'success'}</Chip>
+        <Chip tone="cyan">{log.source || t("app")}</Chip>
+        <Chip tone={isError ? (quietErrors ? 'zinc' : 'red') : 'emerald'}>{log.status || t("success")}</Chip>
         <span className="data-text text-[10px] text-zinc-500">{formatLogTime(log.created_at)}</span>
       </div>
       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
         <p className="data-text truncate text-sm font-semibold text-zinc-100" title={title}>{title}</p>
         {count ? <span className="data-text rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-zinc-300">/ {count}</span> : null}
       </div>
-      {isError && !quietErrors ? <p className="mt-1 text-xs text-red-300">Error recorded</p> : null}
+      {isError && !quietErrors ? <p className="mt-1 text-xs text-red-300">{t("Error recorded")}</p> : null}
     </button>
   );
 }
@@ -168,19 +170,19 @@ function ActionLogDetailModal({ log, returnFocus, onClose }) {
     <dialog
       ref={dialogRef}
       className="action-detail-dialog max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded border border-white/10 bg-[#111] p-0 text-zinc-100"
-      aria-label="AI action detail"
+      aria-label={t("AI action detail")}
       onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
     >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:pt-3">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-400">Action detail</p>
+            <p className="text-xs text-zinc-400">{t("Action detail")}</p>
             <h3 className="mt-1 break-words text-base font-semibold text-zinc-100">{title}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-white/[0.03] text-zinc-300 hover:border-red-400/30 hover:text-red-200"
-            aria-label="Close action detail"
+            aria-label={t("Close action detail")}
           >
             <X size={18} />
           </button>
@@ -188,33 +190,33 @@ function ActionLogDetailModal({ log, returnFocus, onClose }) {
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-3">
           <div className="flex flex-wrap gap-1.5">
-            <Chip tone="cyan">{log.source || 'app'}</Chip>
-            <Chip tone={log.status === 'error' ? 'red' : 'emerald'}>{log.status || 'success'}</Chip>
+            <Chip tone="cyan">{log.source || t("app")}</Chip>
+            <Chip tone={log.status === 'error' ? 'red' : 'emerald'}>{log.status || t("success")}</Chip>
             <Chip tone="zinc">{formatLogTime(log.created_at)}</Chip>
-            {log.request_id ? <Chip tone="zinc">req {log.request_id}</Chip> : null}
+            {log.request_id ? <Chip tone="zinc">{t("req ")}{log.request_id}</Chip> : null}
           </div>
 
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <DetailMetric label="Action Type" value={formatActionType(log.action_type)} />
-            <DetailMetric label="Action Count" value={String(Number(log.action_count ?? 0))} />
-            {log.request_id ? <DetailMetric label="Request ID" value={log.request_id} /> : null}
+            <DetailMetric label={t("Action Type")} value={formatActionType(log.action_type)} />
+            <DetailMetric label={t("Action Count")} value={String(Number(log.action_count ?? 0))} />
+            {log.request_id ? <DetailMetric label={t("Request ID")} value={log.request_id} /> : null}
           </div>
 
-          <DetailSection title="Request">
-            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100">{log.user_message || 'No request stored.'}</p>
+          <DetailSection title={t("Request")}>
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100">{log.user_message || t("No request stored.")}</p>
           </DetailSection>
 
           {log.error_message ? (
-            <DetailSection title="Error">
+            <DetailSection title={t("Error")}>
               <p className="break-words text-sm leading-6 text-red-200">{log.error_message}</p>
             </DetailSection>
           ) : null}
 
-          <DetailSection title="Response">
-            {log.answer ? <AssistantMarkdown content={log.answer} /> : <p className="text-sm text-zinc-500">No response stored.</p>}
+          <DetailSection title={t("Response")}>
+            {log.answer ? <AssistantMarkdown content={log.answer} /> : <p className="text-sm text-zinc-500">{t("No response stored.")}</p>}
           </DetailSection>
 
-          <DetailSection title="Record References">
+          <DetailSection title={t("Record References")}>
             {shownRefs.length ? (
               <div className="grid gap-1.5">
                 {shownRefs.map((ref, index) => (
@@ -225,16 +227,16 @@ function ActionLogDetailModal({ log, returnFocus, onClose }) {
                     {ref.date ? <p className="data-text text-[10px] text-zinc-500">{ref.date}</p> : null}
                   </div>
                 ))}
-                {refs.length > shownRefs.length ? <p className="data-text text-[11px] text-zinc-500">+{refs.length - shownRefs.length} more</p> : null}
+                {refs.length > shownRefs.length ? <p className="data-text text-[11px] text-zinc-500">+{refs.length - shownRefs.length}{t(" more")}</p> : null}
               </div>
             ) : (
-              <p className="text-sm text-zinc-500">No record references stored.</p>
+              <p className="text-sm text-zinc-500">{t("No record references stored.")}</p>
             )}
           </DetailSection>
 
           {Array.isArray(log.actions) && log.actions.length ? (
             <details className="mt-3 rounded-md border border-white/5 bg-black/25 p-3">
-              <summary className="cursor-pointer data-text text-[10px] uppercase text-zinc-500">Sanitized Actions</summary>
+              <summary className="cursor-pointer data-text text-[10px] uppercase text-zinc-500">{t("Sanitized Actions")}</summary>
               <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-zinc-400">
                 {JSON.stringify(log.actions, null, 2)}
               </pre>
@@ -278,7 +280,7 @@ function LifeOSCallout({ tone, children }) {
   const style = calloutStyles[tone] ?? calloutStyles.info;
   return (
     <div className={`min-w-0 rounded-md border px-3 py-2 ${style.shell}`}>
-      <p className={`data-text mb-1 text-[10px] uppercase tracking-wider ${style.labelClass}`}>{style.label}</p>
+      <p className={`data-text mb-1 text-[10px] uppercase tracking-wider ${style.labelClass}`}>{t(style.label)}</p>
       <div className="min-w-0 text-zinc-100">{children}</div>
     </div>
   );
@@ -347,7 +349,7 @@ function formatActionType(type) {
 
 function formatLogTime(value) {
   if (!value) return '--';
-  return new Date(value).toLocaleString(undefined, {
+  return new Date(value).toLocaleString(getLocale(), {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',

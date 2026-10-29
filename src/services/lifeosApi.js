@@ -2,6 +2,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { addDays } from '../utils/date';
 import { calculateSleepHoursFromTimes } from '../utils/health';
 import { resolveExercise } from '../utils/exerciseCatalog';
+import { captureSettingsIdentity } from '../utils/userSettingsIdentity';
 
 const requireSupabase = () => {
   if (!isSupabaseConfigured || !supabase) {
@@ -272,28 +273,28 @@ export const authApi = {
 };
 
 export const userSettingsApi = {
-  async read() {
+  async read(expectedUserId) {
     const client = requireSupabase();
-    const { data, error } = await client.auth.getUser();
-    if (error || !data.user) throw new Error('Sign in before loading settings.');
+    const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
     const [profile, preferences] = await Promise.all([
-      client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', data.user.id).maybeSingle(),
-      client.from('user_preferences').select('language,workout_sharing,share_workout_notes').eq('user_id', data.user.id).maybeSingle(),
+      authorize(client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', userId).maybeSingle()),
+      authorize(client.from('user_preferences').select('language,workout_sharing,share_workout_notes').eq('user_id', userId).maybeSingle()),
     ]);
     return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'en', workout_sharing: false, share_workout_notes: false } };
   },
-  async save(profile, preferences) {
+  async save(profile, preferences, expectedUserId) {
     const client = requireSupabase();
-    const { data, error } = await client.auth.getUser();
-    if (error || !data.user) throw new Error('Sign in before saving settings.');
+    const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
     if (!/^[a-z][a-z0-9_]{2,23}$/i.test(profile.username || '') || !profile.display_name?.trim() || profile.display_name.trim().length > 60) throw new Error('Use a 3–24 character username and a display name.');
-    throwIfError(await client.rpc('save_user_settings', { p_username: profile.username.trim(), p_display_name: profile.display_name.trim(),
-      p_language: preferences.language, p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true }));
-    return this.read();
+    throwIfError(await authorize(client.rpc('save_user_settings', { p_username: profile.username.trim(), p_display_name: profile.display_name.trim(),
+      p_language: preferences.language, p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true })));
+    return this.read(userId);
   },
-  async savePreferences(preferences) {
-    return throwIfError(await requireSupabase().rpc('set_user_preferences', { p_language: preferences.language,
-      p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true }));
+  async savePreferences(preferences, expectedUserId) {
+    const client = requireSupabase();
+    const { authorize } = await captureSettingsIdentity(client, expectedUserId);
+    return throwIfError(await authorize(client.rpc('set_user_preferences', { p_language: preferences.language,
+      p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true })));
   },
 };
 

@@ -12,6 +12,7 @@ import {
 } from '../data/lifeosData';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useUserSettings } from '../hooks/useUserSettings';
+import { setLanguage } from '../i18n';
 import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
 import { localDate, localTime } from '../utils/date';
 import { buildHabitUpdate, getHabitEntry, normalizeHygieneObject } from '../utils/habits';
@@ -55,6 +56,7 @@ export function LifeOSProvider({ children }) {
   const [expandedWorkout, setExpandedWorkout] = useState(workoutData.history[0].date);
   const [authUser, setAuthUser] = useState(null);
   const userSettings = useUserSettings(authUser?.id);
+  useEffect(() => { setLanguage(userSettings.preferences.language); }, [authUser?.id, userSettings.preferences.language]);
   const [authStatus, setAuthStatus] = useState(isSupabaseConfigured ? 'loading' : 'not-configured');
   const [authError, setAuthError] = useState('');
   const [workoutSessions, setWorkoutSessions] = useState([]);

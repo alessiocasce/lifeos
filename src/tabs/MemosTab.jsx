@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import {
   AlarmClock,
   Bell,
@@ -122,7 +124,7 @@ export function MemosTab() {
     event.preventDefault();
     const title = form.title.trim();
     if (!title) {
-      setFormError('Memo title is required.');
+      setFormError(t("Memo title is required."));
       return;
     }
 
@@ -144,7 +146,7 @@ export function MemosTab() {
       }
       closeModal();
     } catch (error) {
-      setFormError(error.message || 'Failed to save memo.');
+      setFormError(error.message || t("Failed to save memo."));
       setSaveStatus('idle');
     }
   };
@@ -155,21 +157,21 @@ export function MemosTab() {
     try {
       await updateMemo(memo.id, { status });
     } catch (error) {
-      setActionError(error.message || 'Failed to update memo.');
+      setActionError(error.message || t("Failed to update memo."));
     } finally {
       setBusyId(null);
     }
   };
 
   const removeMemo = async (memo) => {
-    if (!window.confirm(`Delete memo "${memo.title}"?`)) return;
+    if (!window.confirm(t("Delete memo \"{v0}\"?", { v0: memo.title }))) return;
     setBusyId(`${memo.id}-delete`);
     setActionError('');
     try {
       await deleteMemo(memo.id);
       if (editingId === memo.id) closeModal();
     } catch (error) {
-      setActionError(error.message || 'Failed to delete memo.');
+      setActionError(error.message || t("Failed to delete memo."));
     } finally {
       setBusyId(null);
     }
@@ -179,18 +181,16 @@ export function MemosTab() {
     <div className="memo-workspace grid min-w-0 gap-6 pb-6">
         <header className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-500">Reminders</p>
-            <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-100 sm:mt-1 sm:text-2xl">Memos</h2>
+            <p className="text-xs text-zinc-500">{t("Reminders")}</p>
+            <h2 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-100 sm:mt-1 sm:text-2xl">{t("Memos")}</h2>
           </div>
           <button
             type="button"
             onClick={openCreate}
-            aria-label="Create memo"
+            aria-label={t("Create memo")}
             className="primary-button inline-flex min-h-11 items-center justify-center gap-2 px-4 text-sm font-semibold"
           >
-            <Plus size={17} />
-            New Memo
-          </button>
+            <Plus size={17} />{t("New Memo")}</button>
         </header>
 
       {(actionError || memosError) ? (
@@ -207,8 +207,8 @@ export function MemosTab() {
         <div className={`grid min-w-0 gap-8 ${hasFloatingMemos || hasClosedMemos ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''}`}>
           <section className="min-w-0">
             <PanelHeader
-              eyebrow="Open Dated Memos"
-              title="Timeline"
+              eyebrow={t("Open Dated Memos")}
+              title={t("Timeline")}
               right={<AlarmClock size={16} className="text-cyan-300" />}
             />
             <div className="grid min-w-0 gap-4 py-4">
@@ -236,8 +236,8 @@ export function MemosTab() {
             {hasFloatingMemos ? (
               <section>
                 <PanelHeader
-                  eyebrow={`${groups.noDate.length} open`}
-                  title="Undated"
+                  eyebrow={t("{v0} open", { v0: groups.noDate.length })}
+                  title={t("Undated")}
                   right={<Bell size={16} className="text-zinc-500" />}
                 />
                 <div className="grid min-w-0 gap-2 py-4">
@@ -260,8 +260,8 @@ export function MemosTab() {
                 <details className="group">
                   <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 border-y border-white/10 px-3 py-2">
                     <div className="min-w-0">
-                      <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{groups.doneRecently.length} recent</p>
-                      <h2 className="truncate text-sm font-semibold text-zinc-100">Completed / Dismissed</h2>
+                      <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{groups.doneRecently.length}{t(" recent")}</p>
+                      <h2 className="truncate text-sm font-semibold text-zinc-100">{t("Completed / Dismissed")}</h2>
                     </div>
                   </summary>
                   <div className="grid min-w-0 gap-2 p-2.5 sm:p-3">
@@ -318,16 +318,14 @@ function GlobalEmptyState({ onCreate }) {
       <div className="mx-auto grid h-12 w-12 place-items-center text-zinc-500">
         <Bell size={20} />
       </div>
-      <p className="mt-4 text-lg font-semibold text-zinc-100">No memos.</p>
-      <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-zinc-500">Nothing is waiting for you.</p>
+      <p className="mt-4 text-lg font-semibold text-zinc-100">{t("No memos.")}</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-zinc-500">{t("Nothing is waiting for you.")}</p>
       <button
         type="button"
         onClick={onCreate}
         className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200"
       >
-        <Plus size={16} />
-        Add Memo
-      </button>
+        <Plus size={16} />{t("Add Memo")}</button>
     </div>
   );
 }
@@ -366,7 +364,7 @@ function TimelineMemoCard({ busyId, memo, onDelete, onEdit, onStatus, tone }) {
     <article className={`min-w-0 px-3 py-4 ${overdue ? 'border-l-2 border-l-amber-400/50' : ''}`}>
       <div className="grid min-w-0 gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start">
         <div className="data-text min-w-16 text-base font-semibold text-zinc-200 md:min-w-20">
-          {memo.memo_time ? formatInputTime(memo.memo_time) : 'Any time'}
+          {memo.memo_time ? formatInputTime(memo.memo_time) : t("Any time")}
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -407,14 +405,14 @@ function MemoActions({ busyId, memo, onDelete, onEdit, onStatus }) {
     <div className="flex min-w-0 flex-wrap gap-1.5 md:justify-end">
       {memo.status === 'open' ? (
         <>
-          <IconButton label="Mark memo done" tone="emerald" busy={busyId === `${memo.id}-done`} onClick={() => onStatus(memo, 'done')}><Check size={15} /></IconButton>
-          <IconButton label="Dismiss memo" tone="amber" busy={busyId === `${memo.id}-dismissed`} onClick={() => onStatus(memo, 'dismissed')}><X size={15} /></IconButton>
+          <IconButton label={t("Mark memo done")} tone="emerald" busy={busyId === `${memo.id}-done`} onClick={() => onStatus(memo, 'done')}><Check size={15} /></IconButton>
+          <IconButton label={t("Dismiss memo")} tone="amber" busy={busyId === `${memo.id}-dismissed`} onClick={() => onStatus(memo, 'dismissed')}><X size={15} /></IconButton>
         </>
       ) : (
-        <IconButton label="Reopen memo" tone="cyan" busy={busyId === `${memo.id}-open`} onClick={() => onStatus(memo, 'open')}><RotateCcw size={15} /></IconButton>
+        <IconButton label={t("Reopen memo")} tone="cyan" busy={busyId === `${memo.id}-open`} onClick={() => onStatus(memo, 'open')}><RotateCcw size={15} /></IconButton>
       )}
-      <IconButton label="Edit memo" tone="zinc" onClick={() => onEdit(memo)}><Pencil size={15} /></IconButton>
-      <IconButton label="Delete memo" tone="red" busy={busyId === `${memo.id}-delete`} onClick={() => onDelete(memo)}><Trash2 size={15} /></IconButton>
+      <IconButton label={t("Edit memo")} tone="zinc" onClick={() => onEdit(memo)}><Pencil size={15} /></IconButton>
+      <IconButton label={t("Delete memo")} tone="red" busy={busyId === `${memo.id}-delete`} onClick={() => onDelete(memo)}><Trash2 size={15} /></IconButton>
     </div>
   );
 }
@@ -453,15 +451,15 @@ function MemoEditorModal({
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Memo' : 'Create Memo'}</p>
-            <h3 id="memo-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Update Reminder' : 'New Reminder'}</h3>
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? t("Edit Memo") : t("Create Memo")}</p>
+            <h3 id="memo-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? t("Update Reminder") : t("New Reminder")}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={saveStatus === 'saving'}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
-            aria-label="Close memo editor"
+            aria-label={t("Close memo editor")}
           >
             <X size={18} />
           </button>
@@ -475,24 +473,24 @@ function MemoEditorModal({
           <div className="min-w-0 space-y-3 p-4 sm:min-h-0 sm:flex-1 sm:overflow-y-auto sm:overflow-x-hidden sm:p-3">
             <MemoField
               id="memo-title"
-              label="Remember"
+              label={t("Remember")}
               value={form.title}
-              placeholder="Charge headphones"
+              placeholder={t("Charge headphones")}
               onChange={(value) => onChange('title', value)}
             />
 
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-              <MemoField id="memo-date" label="Date Optional" type="date" value={form.memo_date} onChange={(value) => onChange('memo_date', value)} />
-              <MemoField id="memo-time" label="Time Optional" type="time" value={form.memo_time} onChange={(value) => onChange('memo_time', value)} />
+              <MemoField id="memo-date" label={t("Date Optional")} type="date" value={form.memo_date} onChange={(value) => onChange('memo_date', value)} />
+              <MemoField id="memo-time" label={t("Time Optional")} type="time" value={form.memo_time} onChange={(value) => onChange('memo_time', value)} />
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <QuickButton label="Today" onClick={() => onChange('memo_date', today)} />
-              <QuickButton label="Tomorrow" onClick={() => onChange('memo_date', tomorrow)} />
-              <QuickButton label="Clear Date" onClick={() => onChange('memo_date', '')} />
-              <QuickButton label="+1h" onClick={onQuickInOneHour} />
-              <QuickButton label="Tonight" onClick={onQuickTonight} />
-              <QuickButton label="Clear Time" onClick={() => onChange('memo_time', '')} />
+              <QuickButton label={t("Today")} onClick={() => onChange('memo_date', today)} />
+              <QuickButton label={t("Tomorrow")} onClick={() => onChange('memo_date', tomorrow)} />
+              <QuickButton label={t("Clear Date")} onClick={() => onChange('memo_date', '')} />
+              <QuickButton label={t("+1h")} onClick={onQuickInOneHour} />
+              <QuickButton label={t("Tonight")} onClick={onQuickTonight} />
+              <QuickButton label={t("Clear Time")} onClick={() => onChange('memo_time', '')} />
             </div>
 
             <MemoTextarea value={form.notes} onChange={(value) => onChange('notes', value)} />
@@ -526,16 +524,14 @@ function MemoFormActions({ editing, onClose, saveStatus }) {
         className="primary-button flex min-h-12 w-full min-w-0 items-center justify-center gap-2 px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
       >
         {saveStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-        {saveStatus === 'saving' ? 'Saving Memo' : editing ? 'Update Memo' : 'Create Memo'}
+        {saveStatus === 'saving' ? t("Saving Memo") : editing ? t("Update Memo") : t("Create Memo")}
       </button>
       <button
         type="button"
         onClick={onClose}
         disabled={saveStatus === 'saving'}
         className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
-      >
-        Cancel
-      </button>
+      >{t("Cancel")}</button>
     </>
   );
 }
@@ -559,13 +555,13 @@ function MemoField({ id, label, onChange, placeholder = '', type = 'text', value
 function MemoTextarea({ onChange, value }) {
   return (
     <div className="block min-w-0 space-y-1 overflow-hidden">
-      <label htmlFor="memo-notes" className="block text-xs text-zinc-400">Notes Optional</label>
+      <label htmlFor="memo-notes" className="block text-xs text-zinc-400">{t("Notes Optional")}</label>
       <textarea
         id="memo-notes"
         rows={4}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Any extra context"
+        placeholder={t("Any extra context")}
         className="min-h-24 w-full min-w-0 max-w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-cyan-400/50"
       />
     </div>
@@ -629,7 +625,7 @@ function LoadingState() {
   return (
     <div className="flex items-center gap-2 rounded-md border border-cyan-400/10 bg-cyan-400/[0.03] p-3">
       <Loader2 size={15} className="animate-spin text-cyan-300" />
-      <p className="data-text text-sm text-cyan-300">Loading memos...</p>
+      <p className="data-text text-sm text-cyan-300">{t("Loading memos...")}</p>
     </div>
   );
 }
@@ -637,16 +633,14 @@ function LoadingState() {
 function SmallEmptyTimeline({ onCreate }) {
   return (
     <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-      <p className="text-sm font-semibold text-zinc-100">No dated memos.</p>
-      <p className="mt-1 text-xs leading-5 text-zinc-500">Floating memos can stay loose until they need a date.</p>
+      <p className="text-sm font-semibold text-zinc-100">{t("No dated memos.")}</p>
+      <p className="mt-1 text-xs leading-5 text-zinc-500">{t("Floating memos can stay loose until they need a date.")}</p>
       <button
         type="button"
         onClick={onCreate}
         className="mt-3 inline-flex min-h-11 items-center gap-2 rounded border border-white/20 bg-white/[0.04] px-3 text-sm font-semibold text-zinc-200"
       >
-        <Plus size={16} />
-        Add Dated Memo
-      </button>
+        <Plus size={16} />{t("Add Dated Memo")}</button>
     </div>
   );
 }
@@ -774,16 +768,16 @@ function formatInputTime(value) {
 
 function formatDateLabel(value) {
   const today = getToday();
-  if (value === today) return 'Today';
-  if (value === addDays(today, 1)) return 'Tomorrow';
-  return parseDate(value).toLocaleDateString(undefined, {
+  if (value === today) return t('Today');
+  if (value === addDays(today, 1)) return t('Tomorrow');
+  return parseDate(value).toLocaleDateString(getLocale(), {
     month: 'short',
     day: 'numeric',
   });
 }
 
 function formatFullDate(value) {
-  return parseDate(value).toLocaleDateString(undefined, {
+  return parseDate(value).toLocaleDateString(getLocale(), {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
@@ -791,7 +785,7 @@ function formatFullDate(value) {
 }
 
 function formatTimelineDate(value) {
-  return parseDate(value).toLocaleDateString(undefined, {
+  return parseDate(value).toLocaleDateString(getLocale(), {
     month: 'short',
     day: 'numeric',
   });

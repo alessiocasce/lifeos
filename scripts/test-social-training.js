@@ -2,11 +2,24 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { requireConfiguredUserAccess } from '../api/_utils/supabaseAdmin.js';
-import { exerciseCatalog,resolveExercise,exerciseIdentityKey,searchExercises } from '../src/utils/exerciseCatalog.js';
+import { exerciseCatalog,resolveExercise,exerciseIdentityKey,exerciseLabel,searchExercises } from '../src/utils/exerciseCatalog.js';
+import { setLanguage,t,formatDate } from '../src/i18n/index.js';
 import { prefillWorkoutTargets } from '../src/utils/workoutPrefill.js';
+import { captureSettingsIdentity } from '../src/utils/userSettingsIdentity.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
+let activeSettingsUser = A;
+const settingsClient = { auth: {
+  getSession: async () => ({ data: { session: { access_token: activeSettingsUser } } }),
+  getUser: async (token) => ({ data: { user: { id: token } } }),
+} };
+const captured = await captureSettingsIdentity(settingsClient, A);
+activeSettingsUser = B;
+const boundRequest = { setHeader(name, value) { this[name] = value; return this; } };
+assert.equal(captured.authorize(boundRequest).Authorization, `Bearer ${A}`);
+await assert.rejects(captureSettingsIdentity(settingsClient, A), /Reload settings/);
+assert.equal((await captureSettingsIdentity(settingsClient, B)).userId, B);
 const db = new PGlite();
 try {
   await db.exec(`create schema auth; create role anon; create role authenticated; create role service_role;
@@ -60,6 +73,13 @@ try {
   await db.exec('reset role');
   await db.exec(fs.readFileSync('supabase/operations/map_legacy_exercises.sql','utf8'));
   assert.deepEqual((await as(A,'select exercise,exercise_id from workout_sets order by set_number')).rows,mapped.rows);
+  await assert.rejects(as(A,"select control_workout_rest_timer(auth.uid(),'configure','isolated@lid',null,true,120)"),/permission denied/);
+  await db.exec('reset role');
+  await db.query("select control_workout_rest_timer($1,'configure','isolated@lid',null,true,120)",[A]);
+  await as(A,`insert into workout_sets(workout_id,exercise,exercise_id,set_number,weight,reps) values('${w}','Panca piana con manubri','${resolveExercise('Dumbbell Bench Press').id}',2,30,7)`);
+  await db.exec('reset role');
+  assert.equal((await db.query("select metadata #>> '{workout_rest,next_set_number}' next from brain_outbox_messages where source_type='workout_rest_timer' and status='queued'")).rows[0].next,'3');
+  console.log('PASS durable timer next-set numbering spans canonical/legacy translations');
   const english=resolveExercise('Dumbbell Bench Press'),italian=resolveExercise('Panca Piana con Manubri');
   assert.equal(english.id,italian.id);
   assert.notEqual(english.id,resolveExercise('Barbell Bench Press').id);
@@ -70,12 +90,26 @@ try {
   assert.equal(exerciseCatalog.length,217);
   assert.equal(english.load_type,'per_implement');
   assert.equal(resolveExercise('Pull-Up').leaderboard_eligible,false);
+  setLanguage('it');
+  assert.equal(t('Settings'),'Impostazioni');
+  assert.equal(exerciseLabel({exercise:'User-authored custom name',exercise_id:null}),'User-authored custom name');
+  assert.equal(exerciseLabel({exercise:'Dumbbell Bench Press',exercise_id:english.id}),'Panca piana con manubri');
+  assert.match(formatDate('2026-10-29'),/29 ott 2026/);
+  setLanguage('en');
   assert.equal(prefillWorkoutTargets({weight:'',reps:'',set_number:1,is_warmup:false},[{set_number:1001,is_warmup:true,weight:10,reps:12},{set_number:1,weight:30,reps:8}]).weight,'30');
   console.log('PASS canonical bilingual IDs, equipment distinctions, exact/ambiguous/custom legacy mapping, idempotent backfill, catalog grants and private workouts');
   // Owner-only authorization must still fail closed before any admin query.
-  const oldOwner=process.env.LIFEOS_ACTION_USER_ID;
-  delete process.env.LIFEOS_ACTION_USER_ID;
-  await assert.rejects(requireConfiguredUserAccess('user-b-token'), /not configured/);
-  if(oldOwner)process.env.LIFEOS_ACTION_USER_ID=oldOwner;
+  const oldEnv=Object.fromEntries(['LIFEOS_ACTION_USER_ID','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY'].map(key=>[key,process.env[key]]));
+  const originalFetch=globalThis.fetch;
+  try {
+    process.env.LIFEOS_ACTION_USER_ID=A;process.env.SUPABASE_URL='https://auth-fixture.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='isolated-test-key';
+    globalThis.fetch=async(url,options)=>{
+      assert.equal(new URL(url).hostname,'auth-fixture.invalid');
+      const token=new Headers(options.headers).get('authorization');
+      return new Response(JSON.stringify({id:token.endsWith('user-a-token')?A:B,aud:'authenticated',role:'authenticated'}),{status:200,headers:{'content-type':'application/json'}});
+    };
+    await assert.rejects(requireConfiguredUserAccess('user-b-token'),error=>error.status===403 || error.statusCode===403);
+    assert.equal((await requireConfiguredUserAccess('user-a-token')).id,A);
+  } finally {globalThis.fetch=originalFetch;for(const [key,value] of Object.entries(oldEnv)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
   console.log('PASS real PostgreSQL two-user profile/preference RLS, case-insensitive username uniqueness, rename identity, public whitelist and private defaults');
 } finally { await db.close(); }

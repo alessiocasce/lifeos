@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -70,7 +72,7 @@ export function Shell({ children }) {
   const handleSignOut = async () => {
     setSigningOut(true);
     setAccountError('');
-    try { await signOut(); } catch { setAccountError('Could not sign out. Try again.'); }
+    try { await signOut(); } catch { setAccountError(t("Could not sign out. Try again.")); }
     finally { setSigningOut(false); }
   };
   const resume = () => {
@@ -81,33 +83,33 @@ export function Shell({ children }) {
   return (
     <div className="lifeos-shell">
       <aside className="desktop-rail">
-        <div className="rail-brand"><LifeOSLogo size={26} /><span>LifeOS<span className="brand-detail">PERSONAL SYSTEM</span></span></div>
-        <nav aria-label="Primary navigation" className="rail-navigation">
+        <div className="rail-brand"><LifeOSLogo size={26} /><span>{t("LifeOS")}<span className="brand-detail">{t("PERSONAL SYSTEM")}</span></span></div>
+        <nav aria-label={t("Primary navigation")} className="rail-navigation">
           {primary.map((id) => <NavigationButton key={id} id={id} active={activeTab === id} onClick={() => navigate(id)} />)}
-          <span className="rail-section-label">Records</span>
+          <span className="rail-section-label">{t("Records")}</span>
           {utilities.map((id) => <NavigationButton key={id} id={id} active={activeTab === id} onClick={() => navigate(id)} />)}
         </nav>
         <div className="rail-account">
-          <span className="connection-label"><span className={online ? 'status-dot' : 'status-dot offline'} />{online ? 'Connected' : 'Offline'}</span>
-          <button className="rail-link" onClick={handleSignOut} disabled={signingOut} aria-label="Sign out"><LogOut size={18} /><span>Sign out</span></button>
-          {accountError ? <p role="alert" className="text-xs text-red-300">{accountError}</p> : null}
+          <span className="connection-label"><span className={online ? 'status-dot' : 'status-dot offline'} />{online ? t("Connected") : t("Offline")}</span>
+          <button className="rail-link" onClick={handleSignOut} disabled={signingOut} aria-label={t("Sign out")}><LogOut size={18} /><span>{t("Sign out")}</span></button>
+          {accountError ? <p role="alert" className="text-xs text-red-300">{t(accountError)}</p> : null}
         </div>
       </aside>
       <main className="workspace">
         <header className="workspace-header">
           <div className="flex min-w-0 items-center gap-3">
             <span className="mobile-brand"><LifeOSLogo size={23} /></span>
-            <h1>{destination.label}</h1>
+            <h1>{t(destination.label)}</h1>
           </div>
           <div className="flex items-center gap-3">
-            {!online ? <span className="connection-label text-amber-300">Offline</span> : null}
-            <time className="header-date" dateTime={today}>{new Date(today + 'T12:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</time>
-            {activeTab !== 'assistant' ? <button className="icon-button hidden md:inline-flex" title="Open Companion" aria-label="Open Companion" onClick={() => navigate('assistant')}><MessageSquare size={18} /></button> : null}
+            {!online ? <span className="connection-label text-amber-300">{t("Offline")}</span> : null}
+            <time className="header-date" dateTime={today}>{new Date(today + 'T12:00:00').toLocaleDateString(getLocale(), { day: '2-digit', month: 'short' })}</time>
+            {activeTab !== 'assistant' ? <button className="icon-button hidden md:inline-flex" title={t("Open Companion")} aria-label={t("Open Companion")} onClick={() => navigate('assistant')}><MessageSquare size={18} /></button> : null}
           </div>
         </header>
         <PullToRefresh>
           <div className={'workspace-content ' + (liveSession && activeTab !== 'workout' ? 'has-training-dock' : '')}>
-            {userSettings?.status === 'ready' && !userSettings.profile && activeTab !== 'settings' ? <button className="mb-5 min-h-11 border-b border-white/10 text-sm text-zinc-300" onClick={() => navigate('settings')}>Set up your profile and language</button> : null}
+            {userSettings?.status === 'ready' && !userSettings.profile && activeTab !== 'settings' ? <button className="mb-5 min-h-11 border-b border-white/10 text-sm text-zinc-300" onClick={() => navigate('settings')}>{t("Set up your profile and language")}</button> : null}
             {children}
           </div>
         </PullToRefresh>
@@ -115,30 +117,30 @@ export function Shell({ children }) {
       {liveSession && activeTab !== 'workout' ? (
         <button className="training-dock" data-keyboard-open={keyboardOpen} onClick={resume}>
           <span className="training-dock-icon"><Dumbbell size={20} /></span>
-          <span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">Training in progress</span><strong className="block truncate text-sm">{currentDraft?.exercise || liveSession.name}</strong></span>
-          <span className="flex items-center gap-2 text-sm font-semibold">Resume<ArrowUpRight size={18} /></span>
+          <span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">{t("Training in progress")}</span><strong className="block truncate text-sm">{currentDraft?.exercise || liveSession.name}</strong></span>
+          <span className="flex items-center gap-2 text-sm font-semibold">{t("Resume")}<ArrowUpRight size={18} /></span>
         </button>
       ) : null}
-      <nav className="mobile-dock" aria-label="Mobile navigation" data-keyboard-open={keyboardOpen}>
+      <nav className="mobile-dock" aria-label={t("Mobile navigation")} data-keyboard-open={keyboardOpen}>
         {mobile.map((id) => {
           const item = destinations[id] || { label: 'More', icon: MoreHorizontal };
           const Icon = item.icon;
           const active = id === 'more' ? utilities.includes(activeTab) : activeTab === id;
           return <button key={id} className={'mobile-destination ' + (id === 'workout' ? 'training-destination' : '')} aria-current={active ? 'page' : undefined} onClick={() => id === 'more' ? setMoreOpen(true) : navigate(id)}>
-            <span className="mobile-destination-icon"><Icon size={21} strokeWidth={active ? 2 : 1.65} /></span><span>{item.label}</span>
+            <span className="mobile-destination-icon"><Icon size={21} strokeWidth={active ? 2 : 1.65} /></span><span>{t(item.label)}</span>
           </button>;
         })}
       </nav>
       <dialog ref={sheetRef} className="utility-sheet" aria-labelledby="utility-title" onClose={() => setMoreOpen(false)} onClick={(event) => { if (event.target === sheetRef.current) setMoreOpen(false); }}>
         <div className="utility-sheet-content">
-          <div className="flex items-center justify-between pb-4"><h2 id="utility-title" className="text-lg font-semibold">Your system</h2><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Close utilities"><X size={20} /></button></div>
-          <nav aria-label="Utilities">{utilities.map((id) => {
+          <div className="flex items-center justify-between pb-4"><h2 id="utility-title" className="text-lg font-semibold">{t("Your system")}</h2><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label={t("Close utilities")}><X size={20} /></button></div>
+          <nav aria-label={t("Utilities")}>{utilities.map((id) => {
             const Icon = destinations[id].icon;
-            return <button key={id} className="utility-link" aria-current={activeTab === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={20} /><span>{destinations[id].label}</span><ChevronRight size={16} /></button>;
+            return <button key={id} className="utility-link" aria-current={activeTab === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={20} /><span>{t(destinations[id].label)}</span><ChevronRight size={16} /></button>;
           })}</nav>
           <div className="mt-5 border-t border-white/10 pt-4">
-            <button className="utility-link" disabled={signingOut} onClick={handleSignOut}><LogOut size={20} /><span>Sign out</span></button>
-            {accountError ? <p role="alert" className="text-sm text-red-300">{accountError}</p> : null}
+            <button className="utility-link" disabled={signingOut} onClick={handleSignOut}><LogOut size={20} /><span>{t("Sign out")}</span></button>
+            {accountError ? <p role="alert" className="text-sm text-red-300">{t(accountError)}</p> : null}
           </div>
         </div>
       </dialog>
@@ -148,5 +150,5 @@ export function Shell({ children }) {
 
 function NavigationButton({ id, active, onClick }) {
   const { label, icon: Icon } = destinations[id];
-  return <button className={'rail-link ' + (id === 'workout' ? 'rail-training' : '')} aria-current={active ? 'page' : undefined} title={label} onClick={onClick}><Icon size={19} /><span>{label}</span></button>;
+  return <button className={'rail-link ' + (id === 'workout' ? 'rail-training' : '')} aria-current={active ? 'page' : undefined} title={label} onClick={onClick}><Icon size={19} /><span>{t(label)}</span></button>;
 }

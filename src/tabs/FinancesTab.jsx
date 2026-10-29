@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import { Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -48,7 +50,7 @@ export function FinancesTab() {
       setForm({ ...emptyForm(), category: form.category });
       setSaved(true);
       await refresh();
-    } catch (error) { setFormError(error.message || 'Failed to save expense.'); }
+    } catch (error) { setFormError(error.message || t("Failed to save expense.")); }
     finally { setSaving(false); }
   };
   const beginEdit = (row) => { setEditingId(row.id); setEditForm(formFromExpense(row)); setEditError(''); };
@@ -63,37 +65,37 @@ export function FinancesTab() {
       await updateExpense(editingId, toPayload(editForm));
       setEditingId(null); setEditForm(null);
       await refresh();
-    } catch (error) { setEditError(error.message || 'Failed to update expense.'); }
+    } catch (error) { setEditError(error.message || t("Failed to update expense.")); }
     finally { setSavingEdit(false); }
   };
   const remove = async (row) => {
-    if (deletingId || savingEdit || !window.confirm('Delete expense "' + row.vendor + '" permanently?')) return;
+    if (deletingId || savingEdit || !window.confirm(t("Delete expense \"") + row.vendor + t("\" permanently?"))) return;
     setDeletingId(row.id); setDeleteError('');
     try { await deleteExpense(row.id); await refresh(); }
-    catch (error) { setDeleteError(error.message || 'Failed to delete expense.'); }
+    catch (error) { setDeleteError(error.message || t("Failed to delete expense.")); }
     finally { setDeletingId(null); }
   };
   const renderRow = (row) => editingId === row.id ? (
-    <form key={row.id} aria-label={'Edit expense ' + row.vendor} onSubmit={saveEdit} className="grid gap-3 border-y border-white/15 py-4">
+    <form key={row.id} aria-label={t("Edit expense ") + row.vendor} onSubmit={saveEdit} className="grid gap-3 border-y border-white/15 py-4">
       <fieldset disabled={savingEdit} className="grid min-w-0 gap-3"><ExpenseFields form={editForm} categories={categories} listId="expense-edit-categories" onChange={(field, value) => { setEditForm((prev) => ({ ...prev, [field]: value })); setEditError(''); }} /></fieldset>
-      {editError ? <p role="alert" className="text-sm text-red-300">{editError}</p> : null}
+      {editError ? <p role="alert" className="text-sm text-red-300">{t(editError)}</p> : null}
       <div className="flex gap-2">
-        <button type="submit" disabled={savingEdit} className="primary-button inline-flex min-h-11 items-center gap-2 px-4 text-sm"><Save size={16} />{savingEdit ? 'Saving' : 'Save changes'}</button>
-        <button type="button" disabled={savingEdit} onClick={cancelEdit} className="inline-flex min-h-11 items-center gap-2 px-4 text-sm text-zinc-300"><X size={16} />Cancel</button>
+        <button type="submit" disabled={savingEdit} className="primary-button inline-flex min-h-11 items-center gap-2 px-4 text-sm"><Save size={16} />{savingEdit ? t("Saving") : t("Save changes")}</button>
+        <button type="button" disabled={savingEdit} onClick={cancelEdit} className="inline-flex min-h-11 items-center gap-2 px-4 text-sm text-zinc-300"><X size={16} />{t("Cancel")}</button>
       </div>
     </form>
   ) : (
     <article key={row.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 py-4">
       <div className="min-w-0">
         <h3 className="break-words text-sm font-semibold text-zinc-100">{row.vendor}</h3>
-        <p className="mt-1 break-words text-xs text-zinc-400">{row.category || 'Other'} <span className="text-zinc-600">/</span> {row.spent_on}</p>
+        <p className="mt-1 break-words text-xs text-zinc-400">{row.category || t("Other")} <span className="text-zinc-600">/</span> {row.spent_on}</p>
         {row.notes ? <p className="mt-2 break-words text-sm text-zinc-400">{row.notes}</p> : null}
       </div>
       <div className="flex flex-col items-end gap-2">
-        <span className="data-text whitespace-nowrap text-base font-semibold text-zinc-200">EUR {formatMoney(row.amount)}</span>
+        <span className="data-text whitespace-nowrap text-base font-semibold text-zinc-200">{t("EUR ")}{formatMoney(row.amount)}</span>
         <div className="flex gap-1">
-          <IconButton icon={Pencil} label="Edit expense" disabled={!!deletingId || savingEdit} onClick={() => beginEdit(row)} />
-          <IconButton icon={deletingId === row.id ? Loader2 : Trash2} label="Delete expense" disabled={!!deletingId || savingEdit} onClick={() => remove(row)} />
+          <IconButton icon={Pencil} label={t("Edit expense")} disabled={!!deletingId || savingEdit} onClick={() => beginEdit(row)} />
+          <IconButton icon={deletingId === row.id ? Loader2 : Trash2} label={t("Delete expense")} disabled={!!deletingId || savingEdit} onClick={() => remove(row)} />
         </div>
       </div>
     </article>
@@ -104,35 +106,34 @@ export function FinancesTab() {
       <header className="grid min-w-0 grid-cols-[minmax(0,1fr)_144px] items-start gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
         <div className="min-w-0">
           <p className="text-xs text-zinc-500">{formatMonthLabel(selectedMonth)}</p>
-          <h2 className="mt-1 text-xl font-semibold text-zinc-100">Expense ledger</h2>
-          {rows.length ? <p className="data-text mt-2 text-xl text-zinc-200">EUR {formatMoney(total)} <span className="font-sans text-xs text-zinc-500">/ {rows.length} {rows.length === 1 ? 'entry' : 'entries'}{monthlyExpensesStatus === 'loading' ? ' / refreshing' : ''}</span></p> : null}
+          <h2 className="mt-1 text-xl font-semibold text-zinc-100">{t("Expense ledger")}</h2>
+          {rows.length ? <p className="data-text mt-2 text-xl text-zinc-200">{t("EUR ")}{formatMoney(total)} <span className="font-sans text-xs text-zinc-500">/ {rows.length} {rows.length === 1 ? t("entry") : t("entries")}{monthlyExpensesStatus === 'loading' ? t(" / refreshing") : ''}</span></p> : null}
         </div>
-        <label className="grid gap-1 text-xs text-zinc-400">Month
-          <input type="month" value={selectedMonth} onChange={(event) => { cancelEdit(); setMonthChoice(event.target.value || null); }} disabled={savingEdit} className="h-11 w-full min-w-0 rounded border border-white/10 bg-black/30 px-2 text-base text-zinc-100" />
+        <label className="grid gap-1 text-xs text-zinc-400">{t("Month")}<input type="month" value={selectedMonth} onChange={(event) => { cancelEdit(); setMonthChoice(event.target.value || null); }} disabled={savingEdit} className="h-11 w-full min-w-0 rounded border border-white/10 bg-black/30 px-2 text-base text-zinc-100" />
         </label>
       </header>
       <div className="grid min-w-0 gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-10">
-        <section aria-label="Capture expense" className="min-w-0 border-t border-white/10 pt-4">
-          <h3 className="mb-4 text-sm font-semibold text-zinc-200">Add expense</h3>
+        <section aria-label={t("Capture expense")} className="min-w-0 border-t border-white/10 pt-4">
+          <h3 className="mb-4 text-sm font-semibold text-zinc-200">{t("Add expense")}</h3>
           <form onSubmit={submit} className="grid gap-3">
             <fieldset disabled={saving} className="grid min-w-0 gap-3"><ExpenseFields form={{ ...form, spent_on: form.spent_on || today }} categories={categories} onChange={updateForm} /></fieldset>
-            {formError ? <p role="alert" className="text-sm text-red-300">{formError}</p> : null}
-            <button type="submit" disabled={saving} className="primary-button inline-flex min-h-12 items-center justify-center gap-2 text-sm font-semibold">{saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{saving ? 'Saving expense' : 'Save expense'}</button>
-            {saved ? <p role="status" className="text-sm text-zinc-300">Expense saved.</p> : null}
+            {formError ? <p role="alert" className="text-sm text-red-300">{t(formError)}</p> : null}
+            <button type="submit" disabled={saving} className="primary-button inline-flex min-h-12 items-center justify-center gap-2 text-sm font-semibold">{saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{saving ? t("Saving expense") : t("Save expense")}</button>
+            {saved ? <p role="status" className="text-sm text-zinc-300">{t("Expense saved.")}</p> : null}
           </form>
         </section>
-        <section aria-label="Selected month ledger" className="min-w-0 border-t border-white/10 pt-4">
+        <section aria-label={t("Selected month ledger")} className="min-w-0 border-t border-white/10 pt-4">
           <h3 className="mb-2 text-sm font-semibold text-zinc-200">{formatMonthLabel(selectedMonth)}</h3>
-          {monthlyExpensesError ? <p role="alert" className="py-3 text-sm text-red-300">{monthlyExpensesError}</p> : null}
-          {deleteError ? <p role="alert" className="py-3 text-sm text-red-300">{deleteError}</p> : null}
+          {monthlyExpensesError ? <p role="alert" className="py-3 text-sm text-red-300">{t(monthlyExpensesError)}</p> : null}
+          {deleteError ? <p role="alert" className="py-3 text-sm text-red-300">{t(deleteError)}</p> : null}
           <div className="divide-y divide-white/10">{rows.map(renderRow)}</div>
-          {!rows.length ? monthlyExpensesStatus === 'loading' || monthlyExpensesStatus === 'idle' ? <LoadingRow /> : monthlyExpensesError ? <button type="button" onClick={() => loadExpenseMonth(range.start, range.end)} className="min-h-11 text-sm text-zinc-200">Retry month</button> : <p className="py-6 text-sm text-zinc-500">No expenses this month.</p> : null}
+          {!rows.length ? monthlyExpensesStatus === 'loading' || monthlyExpensesStatus === 'idle' ? <LoadingRow /> : monthlyExpensesError ? <button type="button" onClick={() => loadExpenseMonth(range.start, range.end)} className="min-h-11 text-sm text-zinc-200">{t("Retry month")}</button> : <p className="py-6 text-sm text-zinc-500">{t("No expenses this month.")}</p> : null}
           {categorySpend.length ? (
             <details className="mt-6 border-t border-white/10 pt-2">
-              <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">Category breakdown</summary>
+              <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-300">{t("Category breakdown")}</summary>
               <dl className="grid gap-4 py-3">{categorySpend.map(({ category, amount }) => (
                 <div key={category}>
-                  <div className="mb-2 flex justify-between gap-3 text-sm"><dt className="break-words text-zinc-400">{category}</dt><dd className="data-text shrink-0 text-zinc-200">EUR {formatMoney(amount)}</dd></div>
+                  <div className="mb-2 flex justify-between gap-3 text-sm"><dt className="break-words text-zinc-400">{category}</dt><dd className="data-text shrink-0 text-zinc-200">{t("EUR ")}{formatMoney(amount)}</dd></div>
                   <div className="h-1 bg-white/5"><div className="h-full bg-zinc-500" style={{ width: (total ? amount / total * 100 : 0) + '%' }} /></div>
                 </div>
               ))}</dl>
@@ -141,10 +142,10 @@ export function FinancesTab() {
         </section>
       </div>
       <details className="border-t border-white/10 pt-2">
-        <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-400">Recent expenses in other months</summary>
-        {expensesError ? <p role="alert" className="py-3 text-sm text-red-300">{expensesError}</p> : null}
+        <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-400">{t("Recent expenses in other months")}</summary>
+        {expensesError ? <p role="alert" className="py-3 text-sm text-red-300">{t(expensesError)}</p> : null}
         <div className="divide-y divide-white/10">{recent.map(renderRow)}</div>
-        {!recent.length ? expensesStatus === 'loading' ? <LoadingRow /> : expensesError ? <button type="button" onClick={reloadExpenses} className="min-h-11 text-sm text-zinc-200">Retry recent expenses</button> : <p className="py-4 text-sm text-zinc-500">No recent expenses outside this month.</p> : null}
+        {!recent.length ? expensesStatus === 'loading' ? <LoadingRow /> : expensesError ? <button type="button" onClick={reloadExpenses} className="min-h-11 text-sm text-zinc-200">{t("Retry recent expenses")}</button> : <p className="py-4 text-sm text-zinc-500">{t("No recent expenses outside this month.")}</p> : null}
       </details>
     </div>
   );
@@ -153,16 +154,14 @@ export function FinancesTab() {
 function ExpenseFields({ form, onChange, categories, listId = 'expense-categories' }) {
   return (
     <>
-      <LedgerField label="Vendor" value={form.vendor} onChange={(value) => onChange('vendor', value)} />
+      <LedgerField label={t("Vendor")} value={form.vendor} onChange={(value) => onChange('vendor', value)} />
       <div className="grid min-w-0 grid-cols-2 gap-3">
-        <LedgerField label="Amount" inputMode="decimal" value={form.amount} placeholder="0.00" onChange={(value) => onChange('amount', value)} />
-        <LedgerField label="Date" type="date" value={form.spent_on} onChange={(value) => onChange('spent_on', value)} />
+        <LedgerField label={t("Amount")} inputMode="decimal" value={form.amount} placeholder="0.00" onChange={(value) => onChange('amount', value)} />
+        <LedgerField label={t("Date")} type="date" value={form.spent_on} onChange={(value) => onChange('spent_on', value)} />
       </div>
-      <label className="grid min-w-0 gap-1 text-xs text-zinc-400">Category
-        <input list={listId} value={form.category} onChange={(event) => onChange('category', event.target.value)} className="h-11 min-w-0 rounded border border-white/10 bg-black/30 px-3 text-base text-zinc-100" />
+      <label className="grid min-w-0 gap-1 text-xs text-zinc-400">{t("Category")}<input list={listId} value={form.category} onChange={(event) => onChange('category', event.target.value)} className="h-11 min-w-0 rounded border border-white/10 bg-black/30 px-3 text-base text-zinc-100" />
       </label>
-      <label className="grid min-w-0 gap-1 text-xs text-zinc-400">Notes
-        <textarea value={form.notes} onChange={(event) => onChange('notes', event.target.value)} rows={2} className="min-h-16 min-w-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-base text-zinc-100" />
+      <label className="grid min-w-0 gap-1 text-xs text-zinc-400">{t("Notes")}<textarea value={form.notes} onChange={(event) => onChange('notes', event.target.value)} rows={2} className="min-h-16 min-w-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-base text-zinc-100" />
       </label>
       <datalist id={listId}>{categories.map((category) => <option key={category} value={category} />)}</datalist>
     </>
@@ -174,7 +173,7 @@ function LedgerField({ label, inputMode, type = 'text', value, placeholder, onCh
 function IconButton({ icon: Icon, label, disabled, onClick }) {
   return <button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick} className="grid h-11 w-11 place-items-center rounded border border-white/10 text-zinc-400 hover:text-zinc-100 disabled:opacity-40"><Icon size={16} /></button>;
 }
-function LoadingRow() { return <p role="status" className="flex items-center gap-2 py-6 text-sm text-zinc-500"><Loader2 size={16} className="animate-spin" />Loading expenses</p>; }
+function LoadingRow() { return <p role="status" className="flex items-center gap-2 py-6 text-sm text-zinc-500"><Loader2 size={16} className="animate-spin" />{t("Loading expenses")}</p>; }
 function formFromExpense(row) { return { vendor: row.vendor ?? '', category: row.category ?? 'Other', amount: String(row.amount ?? ''), spent_on: row.spent_on ?? localDate(), notes: row.notes ?? '' }; }
 function toPayload(form) { return { vendor: form.vendor.trim(), category: form.category.trim(), amount: parseDecimal(form.amount), spent_on: form.spent_on, notes: form.notes.trim() || null }; }
 function validateExpenseForm(form) {
@@ -186,7 +185,7 @@ function validateExpenseForm(form) {
   return '';
 }
 function parseDecimal(value) { return Number(String(value ?? '').replace(',', '.')); }
-function formatMoney(value) { return Math.abs(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function formatMoney(value) { return Math.abs(Number(value) || 0).toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function sortExpenses(rows) { return rows.slice().sort((a, b) => String(b.spent_on).localeCompare(String(a.spent_on)) || String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))); }
 function buildCategorySpend(rows) {
   const totals = new Map();
@@ -197,4 +196,4 @@ function getMonthRange(value) {
   const [year, month] = value.split('-').map(Number);
   return { start: value + '-01', end: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10) };
 }
-function formatMonthLabel(value) { return new Date(value + '-01T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); }
+function formatMonthLabel(value) { return new Date(value + '-01T12:00:00').toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' }); }

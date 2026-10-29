@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 export function LifeOSLogo({ className = '', showWordmark = false, size = 24 }) {
   const mark = (
     <svg
@@ -47,7 +48,7 @@ export function LifeOSLogo({ className = '', showWordmark = false, size = 24 }) 
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       {mark}
-      <span className="font-semibold tracking-wide text-zinc-100">LifeOS</span>
+      <span className="font-semibold tracking-wide text-zinc-100">{t("LifeOS")}</span>
     </span>
   );
 }

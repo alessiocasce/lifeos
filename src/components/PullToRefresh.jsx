@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { Check, Loader2, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -128,7 +129,7 @@ export function PullToRefresh({ children }) {
     window.clearTimeout(fadeTimerRef.current);
     setContentOffset(REFRESH_HOLD_OFFSET);
     setState('refreshing');
-    setMessage('Refreshing...');
+    setMessage(t("Refreshing..."));
     let resultDisplayDuration = 900;
 
     try {
@@ -141,27 +142,27 @@ export function PullToRefresh({ children }) {
         const blockingWork = unsavedWorkRef.current[0];
         if (blockingWork || liveTrainingRef.current) {
           setState('update-ready');
-          setMessage(blockingWork ? `Update ready - ${blockingWork.label}.` : 'Update ready - finish your workout first.');
+          setMessage(blockingWork ? t("Update ready - {v0}.", { v0: blockingWork.label }) : t("Update ready - finish your workout first."));
           resultDisplayDuration = 4000;
         } else {
           setState('updating');
-          setMessage('Updating LifeOS...');
+          setMessage(t("Updating LifeOS..."));
           const applied = await applyAppUpdate(updateResult.registration);
           if (applied) return;
           setState('update-ready');
-          setMessage('Update ready - pull again to apply.');
+          setMessage(t("Update ready - pull again to apply."));
           resultDisplayDuration = 4000;
         }
       } else if (dataResult.ok) {
         setState('updated');
-        setMessage('Updated');
+        setMessage(t("Updated"));
       } else {
         setState('failed');
-        setMessage('Refresh failed');
+        setMessage(t("Refresh failed"));
       }
     } catch {
       setState('failed');
-      setMessage('Refresh failed');
+      setMessage(t("Refresh failed"));
     } finally {
       refreshRunningRef.current = false;
       snapContentBack(resultDisplayDuration);
@@ -210,8 +211,8 @@ function RefreshIcon({ state }) {
 }
 
 function refreshLabel(state) {
-  if (state === 'ready') return 'Release to refresh';
-  if (state === 'pulling') return 'Pull to refresh';
+  if (state === 'ready') return t('Release to refresh');
+  if (state === 'pulling') return t('Pull to refresh');
   return '';
 }
 

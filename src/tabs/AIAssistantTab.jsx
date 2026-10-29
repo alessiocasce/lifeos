@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import {
   Archive,
   Bot,
@@ -284,17 +286,17 @@ export function AIAssistantTab() {
       setVaultOpen(true);
       const embeddingResult = created?.embedding_result;
       if (embeddingResult && embeddingResult.configured === false && Number(embeddingResult.skipped ?? 0) > 0) {
-        setVaultRepairMessage('Saved; Gemini key missing - embeddings skipped.');
+        setVaultRepairMessage(t("Saved; Gemini key missing - embeddings skipped."));
         setVaultRepairStatus('ready');
       } else if (embeddingResult && Number(embeddingResult.failed ?? 0) > 0) {
-        setVaultRepairMessage('Saved; embeddings failed. Try Re-embed later.');
+        setVaultRepairMessage(t("Saved; embeddings failed. Try Re-embed later."));
         setVaultRepairStatus('error');
       } else {
         setVaultRepairMessage('');
         setVaultRepairStatus('idle');
       }
     } catch (error) {
-      setVaultSaveError(error.message || 'Could not save to Vault.');
+      setVaultSaveError(error.message || t("Could not save to Vault."));
       setVaultSaveStatus('error');
     } finally { vaultMutationRef.current = false; }
   };
@@ -307,7 +309,7 @@ export function AIAssistantTab() {
     try {
       await archiveAiVaultDocument(documentId);
       setVaultDetail(null);
-    } catch (error) { setVaultArchiveError(error.message || 'Report was not archived.'); }
+    } catch (error) { setVaultArchiveError(error.message || t("Report was not archived.")); }
     finally { vaultMutationRef.current = false; setVaultArchiveBusy(false); }
   };
 
@@ -321,18 +323,18 @@ export function AIAssistantTab() {
       const failed = Number(result?.failed_count ?? 0);
       const skipped = Number(result?.skipped_count ?? 0);
       if (!processed) {
-        setVaultRepairMessage('No chunks need repair.');
+        setVaultRepairMessage(t("No chunks need repair."));
       } else if (ready > 0) {
-        setVaultRepairMessage(`Re-embedded ${ready} chunk${ready === 1 ? '' : 's'}.`);
+        setVaultRepairMessage(t("Re-embedded {v0} chunk{v1}.", { v0: ready, v1: ready === 1 ? '' : 's' }));
       } else if (skipped > 0 && !result?.configured) {
-        setVaultRepairMessage('Gemini key missing - embeddings skipped.');
+        setVaultRepairMessage(t("Gemini key missing - embeddings skipped."));
       } else {
-        setVaultRepairMessage(`Processed ${processed}; ${failed} failed.`);
+        setVaultRepairMessage(t("Processed {v0}; {v1} failed.", { v0: processed, v1: failed }));
       }
       setVaultRepairStatus('ready');
     } catch (error) {
       setVaultRepairStatus('error');
-      setVaultRepairMessage(error.message || 'Embedding repair failed.');
+      setVaultRepairMessage(error.message || t("Embedding repair failed."));
     }
   };
 
@@ -361,7 +363,7 @@ export function AIAssistantTab() {
     try {
       await updateAiMemory(memoryId, { title, content, source: 'manual' });
       setEditingMemoryId(null);
-    } catch (error) { setMemoryError(error.message || 'Memory was not saved.'); }
+    } catch (error) { setMemoryError(error.message || t("Memory was not saved.")); }
     finally { memoryMutationRef.current = false; setMemoryBusy(false); }
   };
 
@@ -371,7 +373,7 @@ export function AIAssistantTab() {
     setMemoryBusy(true);
     setMemoryError('');
     try { await archiveAiMemory(memoryId); }
-    catch (error) { setMemoryError(error.message || 'Memory was not forgotten.'); }
+    catch (error) { setMemoryError(error.message || t("Memory was not forgotten.")); }
     finally { memoryMutationRef.current = false; setMemoryBusy(false); }
   };
 
@@ -380,7 +382,7 @@ export function AIAssistantTab() {
       <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-w-0 items-center gap-2 border-b border-white/10 px-3 py-2">
           <div className="mr-auto min-w-0">
-            <h2 className="truncate text-sm font-semibold text-zinc-100">{aiChatThreads.find((thread) => thread.id === activeAiThreadId)?.title || 'New conversation'}</h2>
+            <h2 className="truncate text-sm font-semibold text-zinc-100">{aiChatThreads.find((thread) => thread.id === activeAiThreadId)?.title || t("New conversation")}</h2>
           </div>
           <div className="flex min-w-0 items-center gap-2">
           <button
@@ -388,24 +390,24 @@ export function AIAssistantTab() {
             onClick={handleNewChat}
             disabled={aiStatus === 'loading'}
             className="icon-button disabled:opacity-40"
-            aria-label="New Brain chat"
-            title="New chat"
+            aria-label={t("New Brain chat")}
+            title={t("New chat")}
           >
             <MessageSquarePlus size={17} />
           </button>
-          <button type="button" className="icon-button" aria-label="Open Companion context" title="Companion context" onClick={() => setContextOpen(true)}><SlidersHorizontal size={17} /></button>
+          <button type="button" className="icon-button" aria-label={t("Open Companion context")} title={t("Companion context")} onClick={() => setContextOpen(true)}><SlidersHorizontal size={17} /></button>
           </div>
         </div>
 
         <div
           ref={messagesContainerRef}
           className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain p-2 md:p-3"
-          aria-label="Brain conversation messages"
+          aria-label={t("Brain conversation messages")}
           data-testid="brain-message-list"
         >
           {aiChatMessagesStatus === 'loading' && !messages.length ? (
             <div className="grid min-h-48 place-items-center text-zinc-500">
-              <Loader2 size={20} className="animate-spin" aria-label="Loading Brain messages" />
+              <Loader2 size={20} className="animate-spin" aria-label={t("Loading Brain messages")} />
             </div>
           ) : messages.length ? (
             messages.map((message) => <AssistantMessage key={message.id} message={message} onSaveToVault={openVaultSave} />)
@@ -415,7 +417,7 @@ export function AIAssistantTab() {
                 <div className="mx-auto grid h-10 w-10 place-items-center text-zinc-500">
                   <BrainCircuit size={21} />
                 </div>
-                <p className="mt-3 text-lg font-semibold text-zinc-200">What's on your mind?</p>
+                <p className="mt-3 text-lg font-semibold text-zinc-200">{t("What's on your mind?")}</p>
               </div>
             </div>
           )}
@@ -425,9 +427,7 @@ export function AIAssistantTab() {
               className="mr-auto inline-flex items-center gap-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] px-3 py-2 text-xs text-cyan-200"
               data-testid="brain-loading-indicator"
             >
-              <Loader2 size={13} className="animate-spin" />
-              Brain is thinking...
-            </div>
+              <Loader2 size={13} className="animate-spin" />{t("Brain is thinking...")}</div>
           ) : null}
 
           {aiError ? <AssistantError error={aiError} onRetry={lastFailedMessage ? retryLastFailedMessage : null} /> : null}
@@ -454,8 +454,8 @@ export function AIAssistantTab() {
                   }
                 }
               }}
-              placeholder="Message Companion..."
-              aria-label="Brain message input"
+              placeholder={t("Message Companion...")}
+              aria-label={t("Brain message input")}
               data-testid="brain-message-input"
               className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-md border border-white/10 bg-black/50 px-3 py-2.5 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-400/40"
             />
@@ -463,8 +463,8 @@ export function AIAssistantTab() {
               type="submit"
               disabled={aiStatus === 'loading' || !aiInput.trim()}
               className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-              aria-label="Send Brain message"
-              title={aiStatus === 'loading' ? 'Brain is thinking' : 'Send message'}
+              aria-label={t("Send Brain message")}
+              title={aiStatus === 'loading' ? t("Brain is thinking") : t("Send message")}
               aria-busy={aiStatus === 'loading'}
               data-testid="brain-send-button"
             >
@@ -476,8 +476,8 @@ export function AIAssistantTab() {
 
       <dialog ref={contextDialogRef} className="companion-context-dialog" aria-labelledby="companion-context-title" onCancel={(event) => { if (event.target === event.currentTarget) setContextOpen(false); }} onClose={(event) => { if (event.target === event.currentTarget) setContextOpen(false); }}>
         <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[#15181c] p-4">
-          <h2 id="companion-context-title" className="text-lg font-semibold">Companion context</h2>
-          <button type="button" className="icon-button" aria-label="Close Companion context" onClick={() => setContextOpen(false)}><X size={18} /></button>
+          <h2 id="companion-context-title" className="text-lg font-semibold">{t("Companion context")}</h2>
+          <button type="button" className="icon-button" aria-label={t("Close Companion context")} onClick={() => setContextOpen(false)}><X size={18} /></button>
         </header>
         <div className="grid min-w-0 gap-5 p-4">
         {contextOpen ? <CompanionState onCorrect={(item) => {
@@ -485,20 +485,20 @@ export function AIAssistantTab() {
           setContextOpen(false);
           window.requestAnimationFrame(() => document.querySelector('[data-testid="brain-message-input"]')?.focus());
         }} /> : null}
-        <section aria-label="Recent conversations">
-          <h3 className="mb-2 text-sm font-semibold">Conversations</h3>
+        <section aria-label={t("Recent conversations")}>
+          <h3 className="mb-2 text-sm font-semibold">{t("Conversations")}</h3>
           {aiChatThreads.length ? aiChatThreads.slice(0, visibleConversationCount).map((thread) => <button key={thread.id} type="button" disabled={aiStatus === 'loading'} aria-current={thread.id === activeAiThreadId ? 'true' : undefined} className="flex min-h-11 w-full items-center border-b border-white/10 py-3 text-left text-sm text-zinc-300 disabled:opacity-40" onClick={() => {
             selectAiChatThread(thread.id);
             setPendingMessages([]);
             setAiError(null);
             setLastFailedMessage(null);
             setContextOpen(false);
-          }}>{thread.title || 'Untitled conversation'}</button>) : <p className="py-3 text-sm text-zinc-500">No saved conversations.</p>}
-          {aiChatThreads.length > visibleConversationCount ? <button type="button" className="min-h-11 text-sm text-zinc-300" onClick={() => setVisibleConversationCount((count) => count + 20)}>View more conversations</button> : null}
-          {visibleConversationCount > 20 ? <button type="button" className="min-h-11 text-sm text-zinc-400" onClick={() => setVisibleConversationCount(20)}>Show fewer conversations</button> : null}
+          }}>{thread.title || t("Untitled conversation")}</button>) : <p className="py-3 text-sm text-zinc-500">{t("No saved conversations.")}</p>}
+          {aiChatThreads.length > visibleConversationCount ? <button type="button" className="min-h-11 text-sm text-zinc-300" onClick={() => setVisibleConversationCount((count) => count + 20)}>{t("View more conversations")}</button> : null}
+          {visibleConversationCount > 20 ? <button type="button" className="min-h-11 text-sm text-zinc-400" onClick={() => setVisibleConversationCount(20)}>{t("Show fewer conversations")}</button> : null}
         </section>
         <Panel>
-          <PanelHeader eyebrow="Action History" title="Recent Actions" right={<History size={16} className="text-violet-300" />} />
+          <PanelHeader eyebrow={t("Action History")} title={t("Recent Actions")} right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
             <AiActionHistoryList logs={brainActionLogs} status={aiActionLogsStatus} limit={actionLimit} quietErrors />
             <div className="flex flex-wrap gap-2">
@@ -508,7 +508,7 @@ export function AIAssistantTab() {
                   onClick={() => setRecentActionsExpanded((expanded) => !expanded)}
                   className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400"
                 >
-                  {recentActionsExpanded ? 'Show less' : 'View more'}
+                  {recentActionsExpanded ? t("Show less") : t("View more")}
                 </button>
               ) : null}
               {failedActionCount > 0 ? (
@@ -517,7 +517,7 @@ export function AIAssistantTab() {
                   onClick={() => setShowActionErrors((shown) => !shown)}
                   className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400"
                 >
-                  {showActionErrors ? 'Hide errors' : `Errors (${failedActionCount})`}
+                  {showActionErrors ? t("Hide errors") : t("Errors ({v0})", { v0: failedActionCount })}
                 </button>
               ) : null}
             </div>
@@ -532,8 +532,8 @@ export function AIAssistantTab() {
             aria-expanded={diagnosticsOpen}
           >
             <div className="min-w-0">
-              <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Diagnostics</p>
-              <h2 className="truncate text-sm font-semibold text-zinc-100">Brain Data</h2>
+              <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{t("Diagnostics")}</p>
+              <h2 className="truncate text-sm font-semibold text-zinc-100">{t("Brain Data")}</h2>
             </div>
             <ChevronDown size={16} className={`shrink-0 text-zinc-500 transition ${diagnosticsOpen ? 'rotate-180' : ''}`} />
           </button>
@@ -542,16 +542,16 @@ export function AIAssistantTab() {
             <div className="grid gap-3 p-3">
               <DiagnosticsSection
                 count={aiVaultDocuments.length}
-                label="Vault"
+                label={t("Vault")}
                 open={vaultOpen}
                 tone="emerald"
-                title="Saved Reports"
+                title={t("Saved Reports")}
                 onToggle={() => setVaultOpen((open) => !open)}
               />
               {vaultOpen ? (
                 <div className="grid gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-zinc-500">Auto-saved reports and semantic context.</p>
+                    <p className="text-xs text-zinc-500">{t("Auto-saved reports and semantic context.")}</p>
                     <div className="flex shrink-0 flex-wrap gap-2">
                       <button
                         type="button"
@@ -559,14 +559,12 @@ export function AIAssistantTab() {
                         disabled={vaultRepairStatus === 'loading'}
                         className="inline-flex min-h-11 items-center gap-2 rounded border border-white/10 px-3 text-sm text-zinc-300 disabled:opacity-50"
                       >
-                        {vaultRepairStatus === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                        Re-embed
-                      </button>
+                        {vaultRepairStatus === 'loading' ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}{t("Re-embed")}</button>
                       <button
                         type="button"
                         onClick={() => reloadAiVaultDocuments?.()}
                         className="icon-button"
-                        aria-label="Refresh Vault documents"
+                        aria-label={t("Refresh Vault documents")}
                       >
                         <RefreshCw size={13} />
                       </button>
@@ -576,7 +574,7 @@ export function AIAssistantTab() {
                     <p className={`text-xs ${vaultRepairStatus === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>{vaultRepairMessage}</p>
                   ) : null}
                   {aiVaultStatus === 'loading' && !aiVaultDocuments.length ? (
-                    <p className="py-3 text-center text-sm text-zinc-500">Loading Vault...</p>
+                    <p className="py-3 text-center text-sm text-zinc-500">{t("Loading Vault...")}</p>
                   ) : aiVaultDocuments.length ? (
                     aiVaultDocuments.slice(0, visibleReportCount).map((document) => (
                       <VaultDocumentCard
@@ -588,14 +586,12 @@ export function AIAssistantTab() {
                       />
                     ))
                   ) : (
-                    <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-500">
-                      Valuable long-form answers save here automatically.
-                    </p>
+                    <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-500">{t("Valuable long-form answers save here automatically.")}</p>
                   )}
-                  {aiVaultDocuments.length > visibleReportCount ? <button type="button" disabled={vaultArchiveBusy} className="min-h-11 text-left text-sm text-zinc-300" onClick={() => setVisibleReportCount((count) => count + 5)}>View more reports</button> : null}
-                  {visibleReportCount > 5 ? <button type="button" disabled={vaultArchiveBusy} className="min-h-11 text-left text-sm text-zinc-400" onClick={() => setVisibleReportCount(5)}>Show fewer reports</button> : null}
-                  {aiVaultError ? <p className="text-xs text-red-300">{aiVaultError}</p> : null}
-                  {vaultArchiveError ? <p role="alert" className="text-sm text-red-300">{vaultArchiveError}</p> : null}
+                  {aiVaultDocuments.length > visibleReportCount ? <button type="button" disabled={vaultArchiveBusy} className="min-h-11 text-left text-sm text-zinc-300" onClick={() => setVisibleReportCount((count) => count + 5)}>{t("View more reports")}</button> : null}
+                  {visibleReportCount > 5 ? <button type="button" disabled={vaultArchiveBusy} className="min-h-11 text-left text-sm text-zinc-400" onClick={() => setVisibleReportCount(5)}>{t("Show fewer reports")}</button> : null}
+                  {aiVaultError ? <p className="text-xs text-red-300">{t(aiVaultError)}</p> : null}
+                  {vaultArchiveError ? <p role="alert" className="text-sm text-red-300">{t(vaultArchiveError)}</p> : null}
                 </div>
               ) : null}
             </div>
@@ -605,27 +601,25 @@ export function AIAssistantTab() {
             <div className="grid gap-3 py-3">
               <DiagnosticsSection
                 count={aiMemories.length}
-                label="Memory"
+                label={t("Memory")}
                 open={memoryOpen}
                 tone="violet"
-                title="Saved memories"
+                title={t("Saved memories")}
                 onToggle={() => setMemoryOpen((open) => !open)}
               />
               {memoryOpen ? (
                 <div className="grid gap-2">
-                  {memoryError ? <p role="alert" className="text-sm text-red-300">{memoryError}</p> : null}
+                  {memoryError ? <p role="alert" className="text-sm text-red-300">{t(memoryError)}</p> : null}
                   <div className="flex items-center justify-end">
                     <button
                       type="button"
                       onClick={() => Promise.allSettled([reloadAiMemories?.(), reloadAiInsights?.()].filter(Boolean))}
                       className="inline-flex min-h-11 items-center gap-2 rounded border border-white/10 px-3 text-sm text-zinc-300"
                     >
-                      <RefreshCw size={13} />
-                      Refresh
-                    </button>
+                      <RefreshCw size={13} />{t("Refresh")}</button>
                   </div>
                   {aiMemoriesStatus === 'loading' && !aiMemories.length ? (
-                    <p className="py-3 text-center text-sm text-zinc-500">Loading memory...</p>
+                    <p className="py-3 text-center text-sm text-zinc-500">{t("Loading memory...")}</p>
                   ) : aiMemories.length ? (
                     aiMemories.map((memory) => (
                       <MemoryCard
@@ -642,16 +636,12 @@ export function AIAssistantTab() {
                       />
                     ))
                   ) : (
-                    <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-500">
-                      Memory builds invisibly as you use Brain.
-                    </p>
+                    <p className="rounded-md border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-500">{t("Memory builds invisibly as you use Brain.")}</p>
                   )}
 
                   {aiInsights.length ? (
                     <details className="border-t border-white/10 py-3">
-                      <summary className="min-h-11 cursor-pointer text-sm text-zinc-400">
-                        Recent insights
-                      </summary>
+                      <summary className="min-h-11 cursor-pointer text-sm text-zinc-400">{t("Recent insights")}</summary>
                       <div className="mt-3 grid gap-2">
                         {aiInsights.slice(0, 3).map((insight) => (
                           <div key={insight.id} className="border-b border-white/10 py-3">
@@ -722,20 +712,20 @@ function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCan
           value={draft.title}
           onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
           className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3 text-base text-zinc-100 outline-none focus:border-zinc-400"
-          aria-label="Memory title"
+          aria-label={t("Memory title")}
         />
         <textarea
           rows={3}
           value={draft.content}
           onChange={(event) => onDraftChange((current) => ({ ...current, content: event.target.value }))}
           className="rounded border border-white/15 bg-[#14171b] px-3 py-2 text-base text-zinc-100 outline-none focus:border-zinc-400"
-          aria-label="Memory content"
+          aria-label={t("Memory content")}
         />
         <div className="flex justify-end gap-2">
-          <button type="button" disabled={busy} onClick={onCancel} className="icon-button" aria-label="Cancel memory edit">
+          <button type="button" disabled={busy} onClick={onCancel} className="icon-button" aria-label={t("Cancel memory edit")}>
             <X size={15} />
           </button>
-          <button type="button" disabled={busy || !draft.title.trim() || !draft.content.trim()} onClick={onSave} className="icon-button" aria-label="Save memory">
+          <button type="button" disabled={busy || !draft.title.trim() || !draft.content.trim()} onClick={onSave} className="icon-button" aria-label={t("Save memory")}>
             <Save size={15} />
           </button>
         </div>
@@ -751,16 +741,14 @@ function MemoryCard({ memory, editing, draft, busy, onDraftChange, onEdit, onCan
           <h3 className="mt-2 text-sm font-semibold text-zinc-100">{memory.title}</h3>
         </div>
         <div className="flex shrink-0 gap-1">
-          <button type="button" disabled={busy} onClick={onEdit} className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400 hover:text-zinc-200">
-            Edit
-          </button>
-          <button type="button" disabled={busy} onClick={onArchive} className="icon-button" aria-label={`Forget ${memory.title}`}>
+          <button type="button" disabled={busy} onClick={onEdit} className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400 hover:text-zinc-200">{t("Edit")}</button>
+          <button type="button" disabled={busy} onClick={onArchive} className="icon-button" aria-label={t("Forget {v0}", { v0: memory.title })}>
             <Archive size={14} />
           </button>
         </div>
       </div>
       <p className="mt-2 break-words text-xs leading-5 text-zinc-400">{memory.content}</p>
-      <p className="data-text mt-2 text-[10px] text-zinc-600">Importance {memory.importance}/5</p>
+      <p className="data-text mt-2 text-[10px] text-zinc-600">{t("Importance ")}{memory.importance}/5</p>
     </article>
   );
 }
@@ -774,7 +762,7 @@ function VaultDocumentCard({ document, busy, onOpen, onArchive }) {
           <h3 className="mt-2 truncate text-sm font-semibold text-zinc-100">{document.title}</h3>
           {document.summary ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{document.summary}</p> : null}
         </button>
-        <button type="button" disabled={busy} onClick={onArchive} className="icon-button shrink-0" aria-label={`Archive ${document.title}`}>
+        <button type="button" disabled={busy} onClick={onArchive} className="icon-button shrink-0" aria-label={t("Archive {v0}", { v0: document.title })}>
           <Archive size={14} />
         </button>
       </div>
@@ -802,61 +790,51 @@ function VaultSaveModal({ draft, status, error, onDraftChange, onClose, onSave }
     <dialog ref={dialogRef} aria-labelledby="vault-save-title" onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); }} className="vault-dialog w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded border border-white/10 bg-[#111] p-4 text-zinc-100">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="data-text text-[10px] uppercase tracking-wider text-emerald-300">Vault</p>
-            <h2 id="vault-save-title" className="text-base font-semibold text-zinc-100">Save Brain Answer</h2>
+            <p className="data-text text-[10px] uppercase tracking-wider text-emerald-300">{t("Vault")}</p>
+            <h2 id="vault-save-title" className="text-base font-semibold text-zinc-100">{t("Save Brain Answer")}</h2>
           </div>
-          <button type="button" disabled={busy} onClick={onClose} className="icon-button" aria-label="Close Vault save">
+          <button type="button" disabled={busy} onClick={onClose} className="icon-button" aria-label={t("Close Vault save")}>
             <X size={16} />
           </button>
         </div>
         <fieldset disabled={busy} className="grid min-w-0 gap-3">
-          <label className="grid gap-1 text-sm text-zinc-300">
-            Title
-            <input
+          <label className="grid gap-1 text-sm text-zinc-300">{t("Title")}<input
               value={draft.title}
               onChange={(event) => onDraftChange((current) => ({ ...current, title: event.target.value }))}
               className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none focus:border-emerald-400/40"
             />
           </label>
-          <label className="grid gap-1 text-sm text-zinc-300">
-            Type
-            <select
+          <label className="grid gap-1 text-sm text-zinc-300">{t("Type")}<select
               value={draft.documentType}
               onChange={(event) => onDraftChange((current) => ({ ...current, documentType: event.target.value }))}
               className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none focus:border-emerald-400/40"
             >
-              <option value="brain_answer">Brain Answer</option>
-              <option value="workout_report">Workout Report</option>
-              <option value="project_report">Project Report</option>
-              <option value="finance_report">Finance Report</option>
-              <option value="life_review">Life Review</option>
-              <option value="product_report">Product Report</option>
-              <option value="note">Note</option>
+              <option value="brain_answer">{t("Brain Answer")}</option>
+              <option value="workout_report">{t("Workout Report")}</option>
+              <option value="project_report">{t("Project Report")}</option>
+              <option value="finance_report">{t("Finance Report")}</option>
+              <option value="life_review">{t("Life Review")}</option>
+              <option value="product_report">{t("Product Report")}</option>
+              <option value="note">{t("Note")}</option>
             </select>
           </label>
-          <label className="grid gap-1 text-sm text-zinc-300">
-            Tags
-            <input
+          <label className="grid gap-1 text-sm text-zinc-300">{t("Tags")}<input
               value={draft.tags}
               onChange={(event) => onDraftChange((current) => ({ ...current, tags: event.target.value }))}
-              placeholder="workout, back_day"
+              placeholder={t("workout, back_day")}
               className="h-11 rounded-md border border-white/10 bg-black/40 px-3 text-base text-zinc-100 outline-none placeholder:text-zinc-700 focus:border-emerald-400/40"
             />
           </label>
           {error ? <p role="alert" className="text-sm text-red-300">{error}</p> : null}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400">
-              Cancel
-            </button>
+            <button type="button" onClick={onClose} className="min-h-11 rounded border border-white/10 px-3 text-sm text-zinc-400">{t("Cancel")}</button>
             <button
               type="button"
               onClick={onSave}
               disabled={status === 'saving' || !draft.title.trim()}
               className="inline-flex min-h-11 items-center gap-2 rounded bg-zinc-100 px-4 text-sm font-semibold text-zinc-950 disabled:opacity-50"
             >
-              {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-              Save
-            </button>
+              {status === 'saving' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}{t("Save")}</button>
           </div>
         </fieldset>
     </dialog>
@@ -883,10 +861,10 @@ function VaultDetailModal({ document, busy, error, returnFocus, onClose, onArchi
             <p className="data-text mt-1 text-[10px] text-zinc-600">{formatShortDate(document.created_at)}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <button type="button" disabled={busy} onClick={onArchive} className="icon-button" aria-label="Archive Vault document">
+            <button type="button" disabled={busy} onClick={onArchive} className="icon-button" aria-label={t("Archive Vault document")}>
               <Archive size={16} />
             </button>
-            <button type="button" disabled={busy} onClick={onClose} className="icon-button" aria-label="Close Vault document">
+            <button type="button" disabled={busy} onClick={onClose} className="icon-button" aria-label={t("Close Vault document")}>
               <X size={16} />
             </button>
           </div>
@@ -908,8 +886,8 @@ function AssistantError({ error, onRetry }) {
     <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3" data-testid="brain-error">
       <p className="text-sm font-medium text-red-200">{error.message}</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {error.providerStatus ? <Tag tone="amber">Provider: {error.providerStatus}</Tag> : null}
-        {error.requestId ? <Tag tone="zinc">Request: {error.requestId}</Tag> : null}
+        {error.providerStatus ? <Tag tone="amber">{t("Provider: ")}{error.providerStatus}</Tag> : null}
+        {error.requestId ? <Tag tone="zinc">{t("Request: ")}{error.requestId}</Tag> : null}
         {error.code ? <Tag tone="amber">{error.code}</Tag> : null}
       </div>
       {error.providerMessage ? <p className="mt-2 text-xs leading-5 text-zinc-400">{error.providerMessage}</p> : null}
@@ -918,9 +896,7 @@ function AssistantError({ error, onRetry }) {
           type="button"
           onClick={onRetry}
           className="mt-3 min-h-11 rounded border border-red-300/20 bg-red-300/10 px-4 text-sm font-semibold text-red-100 hover:border-red-200/40"
-        >
-          Retry
-        </button>
+        >{t("Retry")}</button>
       ) : null}
     </div>
   );
@@ -933,7 +909,7 @@ function AssistantMessage({ message, onSaveToVault }) {
     <article className={`min-w-0 rounded-md border px-3 py-2 ${isUser ? 'ml-auto max-w-[92%] border-cyan-400/20 bg-cyan-400/10 sm:max-w-[78%]' : 'mr-auto max-w-full border-white/5 bg-black/25 sm:max-w-[92%]'}`}>
       <div className="mb-2 flex items-center gap-2">
         {isUser ? <Sparkles size={15} className="text-cyan-300" /> : <Bot size={15} className="text-emerald-300" />}
-        <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{isUser ? 'You' : 'LifeOS'}</span>
+        <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{isUser ? t("You") : t("LifeOS")}</span>
         {skill ? (
           <span
             className="data-text max-w-28 truncate rounded border border-cyan-400/15 bg-cyan-400/[0.06] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-300"
@@ -948,8 +924,8 @@ function AssistantMessage({ message, onSaveToVault }) {
               type="button"
               onClick={() => onSaveToVault?.(message)}
               className="icon-button"
-              aria-label="Save assistant answer to Vault"
-              title="Save to Vault"
+              aria-label={t("Save assistant answer to Vault")}
+              title={t("Save to Vault")}
             >
               <Save size={13} />
             </button>
@@ -1091,7 +1067,7 @@ function formatDocumentType(value) {
 function formatShortDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('it-IT', {
+  return date.toLocaleDateString(getLocale(), {
     timeZone: 'Europe/Rome',
     day: '2-digit',
     month: 'short',
@@ -1105,7 +1081,7 @@ function isUuid(value) {
 function formatMessageTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('it-IT', {
+  return date.toLocaleTimeString(getLocale(), {
     timeZone: 'Europe/Rome',
     hour: '2-digit',
     minute: '2-digit',

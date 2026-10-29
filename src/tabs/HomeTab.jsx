@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import { ArrowUpRight, Bell, CalendarDays, Dumbbell, MessageSquare, Moon, Target } from 'lucide-react';
 import { useEffect } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -38,51 +40,51 @@ export function HomeTab() {
   return <div className="command-surface">
     <header className="command-intro">
       <p className="text-sm text-zinc-400">{formatDay(today)}</p>
-      <h2 className="mt-2 text-2xl font-semibold text-zinc-100">{liveWorkout ? 'Training in progress.' : activeProjectSession ? 'One block at a time.' : nextEvent ? 'Your day, in view.' : dueMemos.length ? 'A few open loops.' : 'Room to focus.'}</h2>
-      <button className="mt-4 flex min-h-11 items-center gap-2 text-sm text-zinc-300 hover:text-white" onClick={() => setActiveTab('assistant')}><MessageSquare size={17} />Talk to Companion<ArrowUpRight size={15} /></button>
+      <h2 className="mt-2 text-2xl font-semibold text-zinc-100">{liveWorkout ? t("Training in progress.") : activeProjectSession ? t("One block at a time.") : nextEvent ? t("Your day, in view.") : dueMemos.length ? t("A few open loops.") : t("Room to focus.")}</h2>
+      <button className="mt-4 flex min-h-11 items-center gap-2 text-sm text-zinc-300 hover:text-white" onClick={() => setActiveTab('assistant')}><MessageSquare size={17} />{t("Talk to Companion")}<ArrowUpRight size={15} /></button>
     </header>
 
-    {liveWorkout || activeProjectSession ? <section aria-label="Active work" className="command-active">
+    {liveWorkout || activeProjectSession ? <section aria-label={t("Active work")} className="command-active">
       {liveWorkout ? <button className="command-active-row" onClick={resumeWorkout}>
-        <Dumbbell size={24} className="shrink-0 text-zinc-200" /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">Active Training</span><span className="mt-1 block break-words text-lg font-semibold">{liveWorkout.name || 'Workout'}</span></span><ArrowUpRight size={20} />
+        <Dumbbell size={24} className="shrink-0 text-zinc-200" /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">{t("Active Training")}</span><span className="mt-1 block break-words text-lg font-semibold">{liveWorkout.name || t("Workout")}</span></span><ArrowUpRight size={20} />
       </button> : null}
       {activeProjectSession ? <button className="command-active-row" onClick={() => setActiveTab('projects')}>
-        <Target size={22} className="shrink-0 text-zinc-400" /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">Project session in progress</span><span className="mt-1 block break-words text-base font-semibold">{project?.name || 'Project session'}</span>{activeProjectSession.target_output ? <span className="mt-1 block break-words text-sm text-zinc-400">{activeProjectSession.target_output}</span> : null}</span><ArrowUpRight size={18} />
+        <Target size={22} className="shrink-0 text-zinc-400" /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">{t("Project session in progress")}</span><span className="mt-1 block break-words text-base font-semibold">{project?.name || t("Project session")}</span>{activeProjectSession.target_output ? <span className="mt-1 block break-words text-sm text-zinc-400">{activeProjectSession.target_output}</span> : null}</span><ArrowUpRight size={18} />
       </button> : null}
     </section> : null}
 
-    {unavailable ? <p role="alert" className="border-t border-white/10 py-4 text-sm text-amber-200">Some commitments could not be refreshed. Open Calendar or Memos to retry.</p> : null}
-    {quiet ? <p className="command-quiet text-zinc-500">{loading ? 'Checking today’s commitments…' : unavailable ? 'Today’s commitments are not fully available.' : 'No dated commitments need your attention here.'}</p> : null}
+    {unavailable ? <p role="alert" className="border-t border-white/10 py-4 text-sm text-amber-200">{t("Some commitments could not be refreshed. Open Calendar or Memos to retry.")}</p> : null}
+    {quiet ? <p className="command-quiet text-zinc-500">{loading ? t("Checking today’s commitments…") : unavailable ? t("Today’s commitments are not fully available.") : t("No dated commitments need your attention here.")}</p> : null}
 
     <div className="command-columns">
-      {events.length ? <section aria-label="Today's agenda" className="command-section">
-        <SectionLink title="Today" icon={CalendarDays} onClick={() => setActiveTab('calendar')} />
+      {events.length ? <section aria-label={t("Today's agenda")} className="command-section">
+        <SectionLink title={t("Today")} icon={CalendarDays} onClick={() => setActiveTab('calendar')} />
         {events.slice(0, 5).map((event) => <button key={event.id} className="command-record" onClick={() => setActiveTab('calendar')}>
           <time className="command-record-time">{timeLabel(event)}</time><span className="min-w-0 flex-1 text-left"><span className={`block break-words text-sm ${event.status === 'done' ? 'text-zinc-500' : 'text-zinc-200'}`}>{event.title}</span>{event.status && event.status !== 'planned' ? <span className="mt-1 block text-xs text-zinc-500">{event.status}</span> : null}</span><ArrowUpRight size={15} className="text-zinc-600" />
         </button>)}
-        {events.length > 5 ? <button className="min-h-11 text-sm text-zinc-400" onClick={() => setActiveTab('calendar')}>View all {events.length} commitments</button> : null}
+        {events.length > 5 ? <button className="min-h-11 text-sm text-zinc-400" onClick={() => setActiveTab('calendar')}>{t("View all ")}{events.length}{t(" commitments")}</button> : null}
       </section> : null}
-      {dueMemos.length ? <section aria-label="Open loops" className="command-section">
-        <SectionLink title="Open loops" icon={Bell} onClick={() => setActiveTab('memos')} />
+      {dueMemos.length ? <section aria-label={t("Open loops")} className="command-section">
+        <SectionLink title={t("Open loops")} icon={Bell} onClick={() => setActiveTab('memos')} />
         {dueMemos.slice(0, 4).map((memo) => <button key={memo.id} className="command-record" onClick={() => setActiveTab('memos')}>
-          <span className={`command-record-time ${memo.memo_date < today ? 'text-amber-200' : ''}`}>{memo.memo_date < today ? 'Overdue' : memo.memo_time?.slice(0, 5) || 'Today'}</span><span className="min-w-0 flex-1 break-words text-left text-sm text-zinc-200">{memo.title}</span><ArrowUpRight size={15} className="text-zinc-600" />
+          <span className={`command-record-time ${memo.memo_date < today ? 'text-amber-200' : ''}`}>{memo.memo_date < today ? t("Overdue") : memo.memo_time?.slice(0, 5) || t("Today")}</span><span className="min-w-0 flex-1 break-words text-left text-sm text-zinc-200">{memo.title}</span><ArrowUpRight size={15} className="text-zinc-600" />
         </button>)}
-        {dueMemos.length > 4 ? <button className="min-h-11 text-sm text-zinc-400" onClick={() => setActiveTab('memos')}>View all {dueMemos.length} open loops</button> : null}
+        {dueMemos.length > 4 ? <button className="min-h-11 text-sm text-zinc-400" onClick={() => setActiveTab('memos')}>{t("View all ")}{dueMemos.length}{t(" open loops")}</button> : null}
       </section> : null}
     </div>
 
-    {hasSleep || habits.length || completedWorkouts.length || completedSessions.length ? <section aria-label="Recorded today" className="command-section">
-      <h3 className="py-4 text-sm font-semibold text-zinc-400">Recorded today</h3>
+    {hasSleep || habits.length || completedWorkouts.length || completedSessions.length ? <section aria-label={t("Recorded today")} className="command-section">
+      <h3 className="py-4 text-sm font-semibold text-zinc-400">{t("Recorded today")}</h3>
       <div className="flex flex-wrap gap-x-8 gap-y-3 pb-5">
-        {hasSleep ? <button className="flex min-h-11 items-center gap-2 text-sm" onClick={() => setActiveTab('health')}><Moon size={17} className={Number(sleep) < 6 ? 'text-amber-200' : 'text-zinc-500'} /><span className={Number(sleep) < 6 ? 'text-amber-200' : 'text-zinc-300'}>{Number(sleep).toLocaleString(undefined, { maximumFractionDigits: 1 })}h sleep</span></button> : null}
-        {habits.map((habit) => <button key={habit.id} className="min-h-11 text-sm text-zinc-400" onClick={() => setActiveTab('health')}>{habit.label}{habit.entry.count > 1 ? ` ×${habit.entry.count}` : ''}<span className="ml-2 text-xs text-zinc-600">{habit.entry.times.at(-1) || 'Logged'}</span></button>)}
-        {completedWorkouts.length ? <button className="flex min-h-11 items-center gap-2 text-sm text-zinc-400" onClick={() => setActiveTab('workout')}><Dumbbell size={17} />{completedWorkouts.length} training session{completedWorkouts.length > 1 ? 's' : ''} completed</button> : null}
-        {completedSessions.length ? <button className="flex min-h-11 items-center gap-2 text-sm text-zinc-400" onClick={() => setActiveTab('projects')}><Target size={17} />{completedSessions.length} project block{completedSessions.length > 1 ? 's' : ''} completed</button> : null}
+        {hasSleep ? <button className="flex min-h-11 items-center gap-2 text-sm" onClick={() => setActiveTab('health')}><Moon size={17} className={Number(sleep) < 6 ? 'text-amber-200' : 'text-zinc-500'} /><span className={Number(sleep) < 6 ? 'text-amber-200' : 'text-zinc-300'}>{Number(sleep).toLocaleString(getLocale(), { maximumFractionDigits: 1 })}{t("h sleep")}</span></button> : null}
+        {habits.map((habit) => <button key={habit.id} className="min-h-11 text-sm text-zinc-400" onClick={() => setActiveTab('health')}>{t(habit.label)}{habit.entry.count > 1 ? t(" ×{v0}", { v0: habit.entry.count }) : ''}<span className="ml-2 text-xs text-zinc-600">{habit.entry.times.at(-1) || t("Logged")}</span></button>)}
+        {completedWorkouts.length ? <button className="flex min-h-11 items-center gap-2 text-sm text-zinc-400" onClick={() => setActiveTab('workout')}><Dumbbell size={17} />{completedWorkouts.length}{t(" training session")}{completedWorkouts.length > 1 ? t("s") : ''}{t(" completed")}</button> : null}
+        {completedSessions.length ? <button className="flex min-h-11 items-center gap-2 text-sm text-zinc-400" onClick={() => setActiveTab('projects')}><Target size={17} />{completedSessions.length}{t(" project block")}{completedSessions.length > 1 ? t("s") : ''}{t(" completed")}</button> : null}
       </div>
     </section> : null}
 
-    {tomorrowEvents.length ? <section aria-label="Tomorrow" className="command-section">
-      <SectionLink title="Coming tomorrow" icon={CalendarDays} onClick={() => setActiveTab('calendar')} />
+    {tomorrowEvents.length ? <section aria-label={t("Tomorrow")} className="command-section">
+      <SectionLink title={t("Coming tomorrow")} icon={CalendarDays} onClick={() => setActiveTab('calendar')} />
       {tomorrowEvents.slice(0, 2).map((event) => <button key={event.id} className="command-record" onClick={() => setActiveTab('calendar')}><span className="command-record-time">{timeLabel(event)}</span><span className="min-w-0 flex-1 break-words text-left text-sm text-zinc-400">{event.title}</span><ArrowUpRight size={15} className="text-zinc-600" /></button>)}
     </section> : null}
   </div>;
@@ -102,5 +104,5 @@ function validLocalDate(value) {
 }
 
 function formatDay(value) {
-  return new Date(`${value}T12:00:00Z`).toLocaleDateString('en-GB', { timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long' });
+  return new Date(`${value}T12:00:00Z`).toLocaleDateString(getLocale(), { timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long' });
 }

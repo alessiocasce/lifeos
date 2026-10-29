@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import {
   ArrowLeft,
   Briefcase,
@@ -108,7 +110,7 @@ export function ProjectsTab() {
   const selectProject = (id) => {
     if (id === selectedProjectId) return;
     if ((sessionTarget.trim() || sessionProof.trim() || sessionDelta || progressInput)
-      && !window.confirm('Discard the unsaved project session/progress draft?')) return;
+      && !window.confirm(t("Discard the unsaved project session/progress draft?"))) return;
     setSessionTarget('');
     setSessionProof('');
     setSessionDelta('');
@@ -199,20 +201,20 @@ export function ProjectsTab() {
       setSelectedProjectId(saved.id);
       closeProjectModal();
     } catch (error) {
-      setProjectFormError(error.message || 'Failed to save project.');
+      setProjectFormError(error.message || t("Failed to save project."));
       setProjectSaveStatus('idle');
     }
   };
 
   const removeProject = async (project) => {
-    if (!window.confirm(`Delete project "${project.name}" and its sessions?`)) return;
+    if (!window.confirm(t("Delete project \"{v0}\" and its sessions?", { v0: project.name }))) return;
     setBusyId(`project:${project.id}:delete`);
     setSessionError('');
     try {
       await deleteProject(project.id);
       if (selectedProjectId === project.id) setSelectedProjectId(null);
     } catch (error) {
-      setSessionError(error.message || 'Failed to delete project.');
+      setSessionError(error.message || t("Failed to delete project."));
     } finally {
       setBusyId('');
     }
@@ -220,7 +222,7 @@ export function ProjectsTab() {
 
   const startSession = async (project) => {
     if (!sessionTarget.trim()) {
-      setSessionError('Set a target output before starting.');
+      setSessionError(t("Set a target output before starting."));
       return;
     }
     setBusyId(`project:${project.id}:start`);
@@ -235,7 +237,7 @@ export function ProjectsTab() {
       setSessionTarget('');
       setSelectedProjectId(session.project_id);
     } catch (error) {
-      setSessionError(error.message || 'Failed to start session.');
+      setSessionError(error.message || t("Failed to start session."));
     } finally {
       setBusyId('');
     }
@@ -256,20 +258,20 @@ export function ProjectsTab() {
       setSessionProof('');
       setSessionDelta('');
     } catch (error) {
-      setSessionError(error.message || 'Failed to end session.');
+      setSessionError(error.message || t("Failed to end session."));
     } finally {
       setBusyId('');
     }
   };
 
   const removeSession = async (session) => {
-    if (!window.confirm('Delete this project session?')) return;
+    if (!window.confirm(t("Delete this project session?"))) return;
     setBusyId(`session:${session.id}:delete`);
     setSessionError('');
     try {
       await deleteProjectSession(session.id);
     } catch (error) {
-      setSessionError(error.message || 'Failed to delete session.');
+      setSessionError(error.message || t("Failed to delete session."));
     } finally {
       setBusyId('');
     }
@@ -278,7 +280,7 @@ export function ProjectsTab() {
   const addProgress = async (project) => {
     const delta = Number(String(progressInput).replace(',', '.'));
     if (!Number.isFinite(delta) || delta <= 0) {
-      setSessionError('Enter a positive progress amount.');
+      setSessionError(t("Enter a positive progress amount."));
       return;
     }
     setBusyId(`project:${project.id}:progress`);
@@ -287,7 +289,7 @@ export function ProjectsTab() {
       await updateProject(project.id, { current_value: Number(project.current_value ?? 0) + delta });
       setProgressInput('');
     } catch (error) {
-      setSessionError(error.message || 'Failed to update project progress.');
+      setSessionError(error.message || t("Failed to update project progress."));
     } finally {
       setBusyId('');
     }
@@ -325,11 +327,11 @@ export function ProjectsTab() {
     if (!selectedProject) return;
     const amount = Number(String(moneyForm.amount).replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setMoneyFormError('Amount must be greater than 0.');
+      setMoneyFormError(t("Amount must be greater than 0."));
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(moneyForm.entry_date)) {
-      setMoneyFormError('Choose a valid entry date.');
+      setMoneyFormError(t("Choose a valid entry date."));
       return;
     }
 
@@ -347,19 +349,19 @@ export function ProjectsTab() {
       }
       closeMoneyModal();
     } catch (error) {
-      setMoneyFormError(error.message || 'Failed to save project money entry.');
+      setMoneyFormError(error.message || t("Failed to save project money entry."));
       setMoneySaveStatus('idle');
     }
   };
 
   const removeMoneyEntry = async (entry) => {
-    if (!window.confirm('Delete this project money entry?')) return;
+    if (!window.confirm(t("Delete this project money entry?"))) return;
     setBusyId(`money:${entry.id}:delete`);
     setSessionError('');
     try {
       await deleteProjectMoneyEntry(entry.id);
     } catch (error) {
-      setSessionError(error.message || 'Failed to delete money entry.');
+      setSessionError(error.message || t("Failed to delete money entry."));
     } finally {
       setBusyId('');
     }
@@ -429,26 +431,24 @@ export function ProjectsTab() {
       <Panel>
         <div className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
-            <p className="text-xs text-zinc-400">Execution</p>
-            <h2 className="mt-1 text-2xl font-semibold text-zinc-100">Projects</h2>
+            <p className="text-xs text-zinc-400">{t("Execution")}</p>
+            <h2 className="mt-1 text-2xl font-semibold text-zinc-100">{t("Projects")}</h2>
           </div>
           <button
             type="button"
             onClick={openCreateProject}
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200"
           >
-            <Plus size={17} />
-            New Project
-          </button>
+            <Plus size={17} />{t("New Project")}</button>
         </div>
       </Panel>
 
       {activeSessionProject ? <button type="button" onClick={() => selectProject(activeSessionProject.id)} className="project-resume">
-        <Play size={18} /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">Session in progress</span><span className="block break-words font-semibold">{activeSessionProject.name}</span></span><ArrowLeft size={18} className="rotate-180" />
+        <Play size={18} /><span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">{t("Session in progress")}</span><span className="block break-words font-semibold">{activeSessionProject.name}</span></span><ArrowLeft size={18} className="rotate-180" />
       </button> : null}
-      {projectSessions.length ? <p className="px-3 text-sm text-zinc-400"><span className="data-text text-zinc-200">{formatNumber(hoursThisWeek)}h</span> recorded this week · {sessionsThisWeek.length} sessions</p> : null}
-      {projects.length ? <div className="flex gap-1 px-3" role="group" aria-label="Project filter">
-        {['all', 'active'].map((filter) => <button key={filter} type="button" aria-pressed={projectFilter === filter} onClick={() => setProjectFilter(filter)} className={`min-h-11 border-b-2 px-4 text-sm capitalize ${projectFilter === filter ? 'border-zinc-200 text-zinc-100' : 'border-transparent text-zinc-500'}`}>{filter === 'all' ? 'All projects' : 'Active'}</button>)}
+      {projectSessions.length ? <p className="px-3 text-sm text-zinc-400"><span className="data-text text-zinc-200">{formatNumber(hoursThisWeek)}{t("h")}</span>{t(" recorded this week · ")}{sessionsThisWeek.length}{t(" sessions")}</p> : null}
+      {projects.length ? <div className="flex gap-1 px-3" role="group" aria-label={t("Project filter")}>
+        {['all', 'active'].map((filter) => <button key={filter} type="button" aria-pressed={projectFilter === filter} onClick={() => setProjectFilter(filter)} className={`min-h-11 border-b-2 px-4 text-sm capitalize ${projectFilter === filter ? 'border-zinc-200 text-zinc-100' : 'border-transparent text-zinc-500'}`}>{filter === 'all' ? t("All projects") : t("Active")}</button>)}
       </div> : null}
 
       {(projectsError || projectSessionsError || sessionError) ? (
@@ -458,7 +458,7 @@ export function ProjectsTab() {
       ) : null}
 
       {projectsLoading ? (
-        <LoadingState label="Loading projects..." />
+        <LoadingState label={t("Loading projects...")} />
       ) : visibleProjects.length ? (
         <div className="grid min-w-0 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
           {visibleProjects.map((project) => (
@@ -470,7 +470,7 @@ export function ProjectsTab() {
             />
           ))}
         </div>
-      ) : projects.length ? <p className="px-3 py-8 text-sm text-zinc-500">No active projects.</p> : (
+      ) : projects.length ? <p className="px-3 py-8 text-sm text-zinc-500">{t("No active projects.")}</p> : (
         <EmptyProjects onCreate={openCreateProject} />
       )}
 
@@ -518,7 +518,7 @@ function ProjectCard({ onOpen, project, sessions }) {
       </div>
 
       <p className="mt-4 break-words text-xs leading-5 text-zinc-400">
-        {lastSession ? `${sessions.length} sessions · Last ${formatDateTime(lastSession.started_at)}` : 'No sessions logged yet'}
+        {lastSession ? t("{v0} sessions · Last {v1}", { v0: sessions.length, v1: formatDateTime(lastSession.started_at) }) : t("No sessions logged yet")}
       </p>
     </button>
   );
@@ -571,19 +571,17 @@ function ProjectDetail({
               onClick={onBack}
               className="inline-flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-zinc-300"
             >
-              <ArrowLeft size={16} />
-              Back
-            </button>
+              <ArrowLeft size={16} />{t("Back")}</button>
             <div className="flex flex-wrap gap-2">
-              <IconButton label="Edit project" onClick={() => onEditProject(project)}><Pencil size={15} /></IconButton>
-              <IconButton label="Delete project" tone="red" busy={busyId === `project:${project.id}:delete`} onClick={() => onDeleteProject(project)}><Trash2 size={15} /></IconButton>
+              <IconButton label={t("Edit project")} onClick={() => onEditProject(project)}><Pencil size={15} /></IconButton>
+              <IconButton label={t("Delete project")} tone="red" busy={busyId === `project:${project.id}:delete`} onClick={() => onDeleteProject(project)}><Trash2 size={15} /></IconButton>
             </div>
           </div>
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Tag tone={statusTone(project.status)}>{project.status}</Tag>
-              <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{project.goal_type} goal</span>
+              <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{project.goal_type}{t(" goal")}</span>
             </div>
             <h2 className="mt-2 break-words text-2xl font-semibold text-zinc-100">{project.name}</h2>
             {project.notes ? <p className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-zinc-500">{project.notes}</p> : null}
@@ -593,7 +591,7 @@ function ProjectDetail({
             <div className="min-w-0 py-3">
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Progress</p>
+                  <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{t("Progress")}</p>
                   <p className="data-text mt-1 text-2xl font-black text-zinc-100">
                     {formatNumber(stats.completed)} / {formatNumber(stats.target)} {stats.unit}
                   </p>
@@ -602,8 +600,7 @@ function ProjectDetail({
               </div>
               <ProgressBar value={stats.percent} />
               <p className="mt-2 text-xs text-zinc-500">
-                {formatNumber(Math.max(0, stats.target - stats.completed))} {stats.unit} remaining
-              </p>
+                {formatNumber(Math.max(0, stats.target - stats.completed))} {stats.unit}{t(" remaining")}</p>
             </div>
           </div>
         </div>
@@ -617,21 +614,21 @@ function ProjectDetail({
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Panel>
-          <PanelHeader title={projectActiveSession ? 'Active Session' : 'Start Session'} right={<Clock3 size={16} className="text-zinc-400" />} />
+          <PanelHeader title={projectActiveSession ? t("Active Session") : t("Start Session")} right={<Clock3 size={16} className="text-zinc-400" />} />
           <div className="grid gap-3 p-3">
             {projectActiveSession ? (
               <div className="grid gap-3">
                 <div className="border-l-2 border-zinc-400 pl-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Tag>In progress</Tag>
+                    <Tag>{t("In progress")}</Tag>
                     <span className="data-text text-2xl font-semibold text-zinc-100">{formatDuration(activeMinutes)}</span>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-zinc-100">{projectActiveSession.target_output || 'Project work session'}</p>
-                  <p className="data-text mt-1 text-[11px] text-zinc-500">Started {formatDateTime(projectActiveSession.started_at)}</p>
+                  <p className="mt-2 text-sm font-semibold text-zinc-100">{projectActiveSession.target_output || t("Project work session")}</p>
+                  <p className="data-text mt-1 text-[11px] text-zinc-500">{t("Started ")}{formatDateTime(projectActiveSession.started_at)}</p>
                 </div>
-                <TextAreaField label="Proof of Work" value={sessionProof} onChange={setSessionProof} placeholder="What did you actually produce, finish, ship, study, or document?" />
+                <TextAreaField label={t("Proof of Work")} value={sessionProof} onChange={setSessionProof} placeholder={t("What did you actually produce, finish, ship, study, or document?")} />
                 {project.goal_type !== 'hours' ? (
-                  <Field label={`Progress Added This Session (${stats.unit})`} type="number" value={sessionDelta} onChange={setSessionDelta} placeholder="1" />
+                  <Field label={t("Progress Added This Session ({v0})", { v0: stats.unit })} type="number" value={sessionDelta} onChange={setSessionDelta} placeholder="1" />
                 ) : null}
                 <button
                   type="button"
@@ -639,27 +636,23 @@ function ProjectDetail({
                   disabled={busyId === `session:${projectActiveSession.id}:end`}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-red-400/30 bg-red-400/10 px-4 text-sm font-semibold text-red-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {busyId === `session:${projectActiveSession.id}:end` ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} />}
-                  End Session
-                </button>
+                  {busyId === `session:${projectActiveSession.id}:end` ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} />}{t("End Session")}</button>
               </div>
             ) : otherActiveSession ? (
               <div className="rounded-md border border-amber-400/20 bg-amber-400/[0.06] p-3">
-                <p className="text-sm font-semibold text-amber-200">Another project session is active.</p>
-                <p className="mt-1 text-xs leading-5 text-zinc-500">End it before starting a new one. V1 allows one active project session globally.</p>
+                <p className="text-sm font-semibold text-amber-200">{t("Another project session is active.")}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{t("End it before starting a new one. V1 allows one active project session globally.")}</p>
               </div>
             ) : (
               <>
-                <Field label="Target Output" value={sessionTarget} onChange={setSessionTarget} placeholder="Ship feature, study chapter 3, draft post..." />
+                <Field label={t("Target Output")} value={sessionTarget} onChange={setSessionTarget} placeholder={t("Ship feature, study chapter 3, draft post...")} />
                 <button
                   type="button"
                   onClick={() => onStartSession(project)}
                   disabled={busyId === `project:${project.id}:start`}
                   className="primary-button w-full disabled:cursor-not-allowed"
                 >
-                  {busyId === `project:${project.id}:start` ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-                  Start Session
-                </button>
+                  {busyId === `project:${project.id}:start` ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}{t("Start Session")}</button>
               </>
             )}
           </div>
@@ -670,34 +663,32 @@ function ProjectDetail({
 
       {project.goal_type !== 'hours' ? (
         <details className="project-secondary">
-          <summary>Update progress</summary>
+          <summary>{t("Update progress")}</summary>
           <Panel>
-            <PanelHeader eyebrow="Manual Progress" title="Add Progress" />
+            <PanelHeader eyebrow={t("Manual Progress")} title={t("Add Progress")} />
             <div className="grid gap-3 p-3">
-              <Field label={`Add ${stats.unit}`} type="number" value={progressInput} onChange={setProgressInput} placeholder="1" />
+              <Field label={t("Add {v0}", { v0: stats.unit })} type="number" value={progressInput} onChange={setProgressInput} placeholder="1" />
               <button
                 type="button"
                 onClick={() => onAddProgress(project)}
                 disabled={busyId === `project:${project.id}:progress`}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {busyId === `project:${project.id}:progress` ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                Add Progress
-              </button>
+                {busyId === `project:${project.id}:progress` ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}{t("Add Progress")}</button>
             </div>
           </Panel>
         </details>
         ) : null}
 
       <details className="project-secondary">
-        <summary>Project records</summary>
-        <dl className="project-telemetry px-3"><div><dt>Recorded effort</dt><dd>{formatNumber(stats.totalHours)}h</dd></div><div><dt>This week</dt><dd>{formatNumber(stats.weekHours)}h</dd></div><div><dt>Sessions</dt><dd>{sessions.length}</dd></div><div><dt>Started</dt><dd>{formatShortDate(project.started_on)}</dd></div></dl>
+        <summary>{t("Project records")}</summary>
+        <dl className="project-telemetry px-3"><div><dt>{t("Recorded effort")}</dt><dd>{formatNumber(stats.totalHours)}{t("h")}</dd></div><div><dt>{t("This week")}</dt><dd>{formatNumber(stats.weekHours)}{t("h")}</dd></div><div><dt>{t("Sessions")}</dt><dd>{sessions.length}</dd></div><div><dt>{t("Started")}</dt><dd>{formatShortDate(project.started_on)}</dd></div></dl>
       </details>
 
       <details className="project-secondary" open={sessions.length > 0}>
-      <summary>Session history <span className="text-zinc-500">({sessions.length})</span></summary>
+      <summary>{t("Session history ")}<span className="text-zinc-500">({sessions.length})</span></summary>
       <Panel>
-        <PanelHeader eyebrow={`${sessions.length} logs`} title="Recent Sessions" />
+        <PanelHeader eyebrow={t("{v0} logs", { v0: sessions.length })} title={t("Recent Sessions")} />
         <div className="grid gap-2 p-3">
           {sessions.length ? (
             sessions.map((session) => (
@@ -711,15 +702,15 @@ function ProjectDetail({
             ))
           ) : (
             <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-              <p className="text-sm font-semibold text-zinc-100">No sessions yet.</p>
-              <p className="mt-1 text-xs text-zinc-500">Start a session to create proof of work.</p>
+              <p className="text-sm font-semibold text-zinc-100">{t("No sessions yet.")}</p>
+              <p className="mt-1 text-xs text-zinc-500">{t("Start a session to create proof of work.")}</p>
             </div>
           )}
         </div>
       </Panel>
       </details>
       <details className="project-secondary">
-        <summary>Project money <span className="text-zinc-500">{projectMoneyEntries.length ? formatSignedMoney(balance.netBalance) : ''}</span></summary>
+        <summary>{t("Project money ")}<span className="text-zinc-500">{projectMoneyEntries.length ? formatSignedMoney(balance.netBalance) : ''}</span></summary>
         <ProjectBalancePanel balance={balance} busyId={busyId} entries={projectMoneyEntries} error={projectMoneyEntriesError} loading={isInitialLoading(projectMoneyEntriesStatus, projectMoneyEntries)} onAddExpense={() => onOpenMoneyModal('expense')} onAddRevenue={() => onOpenMoneyModal('revenue')} onDelete={onDeleteMoneyEntry} onEdit={onEditMoneyEntry} />
       </details>
     </div>
@@ -741,14 +732,14 @@ function ProjectBalancePanel({ balance, busyId, entries, error, loading, onAddEx
 
   return (
     <Panel>
-      <PanelHeader eyebrow="Project Money" title="Project Balance" />
+      <PanelHeader eyebrow={t("Project Money")} title={t("Project Balance")} />
       <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rounded-md border border-white/5 bg-black/25 p-4">
           <p className={`data-text text-3xl font-black ${netTone}`}>{formatSignedMoney(balance.netBalance)}</p>
           <p className="mt-1 text-sm font-semibold text-zinc-300">{subtitle}</p>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <MiniMetric label="Spent" value={`EUR ${formatMoney(balance.totalExpenses)}`} tone="text-red-300" sub="expenses" />
-            <MiniMetric label="Revenue" value={`EUR ${formatMoney(balance.totalRevenue)}`} tone="text-emerald-300" sub="income" />
+            <MiniMetric label={t("Spent")} value={`EUR ${formatMoney(balance.totalExpenses)}`} tone="text-red-300" sub="expenses" />
+            <MiniMetric label={t("Revenue")} value={`EUR ${formatMoney(balance.totalRevenue)}`} tone="text-emerald-300" sub="income" />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
@@ -756,28 +747,24 @@ function ProjectBalancePanel({ balance, busyId, entries, error, loading, onAddEx
               onClick={onAddExpense}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-red-400/25 bg-red-400/10 px-3 text-sm font-semibold text-red-200"
             >
-              <Plus size={16} />
-              Add Expense
-            </button>
+              <Plus size={16} />{t("Add Expense")}</button>
             <button
               type="button"
               onClick={onAddRevenue}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-200"
             >
-              <Plus size={16} />
-              Add Revenue
-            </button>
+              <Plus size={16} />{t("Add Revenue")}</button>
           </div>
         </div>
 
         <div className="grid min-w-0 gap-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">Recent Money Entries</p>
-            <span className="data-text text-[10px] text-zinc-600">{entries.length} total</span>
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{t("Recent Money Entries")}</p>
+            <span className="data-text text-[10px] text-zinc-600">{entries.length}{t(" total")}</span>
           </div>
           {error ? <div className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</div> : null}
           {loading ? (
-            <LoadingState label="Loading project money..." />
+            <LoadingState label={t("Loading project money...")} />
           ) : recentEntries.length ? (
             recentEntries.map((entry) => (
               <MoneyEntryRow
@@ -790,8 +777,8 @@ function ProjectBalancePanel({ balance, busyId, entries, error, loading, onAddEx
             ))
           ) : (
             <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-3">
-              <p className="text-sm font-semibold text-zinc-100">No money entries yet.</p>
-              <p className="mt-1 text-xs text-zinc-500">Add project-level expenses or revenue when they happen.</p>
+              <p className="text-sm font-semibold text-zinc-100">{t("No money entries yet.")}</p>
+              <p className="mt-1 text-xs text-zinc-500">{t("Add project-level expenses or revenue when they happen.")}</p>
             </div>
           )}
         </div>
@@ -810,14 +797,14 @@ function MoneyEntryRow({ busy, entry, onDelete, onEdit }) {
             <span className="data-text text-[11px] text-zinc-500">{formatShortDate(entry.entry_date)}</span>
             <Tag tone={revenue ? 'emerald' : 'red'}>{entry.type}</Tag>
             <span className={`data-text text-[11px] font-semibold ${revenue ? 'text-emerald-300' : 'text-red-300'}`}>
-              {revenue ? '+' : '-'} EUR {formatMoney(entry.amount)}
+              {revenue ? '+' : '-'}{t(" EUR ")}{formatMoney(entry.amount)}
             </span>
           </div>
-          <p className="mt-1 break-words text-sm font-semibold text-zinc-100">{entry.description || 'No description'}</p>
+          <p className="mt-1 break-words text-sm font-semibold text-zinc-100">{entry.description || t("No description")}</p>
         </div>
         <div className="flex gap-2">
-          <IconButton label="Edit money entry" onClick={() => onEdit(entry)}><Pencil size={15} /></IconButton>
-          <IconButton label="Delete money entry" tone="red" busy={busy} onClick={() => onDelete(entry)}><Trash2 size={15} /></IconButton>
+          <IconButton label={t("Edit money entry")} onClick={() => onEdit(entry)}><Pencil size={15} /></IconButton>
+          <IconButton label={t("Delete money entry")} tone="red" busy={busy} onClick={() => onDelete(entry)}><Trash2 size={15} /></IconButton>
         </div>
       </div>
     </article>
@@ -831,7 +818,7 @@ function SessionRow({ busyId, onDelete, project, session }) {
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Tag tone={active ? 'red' : 'emerald'}>{active ? 'active' : 'completed'}</Tag>
+            <Tag tone={active ? 'red' : 'emerald'}>{active ? t("active") : t("completed")}</Tag>
             <span className="data-text text-[11px] text-zinc-500">{formatDateTime(session.started_at)}</span>
             <span className="data-text text-[11px] text-cyan-300">{formatDuration(getSessionMinutes(session))}</span>
           </div>
@@ -841,7 +828,7 @@ function SessionRow({ busyId, onDelete, project, session }) {
             <p className="data-text mt-2 text-[11px] text-emerald-300">+{formatNumber(session.progress_delta)} {unitLabel(project)}</p>
           ) : null}
         </div>
-        <IconButton label="Delete session" tone="red" busy={busyId === `session:${session.id}:delete`} onClick={() => onDelete(session)}><Trash2 size={15} /></IconButton>
+        <IconButton label={t("Delete session")} tone="red" busy={busyId === `session:${session.id}:delete`} onClick={() => onDelete(session)}><Trash2 size={15} /></IconButton>
       </div>
     </article>
   );
@@ -873,15 +860,15 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Project' : 'Create Project'}</p>
-            <h3 id="project-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Edit project' : 'New project'}</h3>
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? t("Edit Project") : t("Create Project")}</p>
+            <h3 id="project-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? t("Edit project") : t("New project")}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={saveStatus === 'saving'}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
-            aria-label="Close project editor"
+            aria-label={t("Close project editor")}
           >
             <X size={18} />
           </button>
@@ -890,24 +877,24 @@ function ProjectModal({ editing, error, form, onChange, onClose, onSubmit, saveS
         <form onSubmit={onSubmit} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain sm:overflow-hidden">
           <div className="grid min-w-0 gap-3 p-4 sm:min-h-0 sm:flex-1 sm:grid-cols-2 sm:overflow-y-auto sm:p-3">
             <div className="sm:col-span-2">
-              <Field label="Project Name" value={form.name} onChange={(value) => onChange('name', value)} placeholder="AI OFM Business, School Biology..." />
+              <Field label={t("Project Name")} value={form.name} onChange={(value) => onChange('name', value)} placeholder={t("AI OFM Business, School Biology...")} />
             </div>
-            <SelectField label="Goal Type" value={form.goal_type} options={goalTypes} onChange={(value) => onChange('goal_type', value)} />
-            <SelectField label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
-            <Field label="Target Value" type="number" value={form.target_value} onChange={(value) => onChange('target_value', value)} placeholder="400" />
-            <Field label="Unit Label" value={form.unit_label} onChange={(value) => onChange('unit_label', value)} placeholder="hours, chapters, posts" />
-            <Field label="Goal Label" value={form.goal_label} onChange={(value) => onChange('goal_label', value)} placeholder="Hours, Chapters, Features" />
+            <SelectField label={t("Goal Type")} value={form.goal_type} options={goalTypes} onChange={(value) => onChange('goal_type', value)} />
+            <SelectField label={t("Status")} value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
+            <Field label={t("Target Value")} type="number" value={form.target_value} onChange={(value) => onChange('target_value', value)} placeholder="400" />
+            <Field label={t("Unit Label")} value={form.unit_label} onChange={(value) => onChange('unit_label', value)} placeholder={t("hours, chapters, posts")} />
+            <Field label={t("Goal Label")} value={form.goal_label} onChange={(value) => onChange('goal_label', value)} placeholder={t("Hours, Chapters, Features")} />
             {form.goal_type !== 'hours' ? (
-              <Field label="Current Value" type="number" value={form.current_value} onChange={(value) => onChange('current_value', value)} placeholder="0" />
+              <Field label={t("Current Value")} type="number" value={form.current_value} onChange={(value) => onChange('current_value', value)} placeholder="0" />
             ) : (
               <div className="rounded-md border border-white/5 bg-black/25 p-3">
-                <p className="data-text text-[10px] uppercase text-zinc-500">Current Value</p>
-                <p className="mt-1 text-sm text-zinc-400">Hour goals calculate progress from sessions.</p>
+                <p className="data-text text-[10px] uppercase text-zinc-500">{t("Current Value")}</p>
+                <p className="mt-1 text-sm text-zinc-400">{t("Hour goals calculate progress from sessions.")}</p>
               </div>
             )}
-            <Field label="Started On" type="date" value={form.started_on} onChange={(value) => onChange('started_on', value)} />
+            <Field label={t("Started On")} type="date" value={form.started_on} onChange={(value) => onChange('started_on', value)} />
             <div className="sm:col-span-2">
-              <TextAreaField label="Notes" value={form.notes} onChange={(value) => onChange('notes', value)} placeholder="Scope, constraints, strategy..." />
+              <TextAreaField label={t("Notes")} value={form.notes} onChange={(value) => onChange('notes', value)} placeholder={t("Scope, constraints, strategy...")} />
             </div>
             {error ? <div role="alert" className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
             <div className="grid min-w-0 gap-2 pb-[calc(env(safe-area-inset-bottom)+16px)] sm:hidden">
@@ -951,14 +938,14 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Money Entry' : `Add ${title}`}</p>
-            <h3 id="project-money-editor-title" className="truncate text-lg font-semibold text-zinc-100">Project {title}</h3>
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? t("Edit Money Entry") : t("Add {v0}", { v0: title })}</p>
+            <h3 id="project-money-editor-title" className="truncate text-lg font-semibold text-zinc-100">{t("Project ")}{title}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
-            aria-label="Close project money editor"
+            aria-label={t("Close project money editor")}
             disabled={saveStatus === 'saving'}
           >
             <X size={18} />
@@ -967,13 +954,13 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
 
         <form onSubmit={onSubmit} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain">
           <div className="grid min-w-0 gap-3 p-4 sm:grid-cols-2 sm:p-3">
-            <SelectField label="Type" value={form.type} options={['expense', 'revenue']} onChange={(value) => onChange('type', value)} />
-            <Field label="Date" type="date" value={form.entry_date} onChange={(value) => onChange('entry_date', value)} />
+            <SelectField label={t("Type")} value={form.type} options={['expense', 'revenue']} onChange={(value) => onChange('type', value)} />
+            <Field label={t("Date")} type="date" value={form.entry_date} onChange={(value) => onChange('entry_date', value)} />
             <div className="sm:col-span-2">
-              <Field label="Amount" type="number" value={form.amount} onChange={(value) => onChange('amount', value)} placeholder="25" />
+              <Field label={t("Amount")} type="number" value={form.amount} onChange={(value) => onChange('amount', value)} placeholder="25" />
             </div>
             <div className="sm:col-span-2">
-              <Field label="Description" value={form.description} onChange={(value) => onChange('description', value)} placeholder="ChatGPT Plus, first payment..." />
+              <Field label={t("Description")} value={form.description} onChange={(value) => onChange('description', value)} placeholder={t("ChatGPT Plus, first payment...")} />
             </div>
             {error ? <div role="alert" className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200 sm:col-span-2">{error}</div> : null}
           </div>
@@ -984,15 +971,13 @@ function ProjectMoneyModal({ editing, error, form, onChange, onClose, onSubmit, 
               className="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saveStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {saveStatus === 'saving' ? 'Saving Entry' : editing ? 'Update Entry' : `Add ${title}`}
+              {saveStatus === 'saving' ? t("Saving Entry") : editing ? t("Update Entry") : t("Add {v0}", { v0: title })}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
-            >
-              Cancel
-            </button>
+            >{t("Cancel")}</button>
           </div>
         </form>
       </div>
@@ -1009,15 +994,13 @@ function ProjectFormActions({ editing, onClose, saveStatus }) {
         className="flex min-h-12 w-full min-w-0 items-center justify-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {saveStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-        {saveStatus === 'saving' ? 'Saving Project' : editing ? 'Update Project' : 'Create Project'}
+        {saveStatus === 'saving' ? t("Saving Project") : editing ? t("Update Project") : t("Create Project")}
       </button>
       <button
         type="button"
         onClick={onClose}
         className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
-      >
-        Cancel
-      </button>
+      >{t("Cancel")}</button>
     </>
   );
 }
@@ -1060,7 +1043,7 @@ function SelectField({ label, onChange, options, value }) {
         onChange={(event) => onChange(event.target.value)}
         className="h-11 w-full min-w-0 max-w-full appearance-none rounded-md border border-white/10 bg-black/40 px-3 text-[16px] capitalize text-zinc-100 outline-none focus:border-cyan-400/50"
       >
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        {options.map((option) => <option key={option} value={option}>{t(option)}</option>)}
       </select>
     </label>
   );
@@ -1128,16 +1111,14 @@ function EmptyProjects({ onCreate }) {
   return (
     <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-5 text-center">
       <Briefcase size={28} className="mx-auto text-cyan-300" />
-      <p className="mt-3 text-lg font-semibold text-zinc-100">No projects yet.</p>
-      <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-zinc-500">Create a serious goal, then log work sessions as proof of execution.</p>
+      <p className="mt-3 text-lg font-semibold text-zinc-100">{t("No projects yet.")}</p>
+      <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-zinc-500">{t("Create a serious goal, then log work sessions as proof of execution.")}</p>
       <button
         type="button"
         onClick={onCreate}
         className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200"
       >
-        <Plus size={16} />
-        Create Project
-      </button>
+        <Plus size={16} />{t("Create Project")}</button>
     </div>
   );
 }
@@ -1249,11 +1230,11 @@ function todayString() {
 }
 
 function formatNumber(value) {
-  return Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return Number(value ?? 0).toLocaleString(getLocale(), { maximumFractionDigits: 1 });
 }
 
 function formatMoney(value) {
-  return Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(value ?? 0).toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatSignedMoney(value) {
@@ -1272,7 +1253,7 @@ function formatDuration(minutes) {
 
 function formatDateTime(value) {
   if (!value) return '--';
-  return new Date(value).toLocaleString(undefined, {
+  return new Date(value).toLocaleString(getLocale(), {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -1282,7 +1263,7 @@ function formatDateTime(value) {
 
 function formatShortDate(value) {
   if (!value) return '--';
-  return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString(getLocale(), {
     month: 'short',
     day: 'numeric',
   });

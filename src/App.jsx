@@ -1,8 +1,10 @@
+import { t } from './i18n';
 import { Suspense, lazy } from 'react';
 import { LifeOSProvider, useLifeOS } from './context/LifeOSContext';
 import { AuthConfigScreen, AuthLoadingScreen, AuthScreen } from './components/AuthScreen';
 import { Shell } from './components/Shell';
 import { HomeTab } from './tabs/HomeTab';
+import { useLanguage } from './i18n';
 
 const CalendarTab = lazy(() => import('./tabs/CalendarTab').then((module) => ({ default: module.CalendarTab })));
 const MemosTab = lazy(() => import('./tabs/MemosTab').then((module) => ({ default: module.MemosTab })));
@@ -53,12 +55,13 @@ function LifeOSApp() {
 function TabLoadingFallback() {
   return (
     <div role="status" className="border-t border-white/10 py-6">
-      <p className="text-sm text-zinc-400">Loading workspace...</p>
+      <p className="text-sm text-zinc-400">{t("Loading workspace...")}</p>
     </div>
   );
 }
 
 export default function App() {
+  useLanguage();
   return (
     <LifeOSProvider>
       <LifeOSApp />

@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import { Eye, Loader2, Pause, Play, RefreshCw, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { companionAppApi } from '../services/lifeosApi';
@@ -51,36 +53,36 @@ function ProjectWatchState({ project }) {
   const canEnable = data && !terminal && state !== 'active' && project.status === 'active' && data.permissions.monitor;
   const labels = { priority_state: 'Priority', current_focus: 'Current focus', next_action: 'Next action', context_summary: 'Context' };
 
-  return <section aria-label="LifeOS Watch" className="border-t border-white/10 py-5">
+  return <section aria-label={t("LifeOS Watch")} className="border-t border-white/10 py-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h3 className="flex items-center gap-2 text-base font-semibold"><Eye size={18} />LifeOS Watch</h3>
-      <span className={watching ? 'text-sm text-emerald-300' : 'text-sm text-zinc-400'}>{data ? label : error ? 'Unavailable' : 'Loading'}</span>
+      <h3 className="flex items-center gap-2 text-base font-semibold"><Eye size={18} />{t("LifeOS Watch")}</h3>
+      <span className={watching ? 'text-sm text-emerald-300' : 'text-sm text-zinc-400'}>{data ? t(label) : error ? t("Unavailable") : t("Loading")}</span>
     </div>
-    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Checks for lost momentum on this project. A check does not guarantee a message.</p>
+    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">{t("Checks for lost momentum on this project. A check does not guarantee a message.")}</p>
     {data ? <>
       {data.context?.length ? <dl className="mt-4 grid gap-3 sm:grid-cols-2">{data.context.map((item) => <div key={item.field}>
-        <dt className="text-xs text-zinc-500">{labels[item.field]}</dt><dd className="mt-1 break-words text-sm text-zinc-200">{item.field === 'priority_state' ? item.text.replaceAll('_', ' ') : item.text}</dd>
+        <dt className="text-xs text-zinc-500">{t(labels[item.field])}</dt><dd className="mt-1 break-words text-sm text-zinc-200">{item.field === 'priority_state' ? t(item.text.replaceAll('_', ' ')) : item.text}</dd>
       </div>)}</dl> : null}
       {data.watch ? <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-zinc-400">
-        <span>Last checked: {formatTime(data.watch.last_checked_at)}</span>
-        <span>Last intervention queued: {formatTime(data.watch.last_triggered_at)}</span>
+        <span>{t("Last checked: ")}{formatTime(data.watch.last_checked_at)}</span>
+        <span>{t("Last intervention queued: ")}{formatTime(data.watch.last_triggered_at)}</span>
       </div> : null}
-      {!data.permissions.message ? <p className="mt-3 text-sm text-zinc-400">WhatsApp outreach is off. Watch can check silently.</p> : null}
-      {!data.permissions.monitor ? <p className="mt-3 text-sm text-amber-200">Project monitoring is off in Companion permissions.</p> : null}
-      {terminal ? <p className="mt-3 text-sm text-zinc-400">This Watch has ended and cannot be resumed.</p> : null}
-      {project.status !== 'active' ? <p className="mt-3 text-sm text-zinc-400">Watch can only be enabled for an active project.</p> : null}
+      {!data.permissions.message ? <p className="mt-3 text-sm text-zinc-400">{t("WhatsApp outreach is off. Watch can check silently.")}</p> : null}
+      {!data.permissions.monitor ? <p className="mt-3 text-sm text-amber-200">{t("Project monitoring is off in Companion permissions.")}</p> : null}
+      {terminal ? <p className="mt-3 text-sm text-zinc-400">{t("This Watch has ended and cannot be resumed.")}</p> : null}
+      {project.status !== 'active' ? <p className="mt-3 text-sm text-zinc-400">{t("Watch can only be enabled for an active project.")}</p> : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        {canEnable ? <button className="primary-button" disabled={Boolean(busy)} onClick={() => change('enable')}><Play size={16} />{state === 'suspended' ? 'Resume Watch' : 'Enable Watch'}</button> : null}
-        {state === 'active' ? <button className="flex min-h-11 items-center gap-2 rounded border border-white/20 px-4 text-sm" disabled={Boolean(busy)} onClick={() => change('suspend')}><Pause size={16} />Suspend Watch</button> : null}
-        {data.watch && !terminal ? <button className="flex min-h-11 items-center gap-2 rounded border border-white/20 px-4 text-sm" disabled={Boolean(busy)} onClick={() => retireConfirm ? change('retire') : setRetireConfirm(true)}><Square size={16} />{retireConfirm ? 'Confirm retirement' : 'Retire Watch'}</button> : null}
-        {retireConfirm ? <button className="min-h-11 px-3 text-sm text-zinc-400" onClick={() => setRetireConfirm(false)}>Keep Watch</button> : null}
-        {busy ? <Loader2 size={18} className="my-3 animate-spin" aria-label="Saving Watch" /> : null}
+        {canEnable ? <button className="primary-button" disabled={Boolean(busy)} onClick={() => change('enable')}><Play size={16} />{state === 'suspended' ? t("Resume Watch") : t("Enable Watch")}</button> : null}
+        {state === 'active' ? <button className="flex min-h-11 items-center gap-2 rounded border border-white/20 px-4 text-sm" disabled={Boolean(busy)} onClick={() => change('suspend')}><Pause size={16} />{t("Suspend Watch")}</button> : null}
+        {data.watch && !terminal ? <button className="flex min-h-11 items-center gap-2 rounded border border-white/20 px-4 text-sm" disabled={Boolean(busy)} onClick={() => retireConfirm ? change('retire') : setRetireConfirm(true)}><Square size={16} />{retireConfirm ? t("Confirm retirement") : t("Retire Watch")}</button> : null}
+        {retireConfirm ? <button className="min-h-11 px-3 text-sm text-zinc-400" onClick={() => setRetireConfirm(false)}>{t("Keep Watch")}</button> : null}
+        {busy ? <Loader2 size={18} className="my-3 animate-spin" aria-label={t("Saving Watch")} /> : null}
       </div>
-      <details className="mt-4 border-t border-white/10 pt-3"><summary className="min-h-11 cursor-pointer py-2 text-sm text-zinc-400">Companion permissions</summary>
+      <details className="mt-4 border-t border-white/10 pt-3"><summary className="min-h-11 cursor-pointer py-2 text-sm text-zinc-400">{t("Companion permissions")}</summary>
         <CompanionPermissionControls permissions={data.permissions} disabled={Boolean(busy)} onChange={(permission, enabled) => change('permission', permission, enabled)} />
       </details>
     </> : null}
-    {error ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-300"><span>{error}</span><button className="icon-button" aria-label="Reload Watch" title="Reload Watch" disabled={Boolean(busy)} onClick={() => setRevision((value) => value + 1)}><RefreshCw size={16} /></button></div> : null}
+    {error ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 text-sm text-red-300"><span>{error}</span><button className="icon-button" aria-label={t("Reload Watch")} title={t("Reload Watch")} disabled={Boolean(busy)} onClick={() => setRevision((value) => value + 1)}><RefreshCw size={16} /></button></div> : null}
   </section>;
 }
 
@@ -95,7 +97,7 @@ export function CompanionPermissionControls({ permissions, disabled, onChange })
 }
 
 function formatTime(value) {
-  if (!value) return 'Not yet';
+  if (!value) return t('Not yet');
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Unavailable' : date.toLocaleString('en-GB', { timeZone: 'Europe/Rome', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? 'Unavailable' : date.toLocaleString(getLocale(), { timeZone: 'Europe/Rome', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }

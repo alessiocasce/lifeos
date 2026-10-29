@@ -1,8 +1,11 @@
+import { t } from '../i18n';
 import { Loader2, LogIn, ShieldCheck, UserPlus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { setLanguage, useLanguage } from '../i18n';
 
 export function AuthScreen() {
+  const language=useLanguage();
   const { authError, signIn, signUp } = useLifeOS();
   const [mode, setMode] = useState('sign-in');
   const [form, setForm] = useState({ email: '', password: '' });
@@ -20,12 +23,12 @@ export function AuthScreen() {
     setMessage('');
 
     if (!form.email.trim()) {
-      setFormError('Email is required.');
+      setFormError(t("Email is required."));
       return;
     }
 
     if (form.password.length < 6) {
-      setFormError('Password must be at least 6 characters.');
+      setFormError(t("Password must be at least 6 characters."));
       return;
     }
 
@@ -35,12 +38,12 @@ export function AuthScreen() {
       const action = isSignUp ? signUp : signIn;
       const data = await action({ email: form.email.trim(), password: form.password });
       if (isSignUp && !data.session) {
-        setMessage('Account created. Check your email to confirm the account, then sign in.');
+        setMessage(t("Account created. Check your email to confirm the account, then sign in."));
         setMode('sign-in');
         setForm((prev) => ({ ...prev, password: '' }));
       }
     } catch (error) {
-      setFormError(error.message || 'Authentication failed.');
+      setFormError(error.message || t("Authentication failed."));
     } finally {
       submitting.current = false;
       setLoading(false);
@@ -48,28 +51,29 @@ export function AuthScreen() {
   };
 
   return (
-    <AuthFrame eyebrow="Private workspace" title="LifeOS">
+    <AuthFrame eyebrow={t("Private workspace")} title={t("LifeOS")}>
       <div className="border-t border-white/15 pt-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-zinc-100">{isSignUp ? 'Create access' : 'Sign in'}</h2>
+            <h2 className="text-xl font-semibold text-zinc-100">{isSignUp ? t("Create access") : t("Sign in")}</h2>
           </div>
           <div className="grid h-11 w-11 shrink-0 place-items-center text-zinc-400">
             <ShieldCheck size={20} aria-hidden="true" />
           </div>
         </div>
 
+        <label className="mb-4 grid gap-2 text-sm">{t('Language')}<select className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
         <form onSubmit={submit} aria-busy={loading}>
           <fieldset disabled={loading} className="grid min-w-0 gap-4">
             <AuthField
-              label="Email"
+              label={t("Email")}
               type="email"
               autoComplete="email"
               value={form.email}
               onChange={(value) => setForm((prev) => ({ ...prev, email: value }))}
             />
             <AuthField
-              label="Password"
+              label={t("Password")}
               type="password"
               autoComplete={isSignUp ? 'new-password' : 'current-password'}
               value={form.password}
@@ -82,7 +86,7 @@ export function AuthScreen() {
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded border border-zinc-300 bg-zinc-200 px-3 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-white disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-400"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : isSignUp ? <UserPlus size={16} /> : <LogIn size={16} />}
-              {loading ? 'Authenticating' : isSignUp ? 'Create Account' : 'Enter LifeOS'}
+              {loading ? t("Authenticating") : isSignUp ? t("Create Account") : t("Enter LifeOS")}
             </button>
           </fieldset>
         </form>
@@ -98,11 +102,11 @@ export function AuthScreen() {
             }}
             className="min-h-11 rounded px-2 text-sm text-zinc-300 transition hover:text-white disabled:text-zinc-500"
           >
-            {isSignUp ? 'Use existing account' : 'Create account'}
+            {isSignUp ? t("Use existing account") : t("Create account")}
           </button>
         </div>
 
-        {message ? <p role="status" className="mt-3 border-l-2 border-emerald-400/50 px-3 py-2 text-sm leading-6 text-emerald-200">{message}</p> : null}
+        {message ? <p role="status" className="mt-3 border-l-2 border-emerald-400/50 px-3 py-2 text-sm leading-6 text-emerald-200">{t(message)}</p> : null}
         {formError || authError ? <p role="alert" className="mt-3 border-l-2 border-red-400/50 px-3 py-2 text-sm leading-6 text-red-200">{formError || authError}</p> : null}
       </div>
     </AuthFrame>
@@ -111,11 +115,11 @@ export function AuthScreen() {
 
 export function AuthLoadingScreen() {
   return (
-    <AuthFrame eyebrow="Private workspace" title="LifeOS">
+    <AuthFrame eyebrow={t("Private workspace")} title={t("LifeOS")}>
       <div role="status" className="flex items-center gap-3 border-t border-white/15 py-6">
         <Loader2 size={18} className="animate-spin text-zinc-400" aria-hidden="true" />
         <div>
-          <p className="text-sm font-semibold text-zinc-100">Restoring session</p>
+          <p className="text-sm font-semibold text-zinc-100">{t("Restoring session")}</p>
         </div>
       </div>
     </AuthFrame>
@@ -124,12 +128,10 @@ export function AuthLoadingScreen() {
 
 export function AuthConfigScreen() {
   return (
-    <AuthFrame eyebrow="Setup Required" title="LifeOS">
+    <AuthFrame eyebrow={t("Setup Required")} title={t("LifeOS")}>
       <div role="alert" className="border-t border-amber-400/30 py-6">
-        <p className="text-sm font-semibold text-amber-100">Supabase environment is missing</p>
-        <p className="mt-2 text-sm leading-6 text-amber-100/75">
-          Configure the public Supabase URL and anonymous key, then restart the app.
-        </p>
+        <p className="text-sm font-semibold text-amber-100">{t("Supabase environment is missing")}</p>
+        <p className="mt-2 text-sm leading-6 text-amber-100/75">{t("Configure the public Supabase URL and anonymous key, then restart the app.")}</p>
       </div>
     </AuthFrame>
   );
@@ -156,7 +158,7 @@ function AuthFrame({ children, eyebrow, title }) {
 function AuthField({ label, onChange, type, value, autoComplete }) {
   return (
     <label className="grid min-w-0 gap-2">
-      <span className="text-sm text-zinc-300">{label}</span>
+      <span className="text-sm text-zinc-300">{t(label)}</span>
       <input
         type={type}
         name={type === 'email' ? 'email' : 'password'}

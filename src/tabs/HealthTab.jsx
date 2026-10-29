@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import { Ban, Check, Coffee, Loader2, Minus, Moon, Plus, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -153,7 +155,7 @@ export function HealthTab() {
         } catch (error) {
           failed = true;
           if (selectedDateRef.current === loggedOn) {
-            setFormError(error.message || 'Failed to save changes.');
+            setFormError(error.message || t("Failed to save changes."));
             setSaveState('error');
           }
         } finally {
@@ -168,17 +170,17 @@ export function HealthTab() {
   return (
     <div className="health-workspace grid min-w-0 grid-cols-12 gap-x-8 gap-y-6 pb-[calc(env(safe-area-inset-bottom)+16px)]">
       <Panel className="col-span-12 xl:col-span-8">
-        <PanelHeader eyebrow="Health" title={panelTitle} right={<AutosaveStatus saveState={saveState} sourceStatus={healthLogsStatus} />} />
+        <PanelHeader eyebrow={t("Health")} title={panelTitle} right={<AutosaveStatus saveState={saveState} sourceStatus={healthLogsStatus} />} />
         <div className="grid gap-6 px-3 pb-5">
-          <div className="max-w-64"><HealthField label="Date" type="date" value={form.logged_on} onChange={updateLoggedOn} /></div>
-          <section aria-label="Sleep" className="health-band">
+          <div className="max-w-64"><HealthField label={t("Date")} type="date" value={form.logged_on} onChange={updateLoggedOn} /></div>
+          <section aria-label={t("Sleep")} className="health-band">
             <div className="mb-4 flex items-center gap-2">
               <Moon size={17} className="text-zinc-400" />
-              <h3 className="text-sm font-semibold text-zinc-200">Sleep</h3>
+              <h3 className="text-sm font-semibold text-zinc-200">{t("Sleep")}</h3>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <HealthField
-                label="Wake Time"
+                label={t("Wake Time")}
                 helper="Used for this selected day."
                 type="time"
                 value={form.wake_time}
@@ -186,7 +188,7 @@ export function HealthTab() {
                 onCommit={() => commitField('wake_time')}
               />
               <HealthField
-                label="Sleep Start"
+                label={t("Sleep Start")}
                 helper="Used for the following morning."
                 type="time"
                 value={form.sleep_start}
@@ -197,16 +199,16 @@ export function HealthTab() {
             </div>
           </section>
 
-          <section aria-label="Daily counters" className="grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-2">
-            <Stepper label="Coffee" value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
-            <Stepper label="ADC" value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
+          <section aria-label={t("Daily counters")} className="grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-2">
+            <Stepper label={t("Coffee")} value={form.coffee} icon={Coffee} tone="amber" onStep={(delta) => stepField('coffee', delta, 0, 20)} />
+            <Stepper label={t("ADC")} value={form.adc} icon={Ban} tone="red" onStep={(delta) => stepField('adc', delta, 0, 50)} />
           </section>
 
-          <section aria-label="Daily habits" className="health-band">
+          <section aria-label={t("Daily habits")} className="health-band">
             <div className="mb-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck size={17} className="text-zinc-400" />
-                <h3 className="text-sm font-semibold text-zinc-200">Daily habits</h3>
+                <h3 className="text-sm font-semibold text-zinc-200">{t("Daily habits")}</h3>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-1 sm:grid-cols-3 sm:gap-4">
@@ -224,9 +226,9 @@ export function HealthTab() {
           {selectedIsToday ? <HealthRoutineState /> : null}
 
           <HealthField
-            label="Notes"
+            label={t("Notes")}
             value={form.notes}
-            placeholder="Optional context"
+            placeholder={t("Optional context")}
             onChange={(value) => updateField('notes', value)}
             onCommit={() => commitField('notes')}
           />
@@ -236,19 +238,19 @@ export function HealthTab() {
       </Panel>
 
       {visibleLogs.length > 0 ? <Panel className="col-span-12 xl:col-span-4">
-        <PanelHeader eyebrow={`${visibleLogs.length} recent logs`} title="Recorded patterns" />
+        <PanelHeader eyebrow={t("{v0} recent logs", { v0: visibleLogs.length })} title={t("Recorded patterns")} />
         <div className="px-3 pb-5">
           <dl className="health-summary">
-            <div><dt>Average sleep</dt><dd>{formatSummary(summary.avgSleep, 'h')}</dd></div>
-            <div><dt>Coffee</dt><dd>{summary.totalCoffee}</dd></div>
-            <div><dt>ADC</dt><dd>{summary.totalAdc}</dd></div>
+            <div><dt>{t("Average sleep")}</dt><dd>{formatSummary(summary.avgSleep, 'h')}</dd></div>
+            <div><dt>{t("Coffee")}</dt><dd>{summary.totalCoffee}</dd></div>
+            <div><dt>{t("ADC")}</dt><dd>{summary.totalAdc}</dd></div>
           </dl>
           <div className="mt-6 border-t border-white/10 pt-4">
-            <p className="mb-3 text-xs text-zinc-400">Habit entries</p>
+            <p className="mb-3 text-xs text-zinc-400">{t("Habit entries")}</p>
             <div className="grid grid-cols-3 gap-2 text-sm">
               {summary.habits.counts.map((habit) => (
                 <div key={habit.id} className="min-w-0">
-                  <p className="truncate text-zinc-500">{habit.label}</p>
+                  <p className="truncate text-zinc-500">{t(habit.label)}</p>
                   <p className="data-text mt-1 text-lg font-semibold text-zinc-200">{habit.total}</p>
                 </div>
               ))}
@@ -258,18 +260,16 @@ export function HealthTab() {
       </Panel> : null}
 
       <Panel className="col-span-12">
-        <PanelHeader title="Recent history" />
+        <PanelHeader title={t("Recent history")} />
         <div className="grid px-3 pb-3">
           {historyInitialLoading ? (
-            <LoadingRow label="Loading health logs" />
+            <LoadingRow label={t("Loading health logs")} />
           ) : visibleLogs.length ? (
             visibleLogs.map((log) => <HistoryRow key={log.id} log={log} current={log.logged_on === today} />)
           ) : historyResolved ? (
-            <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">
-              No persisted health logs yet. Change a field to start today&apos;s history.
-            </div>
+            <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">{t("No persisted health logs yet. Change a field to start today's history.")}</div>
           ) : (
-            <LoadingRow label="Health history pending" />
+            <LoadingRow label={t("Health history pending")} />
           )}
         </div>
       </Panel>
@@ -304,9 +304,9 @@ function HealthField({ helper, inputMode, label, onChange, onCommit, placeholder
 function CalculatedSleepHours({ value }) {
   return (
     <div className="col-span-2 px-3 py-2 sm:col-span-1">
-      <span className="text-xs text-zinc-400">Sleep Hours</span>
-      <p className="data-text my-2 text-3xl font-semibold text-zinc-100">{value === '' ? '--' : `${value}h`}</p>
-      <p className="text-xs leading-4 text-zinc-500">Previous day&apos;s sleep start + this day&apos;s wake time</p>
+      <span className="text-xs text-zinc-400">{t("Sleep Hours")}</span>
+      <p className="data-text my-2 text-3xl font-semibold text-zinc-100">{value === '' ? '--' : t("{v0}h", { v0: value })}</p>
+      <p className="text-xs leading-4 text-zinc-500">{t("Previous day's sleep start + this day's wake time")}</p>
     </div>
   );
 }
@@ -341,10 +341,10 @@ function Stepper({ icon: Icon, label, onStep, tone, value }) {
         <span className={`data-text text-2xl font-black ${currentTone.value}`}>{value || 0}</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" aria-label={`Decrease ${label}`} title={`Decrease ${label}`} onClick={() => onStep(-1)} className="grid h-11 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
+        <button type="button" aria-label={t("Decrease {v0}", { v0: label })} title={t("Decrease {v0}", { v0: label })} onClick={() => onStep(-1)} className="grid h-11 place-items-center rounded border border-white/10 bg-[#121212] text-zinc-300">
           <Minus size={15} />
         </button>
-        <button type="button" aria-label={`Increase ${label}`} title={`Increase ${label}`} onClick={() => onStep(1)} className={`grid h-11 place-items-center rounded border ${currentTone.button}`}>
+        <button type="button" aria-label={t("Increase {v0}", { v0: label })} title={t("Increase {v0}", { v0: label })} onClick={() => onStep(1)} className={`grid h-11 place-items-center rounded border ${currentTone.button}`}>
           <Plus size={15} />
         </button>
       </div>
@@ -357,17 +357,17 @@ function HabitTracker({ habit, entry, onStep }) {
   return (
     <div className="health-habit">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm text-zinc-200">{habit.label}</span>
+        <span className="text-sm text-zinc-200">{t(habit.label)}</span>
         <span className={`data-text text-xl font-semibold ${entry.count ? 'text-emerald-300' : 'text-zinc-400'}`}>{entry.count}</span>
       </div>
       <p className={`data-text mb-3 min-h-4 text-xs ${entry.count ? 'text-zinc-300' : 'text-zinc-500'}`}>
-        {entry.count ? `${entry.count} logged${times ? ` | ${times}` : ''}` : 'Not logged'}
+        {entry.count ? t("{v0} logged{v1}", { v0: entry.count, v1: times ? ` | ${times}` : '' }) : t("Not logged")}
       </p>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" aria-label={`Remove ${habit.label} entry`} title={`Remove ${habit.label} entry`} onClick={() => onStep(-1)} className="grid h-11 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
+        <button type="button" aria-label={t("Remove {v0} entry", { v0: habit.label })} title={t("Remove {v0} entry", { v0: habit.label })} onClick={() => onStep(-1)} className="grid h-11 place-items-center rounded border border-white/10 bg-black/25 text-zinc-400">
           <Minus size={14} />
         </button>
-        <button type="button" aria-label={`Log ${habit.label}`} title={`Log ${habit.label}`} onClick={() => onStep(1)} className="grid h-11 place-items-center rounded border border-white/20 bg-white/[0.06] text-zinc-100">
+        <button type="button" aria-label={t("Log {v0}", { v0: habit.label })} title={t("Log {v0}", { v0: habit.label })} onClick={() => onStep(1)} className="grid h-11 place-items-center rounded border border-white/20 bg-white/[0.06] text-zinc-100">
           <Plus size={14} />
         </button>
       </div>
@@ -382,19 +382,17 @@ function HistoryRow({ current, log }) {
       <div>
         <div className="flex items-center gap-2">
           <p className="data-text whitespace-nowrap text-sm font-bold text-zinc-100">{log.logged_on}</p>
-          {current ? <Tag tone="cyan">TODAY</Tag> : null}
+          {current ? <Tag tone="cyan">{t("TODAY")}</Tag> : null}
         </div>
-        <p className="data-text text-[10px] text-zinc-500">updated {formatShortDate(log.updated_at)}</p>
+        <p className="data-text text-[10px] text-zinc-500">{t("updated ")}{formatShortDate(log.updated_at)}</p>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <HistoryMetric icon={Moon} label="Sleep" value={`${formatNumber(log.sleep_hours)}h`} tone="text-cyan-300" />
-        <HistoryMetric icon={Coffee} label="Coffee" value={String(log.coffee ?? 0)} tone="text-amber-300" />
-        <HistoryMetric icon={Ban} label="ADC" value={String(log.adc ?? 0)} tone="text-red-300" />
+        <HistoryMetric icon={Moon} label={t("Sleep")} value={`${formatNumber(log.sleep_hours)}h`} tone="text-cyan-300" />
+        <HistoryMetric icon={Coffee} label={t("Coffee")} value={String(log.coffee ?? 0)} tone="text-amber-300" />
+        <HistoryMetric icon={Ban} label={t("ADC")} value={String(log.adc ?? 0)} tone="text-red-300" />
         <div className="col-span-2 min-w-0 px-2 py-1 sm:col-span-3">
           <p className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-500">
-            <ShieldCheck size={11} />
-            Habits
-          </p>
+            <ShieldCheck size={11} />{t("Habits")}</p>
           <p className="data-text mt-0.5 text-xs font-semibold leading-5 text-emerald-300">{formatHabitBreakdown(hygiene)}</p>
         </div>
       </div>
@@ -425,18 +423,18 @@ function LoadingRow({ label }) {
 
 function AutosaveStatus({ saveState, sourceStatus }) {
   if (saveState === 'saving') {
-    return <span className="data-text flex items-center gap-1 text-[10px] text-cyan-300"><Loader2 size={12} className="animate-spin" />Saving...</span>;
+    return <span className="data-text flex items-center gap-1 text-[10px] text-cyan-300"><Loader2 size={12} className="animate-spin" />{t("Saving...")}</span>;
   }
   if (saveState === 'saved') {
-    return <span className="data-text flex items-center gap-1 text-[10px] text-emerald-300"><Check size={12} />Saved</span>;
+    return <span className="data-text flex items-center gap-1 text-[10px] text-emerald-300"><Check size={12} />{t("Saved")}</span>;
   }
   if (saveState === 'dirty') {
-    return <span className="data-text text-[10px] text-amber-300">Unsaved changes</span>;
+    return <span className="data-text text-[10px] text-amber-300">{t("Unsaved changes")}</span>;
   }
   if (saveState === 'error' || sourceStatus === 'error') {
-    return <span className="data-text flex items-center gap-1 text-[10px] text-red-300"><TriangleAlert size={12} />Failed to save</span>;
+    return <span className="data-text flex items-center gap-1 text-[10px] text-red-300"><TriangleAlert size={12} />{t("Failed to save")}</span>;
   }
-  return <span className="data-text text-[10px] text-zinc-600">Autosave</span>;
+  return <span className="data-text text-[10px] text-zinc-600">{t("Autosave")}</span>;
 }
 
 function formFromLog(log) {
@@ -582,5 +580,5 @@ function formatSummary(value, suffix) {
 
 function formatShortDate(value) {
   if (!value) return '--';
-  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(value).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 }

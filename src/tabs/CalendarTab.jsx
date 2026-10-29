@@ -1,3 +1,5 @@
+import { getLocale, formatDate } from '../i18n';
+import { t } from '../i18n';
 import {
   CalendarDays,
   ChevronLeft,
@@ -165,13 +167,13 @@ export function CalendarTab() {
       await loadCalendarRange(startOfWeek(form.event_date), addDays(startOfWeek(form.event_date), 7));
       closeModal();
     } catch (error) {
-      setFormError(error.message || 'Failed to save calendar event.');
+      setFormError(error.message || t("Failed to save calendar event."));
       setActionStatus('idle');
     }
   };
 
   const removeEvent = async (id) => {
-    if (!window.confirm('Delete this calendar event?')) return;
+    if (!window.confirm(t("Delete this calendar event?"))) return;
     setDeleteId(id);
     setFormError('');
     setEventActionError('');
@@ -180,7 +182,7 @@ export function CalendarTab() {
       await reloadSelectedRange();
       if (editingId === id) closeModal();
     } catch (error) {
-      setEventActionError(error.message || 'Failed to delete calendar event.');
+      setEventActionError(error.message || t("Failed to delete calendar event."));
     } finally {
       setDeleteId(null);
     }
@@ -195,7 +197,7 @@ export function CalendarTab() {
       await updateCalendarEvent(event.id, { status: nextStatus });
       await reloadSelectedRange();
     } catch (error) {
-      setEventActionError(error.message || 'Failed to update event status.');
+      setEventActionError(error.message || t("Failed to update event status."));
     } finally {
       setStatusActionId('');
     }
@@ -217,20 +219,18 @@ export function CalendarTab() {
         <header className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="min-w-0">
             <p className="text-xs text-zinc-500">
-              {isToday ? 'Today' : formatWeekday(selectedDate)}
+              {isToday ? t("Today") : formatWeekday(selectedDate)}
             </p>
             <h2 className="mt-1 break-words text-xl font-semibold leading-tight text-zinc-100 sm:text-2xl">{formatLongDate(selectedDate)}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {selectedEvents.length ? <span className="text-xs text-zinc-400">{selectedEvents.length} {selectedEvents.length === 1 ? 'event' : 'events'}</span> : null}
-              {isSyncing ? <span className="data-text text-[10px] text-cyan-300">SYNCING</span> : null}
+              {selectedEvents.length ? <span className="text-xs text-zinc-400">{selectedEvents.length} {selectedEvents.length === 1 ? t("event") : t("events")}</span> : null}
+              {isSyncing ? <span className="data-text text-[10px] text-cyan-300">{t("SYNCING")}</span> : null}
               {!isToday ? (
                 <button
                   type="button"
                   onClick={selectToday}
                   className="min-h-11 px-3 text-sm font-medium text-zinc-200 underline decoration-zinc-600 underline-offset-4"
-                >
-                  Today
-                </button>
+                >{t("Today")}</button>
               ) : null}
             </div>
           </div>
@@ -243,53 +243,53 @@ export function CalendarTab() {
                 value={selectedDate}
                 onChange={(event) => selectDate(event.target.value)}
                 className="min-w-0 bg-transparent text-[16px] text-zinc-100 outline-none"
-                aria-label="Choose calendar date"
+                aria-label={t("Choose calendar date")}
               />
             </label>
             <button
               type="button"
               onClick={openCreateModal}
-              aria-label="New event"
+              aria-label={t("New event")}
               className="primary-button inline-flex h-11 min-w-11 items-center justify-center gap-2 px-3 text-sm font-semibold"
             >
               <Plus size={17} />
-              <span className="hidden sm:inline">New</span>
+              <span className="hidden sm:inline">{t("New")}</span>
             </button>
           </div>
         </header>
 
-      <nav aria-label="Calendar week" className="border-y border-white/10 py-3">
+      <nav aria-label={t("Calendar week")} className="border-y border-white/10 py-3">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <IconButton label="Previous week" onClick={() => selectDate(addDays(selectedDate, -7))}><ChevronLeft size={18} /></IconButton>
+          <IconButton label={t("Previous week")} onClick={() => selectDate(addDays(selectedDate, -7))}><ChevronLeft size={18} /></IconButton>
           <span className="text-sm text-zinc-400">{formatShortDate(weekStart)} - {formatShortDate(addDays(weekStart, 6))}</span>
-          <IconButton label="Next week" onClick={() => selectDate(addDays(selectedDate, 7))}><ChevronRight size={18} /></IconButton>
+          <IconButton label={t("Next week")} onClick={() => selectDate(addDays(selectedDate, 7))}><ChevronRight size={18} /></IconButton>
         </div>
         <div className="grid grid-cols-7 gap-1">
           {Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)).map((date) => (
             <button key={date} type="button" aria-label={formatLongDate(date)} aria-pressed={selectedDate === date} onClick={() => selectDate(date)}
               className={`grid min-h-14 min-w-0 place-items-center gap-1 rounded py-2 ${selectedDate === date ? 'bg-zinc-200 text-zinc-950' : 'text-zinc-400 hover:bg-white/5'} ${date === today ? 'border-b-2 border-b-zinc-400' : ''}`}>
-              <span className="text-[11px]">{parseDate(date).toLocaleDateString(undefined, { weekday: 'short' })}</span>
+              <span className="text-[11px]">{parseDate(date).toLocaleDateString(getLocale(), { weekday: 'short' })}</span>
               <span className="data-text text-base font-semibold">{Number(date.slice(-2))}</span>
             </button>
           ))}
         </div>
       </nav>
 
-      <section aria-label="Selected day agenda" className="min-w-0">
+      <section aria-label={t("Selected day agenda")} className="min-w-0">
         <div className="grid min-w-0 divide-y divide-white/10">
           {calendarEventsError ? (
             <div role="alert" className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-              {calendarEventsError}
+              {t(calendarEventsError)}
             </div>
           ) : null}
           {eventActionError ? (
             <div role="alert" className="rounded-md border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-              {eventActionError}
+              {t(eventActionError)}
             </div>
           ) : null}
 
           {isInitialLoading ? (
-            <LoadingRow label="Loading selected day" />
+            <LoadingRow label={t("Loading selected day")} />
           ) : selectedEvents.length ? (
             selectedEvents.map((event) => (
               <EventCard
@@ -303,9 +303,9 @@ export function CalendarTab() {
               />
             ))
           ) : isLoading ? (
-            <LoadingRow label="Syncing selected day" />
+            <LoadingRow label={t("Syncing selected day")} />
           ) : calendarEventsError ? (
-            <button type="button" onClick={reloadSelectedRange} className="min-h-11 text-sm text-zinc-200">Retry calendar</button>
+            <button type="button" onClick={reloadSelectedRange} className="min-h-11 text-sm text-zinc-200">{t("Retry calendar")}</button>
           ) : (
             <EmptyState onCreate={openCreateModal} />
           )}
@@ -349,15 +349,15 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
       >
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-3 border-b border-white/5 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] sm:px-3 sm:py-2.5">
           <div className="min-w-0">
-            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? 'Edit Event' : 'Create Event'}</p>
-            <h3 id="calendar-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? 'Edit event' : 'New event'}</h3>
+            <p className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{editing ? t("Edit Event") : t("Create Event")}</p>
+            <h3 id="calendar-editor-title" className="truncate text-lg font-semibold text-zinc-100">{editing ? t("Edit event") : t("New event")}</h3>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={actionStatus === 'saving'}
             className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-white/10 bg-black/30 text-zinc-300"
-            aria-label="Close event modal"
+            aria-label={t("Close event modal")}
           >
             <X size={18} />
           </button>
@@ -369,32 +369,32 @@ function EventModal({ actionStatus, editing, error, form, onChange, onClose, onS
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           <div className="min-w-0 space-y-3 p-4 sm:min-h-0 sm:flex-1 sm:space-y-2 sm:overflow-y-auto sm:overflow-x-hidden sm:p-3">
-            <CalendarField id="calendar-title" label="Title" value={form.title} placeholder="Deep work, lecture, lift..." onChange={(value) => onChange('title', value)} />
+            <CalendarField id="calendar-title" label={t("Title")} value={form.title} placeholder={t("Deep work, lecture, lift...")} onChange={(value) => onChange('title', value)} />
 
             <div className="grid min-w-0 grid-cols-2 gap-2">
-              <CalendarField id="calendar-date" label="Date" type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
-              <SelectField id="calendar-status" label="Status" value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
+              <CalendarField id="calendar-date" label={t("Date")} type="date" value={form.event_date} onChange={(value) => onChange('event_date', value)} />
+              <SelectField id="calendar-status" label={t("Status")} value={form.status} options={statuses} onChange={(value) => onChange('status', value)} />
             </div>
 
             <div className="grid min-w-0 grid-cols-2 gap-2">
-              <CalendarField id="calendar-start" label="Start" type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
-              <CalendarField id="calendar-end" label="End" type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
+              <CalendarField id="calendar-start" label={t("Start")} type="time" value={form.start_time} onChange={(value) => onChange('start_time', value)} />
+              <CalendarField id="calendar-end" label={t("End")} type="time" value={form.end_time} onChange={(value) => onChange('end_time', value)} />
             </div>
 
             <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-              <SelectField id="calendar-category" label="Category" value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
-              <CalendarField id="calendar-location" label="Location" value={form.location} placeholder="Library, gym, office" onChange={(value) => onChange('location', value)} />
+              <SelectField id="calendar-category" label={t("Category")} value={form.category} options={categories} onChange={(value) => onChange('category', value)} />
+              <CalendarField id="calendar-location" label={t("Location")} value={form.location} placeholder={t("Library, gym, office")} onChange={(value) => onChange('location', value)} />
             </div>
 
             <div className="block min-w-0 space-y-1 overflow-hidden">
-              <label htmlFor="calendar-notes" className="block text-xs text-zinc-400">Notes</label>
+              <label htmlFor="calendar-notes" className="block text-xs text-zinc-400">{t("Notes")}</label>
               <textarea
                 id="calendar-notes"
                 value={form.notes}
                 onChange={(event) => onChange('notes', event.target.value)}
                 rows={3}
                 className="min-h-20 w-full min-w-0 max-w-full resize-y rounded-md border border-white/10 bg-black/40 px-3 py-2 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50 sm:min-h-24"
-                placeholder="Prep, constraints, or agenda notes"
+                placeholder={t("Prep, constraints, or agenda notes")}
               />
             </div>
 
@@ -427,16 +427,14 @@ function EventFormActions({ actionStatus, editing, onClose }) {
         className="primary-button flex min-h-12 w-full min-w-0 items-center justify-center gap-2 px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
       >
         {actionStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-        {actionStatus === 'saving' ? 'Saving Event' : editing ? 'Update Event' : 'Create Event'}
+        {actionStatus === 'saving' ? t("Saving Event") : editing ? t("Update Event") : t("Create Event")}
       </button>
       <button
         type="button"
         onClick={onClose}
         disabled={actionStatus === 'saving'}
         className="min-h-12 w-full min-w-0 rounded-md border border-white/10 bg-white/[0.03] px-4 text-sm font-semibold text-zinc-300 sm:w-auto"
-      >
-        Cancel
-      </button>
+      >{t("Cancel")}</button>
     </>
   );
 }
@@ -470,7 +468,7 @@ function EventCard({ deleting, event, onEdit, onRemove, onStatusChange, statusAc
         </div>
         <div className="flex min-w-0 flex-wrap items-end gap-3 md:justify-end">
           <div className="grid min-w-0 gap-1">
-            <p className="data-text text-[9px] uppercase tracking-wider text-zinc-600">Status</p>
+            <p className="data-text text-[9px] uppercase tracking-wider text-zinc-600">{t("Status")}</p>
             <div className="flex flex-wrap items-center gap-2">
               {statusActions.map((action) => (
                 <StatusActionButton
@@ -485,10 +483,10 @@ function EventCard({ deleting, event, onEdit, onRemove, onStatusChange, statusAc
             </div>
           </div>
           <div className="grid min-w-0 gap-1 border-l border-white/5 pl-3">
-            <p className="data-text text-[9px] uppercase tracking-wider text-zinc-600">Manage</p>
+            <p className="data-text text-[9px] uppercase tracking-wider text-zinc-600">{t("Manage")}</p>
             <div className="flex items-center gap-2">
-              <IconButton label="Edit event" onClick={onEdit} disabled={deleting || statusBusy}><Pencil size={15} /></IconButton>
-              <IconButton label="Delete event permanently" onClick={onRemove} disabled={deleting || statusBusy}>
+              <IconButton label={t("Edit event")} onClick={onEdit} disabled={deleting || statusBusy}><Pencil size={15} /></IconButton>
+              <IconButton label={t("Delete event permanently")} onClick={onRemove} disabled={deleting || statusBusy}>
                 {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
               </IconButton>
             </div>
@@ -512,8 +510,8 @@ function StatusActionButton({ action, active, disabled, loading, onClick }) {
   return (
     <button
       type="button"
-      aria-label={action.label}
-      title={action.label}
+      aria-label={t(action.label)}
+      title={t(action.label)}
       aria-pressed={active}
       disabled={disabledState}
       onClick={onClick}
@@ -551,7 +549,7 @@ function SelectField({ id, label, onChange, options, value }) {
         className="h-11 w-full min-w-0 max-w-full appearance-none rounded border border-white/10 bg-black/40 px-3 text-[16px] text-zinc-100 outline-none focus:border-cyan-400/50"
       >
         {options.map((option) => (
-          <option key={option} value={option}>{option}</option>
+          <option key={option} value={option}>{t(option)}</option>
         ))}
       </select>
     </div>
@@ -563,7 +561,7 @@ function CategoryBadge({ category }) {
   const tone = 'border-white/10 text-zinc-400';
   return (
     <span className={`data-text inline-flex max-w-full break-all rounded border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${tone}`}>
-      {label || 'Uncategorized'}
+      {t(label) || t("Uncategorized")}
     </span>
   );
 }
@@ -571,15 +569,13 @@ function CategoryBadge({ category }) {
 function EmptyState({ onCreate }) {
   return (
     <div className="py-8 text-center">
-      <p className="text-sm font-medium text-zinc-200">No events on this day</p>
+      <p className="text-sm font-medium text-zinc-200">{t("No events on this day")}</p>
       <button
         type="button"
         onClick={onCreate}
         className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-200"
       >
-        <Plus size={16} />
-        Create Event
-      </button>
+        <Plus size={16} />{t("Create Event")}</button>
     </div>
   );
 }
@@ -686,17 +682,17 @@ function isValidTime(value) {
 }
 
 function formatLongDate(dateString) {
-  if (!isValidDate(dateString)) return 'Select a valid date';
-  return parseDate(dateString).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+  if (!isValidDate(dateString)) return t('Select a valid date');
+  return parseDate(dateString).toLocaleDateString(getLocale(), { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatWeekday(dateString) {
-  if (!isValidDate(dateString)) return 'Selected day';
-  return parseDate(dateString).toLocaleDateString(undefined, { weekday: 'long' });
+  if (!isValidDate(dateString)) return t('Selected day');
+  return parseDate(dateString).toLocaleDateString(getLocale(), { weekday: 'long' });
 }
 
 function formatShortDate(dateString) {
-  return parseDate(dateString).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return parseDate(dateString).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
 }
 
 function normalizeTime(value) {
@@ -709,7 +705,7 @@ function formatTimeRange(event) {
   if (start && end) return `${start}-${end}`;
   if (start) return start;
   if (end) return `Ends ${end}`;
-  return 'Any time';
+  return t('Any time');
 }
 
 function normalizeCategoryLabel(category) {
