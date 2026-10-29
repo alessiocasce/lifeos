@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { addDays } from '../utils/date';
 import { calculateSleepHoursFromTimes } from '../utils/health';
+import { resolveExercise } from '../utils/exerciseCatalog';
 
 const requireSupabase = () => {
   if (!isSupabaseConfigured || !supabase) {
@@ -31,6 +32,7 @@ const workoutSelect = `
     user_id,
     workout_id,
     exercise,
+    exercise_id,
     set_number,
     is_warmup,
     weight,
@@ -55,6 +57,7 @@ const workoutTemplateSelect = `
     user_id,
     template_id,
     exercise,
+    exercise_id,
     exercise_order,
     notes,
     created_at,
@@ -67,6 +70,7 @@ const workoutTemplateExerciseSelect = `
   user_id,
   template_id,
   exercise,
+  exercise_id,
   exercise_order,
   notes,
   created_at,
@@ -347,6 +351,7 @@ export const workoutSetApi = {
         .insert({
           workout_id: payload.workout_id,
           exercise: payload.exercise,
+          exercise_id: payload.exercise_id === undefined ? resolveExercise(payload.exercise)?.id || null : payload.exercise_id,
           set_number: Number(payload.set_number),
           is_warmup: Boolean(payload.is_warmup),
           weight: Number(payload.weight),
@@ -356,7 +361,7 @@ export const workoutSetApi = {
           notes: payload.notes || null,
         })
         .select(
-          'id, user_id, workout_id, exercise, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
+          'id, user_id, workout_id, exercise, exercise_id, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
         )
         .single(),
     );
@@ -369,7 +374,7 @@ export const workoutSetApi = {
         .update(prepareWorkoutSetPayload(patch))
         .eq('id', id)
         .select(
-          'id, user_id, workout_id, exercise, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
+          'id, user_id, workout_id, exercise, exercise_id, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
         )
         .single(),
     );
@@ -433,6 +438,7 @@ export const workoutTemplateExerciseApi = {
         .insert({
           template_id: payload.template_id,
           exercise: payload.exercise,
+          exercise_id: payload.exercise_id === undefined ? resolveExercise(payload.exercise)?.id || null : payload.exercise_id,
           exercise_order: Number(payload.exercise_order),
           notes: payload.notes || null,
         })
@@ -1203,6 +1209,7 @@ function prepareWorkoutSetPayload(payload) {
   return Object.fromEntries(
     Object.entries({
       ...payload,
+      ...(payload.exercise !== undefined && payload.exercise_id === undefined ? { exercise_id: resolveExercise(payload.exercise)?.id || null } : {}),
       is_warmup: payload.is_warmup === undefined ? undefined : Boolean(payload.is_warmup),
       rpe: payload.rpe === undefined ? undefined : normalizeNullableNumber(payload.rpe),
     }).filter(([, value]) => value !== undefined),
@@ -1235,6 +1242,7 @@ function prepareWorkoutTemplateExercisePayload(payload) {
   return Object.fromEntries(
     Object.entries({
       ...payload,
+      ...(payload.exercise !== undefined && payload.exercise_id === undefined ? { exercise_id: resolveExercise(payload.exercise)?.id || null } : {}),
       exercise: payload.exercise === undefined ? undefined : payload.exercise?.trim(),
       exercise_order: payload.exercise_order === undefined ? undefined : Number(payload.exercise_order),
       notes: payload.notes === undefined ? undefined : payload.notes?.trim() || null,

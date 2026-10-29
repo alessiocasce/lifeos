@@ -18,6 +18,8 @@ import { useLocalDay } from '../hooks/useLocalDay';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
 import { useWorkoutRestTimer } from '../hooks/useWorkoutRestTimer';
 import { prefillWorkoutTargets } from '../utils/workoutPrefill';
+import { exerciseIdentityKey, exerciseLabel, resolveExercise } from '../utils/exerciseCatalog';
+import { ExerciseSelector } from '../components/ExerciseSelector';
 import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -84,8 +86,8 @@ export function WorkoutTab() {
 
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
   const previousPerformance = useMemo(
-    () => getPreviousPerformance(workoutSessions, activeWorkoutSession, setForm.exercise),
-    [activeWorkoutSession, setForm.exercise, workoutSessions],
+    () => getPreviousPerformance(workoutSessions, activeWorkoutSession, setForm),
+    [activeWorkoutSession, setForm.exercise, setForm.exercise_id, workoutSessions],
   );
   const nextSetNumber = useMemo(
     () => getNextSetNumber(activeWorkoutSession, setForm.exercise),
@@ -184,12 +186,13 @@ export function WorkoutTab() {
   const fillLoggerFromTemplateExercise = (exercise, session = activeWorkoutSession) => {
     if (!exercise) return;
     if (session?.id !== activeWorkoutSession?.id) {
-      writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise });
+      writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise, exercise_id: exercise.exercise_id || resolveExercise(exercise.exercise)?.id || null });
       return;
     }
     setSetForm((prev) => prefillWorkoutTargets({
       ...prev,
       exercise: exercise.exercise,
+      exercise_id: exercise.exercise_id || resolveExercise(exercise.exercise)?.id || null,
       set_number: prev.is_warmup
         ? getNextWarmupSetNumber(session, exercise.exercise)
         : getNextSetNumber(session, exercise.exercise),
@@ -207,6 +210,7 @@ export function WorkoutTab() {
       const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
       const templateSnapshot = exercises.map((exercise, index) => ({
         exercise: exercise.exercise,
+        exercise_id: exercise.exercise_id || resolveExercise(exercise.exercise)?.id || null,
         exercise_order: Number(exercise.exercise_order) || index + 1,
         notes: exercise.notes ?? '',
       }));
@@ -255,6 +259,7 @@ export function WorkoutTab() {
       const createdSet = await createWorkoutSet({
         workout_id: activeWorkoutSession.id,
         exercise: setForm.exercise.trim(),
+        exercise_id: setForm.exercise_id,
         set_number: resolvedSetNumber >= WARMUP_SET_NUMBER_OFFSET && !setForm.is_warmup
           ? getNextSetNumber(activeWorkoutSession, setForm.exercise)
           : resolvedSetNumber,
@@ -296,6 +301,7 @@ export function WorkoutTab() {
     setEditForm({
       id: set.id,
       exercise: set.exercise,
+      exercise_id: set.exercise_id || null,
       set_number: set.set_number,
       weight: String(set.weight),
       reps: String(set.reps),
@@ -325,6 +331,7 @@ export function WorkoutTab() {
     try {
       await updateWorkoutSet(setId, {
         exercise: editForm.exercise.trim(),
+        exercise_id: editForm.exercise_id || null,
         set_number: resolvedSetNumber,
         is_warmup: Boolean(editForm.is_warmup),
         weight: parseDecimal(editForm.weight),
@@ -440,6 +447,11 @@ export function WorkoutTab() {
                 lastSavedSet={lastSavedSet?.workout_id === activeWorkoutSession.id ? lastSavedSet : null}
                 setFormValue={setForm}
                 updateSetForm={(field, value) => setSetForm((prev) => {
+                  if (field === 'exercise_selection') {
+                    const draft = { ...prev, ...value, set_number: prev.is_warmup
+                      ? getNextWarmupSetNumber(activeWorkoutSession, value) : getNextSetNumber(activeWorkoutSession, value) };
+                    return prefillWorkoutTargets(draft, getPreviousPerformance(workoutSessions, activeWorkoutSession, value)?.sets);
+                  }
                   if (field === 'exercise_commit') {
                     const draft = { ...prev, exercise: value, set_number: prev.is_warmup
                       ? getNextWarmupSetNumber(activeWorkoutSession, value) : getNextSetNumber(activeWorkoutSession, value) };
@@ -449,6 +461,7 @@ export function WorkoutTab() {
                     return {
                       ...prev,
                       exercise: value,
+                      exercise_id: null,
                       set_number: prev.is_warmup
                         ? getNextWarmupSetNumber(activeWorkoutSession, value)
                         : getNextSetNumber(activeWorkoutSession, value),
@@ -905,6 +918,7 @@ function TemplateManager({
       await createWorkoutTemplateExercise({
         template_id: template.id,
         exercise: draft.exercise,
+        exercise_id: draft.exercise_id,
         exercise_order: nextOrder,
         notes: draft.notes,
       });
@@ -1016,7 +1030,7 @@ function TemplateManager({
                   <div key={exercise.id} role="group" aria-label={'Template exercise ' + exercise.exercise} className="min-w-0 py-3">
                     {editingExerciseId === exercise.id ? (
                       <div className="grid gap-3">
-                        <CompactField label="Exercise" value={exerciseEditForm.exercise} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, exercise: value }))} />
+                        <ExerciseSelector value={exerciseEditForm.exercise} onChange={(value) => setExerciseEditForm(prev=>({...prev,exercise:value,exercise_id:null}))} onCommit={(value)=>setExerciseEditForm(prev=>({...prev,...value}))} />
                         <CompactField label="Notes" value={exerciseEditForm.notes} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, notes: value }))} />
                         <div className="flex gap-2">
                           <IconButton icon={Check} loading={templateLoading === 'exercise-' + exercise.id} onClick={() => saveExercise(exercise.id)} title="Save exercise" />
@@ -1044,7 +1058,7 @@ function TemplateManager({
                 ))}
               </div>
               <div role="group" aria-label="Add template exercise" className="grid min-w-0 gap-3 border-t border-white/10 pt-4">
-                <CompactField label="Add exercise" value={draft.exercise} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, exercise: value } }))} />
+                <ExerciseSelector value={draft.exercise} onChange={(value)=>setExerciseDrafts(prev=>({...prev,[template.id]:{...draft,exercise:value,exercise_id:null}}))} onCommit={(value)=>setExerciseDrafts(prev=>({...prev,[template.id]:{...draft,...value}}))} />
                 <CompactField label="Notes" value={draft.notes} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, notes: value } }))} />
                 <button type="button" onClick={() => addExercise(template)} disabled={Boolean(templateLoading)} className="flex min-h-11 items-center justify-center gap-2 rounded border border-white/15 text-sm text-zinc-200 disabled:opacity-50">
                   {templateLoading === 'exercise-create-' + template.id ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
@@ -1073,7 +1087,7 @@ function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
         {plan.exercises.length ? (
           <div className="flex max-w-full gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
             {plan.exercises.map((exercise, index) => {
-              const selected = normalizeExercise(activeExercise) === normalizeExercise(exercise.exercise);
+              const selected = normalizeExercise(activeExercise) === normalizeExercise(exercise);
               return (
                 <button
                   key={exercise.id}
@@ -1130,11 +1144,11 @@ function SetLogger({
                 <span className="data-text text-sm text-zinc-100">{setFormValue.is_warmup ? 'Warmup' : 'Set ' + getSafeWorkingSetNumber(setFormValue.set_number)}</span>
               </div>
               <div className="logger-exercise">
-                <ExerciseAutocomplete
+                <ExerciseSelector
                   suggestions={exerciseSuggestions}
                   value={setFormValue.exercise}
                   onChange={(value) => updateSetForm('exercise', value)}
-                  onCommit={(value) => updateSetForm('exercise_commit', value)}
+                  onCommit={(value) => updateSetForm('exercise_selection', value)}
                 />
               </div>
               <PreviousPerformanceCard performance={previousPerformance} />
@@ -1235,7 +1249,7 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
       <details className="mt-2 text-sm text-zinc-400"><summary className="min-h-11 cursor-pointer py-3">Session actions</summary>
         <button type="button" className="flex min-h-11 items-center gap-2 text-zinc-200" onClick={() => onEdit(selected.id)}><Pencil size={16} />{selected.ended_at ? 'Edit / reopen workout' : 'Select for logging'}</button>
       </details>
-      <div className="mt-4 grid gap-6">{Object.entries(groupSetsByExercise(selected.workout_sets ?? [])).map(([exercise, sets]) => <section key={exercise} className="min-w-0 border-t border-white/10 pt-3"><h3 className="mb-3 break-words text-sm font-semibold text-zinc-200">{exercise}</h3><HistoricalSets sets={sets} /></section>)}</div>
+      <div className="mt-4 grid gap-6">{Object.entries(groupSetsByExercise(selected.workout_sets ?? [])).map(([exercise, sets]) => <section key={exercise} className="min-w-0 border-t border-white/10 pt-3"><h3 className="mb-3 break-words text-sm font-semibold text-zinc-200">{exerciseLabel(sets[0])}</h3><HistoricalSets sets={sets} /></section>)}</div>
       {!selected.workout_sets?.length ? <p className="py-4 text-sm text-zinc-400">No sets recorded.</p> : null}
     </> : <>
       <h2 className="mb-3 text-sm font-semibold text-zinc-200">Recent workouts</h2>
@@ -1323,7 +1337,7 @@ function ExerciseSetGroup({
   return (
     <div className="rounded-md border border-white/5 bg-black/25">
       <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
-        <p className="text-sm font-semibold text-zinc-100">{exercise}</p>
+        <p className="text-sm font-semibold text-zinc-100">{exerciseLabel(sets[0])}</p>
       </div>
       <div className="grid gap-1 p-2">
         {sets.map((set) => {
@@ -1374,7 +1388,7 @@ function ExerciseSetGroup({
 }
 
 function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm }) {
-  const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value }));
+  const update = (field, value) => setEditForm((prev) => ({ ...prev, [field]: value, ...(field==='exercise' ? {exercise_id:resolveExercise(value)?.id || null} : {}) }));
   const updateWarmup = (value) =>
     setEditForm((prev) => ({
       ...prev,
@@ -1604,7 +1618,7 @@ function compareSetsForDisplay(a, b) {
 
 function groupSetsByExercise(sets) {
   return sortSetsForExerciseOrder(sets).reduce((groups, set) => {
-    const key = set.exercise || 'Unknown Exercise';
+    const key = normalizeExercise(set) || 'Unknown Exercise';
     groups[key] = groups[key] ?? [];
     groups[key].push(set);
     groups[key].sort(compareSetsForDisplay);
@@ -1691,10 +1705,10 @@ function resolveEditSetNumber(form, session, setId) {
 }
 
 function getNextSetNumber(session, exercise, excludeSetId = null) {
-  if (!session || !exercise.trim()) return 1;
+  if (!session || !normalizeExercise(exercise)) return 1;
   const normalizedExercise = normalizeExercise(exercise);
   const workingSets = (session.workout_sets ?? []).filter(
-    (set) => set.id !== excludeSetId && !isWarmupSet(set) && normalizeExercise(set.exercise) === normalizedExercise,
+    (set) => set.id !== excludeSetId && !isWarmupSet(set) && normalizeExercise(set) === normalizedExercise,
   );
   const validSetNumbers = workingSets
     .map((set) => parseInteger(set.set_number))
@@ -1703,10 +1717,10 @@ function getNextSetNumber(session, exercise, excludeSetId = null) {
 }
 
 function getNextWarmupSetNumber(session, exercise, excludeSetId = null) {
-  if (!session || !exercise.trim()) return WARMUP_SET_NUMBER_OFFSET + 1;
+  if (!session || !normalizeExercise(exercise)) return WARMUP_SET_NUMBER_OFFSET + 1;
   const normalizedExercise = normalizeExercise(exercise);
   const warmupSets = (session.workout_sets ?? []).filter(
-    (set) => set.id !== excludeSetId && isWarmupSet(set) && normalizeExercise(set.exercise) === normalizedExercise,
+    (set) => set.id !== excludeSetId && isWarmupSet(set) && normalizeExercise(set) === normalizedExercise,
   );
   const maxWarmupNumber = warmupSets.length
     ? Math.max(...warmupSets.map((set) => parseInteger(set.set_number)).filter(Number.isFinite))
@@ -1720,7 +1734,7 @@ function hasSetNumberConflict(session, exercise, setNumber, isWarmup, excludeSet
     (set) =>
       set.id !== excludeSetId
       && isWarmupSet(set) === Boolean(isWarmup)
-      && normalizeExercise(set.exercise) === normalizedExercise
+      && normalizeExercise(set) === normalizedExercise
       && parseInteger(set.set_number) === parseInteger(setNumber),
   );
 }
@@ -1728,7 +1742,7 @@ function hasSetNumberConflict(session, exercise, setNumber, isWarmup, excludeSet
 function getSessionExerciseSummary(session, exercise) {
   const key = normalizeExercise(exercise);
   const sets = (session?.workout_sets ?? [])
-    .filter((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key)
+    .filter((set) => !isWarmupSet(set) && normalizeExercise(set) === key)
     .map(normalizeSet)
     .sort((a, b) => parseInteger(a.set_number) - parseInteger(b.set_number));
   return {
@@ -1765,7 +1779,7 @@ function buildExerciseAnalytics(sessions) {
     .forEach((session) => {
       const groupedSets = {};
       (session.workout_sets ?? []).filter((set) => !isWarmupSet(set)).forEach((set) => {
-        const key = normalizeExercise(set.exercise);
+        const key = normalizeExercise(set);
         if (!key) return;
         groupedSets[key] = groupedSets[key] ?? [];
         groupedSets[key].push(set);
@@ -1844,12 +1858,12 @@ function getPreviousPerformance(sessions, activeSession, exercise) {
     .filter((session) => session.id !== activeSession.id)
     .filter((session) => compareSessionPosition(session, activeSession) < 0)
     .sort(compareSessionsDescending)
-    .find((session) => (session.workout_sets ?? []).some((set) => normalizeExercise(set.exercise) === key));
+    .find((session) => (session.workout_sets ?? []).some((set) => normalizeExercise(set) === key));
 
   if (!previousSession) return null;
 
   const sets = previousSession.workout_sets
-    .filter((set) => normalizeExercise(set.exercise) === key)
+    .filter((set) => normalizeExercise(set) === key)
     .map(normalizeSet)
     .sort(compareSetsForDisplay);
   return {
@@ -1867,7 +1881,7 @@ function getExerciseAnalyticsBeforeSession(sessions, activeSession, exercise) {
     .filter((session) => compareSessionPosition(session, activeSession) < 0)
     .map((session) => ({
       ...session,
-      workout_sets: (session.workout_sets ?? []).filter((set) => !isWarmupSet(set) && normalizeExercise(set.exercise) === key),
+      workout_sets: (session.workout_sets ?? []).filter((set) => !isWarmupSet(set) && normalizeExercise(set) === key),
     }));
   return buildExerciseAnalytics(priorSessions).byExercise[key] ?? null;
 }
@@ -1904,7 +1918,7 @@ function normalizeSet(set) {
 }
 
 function normalizeExercise(exercise) {
-  return String(exercise ?? '').trim().toLowerCase();
+  return (typeof exercise==='string' ? !exercise.trim() : !exercise?.exercise && !exercise?.exercise_id) ? '' : exerciseIdentityKey(exercise);
 }
 
 function parseDecimal(value) {

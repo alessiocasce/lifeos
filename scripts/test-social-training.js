@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { requireConfiguredUserAccess } from '../api/_utils/supabaseAdmin.js';
+import { exerciseCatalog,resolveExercise,exerciseIdentityKey,searchExercises } from '../src/utils/exerciseCatalog.js';
+import { prefillWorkoutTargets } from '../src/utils/workoutPrefill.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -30,6 +32,46 @@ try {
   await db.exec('reset role; set role anon');
   await assert.rejects(db.query('select * from user_profiles'),/permission denied/);
   await db.exec('reset role');
+  const schema=fs.readFileSync('supabase/schema.sql','utf8');
+  for(const table of ['workouts','workout_templates','workout_template_exercises','workout_sets','brain_outbox_messages']) {
+    const start=schema.indexOf(`create table if not exists public.${table} (`);
+    await db.exec(schema.slice(start,schema.indexOf('\n);',start)+3));
+  }
+  await db.exec(fs.readFileSync('supabase/migrations/20261004134735_workout_rest_timer.sql','utf8'));
+  for(const table of ['workouts','workout_sets','workout_templates','workout_template_exercises']) {
+    await db.exec(`alter table public.${table} enable row level security; grant select,insert,update,delete on public.${table} to authenticated;`);
+    const start=schema.indexOf(`create policy "${table} are user scoped"`);
+    await db.exec(schema.slice(start,schema.indexOf(';',start)+1));
+  }
+  const w=(await as(A,"insert into workouts(name) values('Private') returning id")).rows[0].id;
+  await as(A,`insert into workout_sets(workout_id,exercise,set_number,weight,reps) values('${w}','Dumbell Bench Press',1,30,8),('${w}','Bench Press',2,80,8),('${w}','My custom move',3,12,10)`);
+  assert.equal((await as(B,'select * from workout_sets')).rows.length,0);
+  assert.equal((await as(B,'select * from workouts')).rows.length,0);
+  await db.exec('reset role');
+  await db.exec(fs.readFileSync('supabase/migrations/20261029201131_social_training_catalog.sql','utf8'));
+  const mapped=await as(A,'select exercise,exercise_id from workout_sets order by set_number');
+  assert.equal(mapped.rows[0].exercise_id,resolveExercise('Panca piana con manubri').id);
+  assert.equal(mapped.rows[1].exercise_id,null);
+  assert.equal(mapped.rows[2].exercise_id,null);
+  const report=await as(A,'select * from exercise_legacy_mapping_report()');
+  assert.equal(report.rows.find(r=>r.exercise==='Bench Press').ambiguous,true);
+  await assert.rejects(as(A,"insert into exercise_catalog(id,slug,name_en,name_it,category,primary_muscle_group,equipment,load_type,uses_external_load) values(gen_random_uuid(),'bad','Bad','No','x','x','x','bodyweight',false)"),/permission/);
+  assert.equal((await as(B,'select * from exercise_legacy_mapping_report()')).rows.length,0);
+  await db.exec('reset role');
+  await db.exec(fs.readFileSync('supabase/operations/map_legacy_exercises.sql','utf8'));
+  assert.deepEqual((await as(A,'select exercise,exercise_id from workout_sets order by set_number')).rows,mapped.rows);
+  const english=resolveExercise('Dumbbell Bench Press'),italian=resolveExercise('Panca Piana con Manubri');
+  assert.equal(english.id,italian.id);
+  assert.notEqual(english.id,resolveExercise('Barbell Bench Press').id);
+  assert.equal(resolveExercise('Bench Press'),null);
+  assert.equal(exerciseIdentityKey({exercise:'Translated',exercise_id:english.id}),exerciseIdentityKey('DB Bench Press'));
+  assert.notEqual(exerciseIdentityKey({exercise:'Same',exercise_id:english.id}),exerciseIdentityKey({exercise:'Same',exercise_id:resolveExercise('Barbell Bench Press').id}));
+  assert.equal(searchExercises('panca manubri').some(e=>e.id===english.id),true);
+  assert.equal(exerciseCatalog.length,217);
+  assert.equal(english.load_type,'per_implement');
+  assert.equal(resolveExercise('Pull-Up').leaderboard_eligible,false);
+  assert.equal(prefillWorkoutTargets({weight:'',reps:'',set_number:1,is_warmup:false},[{set_number:1001,is_warmup:true,weight:10,reps:12},{set_number:1,weight:30,reps:8}]).weight,'30');
+  console.log('PASS canonical bilingual IDs, equipment distinctions, exact/ambiguous/custom legacy mapping, idempotent backfill, catalog grants and private workouts');
   // Owner-only authorization must still fail closed before any admin query.
   const oldOwner=process.env.LIFEOS_ACTION_USER_ID;
   delete process.env.LIFEOS_ACTION_USER_ID;

@@ -2,6 +2,12 @@
 
 ## Social Training identity foundation (2026-10-29, local only)
 
+Catalog milestone adds 217 curated bilingual IDs, aliases, load conventions,
+nullable set/template IDs, snapshot backfill and catalog-first/custom selection.
+Legacy text is preserved; ambiguous shorthand stays unmapped. Rest scheduling
+only gains ID-aware next-set matching. Catalog migration `20261029201131` follows
+identity. No feed, leaderboard or cross-user workout reads. No production changes.
+
 Settings `/settings` is available from Records/More. Public profiles are explicitly
 authored; no email/auth metadata is copied. Private user preferences default to
 English and both sharing flags OFF; these flags publish no workouts. Invoker RPCs

@@ -2026,6 +2026,7 @@ function normalizeWorkoutTemplatePayload(payload) {
 
 function normalizeWorkoutTemplateExercisePayload(payload) {
   const normalized = {};
+  if ('exercise_id' in payload) normalized.exercise_id = payload.exercise_id || null;
   if ('exercise' in payload) normalized.exercise = payload.exercise?.trim();
   if ('exercise_order' in payload) normalized.exercise_order = Math.max(1, integerOrZero(payload.exercise_order));
   if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;

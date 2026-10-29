@@ -3,7 +3,7 @@ const MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const PREFIX = 'lifeos:training:v1:';
 
 export const emptySetDraft = () => ({
-  exercise: '', set_number: 1, weight: '', reps: '', rpe: '', is_warmup: false, notes: '',
+  exercise: '', exercise_id: null, set_number: 1, weight: '', reps: '', rpe: '', is_warmup: false, notes: '',
 });
 
 function storageOrNull(storage) {
@@ -46,6 +46,7 @@ export function sanitizeSetDraft(input) {
   };
   return {
     exercise: text('exercise', 160),
+    exercise_id: typeof value.exercise_id === 'string' && /^[0-9a-f-]{36}$/i.test(value.exercise_id) ? value.exercise_id : null,
     set_number: Number.isInteger(value.set_number) && value.set_number > 0 && value.set_number < 10000 ? value.set_number : 1,
     weight: numericInput('weight'), reps: numericInput('reps'), rpe: numericInput('rpe'),
     is_warmup: value.is_warmup === true, notes: text('notes', 2000),

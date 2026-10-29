@@ -12,7 +12,7 @@ const storage = {
 };
 const now = Date.parse('2026-09-28T14:00:00Z');
 const options = { storage, now };
-const draft = { exercise: 'Barbell Curl', set_number: 2, weight: '25', reps: '8', rpe: '8.5', notes: 'Controlled', is_warmup: true };
+const draft = { exercise: 'Barbell Curl', exercise_id: null, set_number: 2, weight: '25', reps: '8', rpe: '8.5', notes: 'Controlled', is_warmup: true };
 assert.equal(writeWorkoutDraft('a', 'session-a', draft, options), true);
 assert.deepEqual(readWorkoutDraft('a', 'session-a', options), draft);
 assert.deepEqual(readWorkoutDraft('b', 'session-a', options), emptySetDraft());
