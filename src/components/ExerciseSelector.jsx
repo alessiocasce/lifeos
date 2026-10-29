@@ -14,6 +14,7 @@ export function ExerciseSelector({ value, exerciseId=null, onChange, onCommit, s
   const returningFocus=useRef(false);
   const recent = !category ? suggestions.filter(name=>normalizeExerciseText(name).includes(normalizeExerciseText(value))).slice(0,5) : [];
   const recentIds=new Set(recent.map(name=>resolveExercise(name)?.id).filter(Boolean));
+  const canonicalRecent=[...new Map(recent.map(name=>resolveExercise(name)).filter(Boolean).map(exercise=>[exercise.id,exercise])).values()];
   const matches=searchExercises(value,category,20).filter(e=>!recentIds.has(e.id));
   const closeMenu = () => { if(document.activeElement!==input.current){returningFocus.current=true;input.current?.focus();} setOpen(false); };
   const commit = exercise => { onCommit(exercise); closeMenu(); setTyping(false); };
@@ -34,7 +35,7 @@ export function ExerciseSelector({ value, exerciseId=null, onChange, onCommit, s
       {!custom ? <>
         <select aria-label={t("Exercise category")} className="mb-2 min-h-11 w-full bg-[#14171b] text-sm" value={category} onChange={e=>setCategory(e.target.value)}><option value="">{t("All muscle groups")}</option>{[...new Set(exerciseCatalog.map(e=>e.category))].map(c=><option key={c} value={c}>{t(`muscle.${c}`)}</option>)}</select>
         {!value && !category && suggestions.length ? <p className="py-2 text-xs text-zinc-400">{t("Recent")}</p> : null}
-        {recent.filter(name=>resolveExercise(name)).map(name=>{const found=resolveExercise(name);return <button type="button" className="min-h-11 w-full break-words py-2 text-left text-sm" key={found.id} onClick={()=>commit({exercise:found.name_en,exercise_id:found.id})}>{exerciseLabel(found.name_en,language)}</button>;})}
+        {canonicalRecent.map(found=><button type="button" className="min-h-11 w-full break-words py-2 text-left text-sm" key={found.id} onClick={()=>commit({exercise:found.name_en,exercise_id:found.id})}>{exerciseLabel(found.name_en,language)}</button>)}
         {!category ? suggestions.filter(name=>!resolveExercise(name) && normalizeExerciseText(name).includes(normalizeExerciseText(value))).slice(0,5).map(name=><button type="button" className="min-h-11 w-full break-words py-2 text-left text-sm" key={name} onClick={()=>commit({exercise:name,exercise_id:null})}>{name}</button>) : null}
         {matches.map(e=><button type="button" key={e.id} aria-label={language==='it' ? e.name_it : e.name_en} className="min-h-11 w-full break-words border-t border-white/5 py-2 text-left text-sm text-zinc-200" onClick={()=>commit({exercise:e.name_en,exercise_id:e.id})}>{language==='it' ? e.name_it : e.name_en}<span aria-hidden="true" className="ml-2 text-xs text-zinc-500">{t(e.equipment)}</span></button>)}
       </> : <button type="button" className="min-h-11 w-full text-left text-sm" disabled={!value.trim()} onClick={()=>commit({exercise:value.trim(),exercise_id:null})}>{t("Use custom exercise")}</button>}

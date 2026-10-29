@@ -46,19 +46,25 @@ try {
   await assert.rejects(db.query('select * from user_profiles'),/permission denied/);
   await db.exec('reset role');
   const schema=fs.readFileSync('supabase/schema.sql','utf8');
-  for(const table of ['workouts','workout_templates','workout_template_exercises','workout_sets','brain_outbox_messages']) {
+  const privateTables = ['workouts','workout_templates','workout_template_exercises','workout_sets','ai_memories','projects','health_logs','expenses','memos','calendar_events'];
+  for(const table of [...privateTables,'brain_outbox_messages']) {
     const start=schema.indexOf(`create table if not exists public.${table} (`);
     await db.exec(schema.slice(start,schema.indexOf('\n);',start)+3));
   }
   await db.exec(fs.readFileSync('supabase/migrations/20261004134735_workout_rest_timer.sql','utf8'));
-  for(const table of ['workouts','workout_sets','workout_templates','workout_template_exercises']) {
+  for(const table of privateTables) {
     await db.exec(`alter table public.${table} enable row level security; grant select,insert,update,delete on public.${table} to authenticated;`);
     const start=schema.indexOf(`create policy "${table} are user scoped"`);
     await db.exec(schema.slice(start,schema.indexOf(';',start)+1));
   }
   const w=(await as(A,"insert into workouts(name) values('Private') returning id")).rows[0].id;
+  const snapshot = [{exercise:'Panca Piana Manubri',target_sets:3,note:'Keep authored snapshot'}, {exercise:'Incline Bench Press',target_sets:4}];
+  await as(A,`update workouts set template_snapshot='${JSON.stringify(snapshot)}'::jsonb where id='${w}'`);
+  const template = (await as(A,"insert into workout_templates(name) values('Private template') returning id")).rows[0].id;
+  await as(A,`insert into workout_template_exercises(template_id,exercise,exercise_order) values('${template}','Panca Piana Manubri',1),('${template}','Incline Bench Press',2)`);
   await as(A,`insert into workout_sets(workout_id,exercise,set_number,weight,reps) values('${w}','Dumbell Bench Press',1,30,8),('${w}','Bench Press',2,80,8),('${w}','My custom move',3,12,10)`);
   assert.equal((await as(B,'select * from workout_sets')).rows.length,0);
+  assert.equal((await as(B,`update workout_sets set weight=999 where workout_id='${w}' returning id`)).rows.length,0);
   assert.equal((await as(B,'select * from workouts')).rows.length,0);
   await db.exec('reset role');
   await db.exec(fs.readFileSync('supabase/migrations/20261029201131_social_training_catalog.sql','utf8'));
@@ -66,6 +72,10 @@ try {
   assert.equal(mapped.rows[0].exercise_id,resolveExercise('Panca piana con manubri').id);
   assert.equal(mapped.rows[1].exercise_id,null);
   assert.equal(mapped.rows[2].exercise_id,null);
+  const snapshotAfter = (await as(A,`select template_snapshot from workouts where id='${w}'`)).rows[0].template_snapshot;
+  assert.deepEqual(snapshotAfter, [{...snapshot[0],exercise_id:resolveExercise('Dumbbell Bench Press').id},snapshot[1]]);
+  assert.deepEqual((await as(A,`select exercise,exercise_id from workout_template_exercises where template_id='${template}' order by exercise_order`)).rows,
+    [{exercise:'Panca Piana Manubri',exercise_id:resolveExercise('Dumbbell Bench Press').id},{exercise:'Incline Bench Press',exercise_id:null}]);
   const report=await as(A,'select * from exercise_legacy_mapping_report()');
   assert.equal(report.rows.find(r=>r.exercise==='Bench Press').ambiguous,true);
   await assert.rejects(as(A,"insert into exercise_catalog(id,slug,name_en,name_it,category,primary_muscle_group,equipment,load_type,uses_external_load) values(gen_random_uuid(),'bad','Bad','No','x','x','x','bodyweight',false)"),/permission/);
@@ -80,6 +90,9 @@ try {
   await db.exec('reset role');
   assert.equal((await db.query("select metadata #>> '{workout_rest,next_set_number}' next from brain_outbox_messages where source_type='workout_rest_timer' and status='queued'")).rows[0].next,'3');
   console.log('PASS durable timer next-set numbering spans canonical/legacy translations');
+  await db.exec('reset role');
+  await db.exec(fs.readFileSync('supabase/operations/verify_social_training.sql','utf8'));
+  console.log('PASS shared rollback-only deployment verification SQL');
   const english=resolveExercise('Dumbbell Bench Press'),italian=resolveExercise('Panca Piana con Manubri');
   assert.equal(english.id,italian.id);
   assert.notEqual(english.id,resolveExercise('Barbell Bench Press').id);
@@ -87,6 +100,12 @@ try {
   assert.equal(exerciseIdentityKey({exercise:'Translated',exercise_id:english.id}),exerciseIdentityKey('DB Bench Press'));
   assert.notEqual(exerciseIdentityKey({exercise:'Same',exercise_id:english.id}),exerciseIdentityKey({exercise:'Same',exercise_id:resolveExercise('Barbell Bench Press').id}));
   assert.equal(searchExercises('panca manubri').some(e=>e.id===english.id),true);
+  for (const alias of ['Panca Piana Manubri','  db BENCH press  ','Dumbell Bench Press']) assert.equal(resolveExercise(alias).id,english.id);
+  for (const alias of ['DB Incline Press','Incline Dumbell Press','Panca Inclinata Manubri']) assert.equal(resolveExercise(alias).slug,'dumbbell_incline_bench_press');
+  assert.equal(resolveExercise('Dumbell Romanian Deadlift').slug,'dumbbell_romanian_deadlift');
+  for (const ambiguous of ['Incline Bench Press','Panca Piana','Leg Press','Lat Machine','Triceps Pulldown','Single Tricep Overhead']) assert.equal(resolveExercise(ambiguous),null);
+  assert.equal(searchExercises('PÁNCA PIANA MANUBRI').some(e=>e.id===english.id),true);
+  assert.equal(searchExercises('Lat Pulldown').some(e=>e.slug==='lat_pulldown'),true);
   assert.equal(exerciseCatalog.length,217);
   assert.equal(english.load_type,'per_implement');
   assert.equal(resolveExercise('Pull-Up').leaderboard_eligible,false);

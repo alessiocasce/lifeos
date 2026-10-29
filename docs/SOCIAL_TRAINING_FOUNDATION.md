@@ -1,6 +1,8 @@
 # Social Training Foundation
 
-Local-only implementation. No production migration or code push is authorized.
+Foundation implementation and focused QA are complete. Production rollout was
+authorized on 2026-10-29; verify the deployment record and migration ledger rather
+than assuming that local migration filenames have already been applied.
 
 ## Identity / Privacy
 
@@ -103,3 +105,24 @@ reads. Phase 2 needs an explicit completed-workout public projection, per-workou
 sharing decisions and full-history server queries, not relaxed private-table RLS.
 Known limits: 25-session client history, a bundled catalog mirror, no feed/ranking,
 no new-member WhatsApp recipient provisioning and no physical-device verification.
+
+## Final Mapping Audit
+
+`scripts/audit-legacy-exercise-mapping.js <aggregated-inventory.json>` groups
+distinct names by descending set/template/snapshot usage and compares the original
+catalog against current aliases. Outputs under ignored `test-results/` contain
+the private inventory; no raw workout history is committed. The script checks all
+217 original slug/UUID pairs. Explicit-equipment aliases were added for Panca Piana
+Manubri, DB Incline Press, Incline Dumbell Press, Panca Inclinata Manubri and
+Dumbell Romanian Deadlift. No existing canonical IDs changed.
+
+The audited legacy set coverage remains 131/442 (29.64%): the remaining names lack
+equipment, grip, support or movement information. Never turn Incline Bench Press
+into a barbell movement or Pectoral Machine into a fly by guessing. The additional
+aliases improve future selection but do not increase this historical coverage.
+Recent suggestions deduplicate canonical IDs across old spellings.
+
+`supabase/operations/verify_social_training.sql` creates rollback-only identities
+and fixtures, switches to authenticated/anonymous roles, checks RLS/grants and
+username uniqueness, then rolls back. It is also exercised on local PGlite. This
+proves database authorization, not a real second-account browser login or phone QA.

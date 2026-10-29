@@ -35,6 +35,7 @@
       "DB Bench Press",
       "Dumbell Bench Press",
       "Panca con manubri",
+      "Panca Piana Manubri",
       "Bench Press"
     ]
   },
@@ -97,7 +98,10 @@
     "leaderboard_eligible": true,
     "active": true,
     "aliases": [
-      "Incline DB Press"
+      "Incline DB Press",
+      "DB Incline Press",
+      "Incline Dumbell Press",
+      "Panca Inclinata Manubri"
     ]
   },
   {
@@ -2132,7 +2136,8 @@
     "leaderboard_eligible": false,
     "active": true,
     "aliases": [
-      "DB RDL"
+      "DB RDL",
+      "Dumbell Romanian Deadlift"
     ]
   },
   {

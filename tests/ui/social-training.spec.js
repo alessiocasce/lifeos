@@ -41,6 +41,7 @@ test('bilingual catalog, Last Time and unsaved draft survive Settings and reload
   await expect(page.getByRole('textbox',{name:'Note facoltative',exact:true})).toHaveValue('Never translate this note');
   await expect(page.getByText('Do not translate my name',{exact:true})).toBeVisible();
   await expect(page.getByText('Original English note',{exact:true})).toBeVisible();
+  await page.screenshot({path:info.outputPath('italian-live.png'),fullPage:true});
   await page.getByRole('button',{name:'Salva serie',exact:true}).click();
   await expect(page.getByRole('textbox',{name:'Ripetizioni',exact:true})).toHaveValue('7');
   await expect(page.getByRole('textbox',{name:'RPE facoltativo',exact:true})).toHaveValue('');
@@ -61,12 +62,15 @@ test('Other stays custom and language is independent for two users',async({page}
   await page.getByRole('textbox',{name:'Exercise',exact:true}).click();
   await page.getByRole('button',{name:'Other exercise',exact:true}).click();
   await page.getByRole('textbox',{name:'Exercise',exact:true}).fill('My pulley experiment');
+  await page.screenshot({path:info.outputPath('custom-exercise.png'),fullPage:true});
   await page.getByRole('button',{name:'Use custom exercise',exact:true}).click();
   await page.getByRole('textbox',{name:'Weight kg',exact:true}).fill('12');
   await page.getByRole('textbox',{name:'Reps',exact:true}).fill('10');
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].exercise_id)).toBeNull();
-  await settings(page);await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('it');
+  await settings(page);
+  await page.screenshot({path:info.outputPath('english-settings-mobile.png'),fullPage:true});
+  await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('it');
   await expect(page.getByRole('heading',{name:'Impostazioni',exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath('italian-settings-mobile.png'),fullPage:true});
   await page.evaluate(()=>window.__qaSignIn('qa-user-b'));
@@ -100,4 +104,22 @@ test('incomplete onboarding is non-blocking and Italian chrome renders across wo
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
   expect(errors).toEqual([]);
+});
+
+test('cross-language search and recent aliases select one stable identity',async({page},info)=>{
+  await page.goto('/workout');
+  await page.getByRole('textbox',{name:'Exercise',exact:true}).fill('PÁNCA PIANA MANUBRI');
+  await expect(page.getByRole('button',{name:'Dumbbell Bench Press',exact:true})).toHaveCount(1);
+  await page.screenshot({path:info.outputPath('english-catalog-italian-query.png'),fullPage:true});
+  await page.getByRole('button',{name:'Dumbbell Bench Press',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'Weight kg',exact:true})).toHaveValue('30');
+  await settings(page);
+  await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('it');
+  await page.getByRole('button',{name:'Allenamento',exact:true}).click();
+  await page.getByRole('textbox',{name:'Esercizio',exact:true}).fill('Lat Pulldown');
+  await expect(page.getByRole('button',{name:'Lat machine presa prona',exact:true})).toHaveCount(1);
+  await page.screenshot({path:info.outputPath('italian-catalog-english-query.png'),fullPage:true});
+  await page.getByRole('button',{name:'Lat machine presa prona',exact:true}).click();
+  const draft=await page.getByRole('textbox',{name:'Esercizio',exact:true}).inputValue();
+  expect(draft).toBe('Lat machine presa prona');
 });

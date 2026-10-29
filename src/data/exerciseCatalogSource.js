@@ -243,13 +243,13 @@ battle_rope_waves|Battle Rope Waves|Onde con battle rope|rope
 };
 
 export const curatedAliases = {
-  dumbbell_flat_bench_press: ['DB Bench Press', 'Dumbell Bench Press', 'Panca con manubri', 'Bench Press'],
+  dumbbell_flat_bench_press: ['DB Bench Press', 'Dumbell Bench Press', 'Panca con manubri', 'Panca Piana Manubri', 'Bench Press'],
   barbell_flat_bench_press: ['BB Bench Press', 'Panca piana bilanciere', 'Bench Press'],
-  dumbbell_incline_bench_press: ['Incline DB Press'],
+  dumbbell_incline_bench_press: ['Incline DB Press', 'DB Incline Press', 'Incline Dumbell Press', 'Panca Inclinata Manubri'],
   barbell_back_squat: ['Barbell Squat', 'Back Squat'],
   barbell_deadlift: ['Deadlift', 'Conventional Deadlift'],
   barbell_romanian_deadlift: ['Barbell RDL'],
-  dumbbell_romanian_deadlift: ['DB RDL'],
+  dumbbell_romanian_deadlift: ['DB RDL', 'Dumbell Romanian Deadlift'],
   lat_pulldown: ['Lat Pulldowns'],
   pull_up: ['Pull Ups'],
   one_arm_lat_pulldown: ['Single Hand Pulldown'],
