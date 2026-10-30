@@ -6,5 +6,9 @@
   {
     "file": "20261030105557_exercise_catalog_revision.sql",
     "sha256": "6d433f21292724f08068d349490ec76def63b05278699f89b67e4bffc0786f6b"
+  },
+  {
+    "file": "20261030111420_second_training_cohort.sql",
+    "sha256": "c18f793d95f6b0793d7efaf174a0844120cbcda902da1d95686080a4d8f204b2"
   }
 ]

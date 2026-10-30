@@ -1,5 +1,14 @@
 # LifeOS Workout QA
 
+## Community publication
+
+Completed History detail exposes Share with Community, preview/confirm, View and
+Stop sharing. Sharing OFF opens Settings without changing preferences. Preview
+does not publish; notes default excluded even with global notes permission.
+Verify source edits/reopen/delete withdraw, OFF/ON never resurrects shares, and
+History/Live draft, prefills, warmups and rest timers remain intact. Run focused
+Community and Training browser cases; see docs/COMMUNITY.md for production RLS QA.
+
 ## Catalog V2 / Modal Picker (2026-10-30)
 
 Verify 79 active entries; no Glutes filter, only Calf Raises/Crunch/Boxing Bag in

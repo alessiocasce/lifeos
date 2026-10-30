@@ -19,6 +19,7 @@
     "test:workout": "node scripts/test-workout-render.js && node scripts/test-workout-continuity.js",
     "test:workout:rest": "node scripts/test-workout-rest.js",
     "test:social-training": "node scripts/test-social-training.js",
+    "test:community": "node scripts/test-second-training-cohort.js && node scripts/test-community.js",
     "test:ui": "playwright test",
     "test:companion": "node scripts/test-companion-beliefs.js",
     "test:attention": "node scripts/test-companion-monitors.js && node scripts/test-companion-app.js",

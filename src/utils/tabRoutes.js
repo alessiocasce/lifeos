@@ -3,6 +3,7 @@ import { tabs } from '../data/lifeosData';
 const validTabIds = new Set(tabs.map((tab) => tab.id));
 
 const canonicalPaths = {
+  community: '/community',
   settings: '/settings',
   home: '/',
   calendar: '/calendar',
@@ -15,6 +16,7 @@ const canonicalPaths = {
 };
 
 const pathAliases = {
+  '/community': 'community',
   '/settings': 'settings',
   '/': 'home',
   '/home': 'home',

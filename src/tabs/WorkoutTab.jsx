@@ -22,6 +22,7 @@ import { useWorkoutRestTimer } from '../hooks/useWorkoutRestTimer';
 import { prefillWorkoutTargets } from '../utils/workoutPrefill';
 import { exerciseIdentityKey, exerciseLabel, resolveExercise } from '../utils/exerciseCatalog';
 import { ExerciseSelector } from '../components/ExerciseSelector';
+import { WorkoutSharing } from '../components/WorkoutSharing';
 import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -1232,6 +1233,7 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
       <button type="button" onClick={() => onSelect(null)} className="mb-4 flex min-h-11 items-center gap-2 text-sm text-zinc-300"><ArrowLeft size={16} />{t("Back to History")}</button>
       <h2 className="break-words text-xl font-semibold text-zinc-100">{selected.name}</h2>
       <time className="text-sm text-zinc-400">{formatDate(selected.performed_on)}</time>
+      <WorkoutSharing workout={selected} />
       <details className="mt-2 text-sm text-zinc-400"><summary className="min-h-11 cursor-pointer py-3">{t("Session actions")}</summary>
         <button type="button" className="flex min-h-11 items-center gap-2 text-zinc-200" onClick={() => onEdit(selected.id)}><Pencil size={16} />{selected.ended_at ? t("Edit / reopen workout") : t("Select for logging")}</button>
       </details>

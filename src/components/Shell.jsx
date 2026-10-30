@@ -1,6 +1,6 @@
 import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
-import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, X } from 'lucide-react';
+import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { useLocalDay } from '../hooks/useLocalDay';
@@ -9,6 +9,7 @@ import { LifeOSLogo } from './LifeOSLogo';
 import { PullToRefresh } from './PullToRefresh';
 
 const destinations = {
+  community: { label: 'Community', icon: Users },
   settings: { label: 'Settings', icon: Settings },
   home: { label: 'Command', icon: Command },
   workout: { label: 'Training', icon: Dumbbell },
@@ -19,9 +20,10 @@ const destinations = {
   memos: { label: 'Memos', icon: Bell },
   finances: { label: 'Finances', icon: Landmark },
 };
-const primary = ['home', 'workout', 'projects', 'assistant'];
+const primary = ['home', 'workout', 'community', 'projects', 'assistant'];
 const utilities = ['health', 'calendar', 'memos', 'finances', 'settings'];
-const mobile = ['home', 'projects', 'workout', 'assistant', 'more'];
+const moreDestinations = ['projects', ...utilities];
+const mobile = ['home', 'community', 'workout', 'assistant', 'more'];
 
 export function Shell({ children }) {
   const { activeTab, activeWorkoutSession, authUser, userSettings, setActiveTab, setActiveWorkoutId, signOut, workoutSessions } = useLifeOS();
@@ -125,7 +127,7 @@ export function Shell({ children }) {
         {mobile.map((id) => {
           const item = destinations[id] || { label: 'More', icon: MoreHorizontal };
           const Icon = item.icon;
-          const active = id === 'more' ? utilities.includes(activeTab) : activeTab === id;
+          const active = id === 'more' ? moreDestinations.includes(activeTab) : activeTab === id;
           return <button key={id} className={'mobile-destination ' + (id === 'workout' ? 'training-destination' : '')} aria-current={active ? 'page' : undefined} onClick={() => id === 'more' ? setMoreOpen(true) : navigate(id)}>
             <span className="mobile-destination-icon"><Icon size={21} strokeWidth={active ? 2 : 1.65} /></span><span>{t(item.label)}</span>
           </button>;
@@ -134,7 +136,7 @@ export function Shell({ children }) {
       <dialog ref={sheetRef} className="utility-sheet" aria-labelledby="utility-title" onClose={() => setMoreOpen(false)} onClick={(event) => { if (event.target === sheetRef.current) setMoreOpen(false); }}>
         <div className="utility-sheet-content">
           <div className="flex items-center justify-between pb-4"><h2 id="utility-title" className="text-lg font-semibold">{t("Your system")}</h2><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label={t("Close utilities")}><X size={20} /></button></div>
-          <nav aria-label={t("Utilities")}>{utilities.map((id) => {
+          <nav aria-label={t("Utilities")}>{moreDestinations.map((id) => {
             const Icon = destinations[id].icon;
             return <button key={id} className="utility-link" aria-current={activeTab === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={20} /><span>{t(destinations[id].label)}</span><ChevronRight size={16} /></button>;
           })}</nav>

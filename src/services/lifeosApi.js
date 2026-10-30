@@ -272,6 +272,32 @@ export const authApi = {
   },
 };
 
+const shareFields = 'id,author_id,title,performed_on,notes,notes_consent,sets,exercise_count,set_count,published_at,author:user_profiles(user_id,username,display_name,avatar_url)';
+// Capture authorization per request so an account switch cannot retarget a write.
+async function communityRequest(userId, build) {
+  const client = requireSupabase();
+  const { authorize } = await captureSettingsIdentity(client, userId);
+  return throwIfError(await authorize(build(client)));
+}
+export const communityApi = {
+  feed: (userId, { cursor = null, author = null } = {}) => communityRequest(userId, client => client.rpc('community_feed', {
+    p_before_time: cursor?.published_at ?? null, p_before_id: cursor?.id ?? null, p_author: author, p_limit: 10,
+  })),
+  detail: (userId, id) => communityRequest(userId, client => client.from('community_workout_shares').select(shareFields).eq('id', id).maybeSingle()),
+  members: (userId, { search = '', offset = 0 } = {}) => communityRequest(userId, client => {
+    const term = search.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60);
+    let query = client.from('user_profiles').select('user_id,username,display_name,avatar_url').order('username').order('user_id').range(offset, offset + 19);
+    if (term) query = query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`);
+    return query;
+  }),
+  member: (userId, id) => communityRequest(userId, client => client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', id).maybeSingle()),
+  status: (userId, workoutId) => communityRequest(userId, client => client.rpc('workout_share_status', { p_workout: workoutId })),
+  preview: (userId, workoutId, notes, rpe) => communityRequest(userId, client => client.rpc('publish_workout_share', { p_workout: workoutId, p_notes: notes, p_rpe: rpe, p_confirm: false })),
+  publish: (userId, workoutId, notes, rpe) => communityRequest(userId, client => client.rpc('publish_workout_share', { p_workout: workoutId, p_notes: notes, p_rpe: rpe, p_confirm: true })),
+  withdraw: (userId, workoutId) => communityRequest(userId, client => client.rpc('withdraw_workout_share', { p_workout: workoutId })),
+  withdrawShared: (userId, id) => communityRequest(userId, client => client.rpc('withdraw_community_share', { p_share: id })),
+};
+
 export const userSettingsApi = {
   async read(expectedUserId) {
     const client = requireSupabase();

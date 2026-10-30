@@ -37,9 +37,10 @@ export function SettingsTab() {
         <h2 className="border-t border-white/10 pt-5 text-lg font-semibold">{t("Preferences")}</h2>
         <label className="grid gap-2 text-sm">{t("Language")}<select className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={preferences.language} onChange={e => void changeLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
         <h2 className="border-t border-white/10 pt-5 text-lg font-semibold">{t("Training privacy")}</h2>
-        <p className="text-sm text-zinc-400">{t("Sharing is not live yet. These choices do not publish your workout history.")}</p>
+        <p className="text-sm text-zinc-400">{t("Enable individual workout publishing from Training History. Nothing is shared automatically. Turning this off withdraws all shares; turning it on does not restore them.")}</p>
         <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={preferences.workout_sharing} onChange={e => setPreferences({ ...preferences, workout_sharing: e.target.checked })} />{t("Share completed workouts")}</label>
         <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={preferences.share_workout_notes} onChange={e => setPreferences({ ...preferences, share_workout_notes: e.target.checked })} />{t("Share set notes")}</label>
+        <p className="text-xs leading-relaxed text-zinc-400">{t("Notes also require consent in each share preview. Turning notes off removes them from existing shares; turning them on does not restore them.")}</p>
         <button className="flex min-h-11 items-center justify-center gap-2 rounded border border-white/20 px-4" type="submit"><Save size={17} />{busy ? t("Saving") : t("Save settings")}</button>
       </fieldset>
     </form>

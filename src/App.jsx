@@ -14,8 +14,10 @@ const WorkoutTab = lazy(() => import('./tabs/WorkoutTab').then((module) => ({ de
 const FinancesTab = lazy(() => import('./tabs/FinancesTab').then((module) => ({ default: module.FinancesTab })));
 const AIAssistantTab = lazy(() => import('./tabs/AIAssistantTab').then((module) => ({ default: module.AIAssistantTab })));
 const SettingsTab = lazy(() => import('./tabs/SettingsTab').then((module) => ({ default: module.SettingsTab })));
+const CommunityTab = lazy(() => import('./tabs/CommunityTab').then((module) => ({ default: module.CommunityTab })));
 
 const tabViews = {
+  community: CommunityTab,
   settings: SettingsTab,
   home: HomeTab,
   calendar: CalendarTab,

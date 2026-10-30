@@ -1,5 +1,17 @@
 # LifeOS Project Context
 
+## Community Phase 2 (2026-10-30)
+
+Community adds member-only Feed/Members/profile/read-only share views and explicit
+publication from completed Training History. Separate sanitized snapshot storage,
+not broader workout RLS. Both privacy flags remain OFF by default. Master OFF
+withdraws all shares; notes OFF scrubs existing notes; ON never restores either.
+Source edits/reopen/delete withdraw until explicitly republished. Auth-bound calls
+and account-keyed UI prevent stale account updates. See docs/COMMUNITY.md for
+RPCs, tests, rollout and manual acceptance. No rankings or notifications.
+The approved second cohort is now mapped: 16/16, audited global total 442/442.
+Main-account records and all non-exercise fields/timestamps match before hashes.
+
 ## Approved exercise revision (2026-10-30)
 
 Catalog V2 has 224 identities (79 active/145 inactive), preserving all original

@@ -1,5 +1,9 @@
 # Social Training Foundation
 
+Phase 2 is implemented separately: see `docs/COMMUNITY.md` for explicit member-only
+workout publication and its privacy boundary. The foundation below is historical;
+no private workouts became readable or automatically published with that phase.
+
 Current catalog/picker behavior is superseded by the approved V2 revision in
 `EXERCISE_CATALOG_REVISION.md`: 224 retained identities, 79 active choices, explicit
 owner historical corrections and no global legacy backfill. The V1 implementation

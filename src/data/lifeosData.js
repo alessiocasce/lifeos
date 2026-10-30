@@ -1,4 +1,5 @@
 export const tabs = [
+  { id: 'community', label: 'Community' },
   { id: 'settings', label: 'Settings' },
   { id: 'home', label: 'Pulse' },
   { id: 'calendar', label: 'Calendar' },
