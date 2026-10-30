@@ -6,6 +6,7 @@ import { exerciseCatalog,resolveExercise,exerciseIdentityKey,exerciseLabel,searc
 import { setLanguage,t,formatDate } from '../src/i18n/index.js';
 import { prefillWorkoutTargets } from '../src/utils/workoutPrefill.js';
 import { captureSettingsIdentity } from '../src/utils/userSettingsIdentity.js';
+import { testCatalogRevision } from '../tests/workout/catalogRevision.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
@@ -68,6 +69,8 @@ try {
   assert.equal((await as(B,'select * from workouts')).rows.length,0);
   await db.exec('reset role');
   await db.exec(fs.readFileSync('supabase/migrations/20261029211303_social_training_catalog.sql','utf8'));
+  const forward = fs.readdirSync('supabase/migrations').find(name=>name.endsWith('_exercise_catalog_revision.sql'));
+  await db.exec(fs.readFileSync(`supabase/migrations/${forward}`,'utf8'));
   const mapped=await as(A,'select exercise,exercise_id from workout_sets order by set_number');
   assert.equal(mapped.rows[0].exercise_id,resolveExercise('Panca piana con manubri').id);
   assert.equal(mapped.rows[1].exercise_id,null);
@@ -81,7 +84,7 @@ try {
   await assert.rejects(as(A,"insert into exercise_catalog(id,slug,name_en,name_it,category,primary_muscle_group,equipment,load_type,uses_external_load) values(gen_random_uuid(),'bad','Bad','No','x','x','x','bodyweight',false)"),/permission/);
   assert.equal((await as(B,'select * from exercise_legacy_mapping_report()')).rows.length,0);
   await db.exec('reset role');
-  await db.exec(fs.readFileSync('supabase/operations/map_legacy_exercises.sql','utf8'));
+  await assert.rejects(db.exec(fs.readFileSync('supabase/operations/map_legacy_exercises.sql','utf8')),/Global legacy mapping is retired/);
   assert.deepEqual((await as(A,'select exercise,exercise_id from workout_sets order by set_number')).rows,mapped.rows);
   await assert.rejects(as(A,"select control_workout_rest_timer(auth.uid(),'configure','isolated@lid',null,true,120)"),/permission denied/);
   await db.exec('reset role');
@@ -103,10 +106,11 @@ try {
   for (const alias of ['Panca Piana Manubri','  db BENCH press  ','Dumbell Bench Press']) assert.equal(resolveExercise(alias).id,english.id);
   for (const alias of ['DB Incline Press','Incline Dumbell Press','Panca Inclinata Manubri']) assert.equal(resolveExercise(alias).slug,'dumbbell_incline_bench_press');
   assert.equal(resolveExercise('Dumbell Romanian Deadlift').slug,'dumbbell_romanian_deadlift');
-  for (const ambiguous of ['Incline Bench Press','Panca Piana','Leg Press','Lat Machine','Triceps Pulldown','Single Tricep Overhead']) assert.equal(resolveExercise(ambiguous),null);
+  for (const ambiguous of ['Incline Bench Press','Panca Piana','Triceps Pulldown','Single Tricep Overhead']) assert.equal(resolveExercise(ambiguous),null);
   assert.equal(searchExercises('PÁNCA PIANA MANUBRI').some(e=>e.id===english.id),true);
   assert.equal(searchExercises('Lat Pulldown').some(e=>e.slug==='lat_pulldown'),true);
-  assert.equal(exerciseCatalog.length,217);
+  assert.equal(exerciseCatalog.length,224);
+  assert.equal(exerciseCatalog.filter(e=>e.active).length,79);
   assert.equal(english.load_type,'per_implement');
   assert.equal(resolveExercise('Pull-Up').leaderboard_eligible,false);
   setLanguage('it');
@@ -131,4 +135,5 @@ try {
     assert.equal((await requireConfiguredUserAccess('user-a-token')).id,A);
   } finally {globalThis.fetch=originalFetch;for(const [key,value] of Object.entries(oldEnv)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
   console.log('PASS real PostgreSQL two-user profile/preference RLS, case-insensitive username uniqueness, rename identity, public whitelist and private defaults');
+  await testCatalogRevision(db);
 } finally { await db.close(); }

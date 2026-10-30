@@ -1,15 +1,17 @@
 import { test, expect } from '@playwright/test';
 import { localDate } from '../../src/utils/date.js';
+import { searchExercise, selectExercise } from './exercisePicker.js';
+import { resolveExercise } from '../../src/utils/exerciseCatalog.js';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', (route) => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
-  await page.addInitScript(({ today }) => {
+  await page.addInitScript(({ today, ids }) => {
     if (sessionStorage.getItem('qa-history-seeded')) return;
     sessionStorage.setItem('qa-history-seeded', 'true');
     const session = (id, date, sets, ended = true) => ({ id, user_id: 'qa-user-a', name: id, performed_on: date,
       started_at: date + 'T12:00:00Z', ended_at: ended ? date + 'T13:00:00Z' : null, workout_sets: sets });
     const day = (offset) => { const d = new Date(today + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + offset); return d.toISOString().slice(0, 10); };
-    const set = (id, exercise, weight, reps, number, warmup = false) => ({ id, exercise, weight, reps,
+    const set = (id, exercise, weight, reps, number, warmup = false) => ({ id, exercise, exercise_id:ids[exercise]||null, weight, reps,
       set_number: number, is_warmup: warmup, rpe: 8, notes: 'Controlled', performed_at: day(-1) + 'T12:30:00Z' });
     localStorage.setItem('qa-workouts', JSON.stringify([
       session('qa-active', today, [], false),
@@ -19,13 +21,13 @@ test.beforeEach(async ({ page }) => {
         set('qa-dumbbell', 'Dumbbell Curl', 14, 10, 1)]),
       session('qa-future', day(1), [set('qa-future-set', 'Barbell Curl', 200, 1, 1)]),
     ]));
-  }, { today: localDate() });
+  }, { today: localDate(),ids:Object.fromEntries(['Barbell Curl','Dumbbell Curl'].map(name=>[name,resolveExercise(name).id])) });
 });
 
 test('exercise suggestions support keyboard selection, dismissal and durable exercise choice', async ({ page }, info) => {
   await page.goto('/workout');
   const exercise = page.getByRole('textbox', { name: 'Exercise', exact: true });
-  await exercise.fill('Curl');
+  await searchExercise(page,'Curl');
   await exercise.press('ArrowDown');
   const suggestions = page.getByRole('group', { name: 'Exercise suggestions' });
   await expect(suggestions.getByRole('button', { name: 'Barbell Curl', exact: true })).toBeFocused();
@@ -37,13 +39,13 @@ test('exercise suggestions support keyboard selection, dismissal and durable exe
   await expect(suggestions).toHaveCount(0);
   await page.reload();
   await expect(exercise).toHaveValue('Dumbbell Curl');
-  await exercise.fill('Curl');
+  await searchExercise(page,'Curl');
   await exercise.press('ArrowDown');
   await page.keyboard.press('Escape');
   await expect(exercise).toBeFocused();
-  await expect(exercise).toHaveValue('Curl');
+  await expect(exercise).toHaveValue('Dumbbell Curl');
   await expect(suggestions).toHaveCount(0);
-  await exercise.fill('C');
+  await searchExercise(page,'C');
   await exercise.fill('Curl');
   const button = suggestions.getByRole('button', { name: 'Barbell Curl', exact: true });
   expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
@@ -55,7 +57,7 @@ test('exercise suggestions support keyboard selection, dismissal and durable exe
 test('full last time includes warmups, RPE and notes from the latest matching prior workout', async ({ page }, info) => {
   await page.goto('/workout');
   const logger = page.getByRole('region', { name: 'Workout set logger' });
-  await page.getByRole('textbox', { name: 'Exercise', exact: true }).fill('Barbell Curl');
+  await selectExercise(page,'Barbell Curl');
   await expect(logger).toContainText('27.5 kg × 6');
   await expect(logger).toContainText('25 kg × 8');
   await expect(logger).toContainText('100 kg × 1');
@@ -108,7 +110,7 @@ test('editing warmup classification preserves load, notes and separate set numbe
 
 test('session deletion requires confirmation, retains failed session and clears only its draft on retry', async ({ page }) => {
   await page.goto('/workout');
-  await page.getByRole('textbox', { name: 'Exercise', exact: true }).fill('Squat');
+  await selectExercise(page,'Squat');
   await page.getByRole('button', { name: 'Session options', exact: true }).click();
   await page.getByRole('button', { name: 'Danger', exact: true }).click();
   const remove = page.getByRole('button', { name: 'Delete Session', exact: true });
@@ -144,7 +146,7 @@ test('History is read-only and returning Live preserves session and complete dra
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/workout');
-  await page.getByRole('textbox', { name: 'Exercise', exact: true }).fill('Barbell Curl');
+  await selectExercise(page,'Barbell Curl');
   await page.getByRole('textbox', { name: 'Weight kg', exact: true }).fill('80');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.getByText('RPE & notes', { exact: true }).click();

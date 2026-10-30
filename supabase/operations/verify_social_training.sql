@@ -33,7 +33,7 @@ begin
     execute format('select count(*) from public.%I where user_id <> auth.uid()',private_table) into visible;
     if visible <> 0 then raise exception 'Private rows visible in %',private_table; end if;
   end loop;
-  if (select count(*) from public.exercise_catalog) <> 217 then raise exception 'Catalog count incorrect'; end if;
+  if (select count(*) from public.exercise_catalog) <> 224 or (select count(*) from public.exercise_catalog where active) <> 79 then raise exception 'Catalog count incorrect'; end if;
   if public.resolve_exercise_id('Panca Piana con Manubri') is distinct from public.resolve_exercise_id('Dumbbell Bench Press') then raise exception 'Bilingual identity mismatch'; end if;
   begin
     update public.exercise_catalog set name_en='Forbidden';

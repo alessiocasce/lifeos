@@ -92,8 +92,8 @@ export function WorkoutTab() {
     [activeWorkoutSession, setForm.exercise, setForm.exercise_id, workoutSessions],
   );
   const nextSetNumber = useMemo(
-    () => getNextSetNumber(activeWorkoutSession, setForm.exercise),
-    [activeWorkoutSession, setForm.exercise],
+    () => getNextSetNumber(activeWorkoutSession, setForm),
+    [activeWorkoutSession, setForm.exercise, setForm.exercise_id],
   );
   const visibleTemplatePlan = useMemo(
     () => buildPersistedTemplatePlan(activeWorkoutSession),
@@ -107,7 +107,7 @@ export function WorkoutTab() {
   useEffect(() => {
     setSetForm((prev) => ({
       ...prev,
-      set_number: prev.is_warmup ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise) : nextSetNumber,
+      set_number: prev.is_warmup ? getNextWarmupSetNumber(activeWorkoutSession, prev) : nextSetNumber,
     }));
   }, [activeWorkoutSession, nextSetNumber, setForm.is_warmup, setSetForm]);
 
@@ -188,17 +188,17 @@ export function WorkoutTab() {
   const fillLoggerFromTemplateExercise = (exercise, session = activeWorkoutSession) => {
     if (!exercise) return;
     if (session?.id !== activeWorkoutSession?.id) {
-      writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise, exercise_id: exercise.exercise_id || resolveExercise(exercise.exercise)?.id || null });
+      writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise, exercise_id: resolveExercise(exercise)?.id || null });
       return;
     }
     setSetForm((prev) => prefillWorkoutTargets({
       ...prev,
       exercise: exercise.exercise,
-      exercise_id: exercise.exercise_id || resolveExercise(exercise.exercise)?.id || null,
+      exercise_id: resolveExercise(exercise)?.id || null,
       set_number: prev.is_warmup
-        ? getNextWarmupSetNumber(session, exercise.exercise)
-        : getNextSetNumber(session, exercise.exercise),
-    }, getPreviousPerformance(workoutSessions, session, exercise.exercise)?.sets));
+        ? getNextWarmupSetNumber(session, exercise)
+        : getNextSetNumber(session, exercise),
+    }, getPreviousPerformance(workoutSessions, session, exercise)?.sets));
   };
 
   const startFromTemplate = async (templateId) => {
@@ -212,7 +212,7 @@ export function WorkoutTab() {
       const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
       const templateSnapshot = exercises.map((exercise, index) => ({
         exercise: exercise.exercise,
-        exercise_id: exercise.exercise_id || resolveExercise(exercise.exercise)?.id || null,
+        exercise_id: resolveExercise(exercise)?.id || null,
         exercise_order: Number(exercise.exercise_order) || index + 1,
         notes: exercise.notes ?? '',
       }));
@@ -243,8 +243,8 @@ export function WorkoutTab() {
     }
 
     const resolvedSetNumber = setForm.is_warmup
-      ? getNextWarmupSetNumber(activeWorkoutSession, setForm.exercise)
-      : getNextSetNumber(activeWorkoutSession, setForm.exercise);
+      ? getNextWarmupSetNumber(activeWorkoutSession, setForm)
+      : getNextSetNumber(activeWorkoutSession, setForm);
     const resolvedForm = { ...setForm, set_number: resolvedSetNumber };
     const validationError = validateSetForm(resolvedForm, activeWorkoutSession);
     if (validationError) {
@@ -252,7 +252,7 @@ export function WorkoutTab() {
       return;
     }
 
-    const weight = parseDecimal(setForm.weight);
+    const weight = parseSetWeight(setForm);
     const reps = parseInteger(setForm.reps);
     const rpe = parseOptionalDecimal(setForm.rpe);
     savingSetRef.current = true;
@@ -263,7 +263,7 @@ export function WorkoutTab() {
         exercise: setForm.exercise.trim(),
         exercise_id: setForm.exercise_id,
         set_number: resolvedSetNumber >= WARMUP_SET_NUMBER_OFFSET && !setForm.is_warmup
-          ? getNextSetNumber(activeWorkoutSession, setForm.exercise)
+          ? getNextSetNumber(activeWorkoutSession, setForm)
           : resolvedSetNumber,
         is_warmup: Boolean(setForm.is_warmup),
         weight,
@@ -279,8 +279,8 @@ export function WorkoutTab() {
       const nextDraft = prefillWorkoutTargets({
         ...setForm,
         set_number: setForm.is_warmup
-          ? getNextWarmupSetNumber(projectedSession, setForm.exercise)
-          : getNextSetNumber(projectedSession, setForm.exercise),
+          ? getNextWarmupSetNumber(projectedSession, setForm)
+          : getNextSetNumber(projectedSession, setForm),
       }, previousPerformance?.sets, { afterSave: true, savedSet: createdSet });
       writeWorkoutDraft(authUser?.id, activeWorkoutSession.id, nextDraft);
       setSetForm(nextDraft);
@@ -336,7 +336,7 @@ export function WorkoutTab() {
         exercise_id: editForm.exercise_id || null,
         set_number: resolvedSetNumber,
         is_warmup: Boolean(editForm.is_warmup),
-        weight: parseDecimal(editForm.weight),
+        weight: parseSetWeight(editForm),
         reps: parseInteger(editForm.reps),
         rpe: parseOptionalDecimal(editForm.rpe),
         notes: editForm.notes.trim() || null,
@@ -474,8 +474,8 @@ export function WorkoutTab() {
                       ...prev,
                       is_warmup: value,
                       set_number: value
-                        ? getNextWarmupSetNumber(activeWorkoutSession, prev.exercise)
-                        : getNextSetNumber(activeWorkoutSession, prev.exercise),
+                        ? getNextWarmupSetNumber(activeWorkoutSession, prev)
+                        : getNextSetNumber(activeWorkoutSession, prev),
                     }, previousPerformance?.sets);
                   }
                   return { ...prev, [field]: value };
@@ -1142,7 +1142,7 @@ function SetLogger({
               </div>
               <PreviousPerformanceCard performance={previousPerformance} />
               <div className="training-values grid grid-cols-2 gap-3">
-                <CompactField label={t("Weight")} inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
+                <CompactField label={t(resolveExercise(setFormValue)?.uses_external_load === false ? 'Weight optional' : 'Weight')} inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
                 <CompactField label={t("Reps")} inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
               </div>
               <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-zinc-300"><input type="checkbox" className="h-5 w-5 accent-zinc-300" checked={Boolean(setFormValue.is_warmup)} onChange={(event) => updateSetForm('is_warmup', event.target.checked)} />{t("Warmup set")}</label>
@@ -1380,8 +1380,8 @@ function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm 
       ...prev,
       is_warmup: value,
       set_number: value
-        ? getNextWarmupSetNumber(session, prev.exercise, prev.id)
-        : getNextSetNumber(session, prev.exercise, prev.id),
+        ? getNextWarmupSetNumber(session, prev, prev.id)
+        : getNextSetNumber(session, prev, prev.id),
     }));
   return (
     <div role="group" aria-label={t("Edit workout set")} className="grid grid-cols-2 gap-3 rounded border border-white/20 bg-white/[0.02] p-3 sm:grid-cols-3">
@@ -1640,12 +1640,12 @@ function buildPersistedTemplatePlan(session) {
 function buildExerciseSuggestions(activeSession, templates, sessions) {
   const candidates = [
     ...(Array.isArray(activeSession?.template_snapshot)
-      ? activeSession.template_snapshot.map((exercise) => exercise.exercise)
+      ? activeSession.template_snapshot
       : []),
     ...templates.flatMap((template) =>
-      (template.workout_template_exercises ?? []).map((exercise) => exercise.exercise),
+      (template.workout_template_exercises ?? []),
     ),
-    ...sessions.flatMap((session) => (session.workout_sets ?? []).map((set) => set.exercise)),
+    ...sessions.flatMap((session) => (session.workout_sets ?? [])),
   ];
 
   const seen = new Set();
@@ -1674,18 +1674,18 @@ function resolveEditSetNumber(form, session, setId) {
     const parsed = parseInteger(form.set_number);
     return Number.isFinite(parsed)
       && parsed > WARMUP_SET_NUMBER_OFFSET
-      && !hasSetNumberConflict(session, form.exercise, parsed, true, setId)
+      && !hasSetNumberConflict(session, form, parsed, true, setId)
       ? parsed
-      : getNextWarmupSetNumber(session, form.exercise, setId);
+      : getNextWarmupSetNumber(session, form, setId);
   }
 
   const parsed = parseInteger(form.set_number);
   return Number.isFinite(parsed)
     && parsed > 0
     && parsed < WARMUP_SET_NUMBER_OFFSET
-    && !hasSetNumberConflict(session, form.exercise, parsed, false, setId)
+    && !hasSetNumberConflict(session, form, parsed, false, setId)
     ? parsed
-    : getNextSetNumber(session, form.exercise, setId);
+    : getNextSetNumber(session, form, setId);
 }
 
 function getNextSetNumber(session, exercise, excludeSetId = null) {
@@ -1984,8 +1984,12 @@ function compareSessionPosition(a, b) {
   return String(a.id).localeCompare(String(b.id));
 }
 
+function parseSetWeight(form) {
+  return !String(form.weight ?? '').trim() && resolveExercise(form)?.uses_external_load === false ? 0 : parseDecimal(form.weight);
+}
+
 function validateSetForm(form, activeWorkoutSession) {
-  const weight = parseDecimal(form.weight);
+  const weight = parseSetWeight(form);
   const reps = parseInteger(form.reps);
   const rpe = parseOptionalDecimal(form.rpe);
   const setNumber = parseInteger(form.set_number);
@@ -2003,7 +2007,7 @@ function validateSetForm(form, activeWorkoutSession) {
 
 function isMeaningfulSetDraft(form, activeWorkoutSession) {
   if (!activeWorkoutSession || activeWorkoutSession.ended_at || !form.exercise.trim()) return false;
-  const weight = parseDecimal(form.weight);
+  const weight = parseSetWeight(form);
   const reps = parseInteger(form.reps);
   const rpe = parseOptionalDecimal(form.rpe);
   return Number.isFinite(weight)

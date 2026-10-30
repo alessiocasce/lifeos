@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { selectExercise } from './exercisePicker.js';
 
 const exercise = (page) => page.getByRole('textbox', { name: 'Exercise', exact: true });
 const weight = (page) => page.getByRole('textbox', { name: /Weight/ });
@@ -10,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 
 async function fillDraft(page) {
   await page.goto('/workout');
-  await exercise(page).fill('Barbell Curl');
+  await selectExercise(page,'Barbell Curl');
   await weight(page).fill('25');
   await reps(page).fill('8');
 }
@@ -31,7 +32,7 @@ test('unsaved full draft and exercise switch survive reload', async ({ page }, t
   await expect(page.getByRole('textbox', { name: 'RPE optional' })).toHaveValue('8');
   await expect(page.getByRole('textbox', { name: 'Notes optional' })).toHaveValue('Controlled eccentric');
   await expect(page.getByRole('button', { name: 'Save Warmup', exact: true })).toBeVisible();
-  await exercise(page).fill('Dumbbell Curl');
+  await selectExercise(page,'Dumbbell Curl');
   await page.reload();
   await expect(exercise(page)).toHaveValue('Dumbbell Curl');
   expect(errors).toEqual([]);
@@ -134,7 +135,7 @@ test('session switching isolates fields and restores selected session ahead of n
   await page.getByText('Session actions', { exact: true }).click();
   await page.getByRole('button', { name: 'Select for logging', exact: true }).click();
   await expect(exercise(page)).toHaveValue('');
-  await exercise(page).fill('Squat');
+  await selectExercise(page,'Squat');
   await page.reload();
   await expect(exercise(page)).toHaveValue('Squat');
 });

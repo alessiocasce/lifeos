@@ -1,5 +1,17 @@
 # LifeOS Project Context
 
+## Approved exercise revision (2026-10-30)
+
+Catalog V2 has 224 identities (79 active/145 inactive), preserving all original
+UUIDs/slugs. ExercisePicker is a mobile sheet/desktop dialog with local tentative
+search and explicit commit; inactive IDs remain displayable, never normal choices.
+Owner-only correction updates approved historical text/IDs while preserving all
+timestamps and non-identity fields; conflicting IDs or set-number collisions abort.
+Live scope is 426 owner sets, not the 442 global rows (16 belong to another user).
+See `docs/EXERCISE_CATALOG_REVISION.md` for migration, backup, scope and QA rules.
+Applied SQL is sealed by `supabase/catalog-migrations.json`; generate only forward
+revisions. The old global backfill operation is intentionally retired/guarded.
+
 ## Social Training identity foundation (2026-10-29)
 
 English/Italian UI now uses `src/i18n` and private per-user language preferences.

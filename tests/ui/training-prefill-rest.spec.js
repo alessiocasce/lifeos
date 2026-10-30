@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { localDate } from '../../src/utils/date.js';
+import { searchExercise, selectExercise } from './exercisePicker.js';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', (route) => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await page.addInitScript((today) => {
     if (sessionStorage.getItem('prefill-seeded')) return;
     sessionStorage.setItem('prefill-seeded', 'true');
-    const set = (id, number, weight, reps, warmup = false) => ({ id, exercise: 'Bench Press', set_number: number, weight, reps, is_warmup: warmup, rpe: 9, notes: 'Historical outcome' });
+    const set = (id, number, weight, reps, warmup = false) => ({ id, exercise: 'Barbell Bench Press', set_number: number, weight, reps, is_warmup: warmup, rpe: 9, notes: 'Historical outcome' });
     localStorage.setItem('qa-workouts', JSON.stringify([
       { id: 'current', user_id: 'qa-user-a', name: 'Push Day', performed_on: today, started_at: today + 'T12:00:00Z', workout_sets: [] },
       { id: 'previous', user_id: 'qa-user-a', name: 'Last Push', performed_on: '2026-09-28', started_at: '2026-09-28T12:00:00Z', ended_at: '2026-09-28T13:00:00Z', workout_sets: [
@@ -19,9 +20,9 @@ const field = (page, name) => page.getByRole('textbox', { name, exact: true });
 
 test('committed exercise and saved sets prefill targets, never outcomes or manual values', async ({ page }) => {
   await page.goto('/workout');
-  await field(page, 'Exercise').fill('Bench');
+  await searchExercise(page,'Bench');
   await expect(field(page, 'Weight kg')).toHaveValue('');
-  await page.getByRole('button', { name: 'Bench Press', exact: true }).click();
+  await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
   await expect(field(page, 'Weight kg')).toHaveValue('80');
   await expect(field(page, 'Reps')).toHaveValue('8');
   await field(page, 'Weight kg').fill('82.5');
@@ -59,8 +60,7 @@ test('rest settings and countdown survive reload; failed save, Off and end are s
   await page.goto('/workout');
   await page.getByRole('button', { name: /Rest timer/ }).click();
   await page.getByRole('checkbox', { name: 'WhatsApp rest alerts' }).check();
-  await field(page, 'Exercise').fill('Bench Press');
-  await field(page, 'Exercise').press('Tab');
+  await selectExercise(page,'Barbell Bench Press');
   await page.evaluate(() => localStorage.setItem('qa-fail-save', 'true'));
   await page.getByRole('button', { name: 'Save Set', exact: true }).click();
   await expect(page.getByRole('timer')).toHaveCount(0);

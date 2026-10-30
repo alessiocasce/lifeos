@@ -1,5 +1,10 @@
 # Social Training Foundation
 
+Current catalog/picker behavior is superseded by the approved V2 revision in
+`EXERCISE_CATALOG_REVISION.md`: 224 retained identities, 79 active choices, explicit
+owner historical corrections and no global legacy backfill. The V1 implementation
+and rollout details below are historical context; its applied SQL remains immutable.
+
 Foundation implementation and focused QA are complete. Production rollout was
 authorized on 2026-10-29; verify the deployment record and migration ledger rather
 than assuming that local migration filenames have already been applied.

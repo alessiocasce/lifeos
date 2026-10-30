@@ -146,7 +146,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -161,7 +161,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -176,7 +176,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -227,8 +227,8 @@
   {
     "id": "6e66ff29-09ec-5f29-a105-19c3ff9f0913",
     "slug": "pec_deck",
-    "name_en": "Pec Deck Fly",
-    "name_it": "Croci alla pec deck",
+    "name_en": "Pectoral Machine",
+    "name_it": "Pectoral Machine",
     "category": "chest",
     "primary_muscle_group": "chest",
     "equipment": "machine",
@@ -237,13 +237,16 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "Pec Deck Fly",
+      "Croci alla pec deck"
+    ]
   },
   {
     "id": "fa47a745-4dc1-57ff-a5e3-738efaf4848c",
     "slug": "cable_standing_fly",
-    "name_en": "Standing Cable Fly",
-    "name_it": "Croci ai cavi in piedi",
+    "name_en": "Cable Flies",
+    "name_it": "Croci ai cavi",
     "category": "chest",
     "primary_muscle_group": "chest",
     "equipment": "cable",
@@ -252,7 +255,10 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "Standing Cable Fly",
+      "Croci ai cavi in piedi"
+    ]
   },
   {
     "id": "6762f8f7-5b36-5afa-a214-b3800dc9d77e",
@@ -266,7 +272,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -341,7 +347,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -386,13 +392,28 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
+    "active": false,
+    "aliases": []
+  },
+  {
+    "id": "2a07b111-91e9-51c7-af55-24dceb910010",
+    "slug": "incline_bench_cable_flies",
+    "name_en": "Incline Bench Cable Flies",
+    "name_it": "Croci ai cavi su panca inclinata",
+    "category": "chest",
+    "primary_muscle_group": "chest",
+    "equipment": "cable",
+    "load_type": "machine_display",
+    "uses_external_load": true,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
     "active": true,
     "aliases": []
   },
   {
     "id": "da58b184-0044-5e3f-ae76-e3582252e46a",
     "slug": "barbell_bent_over_row",
-    "name_en": "Barbell Bent-Over Row",
+    "name_en": "Barbell Row",
     "name_it": "Rematore con bilanciere",
     "category": "back",
     "primary_muscle_group": "back",
@@ -402,7 +423,9 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "Barbell Bent-Over Row"
+    ]
   },
   {
     "id": "e0469469-0dd5-5637-a716-b6238a89ca4b",
@@ -416,7 +439,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -431,7 +454,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -446,13 +469,13 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "bcd533bd-2ecf-5537-ae71-21b96b796df9",
     "slug": "dumbbell_bent_over_row",
-    "name_en": "Dumbbell Bent-Over Row",
+    "name_en": "Dumbbell Row",
     "name_it": "Rematore con due manubri",
     "category": "back",
     "primary_muscle_group": "back",
@@ -462,7 +485,9 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "Dumbbell Bent-Over Row"
+    ]
   },
   {
     "id": "37045b40-b0d8-5ea9-a13d-c42f598856eb",
@@ -506,7 +531,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -521,7 +546,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -557,8 +582,8 @@
   {
     "id": "430842ab-04fe-5be8-a9ea-702039107ef1",
     "slug": "seated_cable_row",
-    "name_en": "Seated Cable Row",
-    "name_it": "Rematore al cavo da seduto",
+    "name_en": "Pulley",
+    "name_it": "Pulley",
     "category": "back",
     "primary_muscle_group": "back",
     "equipment": "cable",
@@ -567,7 +592,10 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "Seated Cable Row",
+      "Rematore al cavo da seduto"
+    ]
   },
   {
     "id": "f5f8757a-feb0-5f3c-ac4e-6e787bbba6c7",
@@ -581,14 +609,14 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "811ace33-23e5-5ad1-adab-f9c007186f8d",
     "slug": "one_arm_cable_row",
-    "name_en": "One-Arm Cable Row",
-    "name_it": "Rematore al cavo a un braccio",
+    "name_en": "Pistol Pulley",
+    "name_it": "Pulley presa a pistola",
     "category": "back",
     "primary_muscle_group": "back",
     "equipment": "cable",
@@ -598,14 +626,16 @@
     "leaderboard_eligible": false,
     "active": true,
     "aliases": [
+      "One-Arm Cable Row",
+      "Rematore al cavo a un braccio",
       "Pulley Singolo"
     ]
   },
   {
     "id": "d06e5b68-65ff-5f89-a89a-0a3d0934741c",
     "slug": "lat_pulldown",
-    "name_en": "Lat Pulldown",
-    "name_it": "Lat machine presa prona",
+    "name_en": "Lat Machine",
+    "name_it": "Lat Machine",
     "category": "back",
     "primary_muscle_group": "back",
     "equipment": "cable",
@@ -615,6 +645,8 @@
     "leaderboard_eligible": false,
     "active": true,
     "aliases": [
+      "Lat Pulldown",
+      "Lat machine presa prona",
       "Lat Pulldowns"
     ]
   },
@@ -630,7 +662,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -645,7 +677,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -660,7 +692,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -675,7 +707,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": [
       "Single Hand Pulldown"
     ]
@@ -692,7 +724,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -707,7 +739,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -722,7 +754,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -769,7 +801,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -799,7 +831,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -829,7 +861,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -844,14 +876,44 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
+    "active": false,
+    "aliases": []
+  },
+  {
+    "id": "ef0451c3-8ea8-5347-a563-757862b0f919",
+    "slug": "row_machine",
+    "name_en": "Row Machine",
+    "name_it": "Rematore alla macchina",
+    "category": "back",
+    "primary_muscle_group": "back",
+    "equipment": "machine",
+    "load_type": "machine_display",
+    "uses_external_load": true,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
+    "active": true,
+    "aliases": []
+  },
+  {
+    "id": "04e84d08-ae9c-568b-a041-b103665021ed",
+    "slug": "pulley_grip_lat_machine",
+    "name_en": "Pulley Grip Lat Machine",
+    "name_it": "Lat Machine presa pulley",
+    "category": "back",
+    "primary_muscle_group": "back",
+    "equipment": "cable",
+    "load_type": "machine_display",
+    "uses_external_load": true,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
     "active": true,
     "aliases": []
   },
   {
     "id": "82a56e16-9d21-5844-a4ff-e0bf668522c7",
     "slug": "barbell_overhead_press",
-    "name_en": "Standing Barbell Overhead Press",
-    "name_it": "Lento avanti in piedi con bilanciere",
+    "name_en": "Military Press",
+    "name_it": "Military Press",
     "category": "shoulders",
     "primary_muscle_group": "shoulders",
     "equipment": "barbell",
@@ -861,7 +923,8 @@
     "leaderboard_eligible": true,
     "active": true,
     "aliases": [
-      "Military Press"
+      "Standing Barbell Overhead Press",
+      "Lento avanti in piedi con bilanciere"
     ]
   },
   {
@@ -876,7 +939,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -891,14 +954,14 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "432de433-c657-54fa-a8ba-2515fc62ad3e",
     "slug": "seated_dumbbell_press",
-    "name_en": "Seated Dumbbell Shoulder Press",
-    "name_it": "Lento avanti seduto con manubri",
+    "name_en": "Dumbbell Military Press",
+    "name_it": "Military Press con manubri",
     "category": "shoulders",
     "primary_muscle_group": "shoulders",
     "equipment": "dumbbell",
@@ -908,6 +971,8 @@
     "leaderboard_eligible": false,
     "active": true,
     "aliases": [
+      "Seated Dumbbell Shoulder Press",
+      "Lento avanti seduto con manubri",
       "Military Press"
     ]
   },
@@ -923,7 +988,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -938,7 +1003,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -968,7 +1033,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1000,7 +1065,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1032,7 +1097,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1047,7 +1112,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1062,7 +1127,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1077,7 +1142,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1092,7 +1157,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1107,7 +1172,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1122,7 +1187,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1197,7 +1262,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1242,14 +1307,14 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "a2bc1c95-14c7-558d-a56b-0973cc4793dd",
     "slug": "ez_bar_curl",
-    "name_en": "EZ-Bar Curl",
-    "name_it": "Curl con bilanciere EZ",
+    "name_en": "Barbell Curl",
+    "name_it": "Curl con bilanciere",
     "category": "biceps",
     "primary_muscle_group": "biceps",
     "equipment": "ez_bar",
@@ -1258,7 +1323,10 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "EZ-Bar Curl",
+      "Curl con bilanciere EZ"
+    ]
   },
   {
     "id": "fdaea492-4089-5fb8-a165-77fcab7745fe",
@@ -1287,7 +1355,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1332,7 +1400,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1347,14 +1415,14 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "66edb80e-e354-5871-a98e-63888b05b2b5",
     "slug": "ez_preacher_curl",
-    "name_en": "EZ-Bar Preacher Curl",
-    "name_it": "Curl alla panca Scott con bilanciere EZ",
+    "name_en": "Preacher Curl",
+    "name_it": "Curl panca Scott",
     "category": "biceps",
     "primary_muscle_group": "biceps",
     "equipment": "ez_bar",
@@ -1363,7 +1431,10 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "EZ-Bar Preacher Curl",
+      "Curl alla panca Scott con bilanciere EZ"
+    ]
   },
   {
     "id": "c727c590-a024-5731-a16b-fe55cd926edf",
@@ -1392,7 +1463,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1437,7 +1508,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1452,7 +1523,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1482,7 +1553,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1490,6 +1561,21 @@
     "slug": "zottman_curl",
     "name_en": "Zottman Curl",
     "name_it": "Curl Zottman",
+    "category": "biceps",
+    "primary_muscle_group": "biceps",
+    "equipment": "dumbbell",
+    "load_type": "per_implement",
+    "uses_external_load": true,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
+    "active": false,
+    "aliases": []
+  },
+  {
+    "id": "2cc74b41-41a0-5cc5-aa8e-8c090d2032db",
+    "slug": "preacher_hammer_curl",
+    "name_en": "Preacher Hammer Curl",
+    "name_it": "Curl a martello alla panca Scott",
     "category": "biceps",
     "primary_muscle_group": "biceps",
     "equipment": "dumbbell",
@@ -1512,13 +1598,13 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "d093f72d-0b54-5c73-a941-c34359b5d640",
     "slug": "ez_skull_crusher",
-    "name_en": "EZ-Bar Skull Crusher",
+    "name_en": "Barbell Skull Crusher",
     "name_it": "French press su panca con bilanciere EZ",
     "category": "triceps",
     "primary_muscle_group": "triceps",
@@ -1528,7 +1614,9 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "EZ-Bar Skull Crusher"
+    ]
   },
   {
     "id": "2a35ef7a-4b68-5f22-aaba-d162c839b361",
@@ -1557,13 +1645,13 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "2feee85c-7a83-5c32-a2f6-63c55d5a2002",
     "slug": "one_arm_dumbbell_overhead_extension",
-    "name_en": "One-Arm Dumbbell Overhead Triceps Extension",
+    "name_en": "Single Dumbbell Overhead Triceps",
     "name_it": "Estensione tricipiti sopra la testa a un braccio con manubrio",
     "category": "triceps",
     "primary_muscle_group": "triceps",
@@ -1573,7 +1661,9 @@
     "is_unilateral": true,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "One-Arm Dumbbell Overhead Triceps Extension"
+    ]
   },
   {
     "id": "14a94b27-9532-5321-a14f-0caa99dab5cf",
@@ -1619,7 +1709,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1634,13 +1724,13 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "940f1cb7-7b5a-5846-a392-d91faf414010",
     "slug": "one_arm_cable_pushdown",
-    "name_en": "One-Arm Cable Pushdown",
+    "name_en": "Single Cable Pushdown",
     "name_it": "Pushdown al cavo a un braccio",
     "category": "triceps",
     "primary_muscle_group": "triceps",
@@ -1650,7 +1740,9 @@
     "is_unilateral": true,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "One-Arm Cable Pushdown"
+    ]
   },
   {
     "id": "d70d27b9-3741-54e9-a43a-509505f7500f",
@@ -1670,7 +1762,7 @@
   {
     "id": "6f1756da-6a85-5f7f-a3dd-473d06cc832a",
     "slug": "one_arm_cable_overhead_extension",
-    "name_en": "One-Arm Cable Overhead Triceps Extension",
+    "name_en": "Single Overhead Cable Triceps",
     "name_it": "Estensione tricipiti sopra la testa al cavo a un braccio",
     "category": "triceps",
     "primary_muscle_group": "triceps",
@@ -1680,7 +1772,9 @@
     "is_unilateral": true,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "One-Arm Cable Overhead Triceps Extension"
+    ]
   },
   {
     "id": "90a2f37e-403a-58bf-a33c-ec1b487686cf",
@@ -1694,7 +1788,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1709,7 +1803,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1724,7 +1818,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1739,7 +1833,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1754,7 +1848,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1769,7 +1863,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1784,7 +1878,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1799,14 +1893,14 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
     "id": "a80406cd-3458-57b5-a1e9-f8d1ca4bd5e3",
     "slug": "barbell_back_squat",
-    "name_en": "Barbell Back Squat",
-    "name_it": "Squat con bilanciere sulla schiena",
+    "name_en": "Squat",
+    "name_it": "Squat",
     "category": "quadriceps",
     "primary_muscle_group": "quadriceps",
     "equipment": "barbell",
@@ -1816,6 +1910,8 @@
     "leaderboard_eligible": true,
     "active": true,
     "aliases": [
+      "Barbell Back Squat",
+      "Squat con bilanciere sulla schiena",
       "Barbell Squat",
       "Back Squat"
     ]
@@ -1832,7 +1928,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": true,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1868,8 +1964,8 @@
   {
     "id": "ce50cbe1-4388-5ca1-ab84-059031d356f4",
     "slug": "leg_press_45",
-    "name_en": "45-Degree Leg Press",
-    "name_it": "Leg press a 45 gradi",
+    "name_en": "Leg Press",
+    "name_it": "Leg Press",
     "category": "quadriceps",
     "primary_muscle_group": "quadriceps",
     "equipment": "machine",
@@ -1878,7 +1974,10 @@
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
-    "aliases": []
+    "aliases": [
+      "45-Degree Leg Press",
+      "Leg press a 45 gradi"
+    ]
   },
   {
     "id": "fd78ec18-b4b3-587a-a65b-827347826fff",
@@ -1892,7 +1991,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1907,7 +2006,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1937,7 +2036,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1952,7 +2051,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1967,7 +2066,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -1997,7 +2096,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2027,7 +2126,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2042,7 +2141,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2057,7 +2156,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2087,7 +2186,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2102,7 +2201,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2152,7 +2251,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2167,7 +2266,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2182,7 +2281,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2212,7 +2311,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2227,7 +2326,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2242,7 +2341,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2257,7 +2356,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2272,7 +2371,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2285,6 +2384,21 @@
     "equipment": "bodyweight",
     "load_type": "bodyweight",
     "uses_external_load": false,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
+    "active": false,
+    "aliases": []
+  },
+  {
+    "id": "22ac3a14-f23f-591a-af02-f48559093557",
+    "slug": "machine_romanian_deadlift",
+    "name_en": "Machine Romanian Deadlift",
+    "name_it": "Stacco rumeno alla macchina",
+    "category": "hamstrings",
+    "primary_muscle_group": "hamstrings",
+    "equipment": "machine",
+    "load_type": "machine_display",
+    "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
     "active": true,
@@ -2302,7 +2416,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2317,7 +2431,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2332,7 +2446,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2347,7 +2461,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2362,7 +2476,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2377,7 +2491,7 @@
     "uses_external_load": false,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2392,7 +2506,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2407,7 +2521,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2422,7 +2536,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2437,7 +2551,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2452,7 +2566,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2467,7 +2581,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2482,7 +2596,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2497,7 +2611,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2512,7 +2626,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2527,7 +2641,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2542,7 +2656,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2557,7 +2671,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2572,7 +2686,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2587,7 +2701,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2602,7 +2716,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2617,7 +2731,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2632,7 +2746,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2644,6 +2758,21 @@
     "primary_muscle_group": "calves",
     "equipment": "bodyweight",
     "load_type": "bodyweight",
+    "uses_external_load": false,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
+    "active": false,
+    "aliases": []
+  },
+  {
+    "id": "342cdb0e-5c07-547a-a630-5f7eab5d7afe",
+    "slug": "calf_raises",
+    "name_en": "Calf Raises",
+    "name_it": "Calf Raises",
+    "category": "calves",
+    "primary_muscle_group": "calves",
+    "equipment": "unspecified",
+    "load_type": "none",
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
@@ -2677,7 +2806,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2692,7 +2821,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2707,7 +2836,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2722,7 +2851,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2737,7 +2866,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2752,7 +2881,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2767,7 +2896,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2782,7 +2911,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2797,7 +2926,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2812,7 +2941,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2827,7 +2956,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2842,7 +2971,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2857,7 +2986,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2872,7 +3001,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2887,7 +3016,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2902,7 +3031,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2917,7 +3046,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2932,7 +3061,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2947,7 +3076,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2962,7 +3091,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2977,7 +3106,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -2992,7 +3121,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3007,7 +3136,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3022,7 +3151,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3037,7 +3166,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": true,
-    "active": true,
+    "active": false,
     "aliases": [
       "Deadlift",
       "Conventional Deadlift"
@@ -3055,7 +3184,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": true,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3070,7 +3199,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3085,7 +3214,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3100,7 +3229,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3115,7 +3244,7 @@
     "uses_external_load": true,
     "is_unilateral": true,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3130,7 +3259,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3145,7 +3274,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3160,7 +3289,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3175,7 +3304,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3190,7 +3319,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3205,7 +3334,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3220,7 +3349,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3235,7 +3364,7 @@
     "uses_external_load": false,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3250,7 +3379,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3265,7 +3394,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3280,7 +3409,7 @@
     "uses_external_load": true,
     "is_unilateral": false,
     "leaderboard_eligible": false,
-    "active": true,
+    "active": false,
     "aliases": []
   },
   {
@@ -3291,6 +3420,21 @@
     "category": "full_body",
     "primary_muscle_group": "full_body",
     "equipment": "rope",
+    "load_type": "none",
+    "uses_external_load": false,
+    "is_unilateral": false,
+    "leaderboard_eligible": false,
+    "active": false,
+    "aliases": []
+  },
+  {
+    "id": "fd92de42-aabf-5873-a5c0-d41ca5436c32",
+    "slug": "boxing_bag",
+    "name_en": "Boxing Bag",
+    "name_it": "Sacco da boxe",
+    "category": "full_body",
+    "primary_muscle_group": "full_body",
+    "equipment": "boxing_bag",
     "load_type": "none",
     "uses_external_load": false,
     "is_unilateral": false,

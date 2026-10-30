@@ -4,20 +4,31 @@ export const exerciseCatalog = catalog;
 export const normalizeExerciseText = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 const byId = new Map(catalog.map(e => [e.id,e]));
 const aliases = new Map();
+const activeNames = new Map();
 for (const exercise of catalog) {
+  if (exercise.active) for (const label of [exercise.name_en,exercise.name_it]) {
+    const key=normalizeExerciseText(label);
+    const matches=activeNames.get(key) || new Set(); matches.add(exercise.id); activeNames.set(key,matches);
+  }
   for (const label of [exercise.name_en,exercise.name_it,...exercise.aliases]) {
     const key=normalizeExerciseText(label);
     const matches=aliases.get(key) || new Set(); matches.add(exercise.id); aliases.set(key,matches);
   }
 }
 export function resolveExercise(value) {
-  const matches=aliases.get(normalizeExerciseText(typeof value==='object' ? value?.exercise : value));
+  if (value?.exercise_id) return byId.get(value.exercise_id) || null;
+  if (value && typeof value==='object' && value.exercise_id===null) return null;
+  const key=normalizeExerciseText(typeof value==='object' ? value?.exercise : value);
+  const exact=activeNames.get(key);
+  if (exact?.size===1) return byId.get([...exact][0]);
+  const matches=aliases.get(key);
   return matches?.size===1 ? byId.get([...matches][0]) : null;
 }
 export const getCatalogExercise = id => byId.get(id) || null;
 export function exerciseIdentityKey(value) {
   if (value?.exercise_id) return `catalog:${value.exercise_id}`;
   const text=typeof value==='object' ? value?.exercise : value;
+  if (value && typeof value==='object' && value.exercise_id===null) return `legacy:${normalizeExerciseText(text)}`;
   const exercise=resolveExercise(text);
   return exercise ? `catalog:${exercise.id}` : `legacy:${normalizeExerciseText(text)}`;
 }

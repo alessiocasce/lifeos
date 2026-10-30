@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { selectExercise } from './exercisePicker.js';
 
 for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [1280, 800], [1440, 900], [1920, 1080]]) {
   test(`Training layout and navigation at ${width}x${height}`, async ({ page }, testInfo) => {
@@ -7,7 +8,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto('/workout');
-    await page.getByRole('textbox', { name: 'Exercise', exact: true }).fill('Barbell Curl');
+    await selectExercise(page,'Barbell Curl');
     await page.getByRole('textbox', { name: /Weight/ }).fill('25');
     await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
     await page.getByRole('textbox', { name: 'Reps', exact: true }).blur();

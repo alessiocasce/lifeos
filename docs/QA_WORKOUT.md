@@ -1,5 +1,21 @@
 # LifeOS Workout QA
 
+## Catalog V2 / Modal Picker (2026-10-30)
+
+Verify 79 active entries; no Glutes filter, only Calf Raises/Crunch/Boxing Bag in
+their categories. Exercise opens a full-width mobile sheet or desktop dialog.
+Search both languages and old unambiguous names; rows use current locale and
+canonical IDs. Check Arrow/Enter/Escape, focus return, inner scrolling and Other.
+Cancel must preserve the complete existing set draft. Explicitly null custom IDs
+must not be inferred, and inactive recent IDs must not reappear as active choices.
+Boxing saves without external load (zero) using the existing reps/set model.
+
+Run `tests/ui/exercise-picker.spec.js` at its four scoped viewports, plus focused
+Training History/prefill/rest/template/continuity and social-language cases.
+`test:social-training` checks all 29 owner mappings, exact timestamp/field/snapshot
+preservation, idempotency, SQL/JS alias parity, immutable IDs and other-user safety.
+See EXERCISE_CATALOG_REVISION for the restricted backup and targeted rollout.
+
 ## Social Training Foundation (2026-10-29)
 
 Catalog-first selection supports bilingual names, muscle filters, recent choices

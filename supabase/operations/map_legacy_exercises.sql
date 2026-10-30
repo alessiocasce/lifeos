@@ -1,3 +1,11 @@
+-- Retired: exact active names are now picker choices, not proof about old rows.
+-- The immutable V1 migration retains its original backfill. New corrections must
+-- use the reviewed admin-only apply_owner_exercise_revision_v2(owner) operation.
+do $$ begin
+  raise exception 'Global legacy mapping is retired; use the reviewed owner-scoped revision';
+end $$;
+-- Historical implementation below is retained only as documentation; the guard
+-- above deliberately prevents execution of this file against any database.
 -- Idempotent exact/curated-only mapping. No fuzzy assignment or text replacement.
 update public.workout_sets set exercise_id=public.resolve_exercise_id(exercise)
 where exercise_id is null and public.resolve_exercise_id(exercise) is not null;

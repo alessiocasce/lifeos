@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { selectExercise } from './exercisePicker.js';
 
 test.use({ isMobile: true, hasTouch: true });
 test.beforeEach(async ({ page }) => {
@@ -24,7 +25,7 @@ test('keyboard focus after viewport resize hides dock, blur restores it', async 
 
 test('keyboard resize with focused input preserves draft and dock returns on dismissal', async ({ page }) => {
   await page.goto('/workout');
-  await exercise(page).fill('Barbell Curl');
+  await selectExercise(page,'Barbell Curl');
   await page.evaluate(() => {
     Object.defineProperty(window.visualViewport, 'height', { configurable: true, value: innerHeight - 300 });
     window.visualViewport.dispatchEvent(new Event('resize'));
@@ -42,7 +43,7 @@ test('reconnection refresh retains visible draft and browser back retains user a
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/workout');
-  await exercise(page).fill('Barbell Curl');
+  await selectExercise(page,'Barbell Curl');
   await page.getByRole('textbox', { name: /Weight/ }).fill('25');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.evaluate(() => {

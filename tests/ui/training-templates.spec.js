@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { selectExercise } from './exercisePicker.js';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', (route) => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
@@ -56,7 +57,7 @@ test('template and exercise CRUD, notes, ordering and compaction remain function
   await expect(row).toContainText('Second pull day');
   const add = row.getByRole('group', { name: 'Add template exercise' });
   for (const name of ['Pull Up', 'Cable Row']) {
-    await add.getByLabel('Add exercise', { exact: true }).fill(name);
+    await selectExercise(page,name,{label:'Add exercise',scope:add});
     await add.getByLabel('Notes', { exact: true }).fill('Keep full range');
     await add.getByRole('button', { name: 'Add exercise', exact: true }).click();
     await expect(add.getByLabel('Add exercise', { exact: true })).toHaveValue('');
@@ -65,14 +66,14 @@ test('template and exercise CRUD, notes, ordering and compaction remain function
   await expect(row.getByRole('group', { name: /^Template exercise/ }).first()).toContainText('Cable Row');
   const exercise = row.getByRole('group', { name: 'Template exercise Cable Row' });
   await exercise.getByRole('button', { name: 'Edit exercise' }).click();
-  await exercise.getByLabel('Exercise', { exact: true }).fill('Seated Cable Row');
+  await selectExercise(page,'Seated Cable Row',{scope:exercise});
   await exercise.getByRole('button', { name: 'Save exercise' }).click();
   await row.getByRole('button', { name: 'Edit template', exact: true }).click();
   await row.getByRole('group', { name: 'Edit template', exact: true }).getByLabel('Template name').fill('Pull revised');
   await row.getByRole('button', { name: 'Save template', exact: true }).click();
   const revised = template(page, 'Pull revised');
   page.once('dialog', (dialog) => dialog.accept());
-  await revised.getByRole('group', { name: 'Template exercise Seated Cable Row' }).getByRole('button', { name: 'Delete exercise' }).click();
+  await revised.getByRole('group', { name: 'Template exercise Pulley' }).getByRole('button', { name: 'Delete exercise' }).click();
   await expect(revised.getByRole('group', { name: /^Template exercise/ })).toHaveCount(1);
   await page.reload();
   await page.getByRole('button', { name: 'Manage templates' }).click();

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { localDate } from '../../src/utils/date.js';
 import { exerciseCatalog } from '../../src/utils/exerciseCatalog.js';
+import { searchExercise } from './exercisePicker.js';
 const canonical=exerciseCatalog.find(e=>e.slug==='dumbbell_flat_bench_press');
 test.beforeEach(async({page})=>{
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
@@ -22,7 +23,7 @@ async function settings(page,language='en') {
 }
 test('bilingual catalog, Last Time and unsaved draft survive Settings and reload',async({page},info)=>{
   await page.goto('/workout');
-  await page.getByRole('textbox',{name:'Exercise',exact:true}).fill('DB Bench');
+  await searchExercise(page,'DB Bench');
   await page.getByRole('button',{name:'Dumbbell Bench Press',exact:true}).click();
   await expect(page.getByRole('textbox',{name:'Weight kg',exact:true})).toHaveValue('30');
   await expect(page.getByRole('textbox',{name:'Reps',exact:true})).toHaveValue('8');
@@ -108,7 +109,7 @@ test('incomplete onboarding is non-blocking and Italian chrome renders across wo
 
 test('cross-language search and recent aliases select one stable identity',async({page},info)=>{
   await page.goto('/workout');
-  await page.getByRole('textbox',{name:'Exercise',exact:true}).fill('PÁNCA PIANA MANUBRI');
+  await searchExercise(page,'PÁNCA PIANA MANUBRI');
   await expect(page.getByRole('button',{name:'Dumbbell Bench Press',exact:true})).toHaveCount(1);
   await page.screenshot({path:info.outputPath('english-catalog-italian-query.png'),fullPage:true});
   await page.getByRole('button',{name:'Dumbbell Bench Press',exact:true}).click();
@@ -116,10 +117,10 @@ test('cross-language search and recent aliases select one stable identity',async
   await settings(page);
   await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('it');
   await page.getByRole('button',{name:'Allenamento',exact:true}).click();
-  await page.getByRole('textbox',{name:'Esercizio',exact:true}).fill('Lat Pulldown');
-  await expect(page.getByRole('button',{name:'Lat machine presa prona',exact:true})).toHaveCount(1);
+  await searchExercise(page,'Lat Pulldown',{label:'Esercizio'});
+  await expect(page.getByRole('button',{name:'Lat Machine',exact:true})).toHaveCount(1);
   await page.screenshot({path:info.outputPath('italian-catalog-english-query.png'),fullPage:true});
-  await page.getByRole('button',{name:'Lat machine presa prona',exact:true}).click();
+  await page.getByRole('button',{name:'Lat Machine',exact:true}).click();
   const draft=await page.getByRole('textbox',{name:'Esercizio',exact:true}).inputValue();
-  expect(draft).toBe('Lat machine presa prona');
+  expect(draft).toBe('Lat Machine');
 });
