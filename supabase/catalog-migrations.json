@@ -14,5 +14,13 @@
   {
     "file": "20261030113250_community_workout_shares.sql",
     "sha256": "438466e547b68eb02baf7c341a5bbbdd5a217bb9e84cf1024a89a265620f6236"
+  },
+  {
+    "file": "20261030121657_community_automatic_sharing.sql",
+    "sha256": "0c9d6e584eda82a397a4848796777104eb490ade4b79dd4f29ff0428b47deaa4"
+  },
+  {
+    "file": "20261030121659_degra_public_identity.sql",
+    "sha256": "8999d8aa0b4c6355a446f060452a73eb0bbd32b164c92b2e054b7e9d5f7e77cc"
   }
 ]

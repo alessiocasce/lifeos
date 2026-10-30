@@ -66,6 +66,16 @@ stop and re-audit instead of relaxing the guard blindly.
 
 ## Verification and rollout
 
+Production applied `20261030121657_community_automatic_sharing.sql` and
+`20261030121659_degra_public_identity.sql`; filenames/hashes match the ledger.
+Verified 41 casce shares/426 sets and 2 degra shares/16 sets, both notes OFF.
+Degra is the original account, language en (established default); casce's profile,
+source data/timestamps, auth records, existing settings and rest state are unchanged.
+No duplicate, unfinished, date-mismatched or note-bearing projection exists.
+Production rollback-only role QA passed; no permanent test data was inserted.
+Advisors retain only one intentional public SECURITY DEFINER notice for owner-only
+read status, plus unrelated historical search-path/password warnings.
+
 Use `npm run test:community`, `test:social-training`, `test:workout`,
 `test:workout:rest`, `test:schema`, targeted Community/Training/auth browser cases,
 catalog/schema/i18n checks, syntax/diff checks, function gate and production build.

@@ -19,6 +19,11 @@ Production applied `20261030111420_second_training_cohort.sql` and
 `20261030113250_community_workout_shares.sql`; filenames/hashes match the ledger.
 The original manual-publication RPCs are retired by the automatic-sharing forward
 migration. Sync helpers are private/admin-only; workout_share_status is read-only.
+Production versions `20261030121657` (automatic sharing) and `20261030121659`
+(authorized degra identity) are applied/sealed. Verified 41 casce + 2 degra shares,
+442 sets, no public notes, duplicates, unfinished sources or changed dates. Source,
+auth, casce identity, existing preferences, rest and private-policy hashes match.
+Rollback-only production A/B/anon checks passed. No permanent QA records created.
 
 ## Approved exercise revision (2026-10-30)
 
