@@ -10,5 +10,9 @@
   {
     "file": "20261030111420_second_training_cohort.sql",
     "sha256": "c18f793d95f6b0793d7efaf174a0844120cbcda902da1d95686080a4d8f204b2"
+  },
+  {
+    "file": "20261030113250_community_workout_shares.sql",
+    "sha256": "438466e547b68eb02baf7c341a5bbbdd5a217bb9e84cf1024a89a265620f6236"
   }
 ]

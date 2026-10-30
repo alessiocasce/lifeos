@@ -51,6 +51,17 @@ ones abort. Backup/rehearsal precedes correction. Main-account rows are unchange
 
 ## QA and rollout
 
+Applied production versions: `20261030111420_second_training_cohort.sql` and
+`20261030113250_community_workout_shares.sql`. Exact hashes preserve all private
+records/preferences/rest state and existing policies through Community deployment.
+All 442 audited sets are mapped; no shares or QA fixtures persisted. Test shares
+existed only inside the rolled-back verification transaction.
+Production rollback-only role QA passed. Advisors report four intentional
+authenticated SECURITY DEFINER API functions (publish, two withdraw paths, status).
+They are needed to keep direct snapshot mutations denied; all derive auth.uid(),
+check ownership and use fixed empty search paths. Anonymous execution is denied.
+Existing search-path/password warnings are unrelated and were not changed.
+
 Run `npm run test:community`, `test:social-training`, `test:workout`,
 `test:workout:rest`, targeted `tests/ui/community.spec.js` and Training continuity,
 prefill/rest/template cases. Also run catalog/schema/i18n generation checks,

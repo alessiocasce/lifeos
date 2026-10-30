@@ -11,6 +11,12 @@ and account-keyed UI prevent stale account updates. See docs/COMMUNITY.md for
 RPCs, tests, rollout and manual acceptance. No rankings or notifications.
 The approved second cohort is now mapped: 16/16, audited global total 442/442.
 Main-account records and all non-exercise fields/timestamps match before hashes.
+Production applied `20261030111420_second_training_cohort.sql` and
+`20261030113250_community_workout_shares.sql`; filenames/hashes match the ledger.
+Rollback-only A/B/anon production tests passed; shares remain empty after rollout.
+Advisors flag four intentional authenticated SECURITY DEFINER RPCs: guarded
+publication/revocation/status, fixed search paths, no anonymous EXECUTE. Review
+these invariants rather than granting clients direct snapshot writes.
 
 ## Approved exercise revision (2026-10-30)
 
