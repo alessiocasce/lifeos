@@ -36,6 +36,7 @@ test('sign-in failure preserves credentials, locks the request and retries once'
 test('account confirmation is announced without storing a logged-in session', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await expect(page.getByText('Completed workouts are shared with signed-in members once your public profile is set up. You can turn this off in Settings. Notes stay private unless enabled.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('autocomplete', 'new-password');
   await page.getByLabel('Email', { exact: true }).fill('qa@example.test');
   await page.getByLabel('Password', { exact: true }).fill('fixture-password');

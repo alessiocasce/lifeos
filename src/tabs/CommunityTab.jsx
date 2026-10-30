@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, RefreshCw, Search, ShieldOff } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { communityApi } from '../services/lifeosApi';
 import { t, formatDate } from '../i18n';
@@ -27,7 +27,7 @@ function CommunityWorkspace({ userId }) {
   if (location.share) return <ShareDetail key={location.share} userId={userId} id={location.share} />;
   if (location.member) return <MemberProfile key={location.member} userId={userId} id={location.member} />;
   return <div className="max-w-3xl min-w-0">
-    <p className="mb-5 text-sm text-zinc-400">{t('Workouts intentionally shared by LifeOS members.')}</p>
+    <p className="mb-5 text-sm text-zinc-400">{t('Completed workouts from members with Workout Sharing enabled.')}</p>
     <div role="tablist" aria-label={t('Community views')} className="mb-6 flex gap-5 border-b border-white/10">
       {['Feed', 'Members'].map(label => <button type="button" role="tab" key={label} aria-selected={(label === 'Members') === location.members} className={`min-h-11 border-b-2 px-1 text-sm ${((label === 'Members') === location.members) ? 'border-zinc-100 text-zinc-100' : 'border-transparent text-zinc-400'}`} onClick={() => navigate(label === 'Members' ? 'members' : '')}>{t(label)}</button>)}
     </div>
@@ -58,7 +58,8 @@ function useCommunityList(userId, kind, author, search = '') {
   useEffect(() => {
     const refresh = () => { if (document.visibilityState === 'visible') void load(); };
     window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
-    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+    const interval = setInterval(refresh, 30000);
+    return () => { clearInterval(interval); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, [load]);
   return { ...state, load };
 }
@@ -76,7 +77,7 @@ function Feed({ userId, author = null }) {
   const data = useCommunityList(userId, 'feed', author);
   return <section aria-label={t('Shared workouts')} className="min-w-0">
     <div className="grid gap-4">{data.rows.map(share => <SharedWorkoutCard key={share.id} share={share} onOpen={() => navigate('share', share.id)} onMember={() => navigate('member', share.author_id)} />)}</div>
-    <ListFooter data={data} empty={author === userId ? 'You have not shared any workouts. Share a completed workout from Training History.' : 'No shared workouts yet.'} />
+    <ListFooter data={data} empty={author === userId ? 'Completed workouts appear here when Workout Sharing is on and your public profile is complete.' : 'No shared workouts yet.'} />
   </section>;
 }
 
@@ -117,25 +118,11 @@ function BackToCommunity() {
 
 function ShareDetail({ userId, id }) {
   const data = useCommunityRecord(userId, id, 'detail');
-  const [withdrawn, setWithdrawn] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const withdraw = async () => {
-    if (busy) return;
-    setBusy(true); setError(false);
-    try { await communityApi.withdrawShared(userId, id); if (alive.current) setWithdrawn(true); }
-    catch { if (alive.current) setError(true); }
-    finally { if (alive.current) setBusy(false); }
-  };
   return <section className="max-w-2xl min-w-0"><BackToCommunity />
-    {withdrawn ? <p>{t('This workout is private or unavailable.')}</p> : data.loading ? <p role="status">{t('Loading Community...')}</p> : data.error ? <p role="alert">{t('Community is unavailable. Try again.')}</p> : !data.value ? <p>{t('This workout is private or unavailable.')}</p> : <>
+    {data.loading ? <p role="status">{t('Loading Community...')}</p> : data.error ? <p role="alert">{t('Community is unavailable. Try again.')}</p> : !data.value ? <p>{t('This workout is private or unavailable.')}</p> : <>
       <MemberIdentity profile={data.value.author} onOpen={() => navigate('member', data.value.author_id)} />
       <p className="mt-6 text-xs uppercase text-zinc-400">{t('Shared with Community')}</p>
       <h2 className="mt-2 break-words text-xl font-semibold">{data.value.title}</h2><time className="text-sm text-zinc-400">{formatDate(data.value.performed_on)}</time>
-      {data.value.author_id === userId ? <button type="button" disabled={busy} onClick={withdraw} className="mt-3 flex min-h-11 items-center gap-2 text-sm text-zinc-400"><ShieldOff size={16} />{t('Stop sharing')}</button> : null}
-      {error ? <p role="alert" className="text-sm text-amber-200">{t('Sharing failed. Refresh and try again.')}</p> : null}
       <SharedWorkoutSets share={data.value} />
     </>}
   </section>;

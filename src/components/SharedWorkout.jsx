@@ -12,10 +12,10 @@ export function MemberIdentity({ profile, onOpen }) {
 
 export function SharedWorkoutCard({ share, onOpen, onMember }) {
   return <article className="min-w-0 rounded-md border border-white/10 bg-[#111316] p-4">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><MemberIdentity profile={share.author} onOpen={onMember} /><time className="text-xs text-zinc-400" dateTime={share.published_at}>{formatDate(share.published_at)}</time></div>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><MemberIdentity profile={share.author} onOpen={onMember} /><time className="text-xs text-zinc-400" dateTime={share.performed_on}>{formatDate(share.performed_on)}</time></div>
     <button type="button" onClick={onOpen} className="block w-full text-left">
       <h2 className="break-words text-lg font-semibold text-zinc-100">{share.title}</h2>
-      <p className="mt-1 text-xs text-zinc-400">{formatDate(share.performed_on)} · {share.exercise_count}{t(' exercises · ')}{share.set_count}{t(' sets')}</p>
+      <p className="mt-1 text-xs text-zinc-400">{share.exercise_count}{t(' exercises · ')}{share.set_count}{t(' sets')}</p>
       <p className="mt-3 break-words text-sm leading-relaxed text-zinc-300">{(share.exercise_preview || []).map(e => exerciseLabel(e)).join(' · ')}</p>
       <span className="mt-4 flex min-h-11 items-center gap-2 text-sm text-zinc-100"><Dumbbell size={16} />{t('View workout')}</span>
     </button>

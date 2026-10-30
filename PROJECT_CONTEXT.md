@@ -1,22 +1,24 @@
 # LifeOS Project Context
 
-## Community Phase 2 (2026-10-30)
+## Automatic Community sharing (2026-10-30)
 
-Community adds member-only Feed/Members/profile/read-only share views and explicit
-publication from completed Training History. Separate sanitized snapshot storage,
-not broader workout RLS. Both privacy flags remain OFF by default. Master OFF
-withdraws all shares; notes OFF scrubs existing notes; ON never restores either.
-Source edits/reopen/delete withdraw until explicitly republished. Auth-bound calls
-and account-keyed UI prevent stale account updates. See docs/COMMUNITY.md for
-RPCs, tests, rollout and manual acceptance. No rankings or notifications.
+Workout Sharing defaults ON for new/unset accounts, while existing explicit OFF
+choices are preserved. With an authored public profile, every eligible completed
+workout (including history) is synchronized by database triggers. OFF removes all
+projections; ON restores eligible history. Notes default OFF and are controlled
+only by their global preference. No per-workout publish/revoke controls remain.
+Private source RLS is unchanged; Community reads sanitized projections only.
+Source edits refresh, reopen/delete withdraw, completion republishes. A BEFORE
+STATEMENT writer gate serializes source/profile/privacy writes for this small
+community. Projection errors withdraw stale shares without losing source logging.
+Feed v2 paginates by performed_on + UUID; publication timestamps are audit only.
+Auth-bound calls/account-keyed UI remain. See docs/COMMUNITY.md. No rankings.
 The approved second cohort is now mapped: 16/16, audited global total 442/442.
 Main-account records and all non-exercise fields/timestamps match before hashes.
 Production applied `20261030111420_second_training_cohort.sql` and
 `20261030113250_community_workout_shares.sql`; filenames/hashes match the ledger.
-Rollback-only A/B/anon production tests passed; shares remain empty after rollout.
-Advisors flag four intentional authenticated SECURITY DEFINER RPCs: guarded
-publication/revocation/status, fixed search paths, no anonymous EXECUTE. Review
-these invariants rather than granting clients direct snapshot writes.
+The original manual-publication RPCs are retired by the automatic-sharing forward
+migration. Sync helpers are private/admin-only; workout_share_status is read-only.
 
 ## Approved exercise revision (2026-10-30)
 

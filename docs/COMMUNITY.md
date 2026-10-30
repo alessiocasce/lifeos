@@ -1,86 +1,86 @@
-# Community / Shared Workouts
+# Automatic Community Sharing
 
-Phase 2 is member-only. Community is a lazy-loaded top-level destination at
-`/community`, with Feed and Members views. Mobile navigation exposes Community
-directly; Projects remains in More. Detail/profile hash links survive reload/back.
-No rankings, reactions, following, notifications or automatic publication exist.
+## Current product contract
 
-## Privacy boundary
+Workout Sharing defaults ON for newly created or previously unset preferences;
+explicit existing OFF choices are never overwritten. Notes default OFF. A member
+must author a public profile before anything appears; no identity is inferred
+from email/auth metadata. Signup and Settings disclose that past and future
+completed workouts are visible to authenticated members while sharing is ON.
 
-Private workouts/sets/templates retain their owner-only RLS. The separate
-`community_workout_shares` table stores a sanitized JSONB set snapshot, title,
-date, counts and optional notes. JSONB keeps the small immutable published unit
-atomic without duplicating private IDs or coupling public reads to private RLS.
-Owners can revoke from Community detail too, including shares older than the
-private 25-session cache, using their public share ID without exposing source IDs.
-Authenticated users have SELECT only on approved columns, never source workout
-IDs. Anonymous access and direct client mutations are revoked. Feed reads use
-`community_feed` keyset pagination (10/page, timestamp + UUID); public profiles
-are joined once. Member search is server-filtered/paginated, not private history.
+ON reconciles all eligible completed history; OFF withdraws all projections
+immediately in the same transaction. Re-enabling restores eligible history.
+Notes ON includes permitted historical session/set notes; OFF removes them.
+History has only View in Community, not individual publication controls. Details
+are read-only, including for their author. Owner editing stays in Training.
 
-`publish_workout_share` derives auth.uid(), locks preferences and the owned source,
-requires a profile, master publishing permission and persisted ended_at, and builds
-only approved fields. Preview uses the same builder without writing. Confirm is
-an explicit per-workout action. A unique source reference makes retries idempotent.
-At most 500 sets are published; title/notes previews reflect 120/2000 character
-limits. RPE is optional. Canonical IDs localize even inactive entries; null-ID
-custom names remain authored text, never guessed from ambiguous aliases.
+## Database lifecycle
 
-Master sharing OFF or deleting preferences removes all shares transactionally.
-ON never restores them. Notes OFF scrubs session/set notes and consent from all
-existing snapshots; ON never restores notes. Per-share notes consent defaults OFF,
-even when the global notes permission is ON. Source edits, inserts/deletes of sets,
-reopening and source deletion withdraw the share; explicit republishing is needed.
-Trigger/RPC helpers have fixed search paths and minimal grants. Parent/set ownership
-is checked before source invalidation so foreign parent IDs cannot revoke shares.
+Private workouts, sets and templates retain owner-only RLS. Community reads the
+existing sanitized `community_workout_shares` snapshot table, with SELECT on
+approved columns only. Source workout IDs, notes when disabled, email, health,
+outbox and private preferences are not projected. Anonymous reads are denied.
 
-Community has no persistent browser cache. Requests bind a captured auth token;
-account-keyed mounts and generation checks discard stale requests. Detail is
-revalidated on focus/resume and every 30 seconds while visible. Data already read
-cannot be retracted from a viewer's device, but every new DB read honors revocation.
-Feed refreshes on focus/resume. No private source IDs or raw DB errors are rendered.
+Private fixed-search-path sync functions run from source/profile/privacy triggers:
+unfinished/zero-set/>500-set/no-profile/OFF workouts are not published; completion
+creates a projection, edits/sets refresh it, reopen/delete withdraw it. Unique
+source references and conditional UPSERT preserve IDs/row versions on no-op sync.
+Read-time RLS independently checks current master/notes permission, profile and
+source completion, so a stale/corrupt projection cannot override current privacy.
+The visibility helper is callable by the policy, not exposed through the API.
+Projection failure deletes any old snapshot and emits SQLSTATE-only WARNING;
+source logging survives. Failure to revoke cannot be silently ignored.
 
-## Approved second cohort
+BEFORE STATEMENT advisory writer gates serialize relevant source/profile/privacy
+writes, including service-role writes and auth insert/delete cascades, before row
+locks. This deliberately coarse gate suits the current small community; readers
+never take it. Do not add source writers that acquire row locks first. Future
+high-volume scaling should replace the gate through one coordinated protocol,
+not remove it from one path. Source writes and privacy changes commit atomically.
 
-Admin-only `map_second_training_cohort(uuid)` refuses any distribution other than
-the approved 3/3/3/4/3 five-name cohort (16 sets). It accepts a repeat run only if
-every row already has the exact target ID/text. No global ambiguous aliases or
-private user IDs are committed. Timestamp trigger modes are restored transactionally.
-The reviewed account has no template exercises or snapshot references; unexpected
-ones abort. Backup/rehearsal precedes correction. Main-account rows are unchanged.
+Auth insert initializes preferences. Profile creation backfills history, preserving
+existing opt-outs. Preference language-only updates do not reconcile workouts.
+A deleted/malformed settings row fails closed until recreated. Admin sync helpers
+are not callable by ordinary clients. The obsolete manual publish/withdraw RPCs
+are dropped; cached old UIs must refresh. `workout_share_status` remains owner-only
+read access. The old feed read contract remains for cached clients.
 
-## QA and rollout
+`community_feed_v2` uses server-side keyset pagination by performed_on DESC, UUID
+DESC, 10/page. Publication timestamps remain audit metadata; cards show workout
+dates, not bulk-backfill dates. Catalog IDs localize in English/Italian, including
+inactive identities; authored custom names are not guessed or translated.
 
-Applied production versions: `20261030111420_second_training_cohort.sql` and
-`20261030113250_community_workout_shares.sql`. Exact hashes preserve all private
-records/preferences/rest state and existing policies through Community deployment.
-All 442 audited sets are mapped; no shares or QA fixtures persisted. Test shares
-existed only inside the rolled-back verification transaction.
-Production rollback-only role QA passed. Advisors report four intentional
-authenticated SECURITY DEFINER API functions (publish, two withdraw paths, status).
-They are needed to keep direct snapshot mutations denied; all derive auth.uid(),
-check ownership and use fixed empty search paths. Anonymous execution is denied.
-Existing search-path/password warnings are unrelated and were not changed.
+UI requests capture auth identity; account-keyed mounts/generations reject stale
+responses. Feed/details revalidate on focus/resume and every 30 seconds while
+visible. All new DB reads honor revocation immediately; already-read data cannot
+be retracted from a device. No persistent Community browser cache exists.
 
-Run `npm run test:community`, `test:social-training`, `test:workout`,
-`test:workout:rest`, targeted `tests/ui/community.spec.js` and Training continuity,
-prefill/rest/template cases. Also run catalog/schema/i18n generation checks,
-syntax/diff checks, function gate and build. Do not run the whole UI matrix.
-Production role verification is `supabase/operations/verify_community.sql`: it
-creates rollback-only users/workouts and tests actual A/B/anonymous permissions,
-notes/master revocation, no resurrection, source invalidation and keyset pages.
-Never leave fake production posts. Restricted recovery capture is
-`LIFEOS_CAPTURE_COMMUNITY_BACKUP=true node --env-file=.env.local scripts/backup-community-rollout.js`.
-Managed PITR availability is not proven by this logical backup.
+## Authorized degra provisioning
 
-Apply only new targeted forward migrations; never broad db push. Reconcile the
-connector's actual versions and seal their hashes. No owner-only Brain, WhatsApp,
-MCP or rest-timer permission changes; no new Vercel function.
+The admin-only `configure_degra_member(uuid)` validates the reviewed existing
+account's two completed workouts/16 sets, refuses unrelated profiles and username
+collisions, creates `degra` / `degra`, and enables sharing with notes OFF. It
+preserves language, auth account, all source records and casce's identity. No
+private UUID is committed. Repeated provisioning is a no-op. If the cohort changes,
+stop and re-audit instead of relaxing the guard blindly.
 
-Manual acceptance: enable sharing in Settings (defaults OFF), open a completed
-workout in Training History, inspect/cancel preview, confirm with notes unchecked,
-view from another member, stop sharing and verify old link unavailable. Repeat
-with explicit notes consent, turn notes OFF, then master OFF/ON; nothing should
-resurrect. Edit/reopen a shared source and verify withdrawal. Check both languages,
-custom exercises, History/draft return, and iPhone keyboard/dialog ergonomics.
-Physical iPhone background/rest WhatsApp acceptance is not browser-test proof.
+## Verification and rollout
+
+Use `npm run test:community`, `test:social-training`, `test:workout`,
+`test:workout:rest`, `test:schema`, targeted Community/Training/auth browser cases,
+catalog/schema/i18n checks, syntax/diff checks, function gate and production build.
+Do not run the full UI matrix. `supabase/operations/verify_community.sql` exercises
+current automatic behavior under authenticated A/B/anon roles in a rollback-only
+transaction. It creates no permanent production fixtures.
+
+Capture restricted recovery data with the opt-in backup script. Rehearse the actual
+capture using `LIFEOS_COMMUNITY_REHEARSAL_FILE=<restricted path> node scripts/rehearse-automatic-community.js`.
+This proves restoration/data preservation but does not verify managed PITR status.
+Apply only the two new forward migrations, reconcile assigned filenames and seal
+hashes; never broad db push or rewrite applied SQL. Verify projection counts,
+source hashes, notes, grants and advisors before pushing. Let GitHub deploy Vercel.
+
+Manual acceptance: check casce/degra profiles and historical dates, complete/edit/
+reopen a real workout, toggle global sharing OFF/ON, and verify notes OFF/ON/OFF.
+Check both languages and iPhone navigation/draft recovery. Browser tests do not
+prove physical iPhone background or WhatsApp rest delivery. No rankings added.

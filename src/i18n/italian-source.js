@@ -1,5 +1,11 @@
 // Interface-owned messages only. Never run user-authored record text through t().
 export default {
+  'Completed workouts from members with Workout Sharing enabled.':'Allenamenti completati dai membri che hanno attivato la condivisione.',
+  'Completed workouts appear here when Workout Sharing is on and your public profile is complete.':'Gli allenamenti completati appaiono qui quando la condivisione è attiva e il tuo profilo pubblico è completo.',
+  'Your public profile and shared completed workouts are visible to signed-in members. Your email and other personal records stay private.':'Il profilo pubblico e gli allenamenti completati condivisi sono visibili ai membri autenticati. Email e altri dati personali restano privati.',
+  'When Workout Sharing is on, all completed workouts, including past workouts, are automatically visible to signed-in LifeOS members. Turn it off to hide them all. Turning it back on restores them. New accounts start with sharing on.':'Con la condivisione attiva, tutti gli allenamenti completati, anche quelli passati, sono automaticamente visibili ai membri autenticati di LifeOS. Disattivala per nasconderli tutti; riattivandola tornano visibili. Nei nuovi account è attiva inizialmente.',
+  'Notes are private by default. Enabling notes shares workout and set notes, including past notes. Turning notes off removes them from Community immediately.':'Le note sono private inizialmente. Abilitandole condividi le note degli allenamenti e delle serie, anche quelle passate. Disattivandole vengono rimosse subito dalla Community.',
+  'Completed workouts are shared with signed-in members once your public profile is set up. You can turn this off in Settings. Notes stay private unless enabled.':'Dopo aver configurato il profilo pubblico, gli allenamenti completati vengono condivisi con i membri autenticati. Puoi disattivare la condivisione nelle Impostazioni. Le note restano private se non le abiliti.',
   'Community':'Community', 'Community views':'Viste Community', 'Feed':'Bacheca', 'Members':'Membri', 'RPE {v0}':'RPE {v0}',
   'Workouts intentionally shared by LifeOS members.':'Allenamenti condivisi volontariamente dai membri di LifeOS.',
   'View workout':'Vedi allenamento', 'Shared workouts':'Allenamenti condivisi', 'Loading Community...':'Caricamento Community...',

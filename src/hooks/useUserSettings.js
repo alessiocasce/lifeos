@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { userSettingsApi } from '../services/lifeosApi';
 
-export const defaultPreferences = { language: 'en', workout_sharing: false, share_workout_notes: false };
+export const defaultPreferences = { language: 'en', workout_sharing: true, share_workout_notes: false };
 export function useUserSettings(userId) {
   const empty = () => ({ userId, profile: null, preferences: defaultPreferences, status: 'loading', error: '' });
   const [state, setState] = useState(empty);

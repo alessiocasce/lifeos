@@ -6,7 +6,7 @@ const initialSession = () => ({
   started_at: new Date().toISOString(), ended_at: null, template_snapshot: [], workout_sets: [],
 });
 const read = () => JSON.parse(localStorage.getItem('qa-workouts') || JSON.stringify([initialSession()]));
-const write = (rows) => localStorage.setItem('qa-workouts', JSON.stringify(rows));
+const write = (rows) => { localStorage.setItem('qa-workouts', JSON.stringify(rows)); reconcileCommunityUser(user()?.id); };
 let authListener;
 window.__qaSignIn = (id) => {
   const next = { id, email: `${id}@example.test` };
@@ -316,37 +316,38 @@ export const aiReportApi = {
 const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
 const shares = () => JSON.parse(localStorage.getItem('qa-community-shares') || '[]');
 const storeShares = rows => localStorage.setItem('qa-community-shares', JSON.stringify(rows));
+const fixtureSettings = id => JSON.parse(localStorage.getItem(`qa-settings:${id}`) || JSON.stringify({ profile: localStorage.getItem('qa-profile-incomplete') ? null : { username: 'qa_user', display_name: 'QA User' }, preferences: { language: 'en', workout_sharing: true, share_workout_notes: false } }));
+function reconcileCommunityUser(id) {
+  if (!id) return;
+  const settings = fixtureSettings(id), previous = shares();
+  const retained = previous.filter(s => s.author_id !== id || !s.source);
+  if (!settings.preferences.workout_sharing || !settings.profile) { storeShares(previous.filter(s => s.author_id !== id)); return; }
+  const notes = settings.preferences.share_workout_notes;
+  const projected = read().filter(w => w.user_id === id && w.ended_at && w.workout_sets?.length && w.workout_sets.length <= 500).map(w => {
+    const sets = w.workout_sets.map(s => ({ exercise:s.exercise,exercise_id:s.exercise_id ?? null,set_number:s.set_number,is_warmup:s.is_warmup,weight:s.weight,reps:s.reps,rpe:s.rpe,notes:notes?s.notes:null }));
+    const old = previous.find(s => s.source === w.id);
+    return { id:old?.id || crypto.randomUUID(),source:w.id,author_id:id,author:{...settings.profile,user_id:id},title:w.name,performed_on:w.performed_on,
+      published_at:old?.published_at || new Date().toISOString(),notes:notes?w.notes:null,sets,set_count:sets.length,exercise_count:new Set(sets.map(s=>s.exercise_id||s.exercise)).size,exercise_preview:sets.slice(0,3) };
+  });
+  storeShares([...retained,...projected]);
+}
 export const communityApi = {
   async feed(userId, { cursor, author } = {}) {
-    const rows = shares().filter(s => !author || s.author_id === author).sort((a,b) => b.published_at.localeCompare(a.published_at) || b.id.localeCompare(a.id));
+    reconcileCommunityUser(userId);
+    const rows = shares().filter(s => !author || s.author_id === author).sort((a,b) => b.performed_on.localeCompare(a.performed_on) || b.id.localeCompare(a.id));
     await new Promise(resolve => setTimeout(resolve, Number(localStorage.getItem('qa-community-delay') || 0)));
     if (localStorage.getItem('qa-community-fail')) throw new Error('Unavailable');
     return rows.slice(cursor ? rows.findIndex(s => s.id === cursor.id) + 1 : 0).slice(0,10);
   },
-  async detail(userId, id) { return shares().find(s => s.id === id) || null; },
+  async detail(userId, id) { reconcileCommunityUser(userId); return shares().find(s => s.id === id) || null; },
   async members(userId, { search = '', offset = 0 } = {}) { return JSON.parse(localStorage.getItem('qa-community-members') || '[]').filter(p => `${p.username} ${p.display_name}`.toLowerCase().includes(search.toLowerCase())).slice(offset, offset + 20); },
   async member(userId, id) { return JSON.parse(localStorage.getItem('qa-community-members') || '[]').find(p => p.user_id === id) || null; },
-  async status(userId, workoutId) { return shares().find(s => s.source === workoutId && s.author_id === userId)?.id || null; },
-  async preview(userId, workoutId, notes, rpe) {
-    const w = read().find(w => w.id === workoutId && w.user_id === userId);
-    const settings = await userSettingsApi.read();
-    if (!w?.ended_at || !settings.preferences.workout_sharing || (notes && !settings.preferences.share_workout_notes)) throw new Error('Not allowed');
-    return { title: w.name, performed_on: w.performed_on, notes: notes ? w.notes : null, sets: w.workout_sets.map(s => ({ ...s, notes: notes ? s.notes : null, rpe: rpe ? s.rpe : null })), exercise_count: new Set(w.workout_sets.map(s => s.exercise_id || s.exercise)).size, set_count: w.workout_sets.length };
-  },
-  async publish(userId, workoutId, notes, rpe) {
-    const value = await this.preview(userId, workoutId, notes, rpe);
-    const previous = shares().find(s => s.source === workoutId);
-    const profile = (await userSettingsApi.read()).profile;
-    const row = { ...value, id: previous?.id || crypto.randomUUID(), source: workoutId, author_id: userId, author: { ...profile, user_id: userId }, published_at: previous?.published_at || new Date().toISOString(), exercise_preview: value.sets.slice(0,3) };
-    storeShares([...shares().filter(s => s.id !== row.id), row]);return row;
-  },
-  async withdraw(userId, workoutId) { storeShares(shares().filter(s => s.source !== workoutId || s.author_id !== userId)); },
-  async withdrawShared(userId, id) { storeShares(shares().filter(s => s.id !== id || s.author_id !== userId)); },
+  async status(userId, workoutId) { reconcileCommunityUser(userId); return shares().find(s => s.source === workoutId && s.author_id === userId)?.id || null; },
 };
 export const userSettingsApi = {
-  read: async () => JSON.parse(localStorage.getItem(`qa-settings:${user().id}`) || JSON.stringify({ profile: localStorage.getItem('qa-profile-incomplete') ? null : { username: 'qa_user', display_name: 'QA User' }, preferences: { language: 'en', workout_sharing: false, share_workout_notes: false } })),
-  async save(profile, preferences) { const next = { profile, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); if (!preferences.workout_sharing) storeShares(shares().filter(s => s.author_id !== user().id)); else if (!preferences.share_workout_notes) storeShares(shares().map(s => s.author_id === user().id ? { ...s, notes: null, sets: s.sets.map(v => ({...v, notes:null})) } : s)); return next; },
-  async savePreferences(preferences) { const next = { ...await this.read(), preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); return preferences; },
+  read: async () => fixtureSettings(user().id),
+  async save(profile, preferences) { const next = { profile, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return next; },
+  async savePreferences(preferences) { const next = { ...await this.read(), preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return preferences; },
 };
 
 export const workoutRestApi = {

@@ -64,6 +64,7 @@ export function AuthScreen() {
 
         <label className="mb-4 grid gap-2 text-sm">{t('Language')}<select className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
         <form onSubmit={submit} aria-busy={loading}>
+          {isSignUp ? <p className="mb-4 text-sm leading-relaxed text-zinc-400">{t('Completed workouts are shared with signed-in members once your public profile is set up. You can turn this off in Settings. Notes stay private unless enabled.')}</p> : null}
           <fieldset disabled={loading} className="grid min-w-0 gap-4">
             <AuthField
               label={t("Email")}

@@ -1,7 +1,7 @@
 # Social Training Foundation
 
-Phase 2 is implemented separately: see `docs/COMMUNITY.md` for explicit member-only
-workout publication and its privacy boundary. The foundation below is historical;
+Phase 2 is implemented separately: see `docs/COMMUNITY.md` for automatic member-only
+workout sharing and its global opt-out. The foundation below is historical;
 no private workouts became readable or automatically published with that phase.
 
 Current catalog/picker behavior is superseded by the approved V2 revision in

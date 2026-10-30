@@ -280,8 +280,8 @@ async function communityRequest(userId, build) {
   return throwIfError(await authorize(build(client)));
 }
 export const communityApi = {
-  feed: (userId, { cursor = null, author = null } = {}) => communityRequest(userId, client => client.rpc('community_feed', {
-    p_before_time: cursor?.published_at ?? null, p_before_id: cursor?.id ?? null, p_author: author, p_limit: 10,
+  feed: (userId, { cursor = null, author = null } = {}) => communityRequest(userId, client => client.rpc('community_feed_v2', {
+    p_before_date: cursor?.performed_on ?? null, p_before_id: cursor?.id ?? null, p_author: author, p_limit: 10,
   })),
   detail: (userId, id) => communityRequest(userId, client => client.from('community_workout_shares').select(shareFields).eq('id', id).maybeSingle()),
   members: (userId, { search = '', offset = 0 } = {}) => communityRequest(userId, client => {
@@ -292,10 +292,6 @@ export const communityApi = {
   }),
   member: (userId, id) => communityRequest(userId, client => client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', id).maybeSingle()),
   status: (userId, workoutId) => communityRequest(userId, client => client.rpc('workout_share_status', { p_workout: workoutId })),
-  preview: (userId, workoutId, notes, rpe) => communityRequest(userId, client => client.rpc('publish_workout_share', { p_workout: workoutId, p_notes: notes, p_rpe: rpe, p_confirm: false })),
-  publish: (userId, workoutId, notes, rpe) => communityRequest(userId, client => client.rpc('publish_workout_share', { p_workout: workoutId, p_notes: notes, p_rpe: rpe, p_confirm: true })),
-  withdraw: (userId, workoutId) => communityRequest(userId, client => client.rpc('withdraw_workout_share', { p_workout: workoutId })),
-  withdrawShared: (userId, id) => communityRequest(userId, client => client.rpc('withdraw_community_share', { p_share: id })),
 };
 
 export const userSettingsApi = {
@@ -306,7 +302,7 @@ export const userSettingsApi = {
       authorize(client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', userId).maybeSingle()),
       authorize(client.from('user_preferences').select('language,workout_sharing,share_workout_notes').eq('user_id', userId).maybeSingle()),
     ]);
-    return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'en', workout_sharing: false, share_workout_notes: false } };
+    return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'en', workout_sharing: true, share_workout_notes: false } };
   },
   async save(profile, preferences, expectedUserId) {
     const client = requireSupabase();

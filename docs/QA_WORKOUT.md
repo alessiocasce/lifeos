@@ -1,13 +1,14 @@
 # LifeOS Workout QA
 
-## Community publication
+## Automatic Community publication
 
-Completed History detail exposes Share with Community, preview/confirm, View and
-Stop sharing. Sharing OFF opens Settings without changing preferences. Preview
-does not publish; notes default excluded even with global notes permission.
-Verify source edits/reopen/delete withdraw, OFF/ON never resurrects shares, and
-History/Live draft, prefills, warmups and rest timers remain intact. Run focused
-Community and Training browser cases; see docs/COMMUNITY.md for production RLS QA.
+Completed History detail exposes only View in Community when globally shared.
+No manual preview/publish/revoke controls remain. New accounts default sharing ON,
+notes OFF. Authored public profiles are required. Settings explains historical
+publication and the opt-out. OFF hides all shares, ON restores eligible history;
+notes ON includes past notes, OFF removes them. Source edits refresh, reopen/delete
+withdraw, completion republishes. Verify History/Live drafts, prefills, warmups
+and rest timers remain intact. See docs/COMMUNITY.md for production role QA.
 
 ## Catalog V2 / Modal Picker (2026-10-30)
 
