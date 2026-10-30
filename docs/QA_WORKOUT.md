@@ -15,6 +15,9 @@ Training History/prefill/rest/template/continuity and social-language cases.
 `test:social-training` checks all 29 owner mappings, exact timestamp/field/snapshot
 preservation, idempotency, SQL/JS alias parity, immutable IDs and other-user safety.
 See EXERCISE_CATALOG_REVISION for the restricted backup and targeted rollout.
+Production revision `20261030105557` passed owner mapping, checksum preservation
+and rollback-only two-user RLS checks. Device keyboard/safe-area behavior and
+physical WhatsApp rest delivery still require owner acceptance.
 
 ## Social Training Foundation (2026-10-29)
 

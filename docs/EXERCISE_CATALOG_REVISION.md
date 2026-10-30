@@ -62,6 +62,15 @@ Prefer a forward fix; do not delete canonical IDs or rewrite other users' histor
 
 ## Picker / QA
 
+Production applied version: `20261030105557_exercise_catalog_revision.sql`.
+Verified 224 catalog rows (79 active), 426/426 owner sets and 16/16 template
+exercises mapped, with zero owner set text/ID mismatches. Exact aggregate hashes
+prove all non-exercise fields/timestamps, other-user records, rest preferences/
+outbox and private policies survived unchanged. All timestamp triggers are enabled.
+Rollback-only production authenticated A/B and anonymous security QA passed;
+the correction function is not executable by authenticated clients. No historical
+migrations were replayed. Physical iPhone and WhatsApp acceptance remains manual.
+
 Exercise opens an accessible modal: full-width bottom sheet on mobile, centered
 dialog from tablet upward. Search/filter chrome and Other action stay fixed while
 rows scroll. Recent entries retain IDs and cannot resurrect inactive identities.

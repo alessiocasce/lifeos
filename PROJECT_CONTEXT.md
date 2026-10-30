@@ -8,6 +8,10 @@ search and explicit commit; inactive IDs remain displayable, never normal choice
 Owner-only correction updates approved historical text/IDs while preserving all
 timestamps and non-identity fields; conflicting IDs or set-number collisions abort.
 Live scope is 426 owner sets, not the 442 global rows (16 belong to another user).
+Production migration `20261030105557_exercise_catalog_revision.sql` is applied.
+Verified 426/426 owner sets and 16/16 template exercises mapped; non-exercise
+fields/timestamps, other-user records, rest state and private policies match the
+pre-migration checksums. Authenticated A/B and anonymous rollback-only QA passed.
 See `docs/EXERCISE_CATALOG_REVISION.md` for migration, backup, scope and QA rules.
 Applied SQL is sealed by `supabase/catalog-migrations.json`; generate only forward
 revisions. The old global backfill operation is intentionally retired/guarded.

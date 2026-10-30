@@ -2,5 +2,9 @@
   {
     "file": "20261029211303_social_training_catalog.sql",
     "sha256": "5486eb6a59bb44f4063ffe4d66eda42ab031eea3b31c56d2892f189094c75c49"
+  },
+  {
+    "file": "20261030105557_exercise_catalog_revision.sql",
+    "sha256": "6d433f21292724f08068d349490ec76def63b05278699f89b67e4bffc0786f6b"
   }
 ]
