@@ -13,9 +13,9 @@ export const TEMPLATE_ICONS = Object.freeze({
 export const SUGGESTED_TEMPLATES = Object.freeze([
   { name: 'Chest + Triceps', color_key: 'red', icon_key: 'chest' },
   { name: 'Back + Biceps', color_key: 'blue', icon_key: 'back' },
-  { name: 'Quads', color_key: 'green', icon_key: 'quads' },
+  { name: 'Quads', color_key: 'purple', icon_key: 'quads' },
   { name: 'Hamstrings', color_key: 'amber', icon_key: 'hamstrings' },
-  { name: 'Shoulders + Arms', color_key: 'purple', icon_key: 'shoulders' },
+  { name: 'Shoulders + Arms', color_key: 'green', icon_key: 'shoulders' },
 ]);
 
 export function normalizeTemplateAppearance(template = {}) {

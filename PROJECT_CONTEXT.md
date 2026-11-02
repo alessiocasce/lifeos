@@ -1,5 +1,15 @@
 # LifeOS Project Context
 
+## Approved Training visual reference (2026-11-02)
+
+The supplied iPhone image supersedes the earlier prose-only grid interpretation.
+Live start state now uses the framed blue-icon/LIVE intro, Templates heading,
+stacked colored rows with chevrons and a subdued empty-workout card. Suggested
+defaults are red/blue/purple/amber/green; stored custom colors/icons always win.
+No schema/data changes. Header/dock refinements are Training-scoped, and active
+logging, drafts, rest, History and Manage keep their existing behavior. See
+docs/TRAINING_VISUAL_FIDELITY.md for screenshot evidence and focused QA.
+
 ## Training/Profile/Community/Auth release (2026-10-31)
 
 Live / History / Manage separates gym logging from template administration.

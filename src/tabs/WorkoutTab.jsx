@@ -3,6 +3,7 @@ import { t } from '../i18n';
 import {
   ArrowLeft,
   Check,
+  ChevronRight,
   ChevronDown,
   ClipboardList,
   Database,
@@ -28,6 +29,7 @@ import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateA
 import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
+import '../styles/trainingStart.css';
 
 const WARMUP_SET_NUMBER_OFFSET = 1000;
 
@@ -416,7 +418,7 @@ export function WorkoutTab() {
 
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4">
-      <div role="group" aria-label={t("Training view")} className="col-span-12 flex gap-1 border-b border-white/10 pb-3">
+      <div role="group" aria-label={t("Training view")} className="training-views col-span-12 flex gap-1 border-b border-white/10">
         {['live', 'history', 'manage'].map((view) => (
           <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => setTrainingView(view)} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
             {view === 'live' ? t("Live") : view === 'history' ? t("History") : t("Manage")}
@@ -676,7 +678,7 @@ function WorkoutSessionControl({
   const Container = activeSession ? Panel : 'section';
 
   return (
-    <Container className="h-fit min-w-0">
+    <Container className={`h-fit min-w-0 ${activeSession ? '' : 'training-start'}`}>
       {activeSession ? <PanelHeader
         eyebrow={t("Workout")}
         title={activeSession ? t("Session Options") : t("Start Workout")}
@@ -693,13 +695,17 @@ function WorkoutSessionControl({
         <span>{activeSession ? t("Session options") : t("Start workout")}</span>
         <ChevronDown size={16} className={`text-zinc-500 transition ${contentOpen ? 'rotate-180' : ''}`} />
       </button> : null}
-      <div className={`${contentOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
+      <div className={`${contentOpen ? 'block' : 'hidden'} ${activeSession ? 'space-y-2 p-3' : 'training-start-content'} md:block`}>
         {activeSession ? <button disabled={templateBusy} className="flex min-h-11 w-full items-center gap-2 border-b border-white/10 text-sm text-zinc-200" onClick={() => setActiveWorkoutId(null)}><Plus size={16} />{t("New session")}</button> : null}
         {!activeSession ? (
-          <div className="grid min-w-0 gap-6">
-            <header className="py-5">
-              <Dumbbell size={32} className="mb-4 text-zinc-300" />
-              <h1 className="text-2xl font-semibold text-zinc-100">{t('Start your workout')}</h1>
+          <div className="training-start-main">
+            <header className="training-intro">
+              <div className="training-intro-top">
+                <span className="training-intro-icon"><Dumbbell size={30} strokeWidth={2.6} /></span>
+                <span className="training-live-badge"><span aria-hidden="true" />{t('LIVE')}</span>
+              </div>
+              <h2>{t('Start your workout')}</h2>
+              <p>{t('Choose a template below or start from scratch.')}</p>
             </header>
             {workoutSessions.filter((session) => !session.ended_at).map((session) => (
               <button key={session.id} type="button" onClick={() => setActiveWorkoutId(session.id)} className="flex min-h-11 min-w-0 items-center gap-3 border-y border-white/10 py-3 text-left text-sm text-zinc-200">
@@ -718,8 +724,10 @@ function WorkoutSessionControl({
             onClick={() => setShowCustomSession((value) => !value)}
             disabled={savingSession || Boolean(startingTemplateId)}
             aria-expanded={showCustomSession}
-            className="min-h-11 w-full border-y border-white/10 py-3 text-left text-sm font-medium text-zinc-300"
-          >{t("Start Empty Workout")}</button>
+            aria-label={t('Start Empty Workout')}
+            aria-description={t('Build your workout as you go')}
+            className="training-empty-card"
+          ><span className="training-empty-icon"><Plus size={27} strokeWidth={1.6} /></span><span className="training-template-copy"><span className="training-template-name">{t("Start empty workout")}</span><span className="training-template-detail">{t('Build your workout as you go')}</span></span><ChevronRight size={20} className="training-template-chevron" aria-hidden="true" /></button>
         ) : null}
 
         {!activeSession && showCustomSession ? (

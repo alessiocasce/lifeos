@@ -1,6 +1,6 @@
 import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
-import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, Users, X } from 'lucide-react';
+import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { useLocalDay } from '../hooks/useLocalDay';
@@ -83,7 +83,7 @@ export function Shell({ children }) {
   };
 
   return (
-    <div className="lifeos-shell">
+    <div className="lifeos-shell" data-workspace={activeTab}>
       <aside className="desktop-rail">
         <div className="rail-brand"><LifeOSLogo size={26} /><span>{t("LifeOS")}<span className="brand-detail">{t("PERSONAL SYSTEM")}</span></span></div>
         <nav aria-label={t("Primary navigation")} className="rail-navigation">
@@ -100,7 +100,7 @@ export function Shell({ children }) {
       <main className="workspace">
         <header className="workspace-header">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="mobile-brand"><LifeOSLogo size={23} /></span>
+            <span className="mobile-brand">{activeTab === 'workout' ? <span className="training-brand"><Hexagon size={26} strokeWidth={1.3} /><Dumbbell size={15} strokeWidth={1.8} /></span> : <LifeOSLogo size={23} />}</span>
             <h1>{t(destination.label)}</h1>
           </div>
           <div className="flex items-center gap-3">

@@ -1,5 +1,16 @@
 # LifeOS Workout QA
 
+## Approved Training Visual Reference
+
+Training start state must follow the attached iPhone reference: one column,
+framed blue-icon/LIVE introduction, Templates heading, tinted icon tiles and
+chevrons, and dark secondary empty-workout card. No two-column grid or invented
+exercise counts. Suggested palette is red/blue/purple/amber/green, but valid saved
+preferences win. See TRAINING_VISUAL_FIDELITY.md and training-live-manage.spec.js.
+Compare actual screenshots at 390/768/1024/1440; passing tests alone is not fidelity.
+Check the empty action remains reachable below the fixed mobile dock by scrolling.
+No schema rerun required.
+
 ## Automatic Community publication
 
 Completed History detail exposes only View in Community when globally shared.

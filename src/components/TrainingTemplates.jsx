@@ -1,9 +1,9 @@
-import { Dumbbell, Loader2, Plus } from 'lucide-react';
+import { ChevronRight, Dumbbell, Loader2 } from 'lucide-react';
 import { t } from '../i18n';
 import { TEMPLATE_COLORS, TEMPLATE_ICONS, quickStartTemplates, templateAppearance } from '../utils/templateAppearance';
 
 // A shared anatomical outline highlights the selected muscle without changing its silhouette.
-export function TrainingTemplateIcon({ iconKey, size = 28 }) {
+export function TrainingTemplateIcon({ iconKey, size = 28, focused = false }) {
   if (!Object.hasOwn(TEMPLATE_ICONS, iconKey) || iconKey === 'dumbbell') return <Dumbbell size={size} aria-hidden="true" />;
   const muscles = {
     chest: 'M8 8h8v3H8z', back: 'M8 8h8l-1 6H9z',
@@ -16,9 +16,10 @@ export function TrainingTemplateIcon({ iconKey, size = 28 }) {
     full_body: 'M8 8h8v7H8z M8 16h3v6H8z M13 16h3v6h-3z',
     boxing: 'M3 10h4v5H3z M17 10h4v5h-4z',
   };
-  return <svg width={size} height={size} viewBox="0 0 24 26" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon={iconKey}>
+  const focusBox = { chest: '3 7 18 10', back: '3 7 18 10', shoulders: '2 7 20 10', quads: '6 14 12 12', hamstrings: '6 14 12 12' }[iconKey];
+  return <svg width={size} height={size} viewBox={focused && focusBox ? focusBox : '0 0 24 26'} fill="none" stroke="currentColor" strokeWidth={focused && focusBox ? 1.25 : 1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon={iconKey}>
     <circle cx="12" cy="4" r="2.5" />
-    <path d="M8 8 5 9 3 16M16 8l3 1 2 7M8 8l1 7-1 9M16 8l-1 7 1 9M9 15h6M12 17v7" opacity=".5" />
+    <path d="M8 8 5 9 3 16M16 8l3 1 2 7M8 8l1 7-1 9M16 8l-1 7 1 9M9 15h6M12 17v7" opacity={focused ? '.85' : '.5'} />
     <path d={muscles[iconKey]} fill="currentColor" fillOpacity=".35" />
   </svg>;
 }
@@ -46,18 +47,22 @@ export function TemplateAppearanceEditor({ value, onChange }) {
 }
 
 export function TrainingQuickStart({ templates, status, error, busy, startingId, onStart, onSetup }) {
-  return <section className="grid min-w-0 gap-4" aria-label={t('Quick start')}>
-    <h2 className="text-base font-semibold text-zinc-100">{t('Quick start')}</h2>
+  return <section className="training-templates" aria-label={t('Templates')}>
+    <header className="training-templates-heading">
+      <h2>{t('Templates')}</h2>
+      <p>{t('Tap a template to start.')}</p>
+    </header>
     {error ? <p role="alert" className="text-sm text-red-300">{t(error)}</p> : null}
     {status === 'loading' ? <p role="status" className="text-sm text-zinc-400">{t('Loading templates')}</p> : null}
-    <div className="grid min-w-0 grid-cols-2 gap-3">{quickStartTemplates(templates).map((template) => {
+    <div className="training-template-list">{quickStartTemplates(templates).map((template) => {
       const appearance = templateAppearance(template);
       const color = TEMPLATE_COLORS[appearance.color_key];
       const count = template.workout_template_exercises?.length || 0;
       const startable = Boolean(template.id && count);
-      return <button key={template.id || template.name} type="button" disabled={busy || status !== 'ready' || Boolean(error)} aria-label={`${t(startable ? 'Start' : 'Set up')} ${template.name}`} onClick={() => startable ? onStart(template.id) : onSetup(template)} className="grid min-h-36 min-w-0 content-between gap-4 rounded-lg border p-4 text-left transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50" style={{ borderColor: `${color}55`, backgroundColor: `${color}0D` }}>
-        <span className="flex items-center justify-between gap-2" style={{ color }}><TrainingTemplateIcon iconKey={appearance.icon_key} />{startingId === template.id ? <Loader2 size={16} className="animate-spin" /> : !startable ? <Plus size={16} /> : null}</span>
-        <span className="min-w-0"><span className="block break-words text-sm font-semibold text-zinc-100">{template.name}</span><span className="mt-1 block text-xs text-zinc-400">{startable ? `${count}${t(' exercises')}` : t('Set up template')}</span></span>
+      return <button key={template.id || template.name} type="button" disabled={busy || status !== 'ready' || Boolean(error)} aria-label={`${t(startable ? 'Start' : 'Set up')} ${template.name}`} onClick={() => startable ? onStart(template.id) : onSetup(template)} className="training-template-card" style={{ '--template-accent': color }}>
+        <span className="training-template-icon"><TrainingTemplateIcon iconKey={appearance.icon_key} size={36} focused /></span>
+        <span className="training-template-copy"><span className="training-template-name">{template.name}</span><span className="training-template-detail">{startable ? `${count}${t(' exercises')}` : t('Set up template')}</span></span>
+        {startingId === template.id ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : <ChevronRight size={20} className="training-template-chevron" aria-hidden="true" />}
       </button>;
     })}</div>
   </section>;
