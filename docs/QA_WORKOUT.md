@@ -1,5 +1,20 @@
 # LifeOS Workout QA
 
+## Persisted Templates and Icon Artwork
+
+- Live shows exactly the saved templates in loaded order: verify zero, one, three
+  and ten. Mockup names must never appear unless the user saved those names.
+- Zero templates: Create template opens Manage with a blank name. Save, rename,
+  delete and reload: Live reflects real records. An incomplete plan opens Manage
+  and creates no session. Never modify production templates just for visual QA.
+- Inspect all twelve curved icons at 390px and larger widths; verify distinct
+  front/back torso and legs, arms, calves/core, full body, gloves and dumbbell.
+  Picker labels, selected borders and live color preview must work. Save/reload
+  retains color_key/icon_key. No database migration or source-record rewrite.
+- Focused coverage: training-live-manage, training-templates, training-history and
+  workout-continuity Playwright specs. Preserve the approved layout and real PWA
+  draft/rest lifecycle. Browser emulation does not prove physical iPhone behavior.
+
 ## Approved Training Visual Reference
 
 Training start state must follow the attached iPhone reference: one column,

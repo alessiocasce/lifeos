@@ -4,8 +4,12 @@
 
 The supplied iPhone image supersedes the earlier prose-only grid interpretation.
 Live start state now uses the framed blue-icon/LIVE intro, Templates heading,
-stacked colored rows with chevrons and a subdued empty-workout card. Suggested
-defaults are red/blue/purple/amber/green; stored custom colors/icons always win.
+stacked colored rows with chevrons and a subdued empty-workout card. Mockup names
+are visual examples ONLY: Live lists saved user templates in loaded order, never
+suggestions/placeholders. Zero templates offers Create template opening Manage;
+incomplete saved plans open Manage rather than starting an invalid workout.
+Stored colors/icon keys are unchanged. Twelve original curved vector icons replace
+block anatomy; Manage has labeled color-aware choices and a live preview.
 No schema/data changes. Header/dock refinements are Training-scoped, and active
 logging, drafts, rest, History and Manage keep their existing behavior. See
 docs/TRAINING_VISUAL_FIDELITY.md for screenshot evidence and focused QA.
@@ -13,7 +17,7 @@ docs/TRAINING_VISUAL_FIDELITY.md for screenshot evidence and focused QA.
 ## Training/Profile/Community/Auth release (2026-10-31)
 
 Live / History / Manage separates gym logging from template administration.
-Quick start uses persisted templates or explicit setup shortcuts, never invented
+Quick start uses only persisted templates, never sample plans or invented
 exercises. Template visual identifiers are constrained and user-owned. Workout
 draft/rest/session continuity architecture is unchanged. Profiles now use usernames
 only and private Storage avatar paths with short-lived signed reads. Community

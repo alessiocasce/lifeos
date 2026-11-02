@@ -14,19 +14,22 @@ This overrides the earlier prose-only two-column design interpretation.
    Templates heading/subtitle and dark secondary empty-workout card. Header/date,
    tabs and dock proportions are scoped to Training; other workspaces unchanged.
 3. Rechecked responsive screenshots against the supplied image. Persisted data
-   still determines names/counts; missing templates explicitly say Set up template.
+   determines the entire list, names/counts and ordering. No sample templates.
    There is no fake iPhone frame, OS status bar, home indicator or fabricated data.
 
 ## Invariants
 
-- Defaults for unconfigured suggestions: red / blue / purple / amber / green.
-  Every valid stored color/icon overrides defaults. No migration or DB rewrite.
+- Mockup names are examples, not suggestions. Live renders only loaded saved
+  templates, with no imposed names/categories/count/order. Zero templates offers
+  Create template opening Manage. Stored colors/icons are unchanged. No DB rewrite.
   An existing green Quads template remains green if that is its saved preference.
-- Real templates still use the same start/snapshot logic; suggestions open Manage.
+- Real templates use the same start/snapshot logic; incomplete saved plans open Manage.
   Empty workout still expands the existing form. Unfinished sessions retain Resume.
 - Active logger, drafts, rest scheduling, History and Manage CRUD remain intact.
-- Anatomy icons reuse the themeable icon library, focused on the relevant body
-  region; they are not pixel-identical copies of the illustrated reference glyphs.
+- Twelve original vector glyphs share curved contours, a 48px optical grid and
+  translucent muscle emphasis. Stable icon keys use currentColor. Manage shows
+  labels, selected states and a color-aware live preview. These are not exact
+  copies of the reference illustrations.
 - App dates/data, platform font rasterization and desktop sidebar differ on purpose.
   Shorter phone viewports scroll; bottom safe-area padding keeps controls reachable.
 
