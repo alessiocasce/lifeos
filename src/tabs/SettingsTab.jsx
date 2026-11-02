@@ -1,39 +1,56 @@
 import { t } from '../i18n';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Save, RefreshCw } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
+import { ProfilePhotoEditor } from '../components/ProfilePhotoEditor';
 
 export function SettingsTab() {
   const { authUser, userSettings: settings } = useLifeOS();
-  const [profile, setProfile] = useState({ username: '', display_name: '' });
+  return <SettingsForm key={authUser?.id || 'guest'} authUser={authUser} settings={settings} />;
+}
+
+function SettingsForm({ authUser, settings }) {
+  const [profile, setProfile] = useState({ username: '' });
   const [preferences, setPreferences] = useState(settings.preferences);
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProfile, setPhotoProfile] = useState(null);
+  const lock = useRef(false);
+  const mounted = useRef(true);
   const [notice, setNotice] = useState('');
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    setProfile(settings.profile || { username: '', display_name: '' });
+    setProfile({ username: settings.profile?.username || '' });
     setNotice('');
-  }, [authUser?.id, settings.profile]);
-  useEffect(()=>setPreferences(settings.preferences),[authUser?.id,settings.preferences]);
+  }, [authUser?.id, settings.profile?.username]);
+  useEffect(() => setPhotoProfile(settings.profile), [settings.profile]);
+  useEffect(()=>setPreferences(settings.preferences),[authUser?.id,settings.preferences.language,settings.preferences.workout_sharing,settings.preferences.share_workout_notes]);
   const changeLanguage = async (language) => {
+    if (lock.current || photoBusy) return;
+    lock.current = true;
     setBusy(true); setNotice('');
     try { await settings.updateLanguage(language); }
     catch { setNotice(t("Language could not be saved. Try again.")); }
-    finally { setBusy(false); }
+    finally { lock.current = false; setBusy(false); }
   };
   const save = async (event) => {
-    event.preventDefault(); if (busy) return;
+    event.preventDefault(); if (lock.current || photoBusy) return;
+    lock.current = true;
     setBusy(true); setNotice('');
-    try { await settings.saveSettings(profile, preferences); setNotice(t("Settings saved.")); }
+    try {
+      await settings.saveSettings({ username: profile.username }, preferences);
+      if (mounted.current) { setNotice(t("Settings saved.")); window.dispatchEvent(new Event('lifeos:profile-updated')); }
+    }
     catch (error) { setNotice(error.code === '23505' ? t("That username is already taken.") : error.message); }
-    finally { setBusy(false); }
+    finally { lock.current = false; setBusy(false); }
   };
   return <div className="max-w-xl space-y-8">
+    <ProfilePhotoEditor key={authUser?.id || 'guest'} profile={photoProfile} userId={authUser?.id} disabled={busy || settings.status !== 'ready' || !settings.profile} onBusyChange={setPhotoBusy} onChange={async next => { setPhotoProfile(next); await settings.reloadSettings(); }} />
     <form onSubmit={save} className="space-y-6">
-      <fieldset disabled={busy || settings.status !== 'ready'} className="grid gap-5">
+      <fieldset disabled={busy || photoBusy || settings.status !== 'ready'} className="grid gap-5">
         <h2 className="text-lg font-semibold">{t("Public profile")}</h2>
         <p className="text-sm text-zinc-400">{t('Your public profile and shared completed workouts are visible to signed-in members. Your email and other personal records stay private.')}</p>
         <label className="grid gap-2 text-sm">{t("Username")}<input className="min-h-11 rounded border border-white/15 bg-black/30 px-3" autoCapitalize="none" autoComplete="off" minLength={3} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9_]{2,23}" required value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} /></label>
-        <label className="grid gap-2 text-sm">{t("Display name")}<input className="min-h-11 rounded border border-white/15 bg-black/30 px-3" maxLength={60} required value={profile.display_name} onChange={e => setProfile({ ...profile, display_name: e.target.value })} /></label>
         <h2 className="border-t border-white/10 pt-5 text-lg font-semibold">{t("Preferences")}</h2>
         <label className="grid gap-2 text-sm">{t("Language")}<select className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={preferences.language} onChange={e => void changeLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
         <h2 className="border-t border-white/10 pt-5 text-lg font-semibold">{t("Training privacy")}</h2>

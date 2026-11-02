@@ -94,3 +94,13 @@ Manual acceptance: check casce/degra profiles and historical dates, complete/edi
 reopen a real workout, toggle global sharing OFF/ON, and verify notes OFF/ON/OFF.
 Check both languages and iPhone navigation/draft recovery. Browser tests do not
 prove physical iPhone background or WhatsApp rest delivery. No rankings added.
+
+## Username and Navigation Update
+
+Public identities use usernames only. Photos are private Storage paths signed
+for authenticated readers; own-profile Edit photo links to Settings. Each
+Community browser entry records its origin, Members search and scroll state.
+Back returns to that origin, including nested profile/workout navigation; direct
+links fall back safely to Feed. Refresh preserves valid same-account history.
+Automatic global sharing and read-time privacy RLS are unchanged. See
+TRAINING_PROFILE_RELEASE.md and community-navigation.spec.js for focused QA.

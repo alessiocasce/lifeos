@@ -89,7 +89,7 @@ test('incomplete onboarding is non-blocking and Italian chrome renders across wo
   await page.goto('/workout');await expect(page.getByRole('textbox',{name:'Exercise',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Set up your profile and language',exact:true}).click();
   await page.getByRole('textbox',{name:'Username',exact:true}).fill('new_member');
-  await page.getByRole('textbox',{name:'Display name',exact:true}).fill('My authored name');
+  await expect(page.getByRole('textbox',{name:'Display name',exact:true})).toHaveCount(0);
   await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('it');
   await page.getByRole('button',{name:'Salva impostazioni',exact:true}).click();
   await expect(page.getByRole('status')).toHaveText('Impostazioni salvate.');
@@ -100,6 +100,7 @@ test('incomplete onboarding is non-blocking and Italian chrome renders across wo
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
   for(const title of ['Riepilogo','Progetti','Companion']) {
+    if(title==='Progetti')await page.getByRole('button',{name:'Altro',exact:true}).click();
     await page.getByRole('button',{name:title,exact:true}).click();
     await expect(page.getByRole('heading',{name:title,exact:true}).first()).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

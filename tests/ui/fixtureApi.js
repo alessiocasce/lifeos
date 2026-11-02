@@ -316,7 +316,7 @@ export const aiReportApi = {
 const watchState = () => JSON.parse(localStorage.getItem('qa-watch') || '{"watch":null,"context":[{"field":"next_action","text":"Review release checklist"}],"permissions":{"monitor":false,"message":false}}');
 const shares = () => JSON.parse(localStorage.getItem('qa-community-shares') || '[]');
 const storeShares = rows => localStorage.setItem('qa-community-shares', JSON.stringify(rows));
-const fixtureSettings = id => JSON.parse(localStorage.getItem(`qa-settings:${id}`) || JSON.stringify({ profile: localStorage.getItem('qa-profile-incomplete') ? null : { username: 'qa_user', display_name: 'QA User' }, preferences: { language: 'en', workout_sharing: true, share_workout_notes: false } }));
+const fixtureSettings = id => JSON.parse(localStorage.getItem(`qa-settings:${id}`) || JSON.stringify({ profile: localStorage.getItem('qa-profile-incomplete') ? null : { user_id: id, username: 'qa_user' }, preferences: { language: 'en', workout_sharing: true, share_workout_notes: false } }));
 function reconcileCommunityUser(id) {
   if (!id) return;
   const settings = fixtureSettings(id), previous = shares();
@@ -340,7 +340,7 @@ export const communityApi = {
     return rows.slice(cursor ? rows.findIndex(s => s.id === cursor.id) + 1 : 0).slice(0,10);
   },
   async detail(userId, id) { reconcileCommunityUser(userId); return shares().find(s => s.id === id) || null; },
-  async members(userId, { search = '', offset = 0 } = {}) { return JSON.parse(localStorage.getItem('qa-community-members') || '[]').filter(p => `${p.username} ${p.display_name}`.toLowerCase().includes(search.toLowerCase())).slice(offset, offset + 20); },
+  async members(userId, { search = '', offset = 0 } = {}) { return JSON.parse(localStorage.getItem('qa-community-members') || '[]').filter(p => p.username.toLowerCase().includes(search.toLowerCase())).slice(offset, offset + 20); },
   async member(userId, id) { return JSON.parse(localStorage.getItem('qa-community-members') || '[]').find(p => p.user_id === id) || null; },
   async status(userId, workoutId) { reconcileCommunityUser(userId); return shares().find(s => s.source === workoutId && s.author_id === userId)?.id || null; },
 };
@@ -348,6 +348,24 @@ export const userSettingsApi = {
   read: async () => fixtureSettings(user().id),
   async save(profile, preferences) { const next = { profile, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return next; },
   async savePreferences(preferences) { const next = { ...await this.read(), preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return preferences; },
+};
+
+export const profilePhotoApi = {
+  async signedUrl(profile) { return profile?.avatar_url || null; },
+  async upload(blob) {
+    if (localStorage.getItem('qa-photo-fail')) throw new Error('Profile photo could not be saved.');
+    const avatar_url = await new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.readAsDataURL(blob); });
+    const next = fixtureSettings(user().id);
+    next.profile = { ...next.profile, avatar_path: `${user().id}/photo.webp`, avatar_url };
+    localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next));
+    return next.profile;
+  },
+  async remove() {
+    const next = fixtureSettings(user().id);
+    next.profile = { ...next.profile, avatar_path: null, avatar_url: null };
+    localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next));
+    return next.profile;
+  },
 };
 
 export const workoutRestApi = {

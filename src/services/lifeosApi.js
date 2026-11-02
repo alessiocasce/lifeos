@@ -3,6 +3,8 @@ import { addDays } from '../utils/date';
 import { calculateSleepHoursFromTimes } from '../utils/health';
 import { resolveExercise } from '../utils/exerciseCatalog';
 import { captureSettingsIdentity } from '../utils/userSettingsIdentity';
+import { createClient } from '@supabase/supabase-js';
+import { getSignupEmailRedirectTo } from '../lib/authRedirect';
 
 const requireSupabase = () => {
   if (!isSupabaseConfigured || !supabase) {
@@ -51,6 +53,8 @@ const workoutTemplateSelect = `
   user_id,
   name,
   notes,
+  color_key,
+  icon_key,
   created_at,
   updated_at,
   workout_template_exercises (
@@ -258,7 +262,7 @@ export const authApi = {
   },
 
   async signUp({ email, password }) {
-    return throwIfError(await requireSupabase().auth.signUp({ email, password }));
+    return throwIfError(await requireSupabase().auth.signUp({ email, password, options: { emailRedirectTo: getSignupEmailRedirectTo() } }));
   },
 
   async signOut() {
@@ -272,7 +276,8 @@ export const authApi = {
   },
 };
 
-const shareFields = 'id,author_id,title,performed_on,notes,notes_consent,sets,exercise_count,set_count,published_at,author:user_profiles(user_id,username,display_name,avatar_url)';
+const profileFields = 'user_id,username,avatar_url,avatar_path';
+const shareFields = `id,author_id,title,performed_on,notes,notes_consent,sets,exercise_count,set_count,published_at,author:user_profiles(${profileFields})`;
 // Capture authorization per request so an account switch cannot retarget a write.
 async function communityRequest(userId, build) {
   const client = requireSupabase();
@@ -286,11 +291,11 @@ export const communityApi = {
   detail: (userId, id) => communityRequest(userId, client => client.from('community_workout_shares').select(shareFields).eq('id', id).maybeSingle()),
   members: (userId, { search = '', offset = 0 } = {}) => communityRequest(userId, client => {
     const term = search.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60);
-    let query = client.from('user_profiles').select('user_id,username,display_name,avatar_url').order('username').order('user_id').range(offset, offset + 19);
-    if (term) query = query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`);
+    let query = client.from('user_profiles').select(profileFields).order('username').order('user_id').range(offset, offset + 19);
+    if (term) query = query.ilike('username', `%${term}%`);
     return query;
   }),
-  member: (userId, id) => communityRequest(userId, client => client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', id).maybeSingle()),
+  member: (userId, id) => communityRequest(userId, client => client.from('user_profiles').select(profileFields).eq('user_id', id).maybeSingle()),
   status: (userId, workoutId) => communityRequest(userId, client => client.rpc('workout_share_status', { p_workout: workoutId })),
 };
 
@@ -299,7 +304,7 @@ export const userSettingsApi = {
     const client = requireSupabase();
     const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
     const [profile, preferences] = await Promise.all([
-      authorize(client.from('user_profiles').select('user_id,username,display_name,avatar_url').eq('user_id', userId).maybeSingle()),
+      authorize(client.from('user_profiles').select(profileFields).eq('user_id', userId).maybeSingle()),
       authorize(client.from('user_preferences').select('language,workout_sharing,share_workout_notes').eq('user_id', userId).maybeSingle()),
     ]);
     return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'en', workout_sharing: true, share_workout_notes: false } };
@@ -307,8 +312,8 @@ export const userSettingsApi = {
   async save(profile, preferences, expectedUserId) {
     const client = requireSupabase();
     const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
-    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(profile.username || '') || !profile.display_name?.trim() || profile.display_name.trim().length > 60) throw new Error('Use a 3–24 character username and a display name.');
-    throwIfError(await authorize(client.rpc('save_user_settings', { p_username: profile.username.trim(), p_display_name: profile.display_name.trim(),
+    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(profile.username || '')) throw new Error('Use a 3–24 character username starting with a letter.');
+    throwIfError(await authorize(client.rpc('save_user_settings', { p_username: profile.username.trim(),
       p_language: preferences.language, p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true })));
     return this.read(userId);
   },
@@ -317,6 +322,44 @@ export const userSettingsApi = {
     const { authorize } = await captureSettingsIdentity(client, expectedUserId);
     return throwIfError(await authorize(client.rpc('set_user_preferences', { p_language: preferences.language,
       p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true })));
+  },
+};
+
+// Storage and profile mutations share a captured identity, not the mutable auth
+// client. A request started by A can never upload into B's folder after logout.
+async function profilePhotoClient(expectedUserId) {
+  const identity = await captureSettingsIdentity(requireSupabase(), expectedUserId);
+  const client = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { headers: { Authorization: `Bearer ${identity.accessToken}` } },
+  });
+  return { client, userId: identity.userId, bucket: client.storage.from('profile-avatars') };
+}
+export const profilePhotoApi = {
+  async signedUrl(profile, expectedUserId) {
+    if (!profile?.avatar_path) return /^https:\/\//.test(profile?.avatar_url || '') ? profile.avatar_url : null;
+    const { bucket } = await profilePhotoClient(expectedUserId);
+    return throwIfError(await bucket.createSignedUrl(profile.avatar_path, 300))?.signedUrl || null;
+  },
+  async upload(blob, expectedUserId) {
+    if (!(blob instanceof Blob) || blob.type !== 'image/webp' || !blob.size || blob.size > 1048576) throw new Error('Choose a compressed profile photo under 1 MB.');
+    const { client, userId, bucket } = await profilePhotoClient(expectedUserId);
+    const previous = throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
+    const path = `${userId}/${crypto.randomUUID()}.webp`;
+    throwIfError(await bucket.upload(path, blob, { contentType: 'image/webp', cacheControl: '300', upsert: false }));
+    try { throwIfError(await client.rpc('set_profile_avatar', { p_path: path })); }
+    catch (error) { await bucket.remove([path]); throw error; }
+    // New paths avoid stale CDN caches. Cleanup is best-effort after committing
+    // the new reference; a cleanup failure never erases the saved replacement.
+    if (previous.avatar_path) await bucket.remove([previous.avatar_path]);
+    return throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
+  },
+  async remove(expectedUserId) {
+    const { client, userId, bucket } = await profilePhotoClient(expectedUserId);
+    const previous = throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
+    throwIfError(await client.rpc('set_profile_avatar', { p_path: null }));
+    if (previous.avatar_path) await bucket.remove([previous.avatar_path]);
+    return throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
   },
 };
 
@@ -428,6 +471,8 @@ export const workoutTemplateApi = {
         .insert({
           name: payload.name,
           notes: payload.notes || null,
+          color_key: payload.color_key || 'slate',
+          icon_key: payload.icon_key || 'dumbbell',
         })
         .select(workoutTemplateSelect)
         .single(),

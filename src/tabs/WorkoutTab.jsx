@@ -23,6 +23,8 @@ import { prefillWorkoutTargets } from '../utils/workoutPrefill';
 import { exerciseIdentityKey, exerciseLabel, resolveExercise } from '../utils/exerciseCatalog';
 import { ExerciseSelector } from '../components/ExerciseSelector';
 import { WorkoutSharing } from '../components/WorkoutSharing';
+import { TrainingQuickStart, TemplateAppearanceEditor, TrainingTemplateIcon } from '../components/TrainingTemplates';
+import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateAppearance';
 import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
@@ -85,6 +87,12 @@ export function WorkoutTab() {
   const [lastSavedSet, setLastSavedSet] = useState(null);
   const [trainingView, setTrainingView] = useState('live');
   const [historySessionId, setHistorySessionId] = useState(null);
+  const [templateSetup, setTemplateSetup] = useState(null);
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const openTemplateSetup = (template) => {
+    setTemplateSetup({ ...template, ...normalizeTemplateAppearance(template), notes: template.notes || '' });
+    setTrainingView('manage');
+  };
   const restTimer = useWorkoutRestTimer(authUser?.id, activeWorkoutSession);
 
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
@@ -206,6 +214,7 @@ export function WorkoutTab() {
     if (startingTemplateId || savingSession) return;
     const template = workoutTemplates.find((item) => item.id === templateId);
     if (!template) return;
+    if (!template.workout_template_exercises?.length) { openTemplateSetup(template); return; }
 
     setFormError('');
     setStartingTemplateId(templateId);
@@ -408,14 +417,24 @@ export function WorkoutTab() {
   return (
     <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4">
       <div role="group" aria-label={t("Training view")} className="col-span-12 flex gap-1 border-b border-white/10 pb-3">
-        {['live', 'history'].map((view) => (
-          <button key={view} type="button" aria-pressed={trainingView === view} onClick={() => setTrainingView(view)} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
-            {view === 'live' ? t("Live") : t("History")}
+        {['live', 'history', 'manage'].map((view) => (
+          <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => setTrainingView(view)} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
+            {view === 'live' ? t("Live") : view === 'history' ? t("History") : t("Manage")}
           </button>
         ))}
       </div>
       {draftStorageUnavailable ? <p role="status" className="col-span-12 text-sm text-amber-300">{t("Device storage is unavailable. Keep this screen open until your set is saved.")}</p> : null}
-      {trainingView === 'history' ? (
+      <div className={`col-span-12 min-w-0 ${trainingView === 'manage' ? '' : 'hidden'}`}>
+        <h2 className="mb-4 text-base font-semibold text-zinc-100">{t('Manage templates')}</h2>
+        {workoutTemplatesError ? <p role="alert" className="mb-3 text-sm text-red-300">{t(workoutTemplatesError)}</p> : null}
+        <TemplateManager key={authUser?.id || 'guest'} onBusyChange={setTemplateBusy} setup={templateSetup}
+          createWorkoutTemplate={createWorkoutTemplate} createWorkoutTemplateExercise={createWorkoutTemplateExercise}
+          deleteWorkoutTemplate={deleteWorkoutTemplate} deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
+          reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise} updateWorkoutTemplate={updateWorkoutTemplate}
+          updateWorkoutTemplateExercise={updateWorkoutTemplateExercise} workoutTemplates={workoutTemplates}
+          workoutTemplatesStatus={workoutTemplatesStatus} />
+      </div>
+      {trainingView === 'manage' ? null : trainingView === 'history' ? (
         <WorkoutHistory
           sessions={workoutSessions}
           activeSession={activeWorkoutSession}
@@ -517,6 +536,7 @@ export function WorkoutTab() {
               onDeleteSession={removeSession}
               onSelectToday={selectOrStartToday}
               onStartFromTemplate={startFromTemplate}
+              onSetupTemplate={openTemplateSetup}
               onStartWorkout={startWorkout}
               reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
               savingSession={savingSession}
@@ -555,6 +575,7 @@ export function WorkoutTab() {
               onDeleteSession={removeSession}
               onSelectToday={selectOrStartToday}
               onStartFromTemplate={startFromTemplate}
+              onSetupTemplate={openTemplateSetup}
               onStartWorkout={startWorkout}
               reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
               savingSession={savingSession}
@@ -627,6 +648,7 @@ function WorkoutSessionControl({
   onDeleteSession,
   onSelectToday,
   onStartFromTemplate,
+  onSetupTemplate,
   onStartWorkout,
   reorderWorkoutTemplateExercise,
   savingSession,
@@ -648,21 +670,20 @@ function WorkoutSessionControl({
   workoutTemplatesStatus,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [manageTemplatesOpen, setManageTemplatesOpen] = useState(false);
-  const [templateBusy, setTemplateBusy] = useState(false);
+  const templateBusy = false;
   const [dangerOpen, setDangerOpen] = useState(false);
-  const todaysSessions = workoutSessions.filter((session) => session.performed_on === today);
   const contentOpen = !activeSession || mobileOpen;
+  const Container = activeSession ? Panel : 'section';
 
   return (
-    <Panel className="h-fit">
-      <PanelHeader
+    <Container className="h-fit min-w-0">
+      {activeSession ? <PanelHeader
         eyebrow={t("Workout")}
         title={activeSession ? t("Session Options") : t("Start Workout")}
         right={<SourceStatus status={workoutSessionsStatus} />}
-      />
+      /> : null}
       {formError ? <p role="alert" className="px-3 py-2 text-sm text-red-300">{t(formError)}</p> : null}
-      <button
+      {activeSession ? <button
         type="button"
         onClick={() => setMobileOpen((value) => !value)}
         disabled={templateBusy}
@@ -671,62 +692,23 @@ function WorkoutSessionControl({
       >
         <span>{activeSession ? t("Session options") : t("Start workout")}</span>
         <ChevronDown size={16} className={`text-zinc-500 transition ${contentOpen ? 'rotate-180' : ''}`} />
-      </button>
+      </button> : null}
       <div className={`${contentOpen ? 'block' : 'hidden'} space-y-2 p-3 md:block`}>
         {activeSession ? <button disabled={templateBusy} className="flex min-h-11 w-full items-center gap-2 border-b border-white/10 text-sm text-zinc-200" onClick={() => setActiveWorkoutId(null)}><Plus size={16} />{t("New session")}</button> : null}
         {!activeSession ? (
-          <div className="space-y-2">
-            <div className="py-2">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-200">{t("Choose a template")}</p>
-                </div>
-                <ClipboardList size={15} className="shrink-0 text-cyan-300" />
-              </div>
-              {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? (
-                <LoadingCard label={t("Loading workout templates")} />
-              ) : workoutTemplates.length ? (
-                <div className="grid divide-y divide-white/10">
-                  {workoutTemplates.map((template) => {
-                    const count = template.workout_template_exercises?.length ?? 0;
-                    return (
-                      <div key={template.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
-                        <div className="min-w-0">
-                          <p className="break-words text-sm font-medium text-zinc-100">{template.name}</p>
-                          <p className="mt-1 text-xs text-zinc-500">{count}{t(" exercises")}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => onStartFromTemplate(template.id)}
-                          aria-label={t("Start {v0}", { v0: template.name })}
-                          disabled={Boolean(startingTemplateId) || savingSession}
-                          className="primary-button flex min-h-11 items-center justify-center gap-2 px-3 text-sm font-medium disabled:opacity-50"
-                        >
-                          {startingTemplateId === template.id ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}{t("Start")}</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="py-2 text-sm text-zinc-500">{t("No templates yet.")}</p>
-              )}
-              {workoutTemplatesError ? <p role="alert" className="mt-2 text-sm text-red-300">{t(workoutTemplatesError)}</p> : null}
-            </div>
-
-            {todaysSessions.length ? (
-              <button
-                type="button"
-                onClick={onSelectToday}
-                disabled={selectingToday}
-                className="flex w-full items-center justify-between rounded-md border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-left text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
-              >
-                <span>
-                  <span className="block text-sm font-semibold">{selectingToday ? t("Syncing") : t("Continue Today's Workout")}</span>
-                  <span className="data-text text-[10px] text-cyan-300/70">{todaysSessions.length}{t(" today")}</span>
-                </span>
-                {selectingToday ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+          <div className="grid min-w-0 gap-6">
+            <header className="py-5">
+              <Dumbbell size={32} className="mb-4 text-zinc-300" />
+              <h1 className="text-2xl font-semibold text-zinc-100">{t('Start your workout')}</h1>
+            </header>
+            {workoutSessions.filter((session) => !session.ended_at).map((session) => (
+              <button key={session.id} type="button" onClick={() => setActiveWorkoutId(session.id)} className="flex min-h-11 min-w-0 items-center gap-3 border-y border-white/10 py-3 text-left text-sm text-zinc-200">
+                <History size={18} className="shrink-0" /><span className="min-w-0 break-words">{t('Continue')} {session.name}</span>
               </button>
-            ) : null}
+            ))}
+            <TrainingQuickStart templates={workoutTemplates} status={workoutTemplatesStatus} error={workoutTemplatesError}
+              busy={savingSession || Boolean(startingTemplateId)} startingId={startingTemplateId}
+              onStart={onStartFromTemplate} onSetup={onSetupTemplate} />
           </div>
         ) : null}
 
@@ -758,26 +740,6 @@ function WorkoutSessionControl({
           </form>
         ) : null}
 
-        <CollapsedSection
-          open={manageTemplatesOpen}
-          setOpen={setManageTemplatesOpen}
-          title={t("Manage templates")}
-          disabled={templateBusy}
-        >
-          <TemplateManager
-            onBusyChange={setTemplateBusy}
-            createWorkoutTemplate={createWorkoutTemplate}
-            createWorkoutTemplateExercise={createWorkoutTemplateExercise}
-            deleteWorkoutTemplate={deleteWorkoutTemplate}
-            deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
-            reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
-            updateWorkoutTemplate={updateWorkoutTemplate}
-            updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
-            workoutTemplates={workoutTemplates}
-            workoutTemplatesStatus={workoutTemplatesStatus}
-          />
-        </CollapsedSection>
-
         {activeSession ? (
           <CollapsedSection
             open={dangerOpen}
@@ -802,7 +764,7 @@ function WorkoutSessionControl({
 
         {workoutSessionsError ? <p className="data-text text-[11px] text-red-300">{t(workoutSessionsError)}</p> : null}
       </div>
-    </Panel>
+    </Container>
   );
 }
 
@@ -844,6 +806,7 @@ function formatTemplateManagerError(error, fallback) {
 
 function TemplateManager({
   onBusyChange,
+  setup,
   createWorkoutTemplate,
   createWorkoutTemplateExercise,
   deleteWorkoutTemplate,
@@ -854,7 +817,7 @@ function TemplateManager({
   workoutTemplates,
   workoutTemplatesStatus,
 }) {
-  const [templateForm, setTemplateForm] = useState({ name: '', notes: '' });
+  const [templateForm, setTemplateForm] = useState({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' });
   const [templateLoading, setTemplateLoading] = useState('');
   const [templateError, setTemplateError] = useState('');
   const [editingTemplateId, setEditingTemplateId] = useState(null);
@@ -862,6 +825,21 @@ function TemplateManager({
   const [exerciseDrafts, setExerciseDrafts] = useState({});
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [exerciseEditForm, setExerciseEditForm] = useState({ exercise: '', notes: '' });
+  const setupTarget = useRef(null);
+  useEffect(() => {
+    if (!setup) return;
+    if (setup.id) {
+      setEditingTemplateId(setup.id);
+      setTemplateEditForm({ name: setup.name, notes: setup.notes, ...normalizeTemplateAppearance(setup) });
+    } else {
+      setTemplateForm(setup);
+    }
+    const frame = requestAnimationFrame(() => {
+      setupTarget.current?.scrollIntoView({ block: 'start' });
+      setupTarget.current?.querySelector('input')?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [setup]);
   useEffect(() => {
     onBusyChange(Boolean(templateLoading));
     return () => onBusyChange(false);
@@ -877,7 +855,7 @@ function TemplateManager({
     setTemplateLoading('template-create');
     try {
       await createWorkoutTemplate(templateForm);
-      setTemplateForm({ name: '', notes: '' });
+      setTemplateForm({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' });
     } catch (error) {
       setTemplateError(formatTemplateManagerError(error, 'Failed to create template.'));
     } finally {
@@ -985,9 +963,10 @@ function TemplateManager({
   return (
     <fieldset disabled={Boolean(templateLoading)} aria-label={t("Workout template management")} className="grid min-w-0 gap-5">
       {templateError ? <p role="alert" className="text-sm text-red-300">{t(templateError)}</p> : null}
-      <form aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
+      <form ref={setup?.id ? null : setupTarget} aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
         <CompactField label={t("Template name")} value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
         <CompactField label={t("Notes")} value={templateForm.notes} onChange={(value) => setTemplateForm((prev) => ({ ...prev, notes: value }))} />
+        <TemplateAppearanceEditor value={templateForm} onChange={setTemplateForm} />
         <button type="submit" disabled={Boolean(templateLoading)} className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50">
           {templateLoading === 'template-create' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{t("Create template")}</button>
       </form>
@@ -997,11 +976,12 @@ function TemplateManager({
           const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
           const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
           return (
-            <article key={template.id} aria-label={t("Template ") + template.name} className="grid min-w-0 gap-4 py-5">
+            <article ref={setup?.id === template.id ? setupTarget : null} key={template.id} aria-label={t("Template ") + template.name} className="grid min-w-0 gap-4 py-5">
               {editingTemplateId === template.id ? (
                 <div role="group" aria-label={t("Edit template")} className="grid gap-3">
                   <CompactField label={t("Template name")} value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
                   <CompactField label={t("Notes")} value={templateEditForm.notes} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, notes: value }))} />
+                  <TemplateAppearanceEditor value={templateEditForm} onChange={setTemplateEditForm} />
                   <div className="flex gap-2">
                     <IconButton icon={Check} loading={templateLoading === 'template-' + template.id} onClick={() => saveTemplate(template.id)} title={t("Save template")} tone="zinc" />
                     <IconButton icon={X} onClick={() => setEditingTemplateId(null)} title={t("Cancel template edit")} tone="zinc" />
@@ -1010,12 +990,13 @@ function TemplateManager({
               ) : (
                 <header className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <span className="mb-2 block" style={{ color: TEMPLATE_COLORS[normalizeTemplateAppearance(template).color_key] }}><TrainingTemplateIcon iconKey={normalizeTemplateAppearance(template).icon_key} /></span>
                     <h3 className="break-words text-sm font-semibold text-zinc-100">{template.name}</h3>
                     <p className="mt-1 text-xs text-zinc-500">{exercises.length}{t(" exercises")}</p>
                     {template.notes ? <p className="mt-2 break-words text-sm text-zinc-400">{template.notes}</p> : null}
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <IconButton icon={Pencil} onClick={() => { setEditingTemplateId(template.id); setTemplateEditForm({ name: template.name, notes: template.notes ?? '' }); }} title={t("Edit template")} />
+                    <IconButton icon={Pencil} onClick={() => { setEditingTemplateId(template.id); setTemplateEditForm({ name: template.name, notes: template.notes ?? '', ...normalizeTemplateAppearance(template) }); }} title={t("Edit template")} />
                     <IconButton icon={Trash2} loading={templateLoading === 'template-delete-' + template.id} onClick={() => removeTemplate(template.id)} title={t("Delete template")} tone="red" />
                   </div>
                 </header>

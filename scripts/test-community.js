@@ -10,7 +10,8 @@ try {
   await applyCommunityMigration(db,'degra_public_identity');
   assert.equal((await db.query('select workout_sharing from user_preferences where user_id=$1',[A])).rows[0].workout_sharing,false);
   assert.equal((await db.query('select workout_sharing from user_preferences where user_id=$1',[B])).rows[0].workout_sharing,true);
-  console.log((await db.exec(fs.readFileSync('supabase/operations/verify_community.sql','utf8'))).at(-1).rows[0].result);
+  // Historical migration contract; current production SQL is tested by test-training-profile.
+  console.log((await db.exec(fs.readFileSync('tests/workout/verify_community_legacy.sql','utf8'))).at(-1).rows[0].result);
   await db.query("select set_config('request.jwt.claim.sub',$1,false)",[A]);await db.exec('set role authenticated');
   await db.exec("select save_user_settings('casce','casce','en',true,false)");
   await assert.rejects(db.query('select configure_degra_member($1)',[B]),/permission denied/);

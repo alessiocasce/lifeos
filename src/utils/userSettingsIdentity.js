@@ -7,5 +7,5 @@ export async function captureSettingsIdentity(client, expectedUserId) {
     throw new Error('Reload settings before saving.');
   }
   // Bind each request to this identity even if the shared auth client switches accounts.
-  return { userId: data.user.id, authorize: (query) => query.setHeader('Authorization', `Bearer ${token}`) };
+  return { userId: data.user.id, accessToken: token, authorize: (query) => query.setHeader('Authorization', `Bearer ${token}`) };
 }

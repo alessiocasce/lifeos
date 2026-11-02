@@ -2023,6 +2023,8 @@ function normalizeWorkoutTemplatePayload(payload) {
   const normalized = {};
   if ('name' in payload) normalized.name = payload.name?.trim();
   if ('notes' in payload) normalized.notes = payload.notes?.trim() || null;
+  if ('color_key' in payload) normalized.color_key = payload.color_key;
+  if ('icon_key' in payload) normalized.icon_key = payload.icon_key;
   return normalized;
 }
 

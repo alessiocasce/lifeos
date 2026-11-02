@@ -1,13 +1,12 @@
-import { Dumbbell, UserRound } from 'lucide-react';
+import { Dumbbell } from 'lucide-react';
+import { ProfileAvatar } from './ProfileAvatar';
 import { t, formatDate } from '../i18n';
 import { exerciseIdentityKey, exerciseLabel } from '../utils/exerciseCatalog';
 
 export function MemberIdentity({ profile, onOpen }) {
-  if (!profile) return null;
-  const content = <><span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-zinc-900">
-    {profile.avatar_url ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" /> : <UserRound size={18} className="text-zinc-400" />}
-  </span><span className="min-w-0 text-left"><strong className="block break-words text-sm text-zinc-100">{profile.display_name}</strong><span className="block break-all text-xs text-zinc-400">@{profile.username}</span></span></>;
-  return onOpen ? <button type="button" className="flex min-h-11 min-w-0 items-center gap-3" onClick={onOpen}>{content}</button> : <div className="flex min-w-0 items-center gap-3">{content}</div>;
+  if (!profile?.username) return null;
+  const content = <><ProfileAvatar profile={profile} className="h-10 w-10 shrink-0" /><strong className="min-w-0 break-all text-left text-sm text-zinc-100">@{profile.username.replace(/^@+/, '')}</strong></>;
+  return onOpen ? <button type="button" aria-label={`@${profile.username.replace(/^@+/, '')}`} className="flex min-h-11 min-w-0 items-center gap-3" onClick={onOpen}>{content}</button> : <div className="flex min-w-0 items-center gap-3">{content}</div>;
 }
 
 export function SharedWorkoutCard({ share, onOpen, onMember }) {

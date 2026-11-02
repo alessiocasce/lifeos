@@ -37,8 +37,7 @@ test('template starts immutable plan, warmup and working sets, and resumes after
   const session = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0]);
   expect(session.template_snapshot.map((row) => row.exercise)).toEqual(['Dumbbell Bench Press', 'Barbell Curl']);
   expect(session.workout_sets.map((row) => row.is_warmup)).toEqual([true, false]);
-  await page.getByRole('button', { name: 'Session options', exact: true }).click();
-  await page.getByRole('button', { name: 'Manage templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage', exact: true }).click();
   page.once('dialog', (dialog) => dialog.accept());
   await template(page, 'Strength A').getByRole('button', { name: 'Delete template', exact: true }).click();
   await page.reload();
@@ -48,7 +47,7 @@ test('template starts immutable plan, warmup and working sets, and resumes after
 
 test('template and exercise CRUD, notes, ordering and compaction remain functional', async ({ page }) => {
   await page.goto('/workout');
-  await page.getByRole('button', { name: 'Manage templates' }).click();
+  await page.getByRole('button', { name: 'Manage' }).click();
   const create = page.getByRole('form', { name: 'Create workout template' });
   await create.getByLabel('Template name', { exact: true }).fill('Pull B');
   await create.getByLabel('Notes', { exact: true }).fill('Second pull day');
@@ -76,7 +75,7 @@ test('template and exercise CRUD, notes, ordering and compaction remain function
   await revised.getByRole('group', { name: 'Template exercise Pulley' }).getByRole('button', { name: 'Delete exercise' }).click();
   await expect(revised.getByRole('group', { name: /^Template exercise/ })).toHaveCount(1);
   await page.reload();
-  await page.getByRole('button', { name: 'Manage templates' }).click();
+  await page.getByRole('button', { name: 'Manage' }).click();
   await expect(revised).toContainText('Pull Up');
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-templates')).find((row) => row.name === 'Pull revised'));
   expect(stored.workout_template_exercises[0].exercise_order).toBe(1);
@@ -87,7 +86,7 @@ test('template and exercise CRUD, notes, ordering and compaction remain function
 
 test('failed template writes retain draft and failed delete retains persisted plan', async ({ page }) => {
   await page.goto('/workout');
-  await page.getByRole('button', { name: 'Manage templates' }).click();
+  await page.getByRole('button', { name: 'Manage' }).click();
   await page.evaluate(() => localStorage.setItem('qa-template-fail', 'true'));
   const create = page.getByRole('form', { name: 'Create workout template' });
   await create.getByLabel('Template name').fill('Keep draft');
@@ -122,21 +121,21 @@ test('empty session start retains failed fields and starts exactly once', async 
 
 test('template save locks dismissal and failed exercise edit retains corrections', async ({ page }) => {
   await page.goto('/workout');
-  await page.getByRole('button', { name: 'Manage templates' }).click();
+  await page.getByRole('button', { name: 'Manage' }).click();
   const row = template(page, 'Strength A');
   const exercise = row.getByRole('group', { name: 'Template exercise Barbell Curl' });
   await exercise.getByRole('button', { name: 'Edit exercise' }).click();
-  await exercise.getByLabel('Exercise', { exact: true }).fill('Dumbbell Curl');
+  await selectExercise(page, 'Dumbbell Curl', { scope: exercise });
   await page.evaluate(() => {
     localStorage.setItem('qa-template-delay', '1000');
     localStorage.setItem('qa-template-fail', 'true');
   });
   await exercise.getByRole('button', { name: 'Save exercise' }).click();
-  await expect(page.getByRole('button', { name: 'Manage templates', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Manage', exact: true })).toBeDisabled();
   await expect(exercise.getByLabel('Exercise', { exact: true })).toBeDisabled();
   await expect(manager(page).getByRole('alert')).toContainText('not saved');
   await expect(exercise.getByLabel('Exercise', { exact: true })).toHaveValue('Dumbbell Curl');
-  await expect(page.getByRole('button', { name: 'Manage templates', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Manage', exact: true })).toBeEnabled();
   await page.evaluate(() => { localStorage.removeItem('qa-template-delay'); localStorage.removeItem('qa-template-fail'); });
   await exercise.getByRole('button', { name: 'Save exercise' }).click();
   await expect(row.getByRole('group', { name: 'Template exercise Dumbbell Curl' })).toBeVisible();
@@ -150,7 +149,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     await page.goto('/workout');
     await expect(page.getByRole('button', { name: 'Start Strength A' })).toBeVisible();
     await page.screenshot({ path: info.outputPath('training-setup.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Manage templates' }).click();
+    await page.getByRole('button', { name: 'Manage' }).click();
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({ path: info.outputPath('training-templates.png'), fullPage: true });
     const add = template(page, 'Strength A').getByRole('button', { name: 'Add exercise', exact: true });

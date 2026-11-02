@@ -6,21 +6,21 @@ select set_config('lifeos.qa_user_a',gen_random_uuid()::text,true),
 insert into auth.users(id) values(current_setting('lifeos.qa_user_a')::uuid),(current_setting('lifeos.qa_user_b')::uuid);
 set local role authenticated;
 select set_config('request.jwt.claim.sub',current_setting('lifeos.qa_user_a'),true);
-select public.save_user_settings('qa_'||substr(replace(current_setting('lifeos.qa_user_a'),'-',''),1,16),'Rollout QA A','en',false,false);
+select public.save_user_settings('qa_'||substr(replace(current_setting('lifeos.qa_user_a'),'-',''),1,16),'en',false,false);
 with w as (insert into public.workouts(name,ended_at) values('ROLLBACK-ONLY Training QA',now()) returning id)
 select set_config('lifeos.qa_workout_a',id::text,true) from w;
 insert into public.workout_sets(workout_id,exercise,exercise_id,set_number,weight,reps)
 values(current_setting('lifeos.qa_workout_a')::uuid,'Dumbbell Bench Press',public.resolve_exercise_id('Panca Piana Manubri'),1,30,10),
       (current_setting('lifeos.qa_workout_a')::uuid,'Rollout QA custom',null,2,12,8);
 select set_config('request.jwt.claim.sub',current_setting('lifeos.qa_user_b'),true);
-select public.save_user_settings('qa_'||substr(replace(current_setting('lifeos.qa_user_b'),'-',''),1,16),'Rollout QA B','it',false,false);
+select public.save_user_settings('qa_'||substr(replace(current_setting('lifeos.qa_user_b'),'-',''),1,16),'it',false,false);
 do $$
 declare affected integer; private_table text; visible integer;
 begin
   if (select count(*) from public.user_preferences) <> 1 or
      (select language from public.user_preferences) <> 'it' then raise exception 'Preference isolation failed'; end if;
   if (select count(*) from public.user_profiles where user_id in(current_setting('lifeos.qa_user_a')::uuid,current_setting('lifeos.qa_user_b')::uuid)) <> 2 then raise exception 'Public profile projection failed'; end if;
-  update public.user_profiles set display_name='Forbidden' where user_id=current_setting('lifeos.qa_user_a')::uuid;
+  update public.user_profiles set username='forbidden_qa' where user_id=current_setting('lifeos.qa_user_a')::uuid;
   get diagnostics affected=row_count;
   if affected <> 0 then raise exception 'Cross-user profile update allowed'; end if;
   update public.user_preferences set language='en' where user_id=current_setting('lifeos.qa_user_a')::uuid;
@@ -41,7 +41,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
-    perform public.save_user_settings(upper('qa_'||substr(replace(current_setting('lifeos.qa_user_a'),'-',''),1,16)),'Duplicate','en',false,false);
+    perform public.save_user_settings(upper('qa_'||substr(replace(current_setting('lifeos.qa_user_a'),'-',''),1,16)),'en',false,false);
     raise exception 'Case-insensitive username uniqueness failed';
   exception when unique_violation then null;
   end;
@@ -55,7 +55,7 @@ end $$;
 set local role anon;
 do $$ begin
   begin
-    insert into public.user_profiles(username,display_name) values('anon_qa','Forbidden');
+    insert into public.user_profiles(username) values('anon_qa');
     raise exception 'Anonymous profile write allowed';
   exception when insufficient_privilege then null;
   end;

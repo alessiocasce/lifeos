@@ -292,3 +292,12 @@ previous performance against prior working sets, excluding warmups/future data.
 It also selects an ended historical session and checks sets/Reopen remain visible.
 Run `npm run test:ui -- tests/ui/training-history.spec.js` and `npm run test:workout`.
 This is isolated browser evidence, not physical iPhone or production Supabase QA.
+
+## Training Live / Manage Release
+
+See TRAINING_PROFILE_RELEASE.md for focused QA and migration order. Live now has
+five suggested setup cards plus persisted templates; examples cannot start until
+their real exercises exist. Manage owns template CRUD/color/icon/order. Verify
+Live -> Manage -> History -> Live preserves the active full draft and timer.
+Run training-live-manage, training-templates, training-history,
+training-prefill-rest and workout-continuity Playwright specs for this surface.

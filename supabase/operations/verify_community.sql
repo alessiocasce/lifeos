@@ -8,7 +8,7 @@ do $$ begin
   if not (select workout_sharing from public.user_preferences where user_id=auth.uid())
     or (select share_workout_notes from public.user_preferences where user_id=auth.uid()) then raise exception 'New account defaults';end if;
 end $$;
-select public.save_user_settings('qa_'||substr(replace(current_setting('qa.a'),'-',''),1,16),'Automatic QA A','en',false,false);
+select public.save_user_settings('qa_'||substr(replace(current_setting('qa.a'),'-',''),1,16),'en',false,false);
 with w as(insert into public.workouts(name,notes,performed_on,ended_at) values('Rollback historical','PRIVATE SESSION NOTE','2025-01-02',now()) returning id)
 select set_config('qa.w',id::text,true) from w;
 with w as(insert into public.workouts(name,performed_on) values('Rollback active','2025-01-03') returning id)
@@ -38,7 +38,7 @@ select set_config('request.jwt.claim.sub',current_setting('qa.b'),true);
 do $$ begin
   if not exists(select 1 from public.community_workout_shares where id=current_setting('qa.share')::uuid and notes='PRIVATE SESSION NOTE') then raise exception 'Enabled notes absent';end if;
   if exists(select 1 from public.workout_sets where user_id=current_setting('qa.a')::uuid) or exists(select 1 from public.workouts where user_id=current_setting('qa.a')::uuid) then raise exception 'Private source leak';end if;
-  update public.user_profiles set display_name='Forbidden' where user_id=current_setting('qa.a')::uuid;
+  update public.user_profiles set username='forbidden_qa' where user_id=current_setting('qa.a')::uuid;
   if found then raise exception 'Cross profile update';end if;
   update public.user_preferences set workout_sharing=false where user_id=current_setting('qa.a')::uuid;
   if found then raise exception 'Cross preference update';end if;
@@ -72,7 +72,7 @@ with w as(insert into public.workouts(name,ended_at) values('Pre-profile workout
 select set_config('qa.preprofile',id::text,true) from w;
 insert into public.workout_sets(workout_id,exercise,set_number,weight,reps) values(current_setting('qa.preprofile')::uuid,'Custom',1,10,8);
 do $$ begin if public.workout_share_status(current_setting('qa.preprofile')::uuid) is not null then raise exception 'Missing profile visible';end if;end $$;
-select public.save_user_settings('qa_'||substr(replace(current_setting('qa.b'),'-',''),1,16),'Automatic QA B','it',true,false);
+select public.save_user_settings('qa_'||substr(replace(current_setting('qa.b'),'-',''),1,16),'it',true,false);
 do $$ begin if public.workout_share_status(current_setting('qa.preprofile')::uuid) is null then raise exception 'Profile creation failed backfill';end if;end $$;
 -- Chronological keyset pagination is independent of publication timestamps.
 select set_config('request.jwt.claim.sub',current_setting('qa.a'),true);

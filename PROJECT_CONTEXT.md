@@ -1,5 +1,18 @@
 # LifeOS Project Context
 
+## Training/Profile/Community/Auth release (2026-10-31)
+
+Live / History / Manage separates gym logging from template administration.
+Quick start uses persisted templates or explicit setup shortcuts, never invented
+exercises. Template visual identifiers are constrained and user-owned. Workout
+draft/rest/session continuity architecture is unchanged. Profiles now use usernames
+only and private Storage avatar paths with short-lived signed reads. Community
+navigation records per-entry origins/search/scroll rather than always returning
+to Feed. Signup preserves real Supabase verification with an explicit production
+redirect. Schema rollout is expand -> verified frontend -> username-only cleanup;
+never drop the old column before the compatible frontend deploys. See
+docs/TRAINING_PROFILE_RELEASE.md for invariants, rollout and focused QA.
+
 ## Automatic Community sharing (2026-10-30)
 
 Workout Sharing defaults ON for new/unset accounts, while existing explicit OFF

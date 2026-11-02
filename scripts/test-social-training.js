@@ -94,7 +94,7 @@ try {
   assert.equal((await db.query("select metadata #>> '{workout_rest,next_set_number}' next from brain_outbox_messages where source_type='workout_rest_timer' and status='queued'")).rows[0].next,'3');
   console.log('PASS durable timer next-set numbering spans canonical/legacy translations');
   await db.exec('reset role');
-  await db.exec(fs.readFileSync('supabase/operations/verify_social_training.sql','utf8'));
+  await db.exec(fs.readFileSync('tests/workout/verify_social_training_legacy.sql','utf8'));
   console.log('PASS shared rollback-only deployment verification SQL');
   const english=resolveExercise('Dumbbell Bench Press'),italian=resolveExercise('Panca Piana con Manubri');
   assert.equal(english.id,italian.id);
