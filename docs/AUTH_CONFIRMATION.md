@@ -2,13 +2,13 @@
 
 ## Integration
 
-The owner of `src/services/lifeosApi.js` must add:
+`src/services/lifeosApi.js` now imports:
 
 ```js
 import { getSignupEmailRedirectTo } from '../lib/authRedirect';
 ```
 
-Replace only the existing `authApi.signUp` implementation:
+The existing `authApi.signUp` supplies the validated redirect:
 
 ```js
 async signUp({ email, password }) {
@@ -30,24 +30,21 @@ configuration and allowlist entries. Never set a local override in production.
 
 ## Dashboard Status
 
-The connected Supabase tool only exposes documentation search, not Auth admin
-configuration. The public `/auth/v1/settings` endpoint cannot expose the Site
-URL, redirect allowlist or email template. This code slice has not independently
-inspected those dashboard values or changed production settings/accounts.
+The Supabase connector does not expose Auth URL/template configuration. These
+settings were inspected through the authenticated dashboard, not inferred from
+the public `/auth/v1/settings` endpoint.
 Read-only inspection on 2026-10-31 returned HTTP 200, email signup enabled,
 signup not disabled, and `mailer_autoconfirm: false` (confirmation required).
-On 2026-10-31, the dashboard owner verified that Site URL was already correct,
-added and saved the exact production redirect entry (the allowlist was previously
-empty), and verified that Confirm sign up still uses `{{ .ConfirmationURL }}`.
-These dashboard changes were made by the owner, not this code slice. The
-dashboard warns about built-in SMTP production limits; delivery remains subject
+On 2026-10-31, this release verified that Site URL was already correct,
+added and saved the exact production origin redirect entry (the allowlist was
+previously empty), and verified that Confirm sign up still uses
+`{{ .ConfirmationURL }}`. The dashboard warns about built-in SMTP limits; delivery remains subject
 to those limits until an appropriate SMTP configuration is provided.
-Do not edit the dashboard concurrently with the owner.
 
 At https://supabase.com/dashboard/project/wrqscqhclepwxxkazbnc/auth/url-configuration:
 
 - Site URL: `https://lifeos-ruby-gamma.vercel.app`
-- Exact production redirect entry: `https://lifeos-ruby-gamma.vercel.app/`
+- Saved production redirect entry: `https://lifeos-ruby-gamma.vercel.app`
 - Keep only required explicit local-development redirect entries. No production
   wildcard or preview domain is needed for this signup flow.
 
@@ -85,9 +82,14 @@ Local results on 2026-10-31: 28 redirect-policy cases and 7 installed-SDK
 scenarios passed; all 10 existing auth UI cases passed on rerun after an initial
 local QA server connection-refused run. Brain regression harness and production
 build passed (existing >500 kB chunk warning); `git diff --check` passed.
-The owner is handling any controlled disposable-account/generated-link smoke.
-Generated-link verification is not proof of email delivery or a real inbox click;
-the actual inbox signup/confirmation journey remains owner QA until recorded.
+Controlled production GoTrue smoke passed: password sign-in was rejected before
+confirmation, a genuine one-use verification URL confirmed the disposable account,
+HTTP 303 redirected to the production origin with a session fragment, confirmed
+state was checked, then password sign-in/logout succeeded. The account was deleted.
+`LIFEOS_RUN_AUTH_CONFIRMATION_SMOKE=true node --env-file=.env.local scripts/smoke-auth-confirmation.js`
+is explicitly armed and never prints credentials/tokens or sends signup emails.
+This proves GoTrue verification, not email delivery or a real mailbox click;
+the actual emailed signup journey remains owner QA until recorded.
 
 After coordinated configuration and deployment, use a fresh test mailbox:
 
@@ -100,7 +102,8 @@ After coordinated configuration and deployment, use a fresh test mailbox:
    another browser, Community direct links, and local development separately.
 5. Loading the homepage alone is not evidence of verified email ownership.
 
-No schema rerun required. No commit or production deployment is part of this slice.
+No Auth schema rerun required. The broader profile release has two targeted
+migrations; see TRAINING_PROFILE_RELEASE.md for the verified production rollout.
 
 ## Official References
 

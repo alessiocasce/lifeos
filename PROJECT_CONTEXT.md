@@ -12,6 +12,11 @@ to Feed. Signup preserves real Supabase verification with an explicit production
 redirect. Schema rollout is expand -> verified frontend -> username-only cleanup;
 never drop the old column before the compatible frontend deploys. See
 docs/TRAINING_PROFILE_RELEASE.md for invariants, rollout and focused QA.
+Production applied `20261102115233` (expand) and `20261102115554` (cleanup)
+around verified frontend deployment `2a05f25`. Source hashes match for 45 workouts,
+454 sets, template contents/timestamps, identity, preferences, rest and projections.
+Real Storage A/B/anonymous HTTP and rollback-only DB QA passed; fixtures removed.
+No actual email mailbox click or physical iPhone/camera acceptance is claimed.
 
 ## Automatic Community sharing (2026-10-30)
 

@@ -65,3 +65,33 @@ current production verification is `supabase/operations/verify_training_profile.
   proves GoTrue verification, not mailbox delivery. Built-in SMTP is rate-limited.
 
 No new API route, Vercel function, bridge restart, monitor permission or rankings.
+
+## Production Verification (2026-11-02)
+
+Applied only `20261102115233_training_profile_upgrade.sql`, then deployed the
+compatible frontend (`2a05f25`), verified its production alias bundle hash, then
+applied `20261102115554_username_only_cleanup.sql`. Filenames and LF hashes match
+the assigned production ledger. No historical migration replay or schema reset.
+
+Preservation hashes match for 45 workouts / 454 sets, two template contents and
+five exercise rows, usernames/avatar URLs, three preferences, rest state and all
+45 Community projections. Existing template timestamps were preserved while
+assigning initial visuals. Public notes remain absent. The legacy column, RPC
+signature and live function references are gone; old migrations remain immutable.
+
+79 focused browser cases passed (78 initial plus corrected Projects-through-More
+test rerun), with 390/768/1024/1440 layout checks. Workout render/storage, rest,
+Community, Social Training, schema, Brain, redirect/SDK, build and seven-function
+checks passed. Backup rehearsal preserved the actual production-shaped dataset.
+All three rollback-only production verification SQL scripts passed. Real
+authenticated Storage HTTP checks proved upload, signed member read, replacement,
+removal and cross-user/anonymous rejection before and after cleanup; disposable
+accounts, profiles and objects were cleaned up. No fake production workouts.
+
+Security advisors have no new feature-specific finding. Existing owner-only
+workout_share_status SECURITY DEFINER warning, three unrelated mutable search
+paths, seven intentionally server-only policy-less tables and disabled leaked
+password protection remain outside scope.
+
+Physical iPhone camera/PWA lifecycle and actual confirmation-email mailbox click
+remain acceptance work. Generated verification-link smoke is not inbox evidence.

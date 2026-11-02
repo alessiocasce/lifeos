@@ -22,5 +22,13 @@
   {
     "file": "20261030121659_degra_public_identity.sql",
     "sha256": "8999d8aa0b4c6355a446f060452a73eb0bbd32b164c92b2e054b7e9d5f7e77cc"
+  },
+  {
+    "file": "20261102115233_training_profile_upgrade.sql",
+    "sha256": "fb4fc4a67bfc285ec7f5e2c88604be616f092b2f2955a8ea99570af4d284e8f7"
+  },
+  {
+    "file": "20261102115554_username_only_cleanup.sql",
+    "sha256": "9282b1e2b1671e2fb1a030f467707d39d2d262322af8fffcd4da09235823b10b"
   }
 ]
