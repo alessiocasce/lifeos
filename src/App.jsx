@@ -5,6 +5,7 @@ import { AuthConfigScreen, AuthLoadingScreen, AuthScreen } from './components/Au
 import { Shell } from './components/Shell';
 import { HomeTab } from './tabs/HomeTab';
 import { useLanguage } from './i18n';
+import { ProfileCompletion } from './components/ProfileCompletion';
 
 const CalendarTab = lazy(() => import('./tabs/CalendarTab').then((module) => ({ default: module.CalendarTab })));
 const MemosTab = lazy(() => import('./tabs/MemosTab').then((module) => ({ default: module.MemosTab })));
@@ -30,7 +31,7 @@ const tabViews = {
 };
 
 function LifeOSApp() {
-  const { activeTab, authStatus, authUser, isSupabaseConfigured } = useLifeOS();
+  const { activeTab, authStatus, authUser, isSupabaseConfigured, userSettings } = useLifeOS();
 
   if (!isSupabaseConfigured) {
     return <AuthConfigScreen />;
@@ -43,6 +44,8 @@ function LifeOSApp() {
   if (!authUser) {
     return <AuthScreen />;
   }
+  if (userSettings.status === 'loading') return <AuthLoadingScreen />;
+  if (!userSettings.profile?.username && (userSettings.status === 'ready' || activeTab === 'community')) return <ProfileCompletion key={authUser.id} />;
 
   const ActiveView = tabViews[activeTab] ?? HomeTab;
   return (

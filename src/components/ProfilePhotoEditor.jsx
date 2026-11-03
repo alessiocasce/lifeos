@@ -3,7 +3,7 @@ import { Camera, Check, ImagePlus, Trash2, X } from 'lucide-react';
 import * as api from '../services/lifeosApi';
 import { t } from '../i18n';
 import { ProfileAvatar } from './ProfileAvatar';
-import { compressProfilePhoto, drawProfilePhoto, loadProfilePhoto } from '../utils/profilePhoto';
+import { compressProfilePhoto, drawProfilePhoto, loadProfilePhoto, profilePhotoError } from '../utils/profilePhoto';
 
 export function ProfilePhotoEditor({ profile, userId, disabled = false, onChange, onBusyChange }) {
   const [image, setImage] = useState(null);
@@ -56,7 +56,7 @@ export function ProfilePhotoEditor({ profile, userId, disabled = false, onChange
       window.dispatchEvent(new Event('lifeos:profile-updated'));
       setNotice(remove ? 'Photo removed.' : 'Photo saved.');
     } catch (failure) {
-      if (request === generation.current) setError(failure.message || 'Photo could not be saved. Try again.');
+      if (request === generation.current) setError(profilePhotoError(failure));
     } finally {
       if (request === generation.current) { lock.current = false; setBusy(''); onBusyChange?.(false); }
     }
@@ -69,8 +69,8 @@ export function ProfilePhotoEditor({ profile, userId, disabled = false, onChange
       <button type="button" className="icon-button" title={t('Take photo')} aria-label={t('Take photo')} disabled={disabled || Boolean(busy)} onClick={() => cameraInput.current?.click()}><Camera size={18} /></button>
       {profile?.avatar_path || profile?.avatar_url ? <button type="button" className="icon-button" title={t('Remove photo')} aria-label={t('Remove photo')} disabled={disabled || Boolean(busy)} onClick={() => { setConfirmRemove(true); setImage(null); setError(''); }}><Trash2 size={18} /></button> : null}
     </div>
-    <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" aria-label={t('Choose profile photo')} onChange={select} disabled={disabled || Boolean(busy)} />
-    <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" aria-label={t('Camera photo')} onChange={select} disabled={disabled || Boolean(busy)} />
+    <input ref={fileInput} type="file" accept="image/*,.heic,.heif,.avif" className="hidden" aria-label={t('Choose profile photo')} onChange={select} disabled={disabled || Boolean(busy)} />
+    <input ref={cameraInput} type="file" accept="image/*,.heic,.heif,.avif" capture="user" className="hidden" aria-label={t('Camera photo')} onChange={select} disabled={disabled || Boolean(busy)} />
     {image ? <div className="max-w-xs space-y-3">
       <canvas ref={canvas} aria-label={t('Square crop preview')} role="img" className="aspect-square w-full max-w-[15rem] rounded border border-white/15 sm:max-w-none" />
       <fieldset disabled={disabled || Boolean(busy)} className="space-y-3">

@@ -3,6 +3,7 @@ import { exerciseLabel, resolveExercise } from '../../src/utils/exerciseCatalog.
 export async function searchExercise(page, query, { label='Exercise', scope=page } = {}) {
   const dialog=page.getByRole('dialog');
   if (!await dialog.isVisible()) await scope.getByRole('textbox',{name:label,exact:true}).click();
+  if (await dialog.getByRole('button',{name:'Choose another exercise',exact:true}).isVisible()) await dialog.getByRole('button',{name:'Choose another exercise',exact:true}).click();
   await dialog.getByRole('textbox',{name:label,exact:true}).fill(query);
 }
 export async function selectExercise(page, query, options={}) {

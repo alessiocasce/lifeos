@@ -3,15 +3,24 @@ import { Loader2, LogIn, ShieldCheck, UserPlus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { setLanguage, useLanguage } from '../i18n';
+import { identityApi } from '../services/lifeosApi';
 
 export function AuthScreen() {
   const language=useLanguage();
   const { authError, signIn, signUp } = useLifeOS();
   const [mode, setMode] = useState('sign-in');
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ username: '', email: '', password: '' });
   const [formError, setFormError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [availability, setAvailability] = useState('');
+  const availabilityRequest = useRef(0);
+  const checkUsername = async () => {
+    const request = ++availabilityRequest.current;
+    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(form.username)) { setAvailability(''); return; }
+    try { const available = await identityApi.available(form.username); if (request === availabilityRequest.current) setAvailability(available ? 'Username is available.' : 'Username is already taken.'); }
+    catch { if (request === availabilityRequest.current) setAvailability('Availability will be checked when you create your account.'); }
+  };
   const submitting = useRef(false);
 
   const isSignUp = mode === 'sign-up';
@@ -31,12 +40,16 @@ export function AuthScreen() {
       setFormError(t("Password must be at least 6 characters."));
       return;
     }
+    if (isSignUp && !/^[a-z][a-z0-9_]{2,23}$/i.test(form.username)) {
+      setFormError(t('Use a 3–24 character username starting with a letter.'));
+      return;
+    }
 
     submitting.current = true;
     setLoading(true);
     try {
       const action = isSignUp ? signUp : signIn;
-      const data = await action({ email: form.email.trim(), password: form.password });
+      const data = await action({ email: form.email.trim(), password: form.password, ...(isSignUp ? { username: form.username.trim(), language } : {}) });
       if (isSignUp && !data.session) {
         setMessage(t("Account created. Check your email to confirm the account, then sign in."));
         setMode('sign-in');
@@ -66,6 +79,7 @@ export function AuthScreen() {
         <form onSubmit={submit} aria-busy={loading}>
           {isSignUp ? <p className="mb-4 text-sm leading-relaxed text-zinc-400">{t('Completed workouts are shared with signed-in members once your public profile is set up. You can turn this off in Settings. Notes stay private unless enabled.')}</p> : null}
           <fieldset disabled={loading} className="grid min-w-0 gap-4">
+            {isSignUp ? <label className="grid gap-2"><span className="text-sm text-zinc-300">{t('Username')}</span><input aria-label={t('Username')} autoComplete="username" autoCapitalize="none" spellCheck={false} required minLength={3} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9_]{2,23}" className="min-h-12 rounded border border-white/15 bg-[#14171b] px-3" value={form.username} onBlur={checkUsername} onChange={e => { availabilityRequest.current++; setAvailability(''); setForm(v => ({ ...v, username: e.target.value })); }} /><span className="text-xs text-zinc-400">{t('Your username is visible to other LifeOS members.')}</span>{availability ? <span role="status" className="text-xs text-zinc-300">{t(availability)}</span> : null}</label> : null}
             <AuthField
               label={t("Email")}
               type="email"

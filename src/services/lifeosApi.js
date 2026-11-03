@@ -5,6 +5,7 @@ import { resolveExercise } from '../utils/exerciseCatalog';
 import { captureSettingsIdentity } from '../utils/userSettingsIdentity';
 import { createClient } from '@supabase/supabase-js';
 import { getSignupEmailRedirectTo } from '../lib/authRedirect';
+import { avatarCache } from '../utils/avatarCache';
 
 const requireSupabase = () => {
   if (!isSupabaseConfigured || !supabase) {
@@ -27,6 +28,7 @@ const workoutSelect = `
   ended_at,
   template_id,
   template_snapshot,
+  template_appearance,
   notes,
   created_at,
   updated_at,
@@ -261,8 +263,10 @@ export const authApi = {
     return throwIfError(await requireSupabase().auth.signInWithPassword({ email, password }));
   },
 
-  async signUp({ email, password }) {
-    return throwIfError(await requireSupabase().auth.signUp({ email, password, options: { emailRedirectTo: getSignupEmailRedirectTo() } }));
+  async signUp({ email, password, username, language = 'en' }) {
+    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(username || '')) throw new Error('Use a 3–24 character username starting with a letter.');
+    if (!await identityApi.available(username)) throw new Error('Username is already taken.');
+    return throwIfError(await requireSupabase().auth.signUp({ email, password, options: { emailRedirectTo: getSignupEmailRedirectTo(), data: { requested_username: username.trim(), requested_language: language === 'it' ? 'it' : 'en' } } }));
   },
 
   async signOut() {
@@ -325,6 +329,15 @@ export const userSettingsApi = {
   },
 };
 
+export const identityApi = {
+  async available(username) { return throwIfError(await requireSupabase().rpc('username_available', { p_username: username })); },
+  async complete(username, expectedUserId) {
+    const client = requireSupabase();
+    const { authorize } = await captureSettingsIdentity(client, expectedUserId);
+    return throwIfError(await authorize(client.rpc('complete_user_profile', { p_username: username || null })));
+  },
+};
+
 // Storage and profile mutations share a captured identity, not the mutable auth
 // client. A request started by A can never upload into B's folder after logout.
 async function profilePhotoClient(expectedUserId) {
@@ -342,22 +355,26 @@ export const profilePhotoApi = {
     return throwIfError(await bucket.createSignedUrl(profile.avatar_path, 300))?.signedUrl || null;
   },
   async upload(blob, expectedUserId) {
-    if (!(blob instanceof Blob) || blob.type !== 'image/webp' || !blob.size || blob.size > 1048576) throw new Error('Choose a compressed profile photo under 1 MB.');
+    if (!(blob instanceof Blob) || !['image/webp','image/jpeg'].includes(blob.type) || !blob.size || blob.size > 1048576) throw new Error('Choose a compressed profile photo under 1 MB.');
     const { client, userId, bucket } = await profilePhotoClient(expectedUserId);
     const previous = throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
-    const path = `${userId}/${crypto.randomUUID()}.webp`;
-    throwIfError(await bucket.upload(path, blob, { contentType: 'image/webp', cacheControl: '300', upsert: false }));
+    const path = `${userId}/${crypto.randomUUID()}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
+    throwIfError(await bucket.upload(path, blob, { contentType: blob.type, cacheControl: '300', upsert: false }));
     try { throwIfError(await client.rpc('set_profile_avatar', { p_path: path })); }
     catch (error) { await bucket.remove([path]); throw error; }
+    avatarCache.invalidate(userId, previous);
     // New paths avoid stale CDN caches. Cleanup is best-effort after committing
     // the new reference; a cleanup failure never erases the saved replacement.
     if (previous.avatar_path) await bucket.remove([previous.avatar_path]);
-    return throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
+    const next = throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
+    await avatarCache.load(userId, next, profilePhotoApi.signedUrl).catch(() => null);
+    return next;
   },
   async remove(expectedUserId) {
     const { client, userId, bucket } = await profilePhotoClient(expectedUserId);
     const previous = throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
     throwIfError(await client.rpc('set_profile_avatar', { p_path: null }));
+    avatarCache.invalidate(userId, previous);
     if (previous.avatar_path) await bucket.remove([previous.avatar_path]);
     return throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
   },
@@ -948,11 +965,6 @@ export const aiActionLogApi = {
     }
     return payload.data?.logs ?? [];
   },
-};
-
-export const workoutRestApi = {
-  status: () => fetchCompanionApp('/api/ai/actions?view=workout_rest_timer'),
-  control: (body) => fetchCompanionApp('/api/ai/actions', { method: 'POST', body: JSON.stringify({ ...body, action: 'workout_rest_timer' }) }),
 };
 
 export const companionAppApi = {

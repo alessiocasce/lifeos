@@ -1,5 +1,14 @@
 # Signup Email Confirmation
 
+Registration now requires a validated, availability-checked username. It is carried
+as untrusted `requested_username` metadata through real confirmation, along with the
+allowlisted language preference. The confirmed-user `complete_user_profile` RPC
+checks auth.uid(), email confirmation and the username rules again. Existing unique
+lower(username) indexing wins concurrent claims. No unverified reservation exists;
+if taken after confirmation, mandatory onboarding asks for another username. Existing
+profiles/preferences are not overwritten by metadata. Missing profiles cannot enter
+Community without completing identity. See TRAINING_ACTIVE_RELEASE.md for QA.
+
 ## Integration
 
 `src/services/lifeosApi.js` now imports:
@@ -11,11 +20,12 @@ import { getSignupEmailRedirectTo } from '../lib/authRedirect';
 The existing `authApi.signUp` supplies the validated redirect:
 
 ```js
-async signUp({ email, password }) {
+async signUp({ email, password, username, language = 'en' }) {
   return throwIfError(await requireSupabase().auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: getSignupEmailRedirectTo() },
+    options: { emailRedirectTo: getSignupEmailRedirectTo(),
+      data: { requested_username: username, requested_language: language } },
   }));
 },
 ```

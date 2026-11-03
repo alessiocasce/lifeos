@@ -1,6 +1,36 @@
 import { test, expect } from '@playwright/test';
 import { profilePhotoCrop } from '../../src/utils/profilePhoto.js';
 
+test('real JPEG, PNG and WebP bytes decode despite missing or misleading MIME; JPEG fallback works', async ({ page }) => {
+  for (const type of ['image/jpeg','image/png','image/webp']) {
+    const bytes=await page.evaluate(async type=>{const c=document.createElement('canvas');c.width=64;c.height=48;const ctx=c.getContext('2d');ctx.fillStyle='#3d9b70';ctx.fillRect(0,0,64,48);const blob=await new Promise(r=>c.toBlob(r,type));return [...new Uint8Array(await blob.arrayBuffer())];},type);
+    await page.getByLabel('Choose profile photo',{exact:true}).setInputFiles({name:'misreported.bin',mimeType:'application/octet-stream',buffer:Buffer.from(bytes)});
+    await expect(page.getByRole('img',{name:'Square crop preview'})).toBeVisible();
+    if(type==='image/webp') await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob;HTMLCanvasElement.prototype.toBlob=function(callback,type,...rest){if(type==='image/webp')callback(null);else original.call(this,callback,type,...rest);};});
+    await page.getByRole('button',{name:'Save photo',exact:true}).click();
+    await expect(page.getByText('Photo saved.',{exact:true})).toBeVisible();
+    expect(await page.evaluate(()=>window.__photoUpload.type)).toBe(type==='image/webp'?'image/jpeg':'image/webp');
+  }
+});
+
+test('signed avatar URL is reused across Members navigation without another request', async ({page})=>{
+  await page.evaluate(()=>{
+    const profile={user_id:'qa-user-a',username:'cached_user',avatar_path:'qa-user-a/photo.webp'};
+    localStorage.setItem('qa-settings:qa-user-a',JSON.stringify({profile,preferences:{language:'en',workout_sharing:true,share_workout_notes:false}}));
+    localStorage.setItem('qa-community-members',JSON.stringify([profile]));
+  });
+  await page.reload();
+  await expect(page.getByRole('region',{name:'Profile photo',exact:true}).locator('img')).toBeVisible();
+  const initial=await page.evaluate(()=>window.__avatarSignCalls);
+  await page.getByRole('button',{name:'Community',exact:true}).click();
+  for(let i=0;i<3;i++) {
+    await page.getByRole('tab',{name:'Members',exact:true}).click();
+    await expect(page.getByRole('button',{name:/cached_user/}).locator('img')).toBeVisible();
+    await page.getByRole('tab',{name:'Feed',exact:true}).click();
+  }
+  expect(await page.evaluate(()=>window.__avatarSignCalls)).toBe(initial);
+});
+
 const photoFixture = `
 Object.assign(profilePhotoApi, {
   async signedUrl(profile, id) {
@@ -97,11 +127,11 @@ test('replacement uses a fresh stable path and cancelling keeps the saved photo'
 test('invalid sources and failed upload retain a retryable crop', async ({ page }) => {
   const input = page.getByLabel('Choose profile photo', { exact: true });
   await input.setInputFiles({ name: 'photo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg/>') });
-  await expect(page.getByRole('alert')).toHaveText('Choose a JPEG, PNG or WebP photo.');
-  await input.setInputFiles({ name: 'large.png', mimeType: 'image/png', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) });
-  await expect(page.getByRole('alert')).toHaveText('Choose a photo up to 5 MB.');
+  await expect(page.getByRole('alert')).toContainText('Unsupported photo format.');
+  await input.setInputFiles({ name: 'large.png', mimeType: 'image/png', buffer: Buffer.alloc(15 * 1024 * 1024 + 1) });
+  await expect(page.getByRole('alert')).toHaveText('Choose a photo up to 15 MB.');
   await input.setInputFiles({ name: 'broken.png', mimeType: 'image/png', buffer: Buffer.from('not an image') });
-  await expect(page.getByRole('alert')).toHaveText('This photo could not be opened.');
+  await expect(page.getByRole('alert')).toContainText('Unsupported photo format.');
   await choosePhoto(page);
   await page.evaluate(() => localStorage.setItem('photo-fail', 'yes'));
   await page.getByRole('button', { name: 'Save photo', exact: true }).click();
@@ -126,7 +156,7 @@ test('in-flight upload is scoped to the captured account', async ({ page }) => {
   expect(await page.evaluate(() => localStorage.getItem('qa-settings:qa-user-b'))).toBeNull();
 });
 
-test('legacy photos refresh after four minutes and fall back on image failure', async ({ page }) => {
+test('legacy photos refresh before expiry and fall back on image failure', async ({ page }) => {
   await page.clock.install();
   await page.evaluate(() => localStorage.setItem('qa-settings:qa-user-a', JSON.stringify({
     profile: { username: 'legacy_user', avatar_url: 'https://legacy.example/photo.png' },
@@ -136,7 +166,7 @@ test('legacy photos refresh after four minutes and fall back on image failure', 
   const avatar = page.getByRole('region', { name: 'Profile photo', exact: true }).getByRole('img', { name: 'Profile photo', exact: true });
   await expect(avatar.locator('img')).toBeVisible();
   const calls = await page.evaluate(() => window.__avatarSignCalls);
-  await page.clock.fastForward(4 * 60 * 1000);
+  await page.clock.fastForward(4.5 * 60 * 1000);
   await expect.poll(() => page.evaluate(() => window.__avatarSignCalls)).toBeGreaterThan(calls);
   await avatar.locator('img').dispatchEvent('error');
   await expect(avatar).toHaveText('L');

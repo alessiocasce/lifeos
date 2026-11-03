@@ -15,21 +15,23 @@ import {
   Square,
   Trash2,
   X,
+  MoreHorizontal, Settings2, Repeat2, Minus, Flag,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useState, useRef } from 'react';
 import { useLocalDay } from '../hooks/useLocalDay';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
-import { useWorkoutRestTimer } from '../hooks/useWorkoutRestTimer';
+import { TrainingSheet } from '../components/TrainingSheet';
 import { prefillWorkoutTargets } from '../utils/workoutPrefill';
 import { exerciseIdentityKey, exerciseLabel, resolveExercise } from '../utils/exerciseCatalog';
 import { ExerciseSelector } from '../components/ExerciseSelector';
 import { WorkoutSharing } from '../components/WorkoutSharing';
 import { TrainingQuickStart, TemplateAppearanceEditor, TrainingTemplateIcon } from '../components/TrainingTemplates';
 import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateAppearance';
-import { emptySetDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
+import { emptySetDraft, readExerciseDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import '../styles/trainingStart.css';
+import '../styles/trainingActive.css';
 
 const WARMUP_SET_NUMBER_OFFSET = 1000;
 
@@ -95,7 +97,15 @@ export function WorkoutTab() {
     setTemplateSetup({ ...template, ...normalizeTemplateAppearance(template), notes: template.notes || '' });
     setTrainingView('manage');
   };
-  const restTimer = useWorkoutRestTimer(authUser?.id, activeWorkoutSession);
+  const appearance = normalizeTemplateAppearance(activeWorkoutSession?.template_appearance || workoutTemplates.find(row => row.id === activeWorkoutSession?.template_id));
+  const selectExerciseDraft = (exercise, session = activeWorkoutSession) => {
+    const identity = { exercise: exercise.exercise, exercise_id: exercise.exercise_id || resolveExercise(exercise)?.id || null };
+    const previous = session?.id === activeWorkoutSession?.id && exerciseIdentityKey(setForm) === exerciseIdentityKey(identity) ? setForm
+      : readExerciseDraft(authUser?.id, session?.id, identity) || { ...emptySetDraft(), ...identity };
+    const next = prefillWorkoutTargets({ ...previous, ...identity, set_number: previous.is_warmup ? getNextWarmupSetNumber(session, identity) : getNextSetNumber(session, identity) }, getPreviousPerformance(workoutSessions, session, identity)?.sets);
+    if (!session?.ended_at) writeWorkoutDraft(authUser?.id, session?.id, next);
+    if (session?.id === activeWorkoutSession?.id) setSetForm(next);
+  };
 
   const todaysSessions = useMemo(() => workoutSessions.filter((session) => session.performed_on === today), [workoutSessions, today]);
   const previousPerformance = useMemo(
@@ -198,19 +208,13 @@ export function WorkoutTab() {
 
   const fillLoggerFromTemplateExercise = (exercise, session = activeWorkoutSession) => {
     if (!exercise) return;
-    if (session?.id !== activeWorkoutSession?.id) {
-      writeWorkoutDraft(authUser?.id, session?.id, { ...emptySetDraft(), exercise: exercise.exercise, exercise_id: resolveExercise(exercise)?.id || null });
-      return;
-    }
-    setSetForm((prev) => prefillWorkoutTargets({
-      ...prev,
-      exercise: exercise.exercise,
-      exercise_id: resolveExercise(exercise)?.id || null,
-      set_number: prev.is_warmup
-        ? getNextWarmupSetNumber(session, exercise)
-        : getNextSetNumber(session, exercise),
-    }, getPreviousPerformance(workoutSessions, session, exercise)?.sets));
+    selectExerciseDraft(exercise, session);
   };
+  useEffect(() => {
+    if (!activeWorkoutSession || setForm.exercise) return;
+    const first = buildPersistedTemplatePlan(activeWorkoutSession)?.exercises?.[0] || activeWorkoutSession.workout_sets?.[0];
+    if (first) fillLoggerFromTemplateExercise(first);
+  }, [activeWorkoutSession?.id, setForm.exercise]);
 
   const startFromTemplate = async (templateId) => {
     if (startingTemplateId || savingSession) return;
@@ -363,6 +367,7 @@ export function WorkoutTab() {
   };
 
   const removeSet = async (setId) => {
+    if (!window.confirm(t('Delete this set?'))) return;
     setDeletingSetId(setId);
     setFormError('');
     try {
@@ -375,6 +380,8 @@ export function WorkoutTab() {
   };
 
   const endSession = async (sessionId) => {
+    if (endingSessionId || savingSetRef.current) return;
+    if (isMeaningfulSetDraft(setForm, activeWorkoutSession) && !window.confirm(t('End workout and discard the unsaved set? Saved sets are kept.'))) return;
     setEndingSessionId(sessionId);
     setFormError('');
     try {
@@ -417,7 +424,7 @@ export function WorkoutTab() {
   };
 
   return (
-    <div className="grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4">
+    <div className={`grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4 ${activeWorkoutSession && trainingView === 'live' ? 'training-active' : ''}`} style={{ '--workout-accent': TEMPLATE_COLORS[appearance.color_key] }}>
       <div role="group" aria-label={t("Training view")} className="training-views col-span-12 flex gap-1 border-b border-white/10">
         {['live', 'history', 'manage'].map((view) => (
           <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => setTrainingView(view)} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
@@ -450,19 +457,26 @@ export function WorkoutTab() {
       ) : activeWorkoutSession ? (
         <>
           <ActiveWorkoutHeader
+            key={activeWorkoutSession.id}
             activeSession={activeWorkoutSession}
+            appearance={appearance}
+            onUpdate={updateWorkoutSession}
+            onDelete={() => removeSession(activeWorkoutSession.id)}
+            confirmDelete={deleteConfirmId === activeWorkoutSession.id}
+            deleting={deletingSessionId === activeWorkoutSession.id}
+            error={formError}
             ending={endingSessionId === activeWorkoutSession.id || savingSet}
             onEnd={() => endSession(activeWorkoutSession.id)}
             onReopen={() => reopenSession(activeWorkoutSession.id)}
             reopening={reopeningSessionId === activeWorkoutSession.id}
           />
-          {!activeWorkoutSession.ended_at ? <RestTimerControl rest={restTimer} /> : null}
 
-          <div className="col-span-12 grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="grid min-w-0 gap-6">
+          <div className="col-span-12 grid min-w-0 gap-4">
+            <div className="grid min-w-0 gap-4">
               <SetLogger
                 key={activeWorkoutSession.id}
                 activeSession={activeWorkoutSession}
+                plan={visibleTemplatePlan}
                 exerciseSuggestions={exerciseSuggestions}
                 formError={formError}
                 onSetSubmit={submitSet}
@@ -470,27 +484,10 @@ export function WorkoutTab() {
                 savingSet={savingSet}
                 lastSavedSet={lastSavedSet?.workout_id === activeWorkoutSession.id ? lastSavedSet : null}
                 setFormValue={setForm}
-                updateSetForm={(field, value) => setSetForm((prev) => {
-                  if (field === 'exercise_selection') {
-                    const draft = { ...prev, ...value, set_number: prev.is_warmup
-                      ? getNextWarmupSetNumber(activeWorkoutSession, value) : getNextSetNumber(activeWorkoutSession, value) };
-                    return prefillWorkoutTargets(draft, getPreviousPerformance(workoutSessions, activeWorkoutSession, value)?.sets);
-                  }
-                  if (field === 'exercise_commit') {
-                    const draft = { ...prev, exercise: value, set_number: prev.is_warmup
-                      ? getNextWarmupSetNumber(activeWorkoutSession, value) : getNextSetNumber(activeWorkoutSession, value) };
-                    return prefillWorkoutTargets(draft, getPreviousPerformance(workoutSessions, activeWorkoutSession, value)?.sets);
-                  }
-                  if (field === 'exercise') {
-                    return {
-                      ...prev,
-                      exercise: value,
-                      exercise_id: null,
-                      set_number: prev.is_warmup
-                        ? getNextWarmupSetNumber(activeWorkoutSession, value)
-                        : getNextSetNumber(activeWorkoutSession, value),
-                    };
-                  }
+                updateSetForm={(field, value) => {
+                  if (field === 'exercise_selection') { selectExerciseDraft(value); return; }
+                  if (field === 'exercise_commit' || field === 'exercise') { selectExerciseDraft({ exercise: value }); return; }
+                  setSetForm((prev) => {
                   if (field === 'is_warmup') {
                     return prefillWorkoutTargets({
                       ...prev,
@@ -501,17 +498,13 @@ export function WorkoutTab() {
                     }, previousPerformance?.sets);
                   }
                   return { ...prev, [field]: value };
-                })}
+                }); }}
               />
 
-              <TemplatePlanCard
-                activeExercise={setForm.exercise}
-                onSelectExercise={(exercise) => fillLoggerFromTemplateExercise(exercise)}
-                plan={visibleTemplatePlan}
-              />
 
               <TodaySetsLog
                 activeSession={activeWorkoutSession}
+                selectedExercise={setForm}
                 beginEdit={beginEdit}
                 deletingSetId={deletingSetId}
                 editForm={editForm}
@@ -523,42 +516,9 @@ export function WorkoutTab() {
                 setEditingSetId={setEditingSetId}
                 workoutSessionsStatus={workoutSessionsStatus}
               />
+              {!activeWorkoutSession.ended_at ? <button type="button" className="training-end" disabled={Boolean(endingSessionId) || savingSet} onClick={() => endSession(activeWorkoutSession.id)}><Flag size={22} />{t('End Workout')}</button> : <button className="training-row" onClick={() => setActiveWorkoutId(null)}>{t('New session')}</button>}
             </div>
 
-            <WorkoutSessionControl
-              formError={activeWorkoutSession.ended_at ? formError : ''}
-              activeSession={activeWorkoutSession}
-              activeWorkoutId={activeWorkoutId}
-              createWorkoutTemplate={createWorkoutTemplate}
-              createWorkoutTemplateExercise={createWorkoutTemplateExercise}
-              deleteConfirmId={deleteConfirmId}
-              deleteWorkoutTemplate={deleteWorkoutTemplate}
-              deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
-              deletingSessionId={deletingSessionId}
-              onDeleteSession={removeSession}
-              onSelectToday={selectOrStartToday}
-              onStartFromTemplate={startFromTemplate}
-              onSetupTemplate={openTemplateSetup}
-              onStartWorkout={startWorkout}
-              reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
-              savingSession={savingSession}
-              selectingToday={selectingToday}
-              sessionForm={sessionForm}
-              setActiveWorkoutId={setActiveWorkoutId}
-              setSessionForm={setSessionForm}
-              setShowCustomSession={setShowCustomSession}
-              showCustomSession={showCustomSession}
-              startingTemplateId={startingTemplateId}
-              today={today}
-              updateWorkoutTemplate={updateWorkoutTemplate}
-              updateWorkoutTemplateExercise={updateWorkoutTemplateExercise}
-              workoutSessions={workoutSessions}
-              workoutSessionsError={workoutSessionsError}
-              workoutSessionsStatus={workoutSessionsStatus}
-              workoutTemplates={workoutTemplates}
-              workoutTemplatesError={workoutTemplatesError}
-              workoutTemplatesStatus={workoutTemplatesStatus}
-            />
           </div>
         </>
       ) : (
@@ -605,36 +565,38 @@ export function WorkoutTab() {
   );
 }
 
-function ActiveWorkoutHeader({ activeSession, ending, onEnd, onReopen, reopening }) {
+function ActiveWorkoutHeader({ activeSession, appearance, ending, onReopen, reopening, onUpdate, onDelete, confirmDelete, deleting, error }) {
+  const [sheet, setSheet] = useState(null);
+  const [details, setDetails] = useState({ name: activeSession.name, performed_on: activeSession.performed_on });
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState('');
   const ended = Boolean(activeSession.ended_at);
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (ended) return undefined;
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
-  }, [ended]);
-  const elapsed = Math.max(0, Math.floor(((ended ? Date.parse(activeSession.ended_at) : now) - Date.parse(activeSession.started_at)) / 60000));
-
-  return (
-    <section className="col-span-12 mb-3">
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mb-2 flex items-center gap-2 text-xs text-zinc-400"><span className={ended ? 'status-dot offline' : 'status-dot'} />{ended ? t("Session complete") : t("Session in progress")}{Number.isFinite(elapsed) ? ' · ' + elapsed + t(" min") : ''}</p>
-          <h2 className="break-words text-xl font-semibold text-zinc-100 md:text-2xl">{activeSession.name}</h2>
-          <p className="mt-1 text-xs text-zinc-500">{formatDate(activeSession.performed_on)}</p>
-        </div>
-        <button
-          type="button"
-          onClick={ended ? onReopen : onEnd}
-          disabled={ended ? reopening : ending}
-          className="ml-auto flex min-h-11 shrink-0 items-center justify-center gap-2 rounded border border-white/15 px-3 text-xs font-semibold text-zinc-300 disabled:opacity-40"
-        >
-          {ending || reopening ? <Loader2 size={15} className="animate-spin" /> : ended ? <Plus size={15} /> : <Square size={15} />}
-          {ended ? t("Reopen") : t("End Workout")}
-        </button>
-      </div>
-    </section>
-  );
+  const save = async (event) => {
+    event.preventDefault();
+    if (busy || !details.name.trim() || !isValidDate(details.performed_on)) return;
+    setBusy(true); setFailure('');
+    try { await onUpdate(activeSession.id, { name: details.name.trim(), performed_on: details.performed_on }); setSheet(null); }
+    catch (e) { setFailure(e.message); }
+    finally { setBusy(false); }
+  };
+  return <section className="training-workout-header col-span-12">
+    <span className="training-workout-icon"><TrainingTemplateIcon iconKey={appearance.icon_key} size={36} /></span>
+    <div className="min-w-0 flex-1"><h2>{activeSession.name}</h2><p><span className={ended ? 'status-dot offline' : 'status-dot'} />{t(ended ? 'Session complete' : 'Workout in progress')}</p></div>
+    {ended ? <button className="training-row" disabled={reopening} onClick={onReopen}><Plus size={18} />{t('Reopen')}</button> : null}
+    <button type="button" className="training-options" aria-label={t('Workout options')} title={t('Workout options')} disabled={ending} onClick={() => setSheet('options')}><MoreHorizontal size={24} /></button>
+    {sheet === 'options' ? <TrainingSheet title="Workout options" onClose={() => setSheet(null)} busy={deleting}>
+      <button type="button" className="training-row" onClick={() => { setDetails({ name: activeSession.name, performed_on: activeSession.performed_on }); setSheet('edit'); }}><Pencil size={21} /><span>{t('Edit workout details')}</span><ChevronRight size={18} /></button>
+      {confirmDelete ? <p className="text-sm text-red-200">{t('This permanently deletes this workout and all its sets.')}</p> : null}
+      <button type="button" className="training-row text-red-400" disabled={deleting} onClick={onDelete}><Trash2 size={21} />{t(confirmDelete ? 'Confirm Delete Session' : 'Delete workout')}</button>
+      {error ? <p role="alert">{error}</p> : null}
+    </TrainingSheet> : null}
+    {sheet === 'edit' ? <TrainingSheet title="Edit workout details" onClose={() => setSheet(null)} busy={busy}><form className="grid gap-4" onSubmit={save}>
+      <CompactField label={t('Name')} value={details.name} onChange={name => setDetails(v => ({ ...v, name }))} />
+      <CompactField label={t('Date')} type="date" value={details.performed_on} onChange={performed_on => setDetails(v => ({ ...v, performed_on }))} />
+      {failure ? <p role="alert">{failure}</p> : null}
+      <button className="primary-button min-h-12" disabled={busy || !details.name.trim() || !isValidDate(details.performed_on)}>{t('Save changes')}</button>
+    </form></TrainingSheet> : null}
+  </section>;
 }
 
 function WorkoutSessionControl({
@@ -735,7 +697,6 @@ function WorkoutSessionControl({
             <fieldset disabled={savingSession || Boolean(startingTemplateId)} className="grid min-w-0 gap-3">
             <CompactField label={t("Name")} value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
             <CompactField label={t("Date")} type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
-            <CompactField label={t("Notes")} value={sessionForm.notes} onChange={(value) => setSessionForm((prev) => ({ ...prev, notes: value }))} />
             <button
               type="submit"
               disabled={savingSession || Boolean(startingTemplateId)}
@@ -834,8 +795,11 @@ function TemplateManager({
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [exerciseEditForm, setExerciseEditForm] = useState({ exercise: '', notes: '' });
   const setupTarget = useRef(null);
+  const [editorId, setEditorId] = useState(null);
+  const [exerciseControls, setExerciseControls] = useState(null);
   useEffect(() => {
     if (!setup) return;
+    setEditorId(setup.id || 'new');
     if (setup.id) {
       setEditingTemplateId(setup.id);
       setTemplateEditForm({ name: setup.name, notes: setup.notes, ...normalizeTemplateAppearance(setup) });
@@ -862,7 +826,8 @@ function TemplateManager({
     }
     setTemplateLoading('template-create');
     try {
-      await createWorkoutTemplate(templateForm);
+      const created = await createWorkoutTemplate(templateForm);
+      setEditorId(created.id);
       setTemplateForm({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' });
     } catch (error) {
       setTemplateError(formatTemplateManagerError(error, 'Failed to create template.'));
@@ -936,6 +901,7 @@ function TemplateManager({
     setTemplateLoading(`template-delete-${templateId}`);
     try {
       await deleteWorkoutTemplate(templateId);
+      setEditorId(null);
     } catch (error) {
       setTemplateError(formatTemplateManagerError(error, 'Failed to delete template.'));
     } finally {
@@ -968,19 +934,24 @@ function TemplateManager({
     }
   };
 
+  if (!editorId) return <section className="grid gap-3" aria-label={t('Your templates')}>
+    <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t('Your templates')}</h3><button type="button" className="training-row" onClick={() => { setTemplateForm({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' }); setEditorId('new'); }}><Plus size={18} />{t('Create template')}</button></div>
+    {!workoutTemplates.length ? <p className="text-sm text-zinc-400">{t('No templates yet.')}</p> : null}
+    {workoutTemplates.map(template => { const look = normalizeTemplateAppearance(template); return <button type="button" key={template.id} className="training-template-card" style={{ '--template-accent': TEMPLATE_COLORS[look.color_key] }} onClick={() => setEditorId(template.id)}><span className="training-template-icon"><TrainingTemplateIcon iconKey={look.icon_key} size={32} /></span><span className="training-template-copy"><span className="training-template-name">{template.name}</span><span className="training-template-detail">{template.workout_template_exercises?.length || 0}{t(' exercises')}</span></span><ChevronRight size={20} /></button>; })}
+  </section>;
   return (
     <fieldset disabled={Boolean(templateLoading)} aria-label={t("Workout template management")} className="grid min-w-0 gap-5">
+      <button type="button" className="training-row justify-start" onClick={() => { setEditorId(null); setEditingTemplateId(null); }}><ArrowLeft size={18} />{t('Your templates')}</button>
       {templateError ? <p role="alert" className="text-sm text-red-300">{t(templateError)}</p> : null}
-      <form ref={setup?.id ? null : setupTarget} aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
+      {editorId === 'new' ? <form ref={setup?.id ? null : setupTarget} aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
         <CompactField label={t("Template name")} value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
-        <CompactField label={t("Notes")} value={templateForm.notes} onChange={(value) => setTemplateForm((prev) => ({ ...prev, notes: value }))} />
-        <TemplateAppearanceEditor value={templateForm} onChange={setTemplateForm} />
+        <details><summary className="min-h-11 cursor-pointer py-3 text-sm">{t('Edit appearance')}</summary><TemplateAppearanceEditor value={templateForm} onChange={setTemplateForm} /></details>
         <button type="submit" disabled={Boolean(templateLoading)} className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50">
           {templateLoading === 'template-create' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{t("Create template")}</button>
-      </form>
+      </form> : null}
       {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? <LoadingCard label={t("Loading templates")} /> : null}
       <div className="grid min-w-0 divide-y divide-white/10">
-        {workoutTemplates.map((template) => {
+        {workoutTemplates.filter(template => template.id === editorId).map((template) => {
           const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
           const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
           return (
@@ -988,8 +959,7 @@ function TemplateManager({
               {editingTemplateId === template.id ? (
                 <div role="group" aria-label={t("Edit template")} className="grid gap-3">
                   <CompactField label={t("Template name")} value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
-                  <CompactField label={t("Notes")} value={templateEditForm.notes} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, notes: value }))} />
-                  <TemplateAppearanceEditor value={templateEditForm} onChange={setTemplateEditForm} />
+                  <details><summary className="min-h-11 cursor-pointer py-3 text-sm">{t('Edit appearance')}</summary><TemplateAppearanceEditor value={templateEditForm} onChange={setTemplateEditForm} /></details>
                   <div className="flex gap-2">
                     <IconButton icon={Check} loading={templateLoading === 'template-' + template.id} onClick={() => saveTemplate(template.id)} title={t("Save template")} tone="zinc" />
                     <IconButton icon={X} onClick={() => setEditingTemplateId(null)} title={t("Cancel template edit")} tone="zinc" />
@@ -1015,7 +985,6 @@ function TemplateManager({
                     {editingExerciseId === exercise.id ? (
                       <div className="grid gap-3">
                         <ExerciseSelector exerciseId={exerciseEditForm.exercise_id} value={exerciseEditForm.exercise} onChange={(value) => setExerciseEditForm(prev=>({...prev,exercise:value,exercise_id:null}))} onCommit={(value)=>setExerciseEditForm(prev=>({...prev,...value}))} />
-                        <CompactField label={t("Notes")} value={exerciseEditForm.notes} onChange={(value) => setExerciseEditForm((prev) => ({ ...prev, notes: value }))} />
                         <div className="flex gap-2">
                           <IconButton icon={Check} loading={templateLoading === 'exercise-' + exercise.id} onClick={() => saveExercise(exercise.id)} title={t("Save exercise")} />
                           <IconButton icon={X} onClick={() => setEditingExerciseId(null)} title={t("Cancel exercise edit")} />
@@ -1030,12 +999,13 @@ function TemplateManager({
                             {exercise.notes ? <p className="mt-1 break-words text-xs text-zinc-500">{exercise.notes}</p> : null}
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <button type="button" className="icon-button ml-auto" aria-label={t('Exercise options') + ' ' + exerciseLabel(exercise)} onClick={() => setExerciseControls(exerciseControls === exercise.id ? null : exercise.id)}><MoreHorizontal size={20} /></button>
+                        {exerciseControls === exercise.id ? <div className="flex flex-wrap gap-2">
                           <IconButton disabled={index === 0} icon={ChevronDown} className="rotate-180" loading={templateLoading === 'exercise-move-' + exercise.id} onClick={() => moveExercise(template.id, exercise.id, 'up')} title={t("Move up")} />
                           <IconButton disabled={index === exercises.length - 1} icon={ChevronDown} loading={templateLoading === 'exercise-move-' + exercise.id} onClick={() => moveExercise(template.id, exercise.id, 'down')} title={t("Move down")} />
                           <IconButton icon={Pencil} onClick={() => { setEditingExerciseId(exercise.id); setExerciseEditForm({ exercise: exercise.exercise, exercise_id: exercise.exercise_id || null, notes: exercise.notes ?? '' }); }} title={t("Edit exercise")} />
                           <IconButton icon={Trash2} loading={templateLoading === 'exercise-delete-' + exercise.id} onClick={() => removeExercise(exercise.id)} title={t("Delete exercise")} tone="red" />
-                        </div>
+                        </div> : null}
                       </div>
                     )}
                   </div>
@@ -1043,7 +1013,6 @@ function TemplateManager({
               </div>
               <div role="group" aria-label={t("Add template exercise")} className="grid min-w-0 gap-3 border-t border-white/10 pt-4">
                 <ExerciseSelector inputLabel={t('Add exercise')} exerciseId={draft.exercise_id} value={draft.exercise} onChange={(value)=>setExerciseDrafts(prev=>({...prev,[template.id]:{...draft,exercise:value,exercise_id:null}}))} onCommit={(value)=>setExerciseDrafts(prev=>({...prev,[template.id]:{...draft,...value}}))} />
-                <CompactField label={t("Notes")} value={draft.notes} onChange={(value) => setExerciseDrafts((prev) => ({ ...prev, [template.id]: { ...draft, notes: value } }))} />
                 <button type="button" onClick={() => addExercise(template)} disabled={Boolean(templateLoading)} className="flex min-h-11 items-center justify-center gap-2 rounded border border-white/15 text-sm text-zinc-200 disabled:opacity-50">
                   {templateLoading === 'exercise-create-' + template.id ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{t("Add exercise")}</button>
               </div>
@@ -1055,147 +1024,58 @@ function TemplateManager({
   );
 }
 
-function TemplatePlanCard({ activeExercise, onSelectExercise, plan }) {
-  if (!plan) return null;
 
-  return (
-    <Panel>
-      <PanelHeader
-        eyebrow={t("Template")}
-        title={t("Exercise Plan")}
-        right={<Tag tone="cyan">{plan.exercises.length}{t(" exercises")}</Tag>}
-      />
-      <div className="p-2">
-        {plan.exercises.length ? (
-          <div className="flex max-w-full gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
-            {plan.exercises.map((exercise, index) => {
-              const selected = normalizeExercise(activeExercise) === normalizeExercise(exercise);
-              return (
-                <button
-                  key={exercise.id}
-                  type="button"
-                  onClick={() => onSelectExercise(exercise)}
-                  className={`flex min-h-11 min-w-[150px] max-w-[210px] items-center gap-2 rounded border px-2.5 py-2 text-left transition md:min-w-[170px] ${
-                    selected ? 'border-cyan-400/30 bg-cyan-400/10 text-zinc-100' : 'border-white/5 bg-[#121212] text-zinc-300'
-                  }`}
-                >
-                  <span className="data-text text-xs text-zinc-500">{index + 1}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{exerciseLabel(exercise)}</span>
-                  {selected ? <Check size={14} className="shrink-0 text-cyan-300" /> : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">{t("This template has no exercises yet.")}</p>
-        )}
-      </div>
-    </Panel>
-  );
+function TargetControl({ label, value, step, onChange, optional = false }) {
+  const inputId = useId();
+  const adjust = direction => {
+    const number = Number(String(value).replace(',', '.')) || 0;
+    onChange(String(Math.max(0, Math.round((number + direction * step) * 1000) / 1000)));
+  };
+  return <div className="training-target"><label htmlFor={inputId}>{label}</label><div>
+    <button type="button" aria-label={t('Decrease') + ' ' + label} onClick={() => adjust(-1)}><Minus size={19} /></button>
+    <input id={inputId} aria-label={label} inputMode={step === 1 ? 'numeric' : 'decimal'} value={value} placeholder={optional ? '—' : '0'} onChange={e => onChange(e.target.value)} />
+    <button type="button" aria-label={t('Increase') + ' ' + label} onClick={() => adjust(1)}><Plus size={19} /></button>
+  </div></div>;
 }
 
-function SetLogger({
-  activeSession,
-  exerciseSuggestions,
-  formError,
-  onSetSubmit,
-  previousPerformance,
-  savingSet,
-  lastSavedSet,
-  setFormValue,
-  updateSetForm,
-}) {
-  const isEnded = Boolean(activeSession?.ended_at);
-  const [detailsOpen, setDetailsOpen] = useState(() => Boolean(setFormValue.rpe || setFormValue.notes));
-
-  return (
-    <section className="training-logger" aria-label={t("Workout set logger")}>
-      <div>
-        {activeSession && isEnded ? (
-          <div className="rounded-md border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-100">{t("This workout is ended. Reopen it to add more sets.")}</div>
-        ) : activeSession ? (
-          <div className="grid gap-4">
-            <form onSubmit={onSetSubmit} aria-label={t("Log workout set")}>
-              <fieldset disabled={savingSet} className="grid min-w-0 gap-5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-zinc-400">{t("Current exercise")}</span>
-                <span className="data-text text-sm text-zinc-100">{setFormValue.is_warmup ? t("Warmup") : t("Set ") + getSafeWorkingSetNumber(setFormValue.set_number)}</span>
-              </div>
-              <div className="logger-exercise">
-                <ExerciseSelector
-                  exerciseId={setFormValue.exercise_id}
-                  suggestions={exerciseSuggestions}
-                  value={setFormValue.exercise}
-                  onChange={(value) => updateSetForm('exercise', value)}
-                  onCommit={(value) => updateSetForm('exercise_selection', value)}
-                />
-              </div>
-              <PreviousPerformanceCard performance={previousPerformance} />
-              <div className="training-values grid grid-cols-2 gap-3">
-                <CompactField label={t(resolveExercise(setFormValue)?.uses_external_load === false ? 'Weight optional' : 'Weight')} inputMode="decimal" value={setFormValue.weight} suffix="kg" onChange={(value) => updateSetForm('weight', value)} />
-                <CompactField label={t("Reps")} inputMode="numeric" value={setFormValue.reps} onChange={(value) => updateSetForm('reps', value)} />
-              </div>
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-zinc-300"><input type="checkbox" className="h-5 w-5 accent-zinc-300" checked={Boolean(setFormValue.is_warmup)} onChange={(event) => updateSetForm('is_warmup', event.target.checked)} />{t("Warmup set")}</label>
-              <details className="logger-details" open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
-                <summary className="cursor-pointer py-2 text-sm text-zinc-400">{t("RPE & notes")}</summary>
-                <div className="mt-2 grid gap-3 sm:grid-cols-[140px_1fr]">
-                  <CompactField label={t("RPE optional")} inputMode="decimal" value={setFormValue.rpe} onChange={(value) => updateSetForm('rpe', value)} />
-                  <CompactField label={t("Notes optional")} value={setFormValue.notes} onChange={(value) => updateSetForm('notes', value)} />
-                </div>
-              </details>
-              <button
-                type="submit"
-                disabled={savingSet || !activeSession}
-                className="primary-button min-h-14 w-full text-base"
-              >
-                {savingSet ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                {savingSet ? t("Saving Set") : setFormValue.is_warmup ? t("Save Warmup") : t("Save Set")}
-              </button>
-              <div role="status" aria-live="polite" className="min-h-5 text-sm">
-                {formError ? <p className="text-red-300">{t(formError)}</p> : lastSavedSet ? <p className="flex items-center gap-2 text-emerald-300"><Check size={16} />{t("Saved: ")}{lastSavedSet.exercise} · {lastSavedSet.weight}{t(" kg × ")}{lastSavedSet.reps}</p> : null}
-              </div>
-              </fieldset>
-            </form>
-          </div>
-        ) : (
-          <div className="rounded-md border border-white/5 bg-black/25 p-3 text-sm text-zinc-500">{t("Select or start a workout session.")}</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function RestTimerControl({ rest }) {
-  const [open, setOpen] = useState(false);
-  const [duration, setDuration] = useState(rest.preferences.duration_seconds);
-  useEffect(() => setDuration(rest.preferences.duration_seconds), [rest.preferences.duration_seconds]);
-  const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-  return <section aria-label={t("Rest timer")} className="col-span-12 min-w-0 border-b border-white/10 pb-3">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 items-center gap-3 text-sm text-zinc-300">{t("Rest timer ")}<span className="data-text text-zinc-100">{rest.preferences.enabled ? t("On") : t("Off")} · {clock(rest.preferences.duration_seconds)}</span><ChevronDown size={14} />
-      </button>
-      {rest.timer ? <div className="flex items-center gap-3"><span role="timer" className="data-text text-lg text-zinc-100">{rest.remaining ? clock(rest.remaining) : t("Alert due")}</span><button type="button" disabled={rest.busy} onClick={() => rest.control({ operation: 'cancel' })} className="min-h-11 px-2 text-sm text-zinc-400">{t("Cancel")}</button></div> : null}
-    </div>
-    {rest.timer ? <p className="break-words text-xs text-zinc-400">{rest.timer.exercise} · {rest.timer.next_set_number ? t("next set {v0}", { v0: rest.timer.next_set_number }) : t("next set")}</p> : null}
-    {open ? <div className="mt-2 flex flex-wrap items-end gap-3">
-      <label className="flex min-h-11 items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={rest.preferences.enabled} disabled={rest.busy} onChange={(event) => rest.control({ operation: 'configure', enabled: event.target.checked, duration_seconds: rest.preferences.duration_seconds })} />{t("WhatsApp rest alerts")}</label>
-      <label className="grid gap-1 text-xs text-zinc-400">{t("Seconds")}<input aria-label={t("Rest duration seconds")} className="min-h-11 w-24 rounded border border-white/15 bg-[#14171b] px-3 text-base text-zinc-100" type="number" min="15" max="900" value={duration} onChange={(event) => setDuration(event.target.value)} /></label>
-      <button type="button" disabled={rest.busy || !Number.isInteger(Number(duration)) || Number(duration) < 15 || Number(duration) > 900} onClick={() => rest.control({ operation: 'configure', enabled: rest.preferences.enabled, duration_seconds: Number(duration) })} className="min-h-11 px-3 text-sm text-zinc-200">{t("Save duration")}</button>
-    </div> : null}
-    {rest.error ? <div role="alert" className="flex items-center gap-2 text-sm text-amber-300">{t(rest.error)}<button type="button" className="min-h-11 px-2" onClick={rest.refresh}>{t("Retry")}</button></div> : null}
+function SetLogger({ activeSession, plan, exerciseSuggestions, formError, onSetSubmit, previousPerformance, savingSet, lastSavedSet, setFormValue, updateSetForm }) {
+  const [options, setOptions] = useState(false);
+  const ended = Boolean(activeSession?.ended_at);
+  if (ended) return <div className="grid gap-3"><ExerciseSelector compact templatePlan={plan?.exercises || [...new Map((activeSession.workout_sets || []).map(set => [normalizeExercise(set), set])).values()]} exerciseId={setFormValue.exercise_id} value={setFormValue.exercise} onCommit={value => updateSetForm('exercise_selection', value)} /><p className="text-sm text-zinc-400">{t('This workout is ended. Reopen it to add more sets.')}</p></div>;
+  return <section className="training-logger" aria-label={t('Workout set logger')}>
+    <form onSubmit={onSetSubmit} aria-label={t('Log workout set')}>
+      <fieldset disabled={savingSet} className="grid min-w-0 gap-3">
+        <ExerciseSelector compact templatePlan={plan?.exercises} exerciseId={setFormValue.exercise_id} suggestions={exerciseSuggestions} value={setFormValue.exercise}
+          onCommit={value => updateSetForm('exercise_selection', value)} />
+        <PreviousPerformanceCard key={exerciseIdentityKey(setFormValue)} performance={previousPerformance} />
+        <div className="grid grid-cols-2 gap-3">
+          <TargetControl label={t(resolveExercise(setFormValue)?.uses_external_load === false ? 'Weight optional' : 'Weight (kg)')} value={setFormValue.weight} step={2.5} onChange={v => updateSetForm('weight', v)} />
+          <TargetControl label={t('Reps')} value={setFormValue.reps} step={1} onChange={v => updateSetForm('reps', v)} />
+        </div>
+        <button type="button" className="training-row training-surface" onClick={() => setOptions(true)}><Settings2 size={23} />{t('More options')}</button>
+        <button type="submit" disabled={savingSet || !setFormValue.exercise} className="training-save"><Plus size={25} />{t(savingSet ? 'Saving Set' : 'Save Set')}</button>
+        {formError ? <p role="alert" className="text-sm text-red-300">{t(formError)}</p> : null}
+        {lastSavedSet ? <p role="status" className="text-xs text-zinc-400">{t('Saved: ')}{exerciseLabel(lastSavedSet)} · {lastSavedSet.weight}{t(' kg × ')}{lastSavedSet.reps}</p> : null}
+      </fieldset>
+    </form>
+    {options ? <TrainingSheet title="More options" onClose={() => setOptions(false)} busy={savingSet}>
+      <fieldset disabled={savingSet} className="grid gap-4">
+        <label className="training-row"><input type="checkbox" className="h-5 w-5" checked={setFormValue.is_warmup} onChange={e => updateSetForm('is_warmup', e.target.checked)} />{t('Warmup set')}</label>
+        <div><span className="mb-2 block text-sm">RPE</span><div className="training-rpe">
+          {['', '6', '7', '7.5', '8', '8.5', '9', '9.5', '10'].map(v => <button type="button" key={v} aria-label={v ? 'RPE ' + v : t('None')} aria-pressed={setFormValue.rpe === v} onClick={() => updateSetForm('rpe', v === setFormValue.rpe ? '' : v)}>{v || t('None')}</button>)}
+        </div></div>
+        <CompactField label={t('RPE optional')} inputMode="decimal" value={setFormValue.rpe} onChange={v => updateSetForm('rpe', v)} />
+        <CompactField label={t('Set notes')} value={setFormValue.notes} onChange={v => updateSetForm('notes', v)} />
+      </fieldset>
+    </TrainingSheet> : null}
   </section>;
 }
 
 function PreviousPerformanceCard({ performance }) {
-  if (!performance) return null;
-
-  return (
-    <section aria-label={t("Last time")} className="min-w-0 border-l-2 border-zinc-600 pl-3 text-sm">
-      <div className="flex flex-wrap justify-between gap-2 text-xs text-zinc-400"><span>{t("LAST TIME")}</span><time>{formatDate(performance.date)}</time></div>
-      <p className="my-2 break-words text-zinc-300">{performance.sessionName}</p>
-      <HistoricalSets sets={performance.sets} />
-    </section>
-  );
+  return <details className="training-last training-surface" role="region" aria-label={t('Last time')}>
+    <summary><History size={22} /><span>{t('Last time')}</span><time>{performance ? formatDate(performance.date) : '—'}</time><ChevronDown size={19} /></summary>
+    <div className="px-4 pb-4">{performance ? <><p className="mb-3 text-xs text-zinc-400">{performance.sessionName}</p><HistoricalSets sets={performance.sets} /></> : <p className="text-sm text-zinc-400">{t('No previous sets recorded')}</p>}</div>
+  </details>;
 }
 
 function HistoricalSets({ sets }) {
@@ -1243,6 +1123,7 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
 
 function TodaySetsLog({
   activeSession,
+  selectedExercise,
   beginEdit,
   deletingSetId,
   editForm,
@@ -1254,13 +1135,13 @@ function TodaySetsLog({
   setEditingSetId,
   workoutSessionsStatus,
 }) {
-  const activeSets = activeSession?.workout_sets ?? [];
+  const activeSets = (activeSession?.workout_sets ?? []).filter(set => normalizeExercise(set) === normalizeExercise(selectedExercise));
   const groupedActiveSets = groupSetsByExercise(activeSets);
   const sessionsInitialLoading = workoutSessionsStatus === 'loading' && !activeSession;
 
   return (
-    <Panel>
-      <PanelHeader eyebrow={t("Today")} title={t("Logged Sets")} right={<History size={16} className="text-cyan-300" />} />
+    <section className="training-logged training-surface" aria-label={t('Sets logged')}>
+      <header><h2>{t('Sets logged')}</h2><span>{activeSets.length} {t('sets')}</span></header>
       <div className="space-y-3 p-3">
         {sessionsInitialLoading ? (
           <LoadingCard label={t("Loading workout sessions")} />
@@ -1291,7 +1172,7 @@ function TodaySetsLog({
         )}
 
       </div>
-    </Panel>
+    </section>
   );
 }
 
@@ -1312,11 +1193,8 @@ function ExerciseSetGroup({
   const isEnded = Boolean(session?.ended_at);
 
   return (
-    <div className="rounded-md border border-white/5 bg-black/25">
-      <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
-        <p className="text-sm font-semibold text-zinc-100">{exerciseLabel(sets[0])}</p>
-      </div>
-      <div className="grid gap-1 p-2">
+    <div>
+      <div className="grid divide-y divide-white/10">
         {sets.map((set) => {
           if (editingSetId === set.id) {
             return (
@@ -1338,18 +1216,16 @@ function ExerciseSetGroup({
           return (
             <div
               key={set.id}
-              className={`grid grid-cols-[48px_minmax(0,1fr)_auto] items-center gap-2 rounded border px-2 py-2 sm:grid-cols-[58px_minmax(0,1fr)_auto] ${
-                isWarmupSet(set) ? 'border-amber-400/10 bg-amber-400/[0.04]' : 'border-white/5 bg-[#121212]'
-              }`}
+              className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 py-2"
             >
-              <span className={`data-text text-sm font-bold ${isWarmupSet(set) ? 'text-amber-300' : 'text-cyan-300'}`}>
-                {formatSetLabel(set, sets)}
+              <span className="training-set-index">
+                {isWarmupSet(set) ? formatSetLabel(set, sets) : getSafeWorkingSetNumber(set.set_number)}
               </span>
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
-                  <p className="truncate text-xs font-medium text-zinc-100">{formatNumber(set.weight)}{t("kg x ")}{set.reps}</p>
+                  <p className="text-sm font-semibold text-zinc-100">{formatNumber(set.weight)}{t(" kg × ")}{set.reps}</p>
                 </div>
-                <p className="data-text text-[10px] text-zinc-500">{t("RPE ")}{formatRpe(set.rpe)}</p>
+                {set.rpe != null ? <p className="data-text text-[10px] text-zinc-400">{t("RPE ")}{formatRpe(set.rpe)}</p> : null}
                 {set.notes ? <p className="mt-0.5 break-words text-[11px] text-zinc-500">{set.notes}</p> : null}
               </div>
               <div className="flex gap-1">

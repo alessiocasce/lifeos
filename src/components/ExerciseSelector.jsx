@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Search, X } from 'lucide-react';
+import { Check, ChevronDown, Search, X, Dumbbell, Repeat2, Plus } from 'lucide-react';
 import { getLanguage, t } from '../i18n';
 import { exerciseCatalog, exerciseLabel, resolveExercise, searchExercises } from '../utils/exerciseCatalog';
 
@@ -8,11 +8,12 @@ const equipmentLabels = { barbell:'Barbell',dumbbell:'Dumbbell',smith:'Smith mac
   bodyweight:'Bodyweight',assisted_machine:'Assisted machine',ez_bar:'EZ bar',landmine:'Landmine',plate:'Plate',
   kettlebell:'Kettlebell',trap_bar:'Trap bar',sled:'Sled',rope:'Rope',boxing_bag:'Boxing bag',unspecified:'Unspecified' };
 
-export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions=[], language=getLanguage(), inputLabel=t('Exercise') }) {
+export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions=[], language=getLanguage(), inputLabel=t('Exercise'), templatePlan=null, compact=false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [custom, setCustom] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
   const trigger = useRef(null);
   const dialog = useRef(null);
   const search = useRef(null);
@@ -28,7 +29,8 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     dialog.current.showModal();
-    search.current.focus();
+    if (compact) dialog.current.style.setProperty('--workout-accent', getComputedStyle(trigger.current).getPropertyValue('--workout-accent') || '#94a3b8');
+    (search.current || dialog.current.querySelector('button'))?.focus();
     return () => { document.body.style.overflow = previous; };
   },[open]);
 
@@ -38,7 +40,7 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
     queueMicrotask(() => trigger.current?.focus());
   };
   const commit = exercise => { onCommit(exercise); close(); };
-  const begin = () => { setQuery(''); setCategory(''); setCustom(false); setOpen(true); };
+  const begin = () => { setQuery(''); setCategory(''); setCustom(false); setShowPlan(Boolean(templatePlan?.length)); setOpen(true); };
   const navigate = event => {
     if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
     const buttons = [...list.current.querySelectorAll('[data-exercise-option]')];
@@ -59,21 +61,22 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
   </button>;
 
   return <div className="min-w-0">
-    <div aria-hidden={open || undefined} className="flex min-h-12 min-w-0 items-center gap-2 border-b border-white/15">
-      <Search size={17} className="shrink-0 text-zinc-400" />
+    <div aria-hidden={open || undefined} className={compact ? 'training-exercise-row' : 'flex min-h-12 min-w-0 items-center gap-2 border-b border-white/15'}>
+      {compact ? <Dumbbell size={25} /> : <Search size={17} className="shrink-0 text-zinc-400" />}
       <input ref={trigger} readOnly aria-label={inputLabel} aria-haspopup="dialog" aria-expanded={open}
         value={exerciseLabel({exercise:value,exercise_id:exerciseId},language)} placeholder={t('Choose exercise')}
         className="h-12 min-w-0 flex-1 cursor-pointer bg-transparent text-base font-medium text-zinc-100 outline-none focus-visible:ring-1 focus-visible:ring-zinc-400"
         onClick={begin} onKeyDown={e => { if (['Enter',' ','ArrowDown'].includes(e.key)) { e.preventDefault(); begin(); } }} />
-      <button type="button" onClick={begin} title={t('Choose exercise')} aria-label={t('Choose exercise')} className="icon-button"><ChevronDown size={18} /></button>
+      <button type="button" onClick={begin} title={t('Choose exercise')} aria-label={t('Choose exercise')} className="icon-button">{compact ? <Repeat2 size={22} /> : <ChevronDown size={18} />}</button>
     </div>
     {open && createPortal(<dialog ref={dialog} aria-modal="true" aria-label={t('Choose exercise')}
       onCancel={e => {e.preventDefault();close();}}
-      className="fixed inset-x-0 bottom-0 top-auto m-0 flex h-[85dvh] max-h-[85dvh] w-full max-w-none flex-col overflow-hidden rounded-t-lg border border-white/15 bg-[#111418] p-0 text-zinc-100 shadow-2xl backdrop:bg-black/70 sm:inset-0 sm:m-auto sm:h-[min(760px,85dvh)] sm:max-w-xl sm:rounded-lg">
+      className={showPlan ? 'training-sheet' : 'fixed inset-x-0 bottom-0 top-auto m-0 flex h-[85dvh] max-h-[85dvh] w-full max-w-none flex-col overflow-hidden rounded-t-lg border border-white/15 bg-[#111418] p-0 text-zinc-100 shadow-2xl backdrop:bg-black/70 sm:inset-0 sm:m-auto sm:h-[min(760px,85dvh)] sm:max-w-xl sm:rounded-lg'}>
       <header className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
         <h2 className="text-base font-semibold">{t('Choose exercise')}</h2>
         <button type="button" onClick={close} aria-label={t('Close')} title={t('Close')} className="icon-button"><X size={20} /></button>
       </header>
+      {showPlan ? <div className="grid" role="group" aria-label={t('Workout exercises')}>{templatePlan.map((exercise,index) => <button key={exercise.exercise_id || exercise.exercise} type="button" className="training-row" aria-pressed={exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value} onClick={() => commit({ exercise: exercise.exercise, exercise_id: exercise.exercise_id || null })}><span className="training-set-index">{index+1}</span><span className="min-w-0 flex-1 break-words text-left">{exerciseLabel(exercise,language)}</span>{(exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value) ? <Check size={19} /> : null}</button>)}<button type="button" className="training-row mt-4 justify-center rounded-lg border border-white/30" onClick={() => setShowPlan(false)}><Plus size={20} />{t('Choose another exercise')}</button></div> : <>
       <div className="shrink-0 space-y-3 border-b border-white/10 p-4">
         <label className="flex min-h-12 items-center gap-3 rounded border border-white/20 bg-black/20 px-3"><Search size={18} className="shrink-0 text-zinc-400" />
           <input ref={search} aria-label={inputLabel} value={query} onChange={e => setQuery(e.target.value)}
@@ -96,6 +99,7 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
       <footer className="shrink-0 border-t border-white/10 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
         <button type="button" onClick={() => {setCustom(!custom);setQuery('');search.current?.focus();}} className="min-h-12 w-full rounded border border-white/15 text-sm font-medium">{t(custom ? 'Choose from catalog' : 'Other exercise')}</button>
       </footer>
+      </>}
     </dialog>,document.body)}
   </div>;
 }

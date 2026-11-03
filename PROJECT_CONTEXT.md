@@ -1,5 +1,21 @@
 # LifeOS Project Context
 
+## Active Training / Identity / Media (2026-11-03)
+
+The approved active-session reference now governs logging: template-colored header,
+exercise sheet, collapsed Last time, weight/reps steppers, More options sheet,
+selected-exercise sets and separate End workout. Manage is a library plus one editor.
+Only set notes remain in routine inputs; historical notes are untouched. Draft v1
+stores exercise-specific banks to prevent weight/reps/RPE/warmup leakage.
+Rest timers are retired end-to-end by the forward `training_active_identity_media`
+migration, including queued/claimed rest rows; unrelated outbox rules are unchanged.
+New workouts capture nullable appearance metadata without altering plan snapshots.
+Avatar URLs are viewer-scoped/deduplicated in memory; photos use content validation,
+15MB/60MP limits and 512px WebP/JPEG output. Private bucket/ownership remain.
+Signup requires username; confirmed-user finalization and mandatory missing-profile
+onboarding preserve genuine email verification and case-insensitive uniqueness.
+See docs/TRAINING_ACTIVE_RELEASE.md for the exact migration, QA and limitations.
+
 ## Approved Training visual reference (2026-11-02)
 
 The supplied iPhone image supersedes the earlier prose-only grid interpretation.

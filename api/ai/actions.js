@@ -12,10 +12,9 @@ import { getActionUserId, requireConfiguredUserAccess } from '../_utils/supabase
 import { listAiActionLogs } from '../_utils/lifeosTools.js';
 import { readProjectWatch, readCompanionContext, mutateCompanionApp } from '../_utils/companionApp.js';
 import { loadMonitorPermissions } from '../_utils/brainMonitorPermissions.js';
-import { controlWorkoutRestTimer } from '../_utils/workoutRestTimer.js';
 
 export function createActionsHandler({ requireUser = requireConfiguredUserAccess, readWatch = readProjectWatch,
-  mutate = mutateCompanionApp, permissions = loadMonitorPermissions, readContext = readCompanionContext, restTimer = controlWorkoutRestTimer } = {}) {
+  mutate = mutateCompanionApp, permissions = loadMonitorPermissions, readContext = readCompanionContext } = {}) {
   return async function handler(req, res) {
     const context = createRequestContext(req, res);
     res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
@@ -31,9 +30,10 @@ export function createActionsHandler({ requireUser = requireConfiguredUserAccess
         let result;
         if (req.method === 'POST') {
           const body = await readJsonBody(req);
-          result = body.action === 'workout_rest_timer' ? await restTimer({ userId: user.id, body }) : await mutate({ userId: user.id, body });
+          if (body.action === 'workout_rest_timer') throw new HttpError(410, 'Workout rest timer has been removed.');
+          result = await mutate({ userId: user.id, body });
         }
-        else if (url.searchParams.get('view') === 'workout_rest_timer') result = await restTimer({ userId: user.id });
+        else if (url.searchParams.get('view') === 'workout_rest_timer') throw new HttpError(410, 'Workout rest timer has been removed.');
         else if (url.searchParams.get('view') === 'project_watch') result = await readWatch({ userId: user.id, projectId: url.searchParams.get('project_id') });
         else if (url.searchParams.get('view') === 'companion_permissions') result = { permissions: await permissions({ userId: user.id }) };
         else if (url.searchParams.get('view') === 'companion_context') result = await readContext({ userId: user.id });

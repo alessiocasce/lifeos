@@ -1,5 +1,10 @@
 # Training, Username Profiles and Navigation
 
+The 3 November successor is TRAINING_ACTIVE_RELEASE.md. It retires rest timers,
+introduces a focused template editor, exercise draft banks, avatar URL caching,
+15MB content-aware source photos/JPEG fallback and confirmed username onboarding.
+The older rollout below is historical; do not replay its applied migrations.
+
 ## Runtime Contract
 
 - Training has Live / History / Manage. Suggested Quick start cards are setup

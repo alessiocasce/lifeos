@@ -1,5 +1,14 @@
 # LifeOS Workout QA
 
+## Active Training Reference (3 November)
+
+See TRAINING_ACTIVE_RELEASE.md. Verify user-specific accent, session-only details,
+confirmed deletion, separate End, selected-exercise draft isolation across reload,
+template-plan/catalog sheets, collapsible full Last time, steppers, fractional/clear
+RPE, optional set notes and selected-exercise sets. Manage starts with the library,
+not every editor. Historical notes remain; rest UI/scheduling are retired, not hidden.
+Use training-active.spec.js plus the adapted focused CRUD/History/continuity cases.
+
 ## Persisted Templates and Icon Artwork
 
 - Live shows exactly the saved templates in loaded order: verify zero, one, three

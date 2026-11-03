@@ -1,0 +1,40 @@
+.training-active { max-width: 720px; --workout-accent: #94a3b8; }
+.training-active .training-logger { border-top: 0; padding-top: 0; }
+.training-active .training-views > button[aria-pressed='true'] { border-color: var(--workout-accent); }
+.training-workout-header { display: flex; align-items: center; gap: 14px; margin: 10px 0 12px; }
+.training-workout-icon { display: grid; place-items: center; flex-shrink: 0; width: 50px; height: 54px; border-radius: 13px; color: var(--workout-accent); background: color-mix(in srgb,var(--workout-accent) 18%,#090c11); }
+.training-workout-header h2 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
+.training-workout-header p { display: flex; align-items: center; gap: 8px; margin-top: 7px; color: #aeb8cf; font-size: 13px; }
+.training-options { display: grid; place-items: center; width: 42px; height: 44px; flex-shrink: 0; border: 1px solid #38414e; border-radius: 12px; }
+.training-surface,.training-exercise-row { border: 1px solid #353e4b; border-radius: 13px; background: linear-gradient(115deg,#0e1219,#090c10); }
+.training-exercise-row { display: flex; align-items: center; gap: 10px; padding: 4px 12px; min-height: 52px; color: #bac4dc; }
+.training-exercise-row input { font-size: 15px; font-weight: 650; }
+.training-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 12px; font-size: 15px; font-weight: 600; }
+.training-row > span:last-child:not(:first-child) { flex: 1; }
+.training-row[aria-pressed='true'],.training-rpe button[aria-pressed='true'] { color: #f6f4ff; background: color-mix(in srgb,var(--workout-accent,#94a3b8) 27%,#101219); border: 1px solid var(--workout-accent,#94a3b8); border-radius: 9px; }
+.training-last summary { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 14px; cursor: pointer; list-style: none; font-weight: 650; }
+.training-last summary::-webkit-details-marker { display: none; }
+.training-last summary time { margin-left: auto; color: #aeb8cf; font-size: 12px; font-weight: 400; }
+.training-last[open] summary > svg:last-child { transform: rotate(180deg); }
+.training-target { display: grid; gap: 10px; min-width: 0; padding: 12px 10px; text-align: center; border: 1px solid #353e4b; border-radius: 14px; background: linear-gradient(130deg,#0e1219,#090c10); }
+.training-target > label { color: #aeb8cf; font-size: 13px; }
+.training-target > div { display: grid; grid-template-columns: 32px minmax(0,1fr) 32px; align-items: center; gap: 3px; }
+.training-target input { width: 100%; min-width: 0; min-height: 44px; background: transparent; font-size: 32px; font-weight: 700; text-align: center; outline-offset: -2px; }
+.training-target button { display: grid; place-items: center; height: 36px; border: 1px solid #343945; border-radius: 9px; background: #1b1e26; }
+.training-save,.training-end { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 52px; border-radius: 13px; font-size: 18px; font-weight: 700; }
+.training-save { margin-top: 4px; color: #080810; background: #e7e7fa; border: 1px solid #f4f3ff; }
+.training-end { margin: 12px 0; min-height: 56px; border: 1px solid var(--workout-accent); background: color-mix(in srgb,var(--workout-accent) 32%,#111019); color: #fff; }
+.training-logged { overflow: hidden; }
+.training-logged > header { display: flex; align-items: center; justify-content: space-between; margin: 0 14px; padding: 13px 0; border-bottom: 1px solid #303743; }
+.training-logged h2 { font-size: 16px; font-weight: 650; }
+.training-logged > header > span { color: #aeb8cf; font-size: 13px; }
+.training-set-index { display: grid; place-items: center; min-width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(130deg,#292c35,#15181e); border: 1px solid #343945; font-size: 14px; }
+.training-sheet { position: fixed; inset: auto 0 0; margin: 0; padding: 12px 20px max(20px,env(safe-area-inset-bottom)); width: 100%; max-width: none; max-height: 85dvh; overflow-y: auto; border: 1px solid #525968; border-radius: 22px 22px 0 0; background: linear-gradient(130deg,#11141b,#0b0e13); color: #f4f4f8; box-shadow: 0 -12px 50px #0007; }
+.training-sheet::backdrop { background: #0009; }
+.training-sheet-handle { width: 32px; height: 4px; background: #656975; border-radius: 4px; margin: 0 auto 10px; }
+.training-sheet > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.training-sheet h2 { font-size: 20px; font-weight: 700; }
+.training-rpe { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 5px; }
+.training-rpe button { min-height: 40px; border: 1px solid #303743; border-radius: 8px; }
+.training-save:disabled,.training-end:disabled { opacity: .45; }
+@media(min-width:768px) { .training-sheet { inset: 0; margin: auto; width: min(520px,90vw); height: fit-content; border-radius: 20px; } }

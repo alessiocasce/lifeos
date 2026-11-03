@@ -25,7 +25,10 @@ export const authApi = {
     if (localStorage.getItem('qa-auth-fail')) throw new Error('Test sign-in failed. Try again.');
     window.__qaSignIn('qa-user-b'); return { session: { user: user() } };
   },
-  signUp: async () => {
+  signUp: async ({ username }) => {
+    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(username || '')) throw new Error('Use a 3–24 character username starting with a letter.');
+    if (!await identityApi.available(username)) throw new Error('Username is already taken.');
+    localStorage.setItem('qa-pending-username', username);
     localStorage.setItem('qa-auth-attempts', String(Number(localStorage.getItem('qa-auth-attempts') || 0) + 1));
     if (localStorage.getItem('qa-auth-fail')) throw new Error('Test account creation failed. Try again.');
     return { session: null, user: { id: 'qa-unconfirmed' } };
@@ -44,14 +47,12 @@ export const workoutApi = {
     write([row, ...read()]); return row;
   },
   update: async (id, patch) => {
-    if (patch.ended_at) localStorage.removeItem('qa-rest-timer');
     const rows = read().map((row) => row.id === id ? { ...row, ...patch } : row);
     write(rows); return rows.find((row) => row.id === id);
   },
   delete: async (id) => {
     await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-session-delete-delay') || 0)));
     if (localStorage.getItem('qa-session-delete-fail')) throw new Error('Workout session was not deleted.');
-    localStorage.removeItem('qa-rest-timer');
     write(read().filter((row) => row.id !== id));
   },
 };
@@ -59,13 +60,6 @@ export const workoutSetApi = {
   create: async (payload) => {
     if (localStorage.getItem('qa-fail-save')) throw new Error('Test connection lost. Set not saved.');
     const row = { ...payload, id: crypto.randomUUID(), user_id: user().id };
-    const preferences = JSON.parse(localStorage.getItem('qa-rest-preferences') || 'null');
-    if (preferences?.enabled) {
-      const scheduled = Date.now() + preferences.duration_seconds * 1000;
-      localStorage.setItem('qa-rest-timer', JSON.stringify({ id: row.id, workout_id: row.workout_id, exercise: row.exercise,
-        next_set_number: row.is_warmup ? null : row.set_number + 1,
-        scheduled_for: new Date(scheduled).toISOString(), expires_at: new Date(scheduled + 300000).toISOString() }));
-    }
     write(read().map((session) => session.id === row.workout_id ? { ...session, workout_sets: [...session.workout_sets, row] } : session));
     return row;
   },
@@ -349,6 +343,16 @@ export const userSettingsApi = {
   async save(profile, preferences) { const next = { profile, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return next; },
   async savePreferences(preferences) { const next = { ...await this.read(), preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return preferences; },
 };
+export const identityApi = {
+  available: async username => !['taken','qa_user'].includes(username.toLowerCase()),
+  async complete(username) {
+    const candidate = username || user()?.user_metadata?.requested_username;
+    if (!/^[a-z][a-z0-9_]{2,23}$/i.test(candidate || '')) throw new Error('Choose an available username to complete your profile.');
+    if (!await this.available(candidate)) throw new Error('Username is already taken.');
+    const current = fixtureSettings(user().id);
+    localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify({ ...current, profile: { user_id: user().id, username: candidate } }));
+  },
+};
 
 export const profilePhotoApi = {
   async signedUrl(profile) { return profile?.avatar_url || null; },
@@ -368,14 +372,6 @@ export const profilePhotoApi = {
   },
 };
 
-export const workoutRestApi = {
-  status: async () => ({ preferences: JSON.parse(localStorage.getItem('qa-rest-preferences') || '{"enabled":false,"duration_seconds":120}'), timer: JSON.parse(localStorage.getItem('qa-rest-timer') || 'null') }),
-  control: async (body) => {
-    if (body.operation === 'configure') localStorage.setItem('qa-rest-preferences', JSON.stringify({ enabled: body.enabled, duration_seconds: body.duration_seconds }));
-    if (body.operation === 'cancel' || (body.operation === 'configure' && !body.enabled)) localStorage.removeItem('qa-rest-timer');
-    return workoutRestApi.status();
-  },
-};
 
 export const companionAppApi = {
   context: async () => {
