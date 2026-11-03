@@ -24,14 +24,15 @@ proves the failure mechanism with a fixed probe before measuring the portaled do
 This is structural hardening, not proof of the physical iPhone defect's cause.
 
 Manage's old exercise display used a single-column grid for label, options button
-and expanded actions, forcing the options button below the name. Parent owns the
-compact flex-row correction and all WorkoutTab edits; this change does not edit
-WorkoutTab, App, PullToRefresh, shared geometry or the historical editor.
+and expanded actions, forcing the options button below the name. `WorkoutTab.jsx`
+now keeps each exercise's order, name and options control on one compact row.
+The History editor also lives in `WorkoutTab.jsx`; no App or PullToRefresh changes
+were needed.
 
 ## Automated checks
 
 ```sh
-npx playwright test tests/ui/dock-long-scroll.spec.js tests/ui/shell-continuity.spec.js tests/ui/training-navigation.spec.js
+npm run test:ui -- tests/ui/dock-long-scroll.spec.js tests/ui/training-history.spec.js tests/ui/workout-continuity.spec.js tests/ui/training-templates.spec.js
 ```
 
 Repeat the focused spec with `LIFEOS_QA_BROWSER=webkit`. Fixtures and network
@@ -50,11 +51,13 @@ blocking isolate all tests from production. The new spec measures:
 
 ## Physical limitations
 
-Desktop Chromium/WebKit and resized windows do not reproduce Safari toolbar
+This change is committed and deployed. Desktop Chromium/WebKit and resized windows do not reproduce Safari toolbar
 expansion/collapse, cold installed-PWA launch, real safe-area/home-indicator
 insets, keyboard animation, pinch zoom or iOS compositor behavior. Existing tests
 simulate the keyboard viewport boundary; they do not open a physical keyboard.
 On a real iPhone repeat cold launch, long scrolling, toolbar collapse/expansion,
 tab switching, keyboard open/dismiss and standalone resume. Record dock bottom,
 visualViewport bottom and height before assigning a browser-specific root cause.
-No physical iPhone acceptance, deployment or commit is claimed.
+No physical iPhone acceptance is claimed. The automated geometry checks validate
+the rendered viewport behavior in browser engines and do not establish how iOS
+Safari or a standalone PWA handles its native browser chrome.
