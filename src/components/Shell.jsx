@@ -73,9 +73,8 @@ export function Shell({ children }) {
   }, [moreOpen]);
 
   const navigate = (tab) => {
-    if (!document.dispatchEvent(new Event('lifeos:before-navigate', { cancelable: true }))) return;
+    if (setActiveTab(tab) === false) return;
     setMoreOpen(false);
-    setActiveTab(tab);
     window.scrollTo({ top: 0 });
   };
   const handleSignOut = async () => {

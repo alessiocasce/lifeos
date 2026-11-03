@@ -34,5 +34,9 @@
   {
     "file": "20261103023105_training_active_identity_media.sql",
     "sha256": "51ae9f1cd40190615ab18627437c5f1ab7e5388bcbf51da98aa008bc0506e620"
+  },
+  {
+    "file": "20261103154140_workout_history_atomic_delete.sql",
+    "sha256": "bb836172e507fba9b54c75e1924c559046092f7949c05b25423e9258013459ce"
   }
 ]

@@ -146,7 +146,7 @@ test('template save locks dismissal and failed exercise edit retains corrections
   await expect(page.getByRole('button', { name: 'Manage', exact: true })).toBeDisabled();
   await expect(exercise.getByLabel('Exercise', { exact: true })).toBeDisabled();
   await expect(manager(page).getByRole('alert')).toContainText('not saved');
-  await expect(exercise.getByLabel('Exercise', { exact: true })).toHaveValue('Dumbbell Curl');
+  await expect(exercise.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Dumbbell Curl');
   await expect(page.getByRole('button', { name: 'Manage', exact: true })).toBeEnabled();
   await page.evaluate(() => { localStorage.removeItem('qa-template-delay'); localStorage.removeItem('qa-template-fail'); });
   await exercise.getByRole('button', { name: 'Save exercise' }).click();
@@ -165,7 +165,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     await page.evaluate(() => scrollTo(0, 0));
     await page.screenshot({ path: info.outputPath('training-templates.png'), fullPage: true });
     await page.getByRole('button', { name: /Strength A/ }).click();
-    const add = template(page, 'Strength A').getByRole('button', { name: 'Add exercise', exact: true });
+    const add = template(page, 'Strength A').getByRole('button', { name: 'Add exercise', exact: true }).filter({ hasNot: page.locator('span') });
     await add.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await page.screenshot({ path: info.outputPath('training-template-controls.png') });
     if (width < 768) {
@@ -176,6 +176,13 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const bounds = await template(page, 'Strength A').getByRole('button', { name: /Exercise options/ }).first().boundingBox();
     expect(bounds.width).toBeGreaterThanOrEqual(44); expect(bounds.height).toBeGreaterThanOrEqual(44);
+    const firstExercise = template(page, 'Strength A').getByRole('group', { name: /^Template exercise/ }).first();
+    const rowBounds = await firstExercise.boundingBox();
+    expect(rowBounds.height).toBeLessThanOrEqual(60);
+    expect(bounds.y).toBeGreaterThanOrEqual(rowBounds.y);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(rowBounds.y + rowBounds.height);
+    await expect(firstExercise.locator('.training-exercise-number')).toHaveText('01');
+    await page.screenshot({ path: info.outputPath('compact-manage.png') });
     expect(errors).toEqual([]);
   });
 }

@@ -65,6 +65,10 @@ export function LifeOSProvider({ children }) {
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [workoutSessionsStatus, setWorkoutSessionsStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [workoutSessionsError, setWorkoutSessionsError] = useState('');
+  const [workoutHistory, setWorkoutHistory] = useState({ hasMore: false, loading: false, error: '' });
+  const historyPaging = useRef({ cursor: null, pages: 1, generation: 0, loading: false, hasMore: false });
+  const pinnedHistoryWorkout = useRef(null);
+  const retainHistoryWorkout = useCallback(id => { pinnedHistoryWorkout.current = id; }, []);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
   const [workoutTemplatesStatus, setWorkoutTemplatesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [workoutTemplatesError, setWorkoutTemplatesError] = useState('');
@@ -126,10 +130,13 @@ export function LifeOSProvider({ children }) {
   const activeWorkoutIdRef = useRef(activeWorkoutId);
   activeWorkoutIdRef.current = activeWorkoutId;
   const userNavigatedRef = useRef(false);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   const workspaceRestoredFor = useRef(null);
 
   const setActiveTab = useCallback((tabId) => {
     const nextTab = isValidTabId(tabId) ? tabId : 'home';
+    if (nextTab !== activeTabRef.current && !document.dispatchEvent(new Event('lifeos:before-navigate', { cancelable: true }))) return false;
     userNavigatedRef.current = true;
     setActiveTabState(nextTab);
     writeTrainingWorkspace(lastAuthUserId.current, { tab: nextTab, sessionId: activeWorkoutIdRef.current });
@@ -140,12 +147,17 @@ export function LifeOSProvider({ children }) {
     if (currentPath !== nextPath) {
       window.history.pushState({}, '', nextPath);
     }
+    return true;
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const handlePopState = () => {
       const tab = pathToTab(window.location.pathname);
+      if (tab !== activeTabRef.current && !document.dispatchEvent(new Event('lifeos:before-navigate', { cancelable: true }))) {
+        window.history.replaceState({}, '', tabToPath(activeTabRef.current));
+        return;
+      }
       userNavigatedRef.current = true;
       setActiveTabState(tab);
       writeTrainingWorkspace(lastAuthUserId.current, { tab, sessionId: activeWorkoutIdRef.current });
@@ -155,6 +167,9 @@ export function LifeOSProvider({ children }) {
   }, []);
 
   const clearUserScopedState = useCallback((status = 'idle') => {
+    historyPaging.current = { cursor: null, pages: 1, generation: historyPaging.current.generation + 1, loading: false, hasMore: false };
+    setWorkoutHistory({ hasMore: false, loading: false, error: '' });
+    pinnedHistoryWorkout.current = null;
     setWorkoutSessions([]);
     setActiveWorkoutId(null);
     setWorkoutSessionsError('');
@@ -278,11 +293,29 @@ export function LifeOSProvider({ children }) {
 
     setWorkoutSessionsStatus('loading');
     setWorkoutSessionsError('');
+    const generation = ++historyPaging.current.generation;
+    historyPaging.current.loading = true;
+    setWorkoutHistory(previous => ({ ...previous, loading: true, error: '' }));
     try {
-      const rows = await workoutApi.list();
-      if (lastAuthUserId.current !== authUser.id) return;
-      setWorkoutSessions(rows ?? []);
+      let page;
+      let rows = [];
+      for (let index = 0; index < historyPaging.current.pages; index++) {
+        page = await workoutApi.page(page?.cursor);
+        if (lastAuthUserId.current !== authUser.id || generation !== historyPaging.current.generation) return;
+        rows.push(...page.rows);
+        if (!page.hasMore) break;
+      }
+      rows = [...new Map(rows.map(row => [row.id, row])).values()];
       const workspace = readTrainingWorkspace(authUser.id);
+      for (const wanted of new Set([activeWorkoutIdRef.current || workspace?.sessionId, pinnedHistoryWorkout.current])) {
+        if (!wanted || rows.some(row => row.id === wanted)) continue;
+        const saved = await workoutApi.get(wanted);
+        if (lastAuthUserId.current !== authUser.id || generation !== historyPaging.current.generation) return;
+        if (saved) rows.push(saved);
+      }
+      historyPaging.current = { ...historyPaging.current, cursor: page.cursor, hasMore: page.hasMore, loading: false };
+      setWorkoutHistory({ hasMore: page.hasMore, loading: false, error: '' });
+      setWorkoutSessions(rows ?? []);
       setActiveWorkoutId((currentId) => chooseWorkoutSession(rows, currentId, workspace, today()));
       if (workspaceRestoredFor.current !== authUser.id) {
         if (shouldResumeTraining({ pathname: window.location.pathname, workspace, sessions: rows, userNavigated: userNavigatedRef.current })) {
@@ -297,8 +330,30 @@ export function LifeOSProvider({ children }) {
       if (workspace?.sessionId && !rows.some((session) => session.id === workspace.sessionId)) clearWorkoutDraft(authUser.id, workspace.sessionId);
       setWorkoutSessionsStatus('ready');
     } catch (error) {
+      if (lastAuthUserId.current !== authUser.id || generation !== historyPaging.current.generation) return;
+      historyPaging.current.loading = false;
+      setWorkoutHistory(previous => ({ ...previous, loading: false, error: error.message }));
       setWorkoutSessionsError(error.message || 'Failed to load workout sessions.');
       setWorkoutSessionsStatus('error');
+    }
+  }, [authUser]);
+
+  const loadMoreWorkoutSessions = useCallback(async () => {
+    const paging = historyPaging.current;
+    if (!authUser || paging.loading || !paging.hasMore) return;
+    paging.loading = true;
+    const generation = paging.generation;
+    setWorkoutHistory(previous => ({ ...previous, loading: true, error: '' }));
+    try {
+      const page = await workoutApi.page(paging.cursor);
+      if (lastAuthUserId.current !== authUser.id || generation !== historyPaging.current.generation) return;
+      setWorkoutSessions(previous => [...new Map([...page.rows, ...previous].map(row => [row.id, row])).values()]);
+      historyPaging.current = { ...paging, cursor: page.cursor, hasMore: page.hasMore, pages: paging.pages + 1, loading: false };
+      setWorkoutHistory({ hasMore: page.hasMore, loading: false, error: '' });
+    } catch (error) {
+      if (lastAuthUserId.current !== authUser.id || generation !== historyPaging.current.generation) return;
+      paging.loading = false;
+      setWorkoutHistory(previous => ({ ...previous, loading: false, error: error.message }));
     }
   }, [authUser]);
 
@@ -1126,6 +1181,14 @@ export function LifeOSProvider({ children }) {
           })),
         );
       },
+      deleteWorkoutExercise: async (workoutId, endedAt, sets) => {
+        const userId = authUser?.id;
+        const ids = await workoutSetApi.deleteExercise(workoutId, endedAt, sets);
+        if (!userId || lastAuthUserId.current !== userId) throw new Error('Account changed. Sign in to the original account to verify this set.');
+        const removed = new Set(ids);
+        setWorkoutSessions(previous => previous.map(session => session.id === workoutId
+          ? { ...session, workout_sets: session.workout_sets.filter(set => !removed.has(set.id)) } : session));
+      },
       reloadWorkoutTemplates: loadWorkoutTemplates,
       createWorkoutTemplate: async (payload) => {
         if (!authUser) {
@@ -1784,6 +1847,9 @@ export function LifeOSProvider({ children }) {
     workoutSessions,
     workoutSessionsError,
     workoutSessionsStatus,
+    workoutHistory,
+    loadMoreWorkoutSessions,
+    retainHistoryWorkout,
     workoutTemplates,
     workoutTemplatesError,
     workoutTemplatesStatus,

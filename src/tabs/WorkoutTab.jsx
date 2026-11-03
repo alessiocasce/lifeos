@@ -61,6 +61,9 @@ export function WorkoutTab() {
     workoutSessions,
     workoutSessionsError,
     workoutSessionsStatus,
+    workoutHistory,
+    loadMoreWorkoutSessions,
+    reloadWorkoutSessions,
     workoutTemplates,
     workoutTemplatesError,
     workoutTemplatesStatus,
@@ -437,7 +440,10 @@ export function WorkoutTab() {
           onSelect={setHistorySessionId}
           listScroll={historyListScroll}
           leaveRef={historyLeave}
-          onResume={() => setTrainingView('live')}
+          onResume={() => { if (historyLeave.current()) setTrainingView('live'); }}
+          pagination={workoutHistory}
+          onLoadMore={loadMoreWorkoutSessions}
+          onRetry={reloadWorkoutSessions}
           status={workoutSessionsStatus}
           error={workoutSessionsError}
         />
@@ -1075,7 +1081,12 @@ function HistoricalSets({ sets }) {
   ))}</div>;
 }
 
-function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResume, listScroll, leaveRef, status, error }) {
+function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResume, listScroll, leaveRef, status, error, pagination, onLoadMore, onRetry }) {
+  const { retainHistoryWorkout } = useLifeOS();
+  useEffect(() => {
+    retainHistoryWorkout?.(selectedId);
+    return () => retainHistoryWorkout?.(null);
+  }, [selectedId, retainHistoryWorkout]);
   const selected = sessions.find((session) => session.id === selectedId);
   const history = sessions.filter((session) => session.id !== activeSession?.id || session.ended_at).slice().sort(compareSessionsDescending);
   useLayoutEffect(() => {
@@ -1087,7 +1098,7 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
       <div className="min-w-0"><p className="text-xs text-zinc-400">{t("Training in progress")}</p><p className="break-words text-sm text-zinc-100">{activeSession.name}</p></div>
       <button type="button" className="min-h-11 px-3 text-sm text-zinc-200" onClick={onResume}>{t("Resume")}</button>
     </div> : null}
-    {error ? <p role="alert" className="mb-3 text-sm text-red-300">{error}</p> : null}
+    {error ? <div role="alert" className="mb-3 text-sm text-red-300">{error}<button type="button" className="min-h-11 px-3" onClick={onRetry}>{t('Retry')}</button></div> : null}
     {selected ? <HistoricalWorkoutDetail key={selected.id} session={selected} onBack={() => onSelect(null)} leaveRef={leaveRef} /> : <>
       <h2 className="mb-3 text-sm font-semibold text-zinc-200">{t("Recent workouts")}</h2>
       {status === 'loading' && !history.length ? <LoadingCard label={t("Loading workout history")} /> : null}
@@ -1096,13 +1107,15 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
         <span className="break-words text-sm font-medium text-zinc-100">{session.name}</span>
         <span className="text-xs text-zinc-400">{Object.keys(groupSetsByExercise(session.workout_sets ?? [])).length}{t(" exercises · ")}{session.workout_sets?.length ?? 0}{t(" sets")}</span>
       </button>)}
+      {pagination?.error && !error ? <p role="alert" className="text-sm text-red-300">{pagination.error}</p> : null}
+      {pagination?.hasMore ? <button type="button" className="training-row mt-3" disabled={pagination.loading} onClick={onLoadMore}>{t(pagination.loading ? 'Loading...' : 'Load older workouts')}</button> : null}
       {status !== 'loading' && !history.length ? <p className="py-4 text-sm text-zinc-400">{t("No past workouts yet.")}</p> : null}
     </>}
   </section>;
 }
 
 function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
-  const {updateWorkoutSession,deleteWorkoutSession,createWorkoutSet,updateWorkoutSet,deleteWorkoutSet,setUnsavedWork} = useLifeOS();
+  const {updateWorkoutSession,deleteWorkoutSession,createWorkoutSet,updateWorkoutSet,deleteWorkoutSet,deleteWorkoutExercise,setUnsavedWork} = useLifeOS();
   const [editing,setEditing] = useState(false);
   const [details,setDetails] = useState(null);
   const [expanded,setExpanded] = useState(null);
@@ -1137,11 +1150,12 @@ function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
   const guard = row => ({expectedUpdatedAt:row.updated_at,...(row.ended_at ? {expectedEndedAt:row.ended_at} : {})});
   const closeForm = () => { if (!canLeave()) return; resetForm(); setAddition(null); };
   const startSet = (exercise,set = null) => {
-    if (!canLeave()) return;
+    if (!canLeave()) return false;
     const next = {id:set?.id || null,exercise:exercise.exercise,exercise_id:exercise.exercise_id || null,
       set_number:set?.set_number || getNextSetNumber(session,exercise),is_warmup:set ? isWarmupSet(set) : false,
       weight:set ? String(set.weight) : '',reps:set ? String(set.reps) : '',rpe:set?.rpe == null ? '' : String(set.rpe),notes:set?.notes || '',...(set ? {source:{...set}} : {})};
     setForm(next); setBaseline(next); setDetails(null);
+    return true;
   };
   const saveSet = event => {
     event.preventDefault();
@@ -1164,7 +1178,7 @@ function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
   };
   const removeExercise = sets => {
     if (!canLeave() || !window.confirm(t('Delete {count} sets from this workout only?',{count:sets.length}))) return;
-    run(async () => { for (const set of sets) await deleteWorkoutSet(set.id,guard(set)); },() => {resetForm();setExpanded(null);});
+    run(() => deleteWorkoutExercise(session.id, session.ended_at, sets),() => {resetForm();setExpanded(null);});
   };
   const setEditor = form ? <form aria-label={t('Historical set editor')} onSubmit={saveSet} className="grid gap-3 border-t border-white/20 pt-3">
     <h3 className="break-words font-semibold">{exerciseLabel(form)}</h3><fieldset disabled={busy} className="grid grid-cols-2 gap-3">
@@ -1173,7 +1187,7 @@ function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
       <div className="col-span-full"><CompactField label={t('Set notes')} value={form.notes} onChange={notes=>setForm(v=>({...v,notes}))}/></div>
       <button type="submit" className="primary-button min-h-11">{t('Save set')}</button><button type="button" className="min-h-11" onClick={closeForm}>{t('Cancel')}</button>
     </fieldset>
-  </form>:null;
+  </form> : null;
   return <div className="grid min-w-0 gap-4" aria-label={t('Historical workout detail')}>
     <button type="button" className="training-row justify-start" onClick={() => { if (canLeave()) onBack(); }}><ArrowLeft size={16} />{t('Back to History')}</button>
     <header><h2 className="break-words text-xl font-semibold">{session.name}</h2><time className="text-sm text-zinc-400">{formatDate(session.performed_on)}</time><p className="text-xs text-zinc-400">{t(session.ended_at ? 'Session complete' : 'Workout in progress')}</p></header>
@@ -1192,13 +1206,13 @@ function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
       <header className="mb-3 flex min-h-11 items-center gap-3"><span className="training-exercise-number">{String(index+1).padStart(2,'0')}</span><h3 className="min-w-0 flex-1 break-words text-sm font-semibold">{exerciseLabel(sets[0])}</h3>{editing ? <button type="button" disabled={busy} className="min-h-11 px-3 text-sm" aria-label={t('Edit')+' '+exerciseLabel(sets[0])} onClick={()=>{if(!canLeave())return;resetForm();setDetails(null);setAddition(null);setExpanded(expanded===key?null:key);}}>{t(expanded===key?'Close':'Edit')}</button>:null}</header>
       {editing && expanded===key ? <div className="grid gap-3">
         {sets.map(set=><div key={set.id} className="border-b border-white/10 pb-2"><HistoricalSets sets={[set]} /><div className="flex gap-3"><button type="button" disabled={busy} className="min-h-11 text-sm" aria-label={t('Edit set')+' '+set.id} onClick={()=>startSet(sets[0],set)}>{t('Edit set')}</button><button type="button" disabled={busy} className="min-h-11 text-sm text-red-400" aria-label={t('Delete set')+' '+set.id} onClick={()=>removeSet(set)}>{t('Delete set')}</button></div></div>)}
-        {form && normalizeExercise(form)===key && !addition ? setEditor : null}
+        {form && !addition && normalizeExercise(form) === key ? setEditor : null}
         <button type="button" disabled={busy} className="training-row justify-start" onClick={()=>startSet(sets[0])}><Plus size={17}/>{t('Add set')}</button>
         <button type="button" disabled={busy} className="min-h-11 text-left text-sm text-red-400" onClick={()=>removeExercise(sets)}>{t('Delete exercise from workout')}</button>
       </div>:<HistoricalSets sets={sets} />}
     </section>)}
     {!groups.length ? <p className="text-sm text-zinc-400">{t('No sets recorded.')}</p> : null}
-    {editing ? <div><p className="mb-2 text-sm">{t('Add exercise')}</p><ExerciseSelector inputLabel={t('Add exercise')} value={addition?.exercise || ''} exerciseId={addition?.exercise_id} onCommit={exercise=>{if(!canLeave())return;setAddition(exercise);setExpanded(null);startSet(exercise);}} /></div> : null}
+    {editing ? <ExerciseSelector inputLabel={t('Add exercise')} value={addition?.exercise || ''} exerciseId={addition?.exercise_id} onCommit={exercise=>{if(!startSet(exercise))return;setAddition(exercise);setExpanded(null);}} /> : null}
     {editing && addition ? setEditor : null}
   </div>;
 }
@@ -1927,6 +1941,8 @@ function compareSessionsDescending(a, b) {
 }
 
 function compareSessionPosition(a, b) {
+  const dateOrder = String(a.performed_on).localeCompare(String(b.performed_on));
+  if (dateOrder) return dateOrder;
   const aTime = new Date(a.started_at || `${a.performed_on}T00:00:00`).getTime();
   const bTime = new Date(b.started_at || `${b.performed_on}T00:00:00`).getTime();
   if (aTime !== bTime) return aTime - bTime;

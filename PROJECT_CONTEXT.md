@@ -182,6 +182,21 @@ continuity browser cases. See QA_WORKOUT for physical background/WhatsApp QA.
 
 ## Training History Editing (2026-11-03)
 
+Recovery audit: History now pages in stable 25-session batches (date, start time,
+UUID tie-breaker with null-start support), with retry/deduplication and direct
+recovery of an active session outside the first page. Previously only 25 sessions
+were accessible after refresh. Already loaded page depth is revalidated on resume.
+The shared tab setter owns unsaved-navigation checks; Community links respect
+cancellation before changing their hash. Add-exercise checks dirty state once.
+Exercise deletion now uses the invoker/RLS-scoped
+`delete_historical_workout_exercise` RPC, validating full membership and exact set
+versions under the existing Community writer gate, then deleting transactionally.
+This requires only the forward `workout_history_atomic_delete` migration before
+the compatible frontend deploy, not a schema rerun. It also adds a history cursor
+index. See docs/TRAINING_CORRECTIVE_RECOVERY.md for evidence and device limits.
+Production applied/sealed `20261103154140_workout_history_atomic_delete.sql`;
+source/projection/policy/trigger hashes match across rollout.
+
 Completed sessions stay completed. Reopen is removed; historical corrections
 occur in place in Training → History and never clear `ended_at` or change the
 Live `activeWorkoutId`. Details are read-only by default with visible Edit
@@ -197,7 +212,7 @@ PullToRefresh ancestors cannot capture their fixed positioning. History stores
 list scroll separately; details open at the top and return to the saved list
 offset. Manage template exercises use compact single-line option rows. Existing
 draft storage, active-session identity, root resume and PWA update protection
-remain unchanged. No schema rerun required.
+remain unchanged. Do not rerun the full schema; apply the targeted migration only.
 
 Focused QA: `npm run test:workout`, `node scripts/test-workout-history-db.js`,
 `node scripts/test-workout-mutation-guards.js`, and focused

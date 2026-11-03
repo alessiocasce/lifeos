@@ -9,7 +9,7 @@ const source = fs.readFileSync('src/services/lifeosApi.js', 'utf8')
 let calls;
 let response;
 const builder = {};
-for (const method of ['from', 'update', 'delete', 'eq', 'is', 'select', 'single']) {
+for (const method of ['from', 'update', 'delete', 'eq', 'is', 'select', 'single', 'order', 'limit', 'or', 'maybeSingle', 'rpc']) {
   builder[method] = (...args) => { calls.push([method, ...args]); return builder; };
 }
 builder.then = (resolve, reject) => Promise.resolve(response).then(resolve, reject);
@@ -45,13 +45,30 @@ await workoutSetApi.delete('row', { expectedEndedAt: ended });
 assert.deepEqual(calls.map(call => call[0]), ['from', 'delete', 'eq'], 'set API does not accept parent completion predicate');
 console.log('PASS service guards: exact timestamp/state filters, SQL null predicate, unchanged payloads, single-row errors and legacy delete behavior');
 
+reset();
+response.data = Array.from({ length: 26 }, (_, i) => ({ id: '11111111-1111-4111-8111-' + String(i).padStart(12,'0'),
+  performed_on: '2026-11-01', started_at: stamp, workout_sets: [] }));
+const firstPage = await workoutApi.page();
+assert.equal(firstPage.rows.length, 25);
+assert.equal(firstPage.hasMore, true);
+assert.equal(firstPage.cursor.started, stamp, 'cursor retains Postgres microseconds');
+assert.ok(calls.some(call => call[0] === 'limit' && call[1] === 26));
+calls = [];
+await workoutApi.page(firstPage.cursor);
+assert.ok(calls.find(call => call[0] === 'or')[1].includes('started_at.is.null'), 'older null-start rows remain reachable');
+calls = [];
+await workoutApi.page({ ...firstPage.cursor, started: null });
+assert.ok(calls.find(call => call[0] === 'or')[1].includes('started_at.is.null,id.lt.'));
+await assert.rejects(workoutApi.page({ date: 'invalid', started: null, id: 'injected' }), /Invalid/);
+console.log('PASS actual service keyset contract: bounded page+lookahead, precise timestamp/UUID ties, null-start continuation and cursor validation');
+
 // Execute each actual wrapper around a deferred API call to simulate A -> B/logout.
 const context = fs.readFileSync('src/context/LifeOSContext.jsx', 'utf8');
 for (const [name, next, apiName, method, update] of [
   ['updateWorkoutSession', 'endWorkoutSession', 'workoutApi', 'update', true],
   ['deleteWorkoutSession', 'createWorkoutSet', 'workoutApi', 'delete', false],
   ['updateWorkoutSet', 'deleteWorkoutSet', 'workoutSetApi', 'update', true],
-  ['deleteWorkoutSet', 'reloadWorkoutTemplates', 'workoutSetApi', 'delete', false],
+  ['deleteWorkoutSet', 'deleteWorkoutExercise', 'workoutSetApi', 'delete', false],
 ]) {
   const start = context.indexOf(`      ${name}: async`);
   const end = context.indexOf(`      ${next}:`, start);
@@ -84,3 +101,20 @@ for (const [name, next, apiName, method, update] of [
   }
 }
 console.log('PASS all four context wrappers forward options and reject A -> B/logout responses before state or draft changes; same-account success preserved');
+
+const atomicStart = context.indexOf('      deleteWorkoutExercise: async');
+const atomicEnd = context.indexOf('      reloadWorkoutTemplates:', atomicStart);
+const atomicWrapper = context.slice(atomicStart, atomicEnd).trim().replace(/^deleteWorkoutExercise:\s*/, '').replace(/,$/, '');
+for (const destination of ['A', 'B', null]) {
+  let finish;
+  let effects = 0;
+  const identity = { current: 'A' };
+  const wrapper = new Function('authUser', 'lastAuthUserId', 'workoutSetApi', 'setWorkoutSessions', `return ${atomicWrapper}`)(
+    { id: 'A' }, identity, { deleteExercise: () => new Promise(resolve => { finish = resolve; }) }, () => { effects++; });
+  const pending = wrapper('workout', ended, [{ id: 'set', updated_at: stamp }]);
+  identity.current = destination;
+  finish(['set']);
+  if (destination === 'A') { await pending; assert.equal(effects, 1); }
+  else { await assert.rejects(pending, /Account changed/); assert.equal(effects, 0); }
+}
+console.log('PASS atomic exercise wrapper rejects stale-account results before applying its returned IDs');

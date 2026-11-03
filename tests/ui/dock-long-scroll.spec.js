@@ -60,6 +60,7 @@ for (const width of [375, 390, 430]) {
       await page.goto('/workout', { waitUntil: 'domcontentloaded' });
       await expect(page.getByText('Loading workspace...', { exact: true })).toBeVisible();
       await measure(page, 'cold shell before lazy CSS', samples);
+      await page.screenshot({ path: info.outputPath('dock-cold.png') });
     } finally { release(); }
     await expect(page.getByRole('button', { name: 'Workout options', exact: true })).toBeVisible();
     await measure(page, 'loaded Training', samples);
@@ -69,6 +70,7 @@ for (const width of [375, 390, 430]) {
       await page.evaluate(y => window.scrollTo(0, y), maxScroll * fraction);
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(maxScroll * fraction, 0);
       await measure(page, 'scroll ' + fraction, samples);
+      await page.screenshot({ path: info.outputPath('dock-scroll-' + fraction + '.png') });
     }
     for (const height of [640, 900, 844]) {
       await page.setViewportSize({ width, height });

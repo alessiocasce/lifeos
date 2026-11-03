@@ -402,6 +402,32 @@ function throwWorkoutMutationError(result, options = {}) {
 }
 
 export const workoutApi = {
+  async page(cursor = null, size = 25) {
+    const limit = Math.max(1, Math.min(25, Math.floor(Number(size) || 25)));
+    let query = requireSupabase().from('workouts').select(workoutSelect)
+      .order('performed_on', { ascending: false })
+      .order('started_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false }).limit(limit + 1);
+    if (cursor) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cursor.date) || !/^[a-f0-9-]{36}$/i.test(cursor.id)
+        || (cursor.started !== null && !/^[\dT:.+Z-]+$/.test(cursor.started))) throw new Error('Invalid workout history cursor.');
+      const same = `performed_on.eq.${cursor.date}`;
+      const older = cursor.started === null
+        ? `and(${same},started_at.is.null,id.lt.${cursor.id})`
+        : `and(${same},started_at.lt.${cursor.started}),and(${same},started_at.eq.${cursor.started},id.lt.${cursor.id}),and(${same},started_at.is.null)`;
+      query = query.or(`performed_on.lt.${cursor.date},${older}`);
+    }
+    const all = throwIfError(await query) || [];
+    const rows = normalizeWorkouts(all.slice(0, limit));
+    const last = all[Math.min(limit, all.length) - 1];
+    return { rows, hasMore: all.length > limit, cursor: last ? { date: last.performed_on, started: last.started_at, id: last.id } : null };
+  },
+
+  async get(id) {
+    const row = throwIfError(await requireSupabase().from('workouts').select(workoutSelect).eq('id', id).maybeSingle());
+    return row ? normalizeWorkout(row) : null;
+  },
+
   async list(limit = 25) {
     const rows = throwIfError(
       await requireSupabase()
@@ -450,6 +476,12 @@ export const workoutApi = {
 };
 
 export const workoutSetApi = {
+  async deleteExercise(workoutId, endedAt, sets) {
+    return throwIfError(await requireSupabase().rpc('delete_historical_workout_exercise', {
+      p_workout_id: workoutId, p_ended_at: endedAt,
+      p_sets: sets.map(set => ({ id: set.id, updated_at: set.updated_at })),
+    }));
+  },
   async create(payload) {
     return throwIfError(
       await requireSupabase()

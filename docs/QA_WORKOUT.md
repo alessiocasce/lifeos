@@ -1,5 +1,19 @@
 # LifeOS Workout QA
 
+## Corrective Recovery (2026-11-03)
+
+See `TRAINING_CORRECTIVE_RECOVERY.md` for the requirement audit and release evidence.
+History uses 25-session keyset pages and Load older workouts, never an unlimited
+joined fetch. Check failed-page retry and edit access beyond 25, including a saved
+active session outside page one. Loaded page depth survives in-app revalidation.
+View in Community, tab navigation and browser Back must honor dirty History forms.
+Exercise removal is one invoker/RLS RPC with expected timestamps and membership;
+an injected deletion failure must roll back both private sets and projections.
+Apply only the forward workout_history_atomic_delete migration before deploying.
+No full schema rerun. Original set times and completion remain unchanged; new
+historical sets use noon UTC on the recorded date. Do not use production workouts
+as UI fixtures. Physical Safari/PWA cold launch and toolbar acceptance remain open.
+
 ## Active Training Reference (3 November)
 
 See TRAINING_ACTIVE_RELEASE.md. Verify user-specific accent, session-only details,

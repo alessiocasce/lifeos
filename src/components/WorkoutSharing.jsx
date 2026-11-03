@@ -20,5 +20,5 @@ export function WorkoutSharing({ workout }) {
     return () => { current = false; };
   }, [authUser?.id, workout.id, workout.ended_at, workout.updated_at, workout.workout_sets, sharing]);
   if (!sharing || !workout.ended_at || result?.userId !== authUser?.id || result?.workoutId !== workout.id || !result?.id) return null;
-  return <button type="button" onClick={() => { setActiveTab('community'); window.location.hash = `share=${result.id}`; }} className="my-3 flex min-h-11 items-center gap-2 text-sm text-zinc-300"><ExternalLink size={16} />{t('View in Community')}</button>;
+  return <button type="button" onClick={() => { if (setActiveTab('community') !== false) window.location.hash = `share=${result.id}`; }} className="my-3 flex min-h-11 items-center gap-2 text-sm text-zinc-300"><ExternalLink size={16} />{t('View in Community')}</button>;
 }

@@ -1,14 +1,17 @@
 # Dock cold-load and long-scroll QA
 
-No schema rerun required. No production data, auth, API or PWA activation change.
+Dock positioning needs no schema change. The recovery release separately adds
+the targeted atomic exercise-deletion RPC/index migration documented in
+TRAINING_CORRECTIVE_RECOVERY.md. Do not rerun the full schema.
 
 ## Scope and cause
 
 `Shell.jsx` portals the mobile navigation and active-training resume dock into a
 body-level `.shell-docks[data-workspace]` wrapper. Training-only appearance rules
 in `trainingStart.css` follow that wrapper; shared dock geometry is unchanged.
-Shell navigation dispatches cancelable `lifeos:before-navigate` on `document`
-before changing the tab, closing utilities or resetting scroll. History owns its
+The shared context tab setter dispatches cancelable `lifeos:before-navigate` on
+`document` before changing tabs. Shell closes utilities/resets scroll only after
+approval, and Community only updates its hash after approval. History owns its
 local dirty/busy listener and beforeunload handling.
 
 A transform (including identity translate3d), transform will-change, or containing

@@ -1,4 +1,5 @@
 import { localDate } from '../../src/utils/date';
+import { exerciseIdentityKey } from '../../src/utils/exerciseCatalog';
 
 const user = () => JSON.parse(localStorage.getItem('qa-user') ?? '{"id":"qa-user-a","email":"qa@example.test"}');
 const initialSession = () => ({
@@ -47,9 +48,22 @@ export const authApi = {
   },
 };
 export const workoutApi = {
+  page: async (cursor = null) => {
+    if (cursor && localStorage.getItem('qa-history-page-fail')) throw new Error('Older workouts could not be loaded.');
+    const rows = (await workoutApi.list()).slice().sort((a,b) => b.performed_on.localeCompare(a.performed_on)
+      || (b.started_at || '').localeCompare(a.started_at || '') || b.id.localeCompare(a.id));
+    const older = cursor ? rows.filter(row => row.performed_on < cursor.date
+      || row.performed_on === cursor.date && ((row.started_at || '') < (cursor.started || '')
+        || (row.started_at || '') === (cursor.started || '') && row.id < cursor.id)) : rows;
+    const page = older.slice(0, 25);
+    const last = page.at(-1);
+    return { rows: page, hasMore: older.length > 25, cursor: last ? { id: last.id, date: last.performed_on, started: last.started_at } : null };
+  },
+  get: async id => read().find(row => row.id === id && row.user_id === user()?.id) || null,
   list: async () => {
     await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-load-delay') || 0)));
     if (localStorage.getItem('qa-fail-load')) throw new Error('Test network unavailable');
+    localStorage.setItem('qa-workout-loads', String(Number(localStorage.getItem('qa-workout-loads') || 0) + 1));
     return read().filter((row) => row.user_id === user()?.id);
   },
   create: async (payload) => {
@@ -60,7 +74,7 @@ export const workoutApi = {
   },
   update: async (id, patch, options) => {
     await workoutMutation('session-update', id, patch, options);
-    const rows = read().map((row) => row.id === id ? { ...row, ...patch } : row);
+    const rows = read().map((row) => row.id === id ? { ...row, ...patch, updated_at: new Date().toISOString() } : row);
     write(rows); return rows.find((row) => row.id === id);
   },
   delete: async (id, options) => {
@@ -71,10 +85,22 @@ export const workoutApi = {
   },
 };
 export const workoutSetApi = {
+  deleteExercise: async (workoutId, endedAt, sets) => {
+    await workoutMutation('exercise-delete', workoutId);
+    const session = read().find(row => row.id === workoutId && row.user_id === user()?.id);
+    const group = session?.workout_sets.filter(set => exerciseIdentityKey(set) === exerciseIdentityKey(sets[0])) || [];
+    if (!session || session.ended_at !== endedAt || group.length !== sets.length
+      || group.some(set => !sets.some(expected => expected.id === set.id && expected.updated_at === set.updated_at))) {
+      throw new Error('Exercise changed. Refresh History before deleting.');
+    }
+    const ids = sets.map(set => set.id);
+    write(read().map(row => row.id === workoutId ? { ...row, workout_sets: row.workout_sets.filter(set => !ids.includes(set.id)) } : row));
+    return ids;
+  },
   create: async (payload) => {
     await workoutMutation('set-create', payload.workout_id, payload);
     if (localStorage.getItem('qa-fail-save')) throw new Error('Test connection lost. Set not saved.');
-    const row = { ...payload, id: crypto.randomUUID(), user_id: user().id };
+    const row = { ...payload, id: crypto.randomUUID(), user_id: user().id, updated_at: new Date().toISOString() };
     write(read().map((session) => session.id === row.workout_id ? { ...session, workout_sets: [...session.workout_sets, row] } : session));
     return row;
   },
@@ -83,7 +109,7 @@ export const workoutSetApi = {
     let updated;
     write(read().map((session) => ({ ...session, workout_sets: session.workout_sets.map((set) => {
       if (set.id !== id) return set;
-      updated = { ...set, workout_id: session.id, ...patch }; return updated;
+      updated = { ...set, workout_id: session.id, ...patch, updated_at: new Date().toISOString() }; return updated;
     }) })));
     return updated;
   },
