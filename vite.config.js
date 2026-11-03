@@ -1,9 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execFileSync } from 'node:child_process';
+
+const buildId = process.env.LIFEOS_BUILD_ID || process.env.VERCEL_GIT_COMMIT_SHA || (() => { try { return execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(); } catch { return `local-${Date.now()}`; } })();
 
 export default defineConfig({
+  define: { __LIFEOS_BUILD_ID__: JSON.stringify(buildId) },
   plugins: [
+    { name:'lifeos-build-version', generateBundle() { this.emitFile({type:'asset',fileName:'build-version.json',source:JSON.stringify({version:buildId})}); } },
     react(),
     VitePWA({
       registerType: 'prompt',
@@ -47,6 +52,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: false,
+        clientsClaim: true,
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html}'],
         navigateFallback: '/index.html',

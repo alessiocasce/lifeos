@@ -336,3 +336,18 @@ their real exercises exist. Manage owns template CRUD/color/icon/order. Verify
 Live -> Manage -> History -> Live preserves the active full draft and timer.
 Run training-live-manage, training-templates, training-history,
 training-prefill-rest and workout-continuity Playwright specs for this surface.
+# Corrective Training / PWA QA (2026-11-03)
+
+See `PWA_TRAINING_CORRECTIONS.md` for the focused commands and two-build update
+harness. Check immediate new-template appearance; 1/2/5/10/20-exercise compact
+sheets; repeated Close/Escape, reduced motion, keyboard/safe-area sizing and no
+automatic focus on editable inputs. Tap different positions in Weight/Reps and
+verify end caret without breaking keyboard selection. New RPE is only None and
+integers 6-10; editing old 7.5 preserves it until an explicit change.
+
+Untouched prefill is clean, manual edits survive per-exercise switches/reload,
+and End Workout never asks to discard or saves a phantom set. Confirm updates
+are blocked during a live workout, including on other app tabs; after ending,
+Settings update changes the running build ID and retains user storage.
+No rest timers, schema/data edits or fake production workouts. Physical iPhone
+Safari/installed PWA and installed desktop PWA still need device acceptance.

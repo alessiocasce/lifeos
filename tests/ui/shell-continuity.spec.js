@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/*', (route) => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
 });
 
-const exercise = (page) => page.getByRole('textbox', { name: 'Exercise', exact: true });
+const exercise = (page) => page.getByRole('button', { name: 'Exercise', exact: true });
 const dock = (page) => page.getByRole('navigation', { name: 'Mobile navigation' });
 
 test('keyboard focus after viewport resize hides dock, blur restores it', async ({ page }) => {
@@ -17,7 +17,7 @@ test('keyboard focus after viewport resize hides dock, blur restores it', async 
     window.visualViewport.dispatchEvent(new Event('resize'));
   });
   await expect(dock(page)).toBeVisible();
-  await exercise(page).focus();
+  await page.getByRole('textbox',{name:'Reps',exact:true}).focus();
   await expect(dock(page)).toBeHidden();
   await page.evaluate(() => document.activeElement.blur());
   await expect(dock(page)).toBeVisible();
@@ -26,12 +26,13 @@ test('keyboard focus after viewport resize hides dock, blur restores it', async 
 test('keyboard resize with focused input preserves draft and dock returns on dismissal', async ({ page }) => {
   await page.goto('/workout');
   await selectExercise(page,'Barbell Curl');
+  await page.getByRole('textbox',{name:'Reps',exact:true}).focus();
   await page.evaluate(() => {
     Object.defineProperty(window.visualViewport, 'height', { configurable: true, value: innerHeight - 300 });
     window.visualViewport.dispatchEvent(new Event('resize'));
   });
   await expect(dock(page)).toBeHidden();
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await page.evaluate(() => {
     Object.defineProperty(window.visualViewport, 'height', { configurable: true, value: innerHeight });
     window.visualViewport.dispatchEvent(new Event('resize'));
@@ -51,31 +52,36 @@ test('reconnection refresh retains visible draft and browser back retains user a
     window.dispatchEvent(new Event('online'));
     window.__qaAuthRefresh();
   });
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await expect(page.getByRole('textbox', { name: 'Reps', exact: true })).toHaveValue('8');
   await page.waitForTimeout(1200);
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await dock(page).getByRole('button', { name: 'Command', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/workout$/);
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await page.goForward();
   await expect(page).toHaveURL(/\/$/);
   await page.getByRole('button', { name: /Training in progress/ }).click();
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   expect(errors).toEqual([]);
 });
 
 test('pull refresh defers waiting PWA activation even with an empty live logger', async ({ page }) => {
+  await page.route('**/build-version.json',route=>route.fulfill({json:{version:'next'}}));
+  await page.addInitScript(()=>{
+    window.__qaActivationCount=0;
+    const sw=new EventTarget();const reg=new EventTarget();
+    reg.waiting={postMessage(){window.__qaActivationCount++;}};reg.update=async()=>{};
+    sw.getRegistration=async()=>reg;
+    Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:sw});
+  });
   await page.goto('/workout');
-  await expect(exercise(page)).toHaveValue('');
+  await expect(exercise(page)).toContainText('Choose exercise');
   await page.evaluate(() => {
     window.__qaActivationCount = 0;
     // Emulate the browser service-worker boundary, not the update implementation.
-    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: {
-      getRegistration: async () => ({ waiting: { postMessage() { window.__qaActivationCount += 1; } } }),
-    } });
     window.scrollTo(0, 0);
     const container = document.querySelector('.workspace-content').parentElement.parentElement;
     const target = document.querySelector('.workspace-content');
@@ -85,6 +91,6 @@ test('pull refresh defers waiting PWA activation even with an empty live logger'
   });
   await expect(page.getByText('Update ready - finish your workout first.', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__qaActivationCount)).toBe(0);
-  await expect(exercise(page)).toHaveValue('');
+  await expect(exercise(page)).toContainText('Choose exercise');
   await expect(page).toHaveURL(/\/workout$/);
 });

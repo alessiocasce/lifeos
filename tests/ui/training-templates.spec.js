@@ -22,7 +22,7 @@ const template = (page, name) => page.getByRole('article', { name: 'Template ' +
 test('template starts immutable plan, warmup and working sets, and resumes after reload', async ({ page }) => {
   await page.goto('/workout');
   await page.getByRole('button', { name: 'Start Strength A', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveValue('Dumbbell Bench Press');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Dumbbell Bench Press');
   await page.getByRole('textbox', { name: /Weight/ }).fill('25');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
@@ -36,7 +36,7 @@ test('template starts immutable plan, warmup and working sets, and resumes after
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('6');
   await page.getByRole('button', { name: 'Save Set', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveValue('Dumbbell Bench Press');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Dumbbell Bench Press');
   const session = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0]);
   expect(session.template_snapshot.map((row) => row.exercise)).toEqual(['Dumbbell Bench Press', 'Barbell Curl']);
   expect(session.workout_sets.map((row) => row.is_warmup)).toEqual([true, false]);
@@ -45,7 +45,7 @@ test('template starts immutable plan, warmup and working sets, and resumes after
   page.once('dialog', (dialog) => dialog.accept());
   await template(page, 'Strength A').getByRole('button', { name: 'Delete template', exact: true }).click();
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveValue('Dumbbell Bench Press');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Dumbbell Bench Press');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].template_snapshot.length)).toBe(2);
 });
 
@@ -62,7 +62,7 @@ test('template and exercise CRUD, notes, ordering and compaction remain function
   for (const name of ['Pull Up', 'Cable Row']) {
     await selectExercise(page,name,{label:'Add exercise',scope:add});
     await expect(add.getByLabel('Notes', { exact: true })).toHaveCount(0);
-    await add.getByRole('button', { name: 'Add exercise', exact: true }).click();
+    await add.getByRole('button', { name: 'Add exercise', exact: true }).filter({hasNot:page.locator('span')}).click();
     await expect(add.getByLabel('Add exercise', { exact: true })).toHaveValue('');
   }
   await row.getByRole('group', { name: 'Template exercise Cable Row' }).getByRole('button', { name: /Exercise options/ }).click();
@@ -125,7 +125,7 @@ test('empty session start retains failed fields and starts exactly once', async 
   await form.getByRole('button', { name: 'Start Empty', exact: true }).click();
   await expect(form.getByRole('button', { name: 'Starting', exact: true })).toBeDisabled();
   await expect(form.getByLabel('Name', { exact: true })).toBeDisabled();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).length)).toBe(1);
 });
 

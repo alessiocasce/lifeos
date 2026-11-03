@@ -27,7 +27,7 @@ import { ExerciseSelector } from '../components/ExerciseSelector';
 import { WorkoutSharing } from '../components/WorkoutSharing';
 import { TrainingQuickStart, TemplateAppearanceEditor, TrainingTemplateIcon } from '../components/TrainingTemplates';
 import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateAppearance';
-import { emptySetDraft, readExerciseDraft, writeWorkoutDraft } from '../utils/workoutContinuity';
+import { emptySetDraft, readExerciseDraft, writeWorkoutDraft, withDraftBaseline, hasWorkoutDraftEdits, draftHasEdits } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import '../styles/trainingStart.css';
@@ -100,9 +100,11 @@ export function WorkoutTab() {
   const appearance = normalizeTemplateAppearance(activeWorkoutSession?.template_appearance || workoutTemplates.find(row => row.id === activeWorkoutSession?.template_id));
   const selectExerciseDraft = (exercise, session = activeWorkoutSession) => {
     const identity = { exercise: exercise.exercise, exercise_id: exercise.exercise_id || resolveExercise(exercise)?.id || null };
-    const previous = session?.id === activeWorkoutSession?.id && exerciseIdentityKey(setForm) === exerciseIdentityKey(identity) ? setForm
-      : readExerciseDraft(authUser?.id, session?.id, identity) || { ...emptySetDraft(), ...identity };
-    const next = prefillWorkoutTargets({ ...previous, ...identity, set_number: previous.is_warmup ? getNextWarmupSetNumber(session, identity) : getNextSetNumber(session, identity) }, getPreviousPerformance(workoutSessions, session, identity)?.sets);
+    const restored = session?.id === activeWorkoutSession?.id && exerciseIdentityKey(setForm) === exerciseIdentityKey(identity) ? setForm
+      : readExerciseDraft(authUser?.id, session?.id, identity);
+    const previous = restored || { ...emptySetDraft(), ...identity };
+    let next = prefillWorkoutTargets({ ...previous, ...identity, set_number: previous.is_warmup ? getNextWarmupSetNumber(session, identity) : getNextSetNumber(session, identity) }, getPreviousPerformance(workoutSessions, session, identity)?.sets);
+    if (!restored) next = withDraftBaseline(next);
     if (!session?.ended_at) writeWorkoutDraft(authUser?.id, session?.id, next);
     if (session?.id === activeWorkoutSession?.id) setSetForm(next);
   };
@@ -142,11 +144,11 @@ export function WorkoutTab() {
   useEffect(() => {
     setUnsavedWork(
       'workout-set',
-      isMeaningfulSetDraft(setForm, activeWorkoutSession),
+      Boolean(activeWorkoutSession && !activeWorkoutSession.ended_at && (savingSet || editForm || draftHasEdits(setForm) || hasWorkoutDraftEdits(authUser?.id, activeWorkoutSession.id))),
       'save current workout set first',
     );
     return () => setUnsavedWork('workout-set', false);
-  }, [activeWorkoutSession, setForm, setUnsavedWork]);
+  }, [activeWorkoutSession, setForm, setUnsavedWork, savingSet, editForm, authUser?.id]);
 
   const startWorkout = async (event) => {
     event.preventDefault();
@@ -292,12 +294,12 @@ export function WorkoutTab() {
         ...activeWorkoutSession,
         workout_sets: [...(activeWorkoutSession.workout_sets ?? []), createdSet],
       };
-      const nextDraft = prefillWorkoutTargets({
+      const nextDraft = withDraftBaseline(prefillWorkoutTargets({
         ...setForm,
         set_number: setForm.is_warmup
           ? getNextWarmupSetNumber(projectedSession, setForm)
           : getNextSetNumber(projectedSession, setForm),
-      }, previousPerformance?.sets, { afterSave: true, savedSet: createdSet });
+      }, previousPerformance?.sets, { afterSave: true, savedSet: createdSet }));
       writeWorkoutDraft(authUser?.id, activeWorkoutSession.id, nextDraft);
       setSetForm(nextDraft);
       setLastSavedSet(createdSet);
@@ -381,7 +383,6 @@ export function WorkoutTab() {
 
   const endSession = async (sessionId) => {
     if (endingSessionId || savingSetRef.current) return;
-    if (isMeaningfulSetDraft(setForm, activeWorkoutSession) && !window.confirm(t('End workout and discard the unsaved set? Saved sets are kept.'))) return;
     setEndingSessionId(sessionId);
     setFormError('');
     try {
@@ -570,12 +571,14 @@ function ActiveWorkoutHeader({ activeSession, appearance, ending, onReopen, reop
   const [details, setDetails] = useState({ name: activeSession.name, performed_on: activeSession.performed_on });
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
+  const closeOptions = useRef(null);
+  const closeDetails = useRef(null);
   const ended = Boolean(activeSession.ended_at);
   const save = async (event) => {
     event.preventDefault();
     if (busy || !details.name.trim() || !isValidDate(details.performed_on)) return;
     setBusy(true); setFailure('');
-    try { await onUpdate(activeSession.id, { name: details.name.trim(), performed_on: details.performed_on }); setSheet(null); }
+    try { await onUpdate(activeSession.id, { name: details.name.trim(), performed_on: details.performed_on }); closeDetails.current?.(); }
     catch (e) { setFailure(e.message); }
     finally { setBusy(false); }
   };
@@ -584,13 +587,13 @@ function ActiveWorkoutHeader({ activeSession, appearance, ending, onReopen, reop
     <div className="min-w-0 flex-1"><h2>{activeSession.name}</h2><p><span className={ended ? 'status-dot offline' : 'status-dot'} />{t(ended ? 'Session complete' : 'Workout in progress')}</p></div>
     {ended ? <button className="training-row" disabled={reopening} onClick={onReopen}><Plus size={18} />{t('Reopen')}</button> : null}
     <button type="button" className="training-options" aria-label={t('Workout options')} title={t('Workout options')} disabled={ending} onClick={() => setSheet('options')}><MoreHorizontal size={24} /></button>
-    {sheet === 'options' ? <TrainingSheet title="Workout options" onClose={() => setSheet(null)} busy={deleting}>
-      <button type="button" className="training-row" onClick={() => { setDetails({ name: activeSession.name, performed_on: activeSession.performed_on }); setSheet('edit'); }}><Pencil size={21} /><span>{t('Edit workout details')}</span><ChevronRight size={18} /></button>
+    {sheet === 'options' ? <TrainingSheet title="Workout options" onClose={() => setSheet(null)} requestCloseRef={closeOptions} busy={deleting}>
+      <button type="button" className="training-row" onClick={() => { setDetails({ name: activeSession.name, performed_on: activeSession.performed_on }); closeOptions.current?.(() => setSheet('edit')); }}><Pencil size={21} /><span>{t('Edit workout details')}</span><ChevronRight size={18} /></button>
       {confirmDelete ? <p className="text-sm text-red-200">{t('This permanently deletes this workout and all its sets.')}</p> : null}
       <button type="button" className="training-row text-red-400" disabled={deleting} onClick={onDelete}><Trash2 size={21} />{t(confirmDelete ? 'Confirm Delete Session' : 'Delete workout')}</button>
       {error ? <p role="alert">{error}</p> : null}
     </TrainingSheet> : null}
-    {sheet === 'edit' ? <TrainingSheet title="Edit workout details" onClose={() => setSheet(null)} busy={busy}><form className="grid gap-4" onSubmit={save}>
+    {sheet === 'edit' ? <TrainingSheet title="Edit workout details" onClose={() => setSheet(null)} requestCloseRef={closeDetails} busy={busy}><form className="grid gap-4" onSubmit={save}>
       <CompactField label={t('Name')} value={details.name} onChange={name => setDetails(v => ({ ...v, name }))} />
       <CompactField label={t('Date')} type="date" value={details.performed_on} onChange={performed_on => setDetails(v => ({ ...v, performed_on }))} />
       {failure ? <p role="alert">{failure}</p> : null}
@@ -945,7 +948,7 @@ function TemplateManager({
       {templateError ? <p role="alert" className="text-sm text-red-300">{t(templateError)}</p> : null}
       {editorId === 'new' ? <form ref={setup?.id ? null : setupTarget} aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
         <CompactField label={t("Template name")} value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
-        <details><summary className="min-h-11 cursor-pointer py-3 text-sm">{t('Edit appearance')}</summary><TemplateAppearanceEditor value={templateForm} onChange={setTemplateForm} /></details>
+        <TemplateAppearanceEditor value={templateForm} onChange={setTemplateForm} />
         <button type="submit" disabled={Boolean(templateLoading)} className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50">
           {templateLoading === 'template-create' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{t("Create template")}</button>
       </form> : null}
@@ -1027,15 +1030,31 @@ function TemplateManager({
 
 function TargetControl({ label, value, step, onChange, optional = false }) {
   const inputId = useId();
+  const caretFrame = useRef(null);
+  useEffect(() => () => cancelAnimationFrame(caretFrame.current), []);
+  const moveCaret = event => {
+    const input = event.currentTarget;
+    const end = () => { if (document.activeElement === input) input.setSelectionRange(input.value.length,input.value.length); };
+    end();
+    cancelAnimationFrame(caretFrame.current);
+    caretFrame.current = requestAnimationFrame(end);
+  };
   const adjust = direction => {
     const number = Number(String(value).replace(',', '.')) || 0;
     onChange(String(Math.max(0, Math.round((number + direction * step) * 1000) / 1000)));
   };
   return <div className="training-target"><label htmlFor={inputId}>{label}</label><div>
     <button type="button" aria-label={t('Decrease') + ' ' + label} onClick={() => adjust(-1)}><Minus size={19} /></button>
-    <input id={inputId} aria-label={label} inputMode={step === 1 ? 'numeric' : 'decimal'} value={value} placeholder={optional ? '—' : '0'} onChange={e => onChange(e.target.value)} />
+    <input id={inputId} aria-label={label} inputMode={step === 1 ? 'numeric' : 'decimal'} value={value} placeholder={optional ? '—' : '0'} onPointerUp={moveCaret} onClick={moveCaret} onKeyDown={() => cancelAnimationFrame(caretFrame.current)} onChange={e => onChange(e.target.value)} />
     <button type="button" aria-label={t('Increase') + ' ' + label} onClick={() => adjust(1)}><Plus size={19} /></button>
   </div></div>;
+}
+
+function RpeSelector({ value, onChange }) {
+  const choices = ['', '6', '7', '8', '9', '10'];
+  return <fieldset className="col-span-full min-w-0"><legend className="mb-2 text-sm">RPE</legend><div className="training-rpe">
+    {choices.map(v => <button type="button" key={v} aria-label={v ? 'RPE ' + v : t('None')} aria-pressed={String(value ?? '') === v} onClick={() => onChange(String(value) === v ? '' : v)}>{v || t('None')}</button>)}
+  </div>{value && !choices.includes(String(value)) ? <p className="mt-2 text-xs text-zinc-400">{t('Previous RPE: {value}. Kept unless changed.',{value})}</p> : null}</fieldset>;
 }
 
 function SetLogger({ activeSession, plan, exerciseSuggestions, formError, onSetSubmit, previousPerformance, savingSet, lastSavedSet, setFormValue, updateSetForm }) {
@@ -1061,10 +1080,7 @@ function SetLogger({ activeSession, plan, exerciseSuggestions, formError, onSetS
     {options ? <TrainingSheet title="More options" onClose={() => setOptions(false)} busy={savingSet}>
       <fieldset disabled={savingSet} className="grid gap-4">
         <label className="training-row"><input type="checkbox" className="h-5 w-5" checked={setFormValue.is_warmup} onChange={e => updateSetForm('is_warmup', e.target.checked)} />{t('Warmup set')}</label>
-        <div><span className="mb-2 block text-sm">RPE</span><div className="training-rpe">
-          {['', '6', '7', '7.5', '8', '8.5', '9', '9.5', '10'].map(v => <button type="button" key={v} aria-label={v ? 'RPE ' + v : t('None')} aria-pressed={setFormValue.rpe === v} onClick={() => updateSetForm('rpe', v === setFormValue.rpe ? '' : v)}>{v || t('None')}</button>)}
-        </div></div>
-        <CompactField label={t('RPE optional')} inputMode="decimal" value={setFormValue.rpe} onChange={v => updateSetForm('rpe', v)} />
+        <RpeSelector value={setFormValue.rpe} onChange={v => updateSetForm('rpe',v)} />
         <CompactField label={t('Set notes')} value={setFormValue.notes} onChange={v => updateSetForm('notes', v)} />
       </fieldset>
     </TrainingSheet> : null}
@@ -1256,7 +1272,7 @@ function EditSetRow({ editForm, loading, onCancel, onSave, session, setEditForm 
       <WarmupToggle checked={Boolean(editForm.is_warmup)} onChange={updateWarmup} compact />
       <CompactField label={t("Weight")} inputMode="decimal" value={editForm.weight} suffix="kg" onChange={(value) => update('weight', value)} />
       <CompactField label={t("Reps")} inputMode="numeric" value={editForm.reps} onChange={(value) => update('reps', value)} />
-      <CompactField label={t("RPE optional")} inputMode="decimal" value={editForm.rpe} onChange={(value) => update('rpe', value)} />
+      <RpeSelector value={editForm.rpe} onChange={value => update('rpe',value)} />
       <CompactField label={t("Notes")} value={editForm.notes} onChange={(value) => update('notes', value)} />
       <div className="flex items-end gap-1">
         <IconButton icon={Check} loading={loading} onClick={onSave} title={t("Save edit")} tone="emerald" size="sm" />
@@ -1870,18 +1886,6 @@ function validateSetForm(form, activeWorkoutSession) {
   if (!Number.isInteger(reps) || reps <= 0) return 'Reps must be a positive whole number.';
   if (rpe !== null && (!Number.isFinite(rpe) || rpe < 0 || rpe > 10)) return 'RPE must be between 0 and 10.';
   return '';
-}
-
-function isMeaningfulSetDraft(form, activeWorkoutSession) {
-  if (!activeWorkoutSession || activeWorkoutSession.ended_at || !form.exercise.trim()) return false;
-  const weight = parseSetWeight(form);
-  const reps = parseInteger(form.reps);
-  const rpe = parseOptionalDecimal(form.rpe);
-  return Number.isFinite(weight)
-    && weight >= 0
-    && Number.isInteger(reps)
-    && reps > 0
-    && (rpe === null || (Number.isFinite(rpe) && rpe >= 0 && rpe <= 10));
 }
 
 function isValidDate(value) {

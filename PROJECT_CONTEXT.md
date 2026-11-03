@@ -1,5 +1,21 @@
 # LifeOS Project Context
 
+## Training UX / PWA corrections (2026-11-03)
+
+Approved structure is unchanged. Training sheets now share animated, content-sized
+native dialogs with visualViewport/safe-area constraints and safe button focus.
+Exercise triggers are semantic buttons (no Safari input-focus zoom). Numeric taps
+place the caret at end without overriding keyboard edits. New template appearance
+is directly visible. RPE is one None/6/7/8/9/10 selector; historical fractional
+values stay intact. Per-exercise draft baselines distinguish prefill from edits.
+End Workout never prompts to discard a logger form or silently saves it.
+Settings -> Application exposes shared update state, build SHA and manual checks;
+automatic discovery never forces activation. Workbox's implicit cross-tab reload
+is disabled. Updates block while workouts load, any workout is active, or genuine
+unsaved work exists. No destructive storage/cache reset. No schema rerun required.
+See docs/PWA_TRAINING_CORRECTIONS.md for code boundaries, A/B Workbox QA and
+physical-device limitations. Unrelated OAuth work remains excluded.
+
 ## Active Training / Identity / Media (2026-11-03)
 
 The approved active-session reference now governs logging: template-colored header,

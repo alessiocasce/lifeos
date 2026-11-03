@@ -7,6 +7,8 @@ import { useLocalDay } from '../hooks/useLocalDay';
 import { readWorkoutDraft } from '../utils/workoutContinuity';
 import { LifeOSLogo } from './LifeOSLogo';
 import { PullToRefresh } from './PullToRefresh';
+import { AppUpdateNotice } from './AppUpdates';
+import { appUpdate } from '../utils/pwaUpdate';
 
 const destinations = {
   community: { label: 'Community', icon: Users },
@@ -26,7 +28,10 @@ const moreDestinations = ['projects', ...utilities];
 const mobile = ['home', 'community', 'workout', 'assistant', 'more'];
 
 export function Shell({ children }) {
-  const { activeTab, activeWorkoutSession, authUser, userSettings, setActiveTab, setActiveWorkoutId, signOut, workoutSessions } = useLifeOS();
+  const { activeTab, activeWorkoutSession, authUser, userSettings, setActiveTab, setActiveWorkoutId, signOut, workoutSessions, workoutSessionsStatus, meaningfulUnsavedWork } = useLifeOS();
+  const updateGuard = useRef(null);
+  updateGuard.current = workoutSessionsStatus !== 'ready' ? 'loading-workouts' : workoutSessions.some(session => !session.ended_at) ? 'active-workout' : meaningfulUnsavedWork?.length ? 'unsaved-work' : null;
+  useEffect(() => { appUpdate.setGuard(() => updateGuard.current); return () => appUpdate.setGuard(() => null); }, []);
   const [signingOut, setSigningOut] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -98,6 +103,7 @@ export function Shell({ children }) {
         </div>
       </aside>
       <main className="workspace">
+        <AppUpdateNotice />
         <header className="workspace-header">
           <div className="flex min-w-0 items-center gap-3">
             <span className="mobile-brand">{activeTab === 'workout' ? <span className="training-brand"><Hexagon size={26} strokeWidth={1.3} /><Dumbbell size={15} strokeWidth={1.8} /></span> : <LifeOSLogo size={23} />}</span>

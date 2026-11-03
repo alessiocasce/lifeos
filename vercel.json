@@ -1,4 +1,9 @@
 {
+  "headers": [
+    { "source": "/((?!api/|assets/).*)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }] },
+    { "source": "/build-version.json", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }
+  ],
   "rewrites": [
     { "source": "/.well-known/oauth-protected-resource", "destination": "/api/mcp?mcp_oauth=protected-resource" },
     { "source": "/.well-known/oauth-authorization-server", "destination": "/api/mcp?mcp_oauth=authorization-server" },

@@ -18,7 +18,7 @@ for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]) {
   test(`picker layout, active categories and keyboard at ${width}`,async({page},info)=>{
     await page.setViewportSize({width,height});
     await page.goto('/workout');
-    await page.getByRole('textbox',{name:'Exercise',exact:true}).click();
+    await page.getByRole('button',{name:'Exercise',exact:true}).click();
     const dialog=page.getByRole('dialog',{name:'Choose exercise',exact:true});
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('combobox')).not.toContainText('Glutes');
@@ -35,14 +35,14 @@ for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]) {
     await expect(dialog.getByRole('button',{name:'Military Press',exact:true})).toBeFocused();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     const box=await dialog.boundingBox();expect(box.width).toBeLessThanOrEqual(width);
-    if(width===390)expect(box.width).toBeGreaterThanOrEqual(388);
+    if(width===390)expect(box.width).toBeGreaterThanOrEqual(370);
     await page.screenshot({path:info.outputPath(`picker-${width}.png`)});
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole('textbox',{name:'Exercise',exact:true})).toHaveValue('Military Press');
-    await expect(page.getByRole('textbox',{name:'Exercise',exact:true})).toBeFocused();
+    await expect(page.getByRole('button',{name:'Exercise',exact:true})).toContainText('Military Press');
+    await expect(page.getByRole('button',{name:'Exercise',exact:true})).toBeFocused();
     await searchExercise(page,'Bench');await page.keyboard.press('Escape');
-    await expect(page.getByRole('textbox',{name:'Exercise',exact:true})).toHaveValue('Military Press');
+    await expect(page.getByRole('button',{name:'Exercise',exact:true})).toContainText('Military Press');
   });
 }
 

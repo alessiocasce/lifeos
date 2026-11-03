@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { selectExercise } from './exercisePicker.js';
 
-const exercise = (page) => page.getByRole('textbox', { name: 'Exercise', exact: true });
+const exercise = (page) => page.getByRole('button', { name: 'Exercise', exact: true });
 const weight = (page) => page.getByRole('textbox', { name: /Weight/ });
 const reps = (page) => page.getByRole('textbox', { name: 'Reps', exact: true });
 
@@ -21,22 +21,22 @@ test('unsaved full draft and exercise switch survive reload', async ({ page }, t
   page.on('pageerror', (error) => errors.push(error.message));
   await fillDraft(page);
   await page.getByRole('button', { name: 'More options', exact: true }).click();
-  await page.getByRole('textbox', { name: 'RPE optional' }).fill('8');
+  await page.getByRole('button', { name: 'RPE 8', exact: true }).click();
   await page.getByRole('textbox', { name: 'Set notes' }).fill('Controlled eccentric');
   await page.screenshot({ path: testInfo.outputPath('training-mobile.png'), fullPage: true });
   await page.getByRole('checkbox', { name: 'Warmup set' }).check();
   await page.reload();
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await expect(weight(page)).toHaveValue('25');
   await expect(reps(page)).toHaveValue('8');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'RPE optional' })).toHaveValue('8');
+  await expect(page.getByRole('button', { name: 'RPE 8', exact: true })).toHaveAttribute('aria-pressed','true');
   await expect(page.getByRole('textbox', { name: 'Set notes' })).toHaveValue('Controlled eccentric');
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save Set', exact: true })).toBeVisible();
   await selectExercise(page,'Dumbbell Curl');
   await page.reload();
-  await expect(exercise(page)).toHaveValue('Dumbbell Curl');
+  await expect(exercise(page)).toContainText('Dumbbell Curl');
   expect(errors).toEqual([]);
 });
 
@@ -46,7 +46,7 @@ test('confirmed save preserves exercise and load, advances set, and survives roo
   await expect(reps(page)).toHaveValue('8');
   await page.goto('/');
   await expect(page).toHaveURL(/\/workout$/);
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await expect(weight(page)).toHaveValue('25');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('lifeos:training:v1:qa-user-a:draft:qa-session-a')).draft.set_number)).toBe(2);
   const sets = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets);
@@ -61,7 +61,7 @@ test('failed mutation keeps draft through reload and never pretends it saved', a
   await expect(reps(page)).toHaveValue('8');
   await page.reload();
   await expect(reps(page)).toHaveValue('8');
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
 });
 
 test('saved sets remain editable, deletable and session can reopen', async ({ page }) => {
@@ -75,7 +75,6 @@ test('saved sets remain editable, deletable and session can reopen', async ({ pa
   await expect(editor).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].reps)).toBe(10);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
   await page.getByRole('button', { name: 'Reopen', exact: true }).click();
   await expect(exercise(page)).toBeVisible();
@@ -87,7 +86,6 @@ test('saved sets remain editable, deletable and session can reopen', async ({ pa
 
 test('confirmed end clears draft and new session starts clean', async ({ page }) => {
   await fillDraft(page);
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
   await expect(page.getByText('This workout is ended. Reopen it to add more sets.')).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes(':draft:')))).toEqual([]);
@@ -97,7 +95,7 @@ test('confirmed end clears draft and new session starts clean', async ({ page })
     localStorage.setItem('qa-workouts', JSON.stringify(rows));
   });
   await page.reload();
-  await expect(exercise(page)).toHaveValue('');
+  await expect(exercise(page)).toContainText('Choose exercise');
   await expect(weight(page)).toHaveValue('');
 });
 
@@ -121,7 +119,7 @@ test('intentional Home navigation and direct routes win; auth refresh preserves 
   await page.goto('/health');
   await expect(page).toHaveURL(/\/health$/);
   await page.goto('/workout');
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
 });
 
 test('session switching isolates fields and restores selected session ahead of newer rows', async ({ page }) => {
@@ -134,15 +132,15 @@ test('session switching isolates fields and restores selected session ahead of n
     ]));
   });
   await page.reload();
-  await expect(exercise(page)).toHaveValue('Barbell Curl');
+  await expect(exercise(page)).toContainText('Barbell Curl');
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: /Other workout/ }).click();
   await page.getByText('Session actions', { exact: true }).click();
   await page.getByRole('button', { name: 'Select for logging', exact: true }).click();
-  await expect(exercise(page)).toHaveValue('');
+  await expect(exercise(page)).toContainText('Choose exercise');
   await selectExercise(page,'Squat');
   await page.reload();
-  await expect(exercise(page)).toHaveValue('Squat');
+  await expect(exercise(page)).toContainText('Squat');
 });
 
 test('deleted saved session does not restore stale draft or redirect root', async ({ page }) => {

@@ -41,7 +41,6 @@ test('empty state, real start, icon persistence, rename/delete and immutable sna
   const create = page.getByRole('form', { name: 'Create workout template' });
   await expect(create.getByLabel('Template name')).toHaveValue('');
   await create.getByLabel('Template name').fill('My legs');
-  await create.getByText('Edit appearance', { exact: true }).click();
   await create.getByRole('button', { name: 'Purple', exact: true }).click();
   for (const [key, label] of Object.entries(TEMPLATE_ICONS)) {
     const choice = create.getByRole('button', { name: label, exact: true });
@@ -63,11 +62,11 @@ test('empty state, real start, icon persistence, rename/delete and immutable sna
   await row.getByRole('button', { name: 'Cancel template edit' }).click();
   const add = row.getByRole('group', { name: 'Add template exercise' });
   await selectExercise(page, 'Leg Press', { label: 'Add exercise', scope: add });
-  await add.getByRole('button', { name: 'Add exercise', exact: true }).click();
+  await add.getByRole('button', { name: 'Add exercise', exact: true }).filter({hasNot:page.locator('span')}).click();
   await expect(row.getByRole('group', { name: /^Template exercise/ })).toHaveCount(1);
   await page.getByRole('button', { name: 'Live', exact: true }).click();
   await quick.getByRole('button', { name: 'Start My legs', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).not.toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Leg Press');
   const session = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0]);
   expect(session.template_snapshot).toHaveLength(1);
   await page.getByRole('button', { name: 'Manage', exact: true }).click();

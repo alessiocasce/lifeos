@@ -21,7 +21,7 @@ export function useWorkoutDraft(userId, session) {
     if (current.current.key !== key) return;
     const previous = current.current.draft;
     const next = sanitizeSetDraft(typeof update === 'function' ? update(previous) : update);
-    if (Object.keys(next).every((field) => next[field] === previous[field])) return;
+    if (JSON.stringify(next) === JSON.stringify(previous)) return;
     const envelope = { key, draft: next };
     current.current = envelope;
     // Synchronous persistence at each input boundary survives abrupt process death.

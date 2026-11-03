@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Save, RefreshCw } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { ProfilePhotoEditor } from '../components/ProfilePhotoEditor';
+import { ApplicationUpdates } from '../components/AppUpdates';
 
 export function SettingsTab() {
   const { authUser, userSettings: settings } = useLifeOS();
@@ -45,6 +46,7 @@ function SettingsForm({ authUser, settings }) {
     finally { lock.current = false; setBusy(false); }
   };
   return <div className="max-w-xl space-y-8">
+    <ApplicationUpdates />
     <ProfilePhotoEditor key={authUser?.id || 'guest'} profile={photoProfile} userId={authUser?.id} disabled={busy || settings.status !== 'ready' || !settings.profile} onBusyChange={setPhotoBusy} onChange={async next => { setPhotoProfile(next); await settings.reloadSettings(); }} />
     <form onSubmit={save} className="space-y-6">
       <fieldset disabled={busy || photoBusy || settings.status !== 'ready'} className="grid gap-5">

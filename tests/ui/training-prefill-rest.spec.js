@@ -25,14 +25,14 @@ test('committed exercise and saved sets prefill targets, never outcomes or manua
   await expect(field(page, 'Reps')).toHaveValue('8');
   await field(page, 'Weight (kg)').fill('82.5');
   await page.getByRole('button',{name:'More options',exact:true}).click();
-  await field(page,'RPE optional').fill('8');
+  await page.getByRole('button',{name:'RPE 8',exact:true}).click();
   await field(page,'Set notes').fill('Actual outcome');
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
   await expect(field(page,'Weight (kg)')).toHaveValue('80');
   await expect(field(page,'Reps')).toHaveValue('7');
   await page.getByRole('button',{name:'More options',exact:true}).click();
-  await expect(field(page,'RPE optional')).toHaveValue('');
+  await expect(page.getByRole('button',{name:'None',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(field(page,'Set notes')).toHaveValue('');
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
   await page.getByRole('button',{name:'History',exact:true}).click();

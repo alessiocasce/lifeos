@@ -44,13 +44,33 @@ export function sanitizeSetDraft(input) {
     const raw = typeof value[field] === 'number' ? String(value[field]) : text(field, 12);
     return /^\d{0,6}(?:[.,]\d{0,3})?$/.test(raw) ? raw : '';
   };
-  return {
+  const draft = {
     exercise: text('exercise', 160),
     exercise_id: typeof value.exercise_id === 'string' && /^[0-9a-f-]{36}$/i.test(value.exercise_id) ? value.exercise_id : null,
     set_number: Number.isInteger(value.set_number) && value.set_number > 0 && value.set_number < 10000 ? value.set_number : 1,
     weight: numericInput('weight'), reps: numericInput('reps'), rpe: numericInput('rpe'),
     is_warmup: value.is_warmup === true, notes: text('notes', 2000),
   };
+  if (value.baseline && typeof value.baseline === 'object') {
+    draft.baseline = Object.fromEntries(['weight','reps','rpe','is_warmup','notes'].map(field => [field, field === 'is_warmup' ? value.baseline[field] === true : String(value.baseline[field] ?? '').slice(0, field === 'notes' ? 2000 : 12)]));
+  }
+  return draft;
+}
+
+export function withDraftBaseline(draft) {
+  return { ...draft, baseline: Object.fromEntries(['weight','reps','rpe','is_warmup','notes'].map(field => [field,draft[field]])) };
+}
+
+export function draftHasEdits(draft) {
+  if (!draft) return false;
+  // Older drafts have no trustworthy baseline; protect them conservatively.
+  const baseline = draft.baseline || { weight:'',reps:'',rpe:'',is_warmup:false,notes:'' };
+  return ['weight','reps','rpe','is_warmup','notes'].some(field => draft[field] !== baseline[field]);
+}
+
+export function hasWorkoutDraftEdits(userId, sessionId, options = {}) {
+  const row = read(keyFor(userId, `draft:${encodeURIComponent(sessionId)}`), options.storage, options.now ?? Date.now());
+  return row?.session_id === sessionId && [row.draft,...Object.values(row.exercises || {})].some(draftHasEdits);
 }
 
 export function readWorkoutDraft(userId, sessionId, { storage, now = Date.now() } = {}) {

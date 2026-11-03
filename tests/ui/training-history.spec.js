@@ -26,32 +26,32 @@ test.beforeEach(async ({ page }) => {
 
 test('exercise suggestions support keyboard selection, dismissal and durable exercise choice', async ({ page }, info) => {
   await page.goto('/workout');
-  const exercise = page.getByRole('textbox', { name: 'Exercise', exact: true });
+  const exercise = page.getByRole('button', { name: 'Exercise', exact: true });
   await searchExercise(page,'Curl');
-  await exercise.press('ArrowDown');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Exercise',exact:true}).press('ArrowDown');
   const suggestions = page.getByRole('group', { name: 'Exercise suggestions' });
   await expect(suggestions.getByRole('button', { name: 'Barbell Curl', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(suggestions.getByRole('button', { name: 'Dumbbell Curl', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(exercise).toHaveValue('Dumbbell Curl');
+  await expect(exercise).toContainText('Dumbbell Curl');
   await expect(exercise).toBeFocused();
   await expect(suggestions).toHaveCount(0);
   await page.reload();
-  await expect(exercise).toHaveValue('Dumbbell Curl');
+  await expect(exercise).toContainText('Dumbbell Curl');
   await searchExercise(page,'Curl');
-  await exercise.press('ArrowDown');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Exercise',exact:true}).press('ArrowDown');
   await page.keyboard.press('Escape');
   await expect(exercise).toBeFocused();
-  await expect(exercise).toHaveValue('Dumbbell Curl');
+  await expect(exercise).toContainText('Dumbbell Curl');
   await expect(suggestions).toHaveCount(0);
   await searchExercise(page,'C');
-  await exercise.fill('Curl');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Exercise',exact:true}).fill('Curl');
   const button = suggestions.getByRole('button', { name: 'Barbell Curl', exact: true });
   expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: info.outputPath('exercise-suggestions.png'), fullPage: true });
   await button.click();
-  await expect(exercise).toHaveValue('Barbell Curl');
+  await expect(exercise).toContainText('Barbell Curl');
 });
 
 test('full last time includes warmups, RPE and notes from the latest matching prior workout', async ({ page }, info) => {
@@ -67,7 +67,7 @@ test('full last time includes warmups, RPE and notes from the latest matching pr
   await expect(logger).not.toContainText('200 kg');
   await page.getByRole('button', { name: 'Command', exact: true }).click();
   await page.getByRole('button', { name: 'Training', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveValue('Barbell Curl');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Barbell Curl');
   await expect(logger).toContainText('27.5 kg × 6');
   await page.screenshot({ path: info.outputPath('live-last-time.png'), fullPage: true });
   await page.getByRole('button', { name: 'History', exact: true }).click();
@@ -100,7 +100,7 @@ test('editing warmup classification preserves load, notes and separate set numbe
   expect(await row()).toMatchObject({ is_warmup: false, set_number: 3, weight: 100, reps: 1, rpe: null, notes: 'Controlled' });
   await page.reload();
   await page.getByRole('button', { name: 'Edit set', exact: true }).last().click();
-  await expect(editor.getByRole('textbox', { name: 'Weight (kg)', exact: true })).toHaveValue('100');
+  await expect(editor.getByRole('textbox', { name: 'Weight kg', exact: true })).toHaveValue('100');
   await expect(warmup).toHaveAttribute('aria-pressed', 'false');
   await warmup.click();
   await editor.getByRole('button', { name: 'Save edit', exact: true }).click();
@@ -125,7 +125,7 @@ test('session deletion requires confirmation, retains failed session and clears 
   await confirm.click();
   await expect(confirm).toBeDisabled();
   await expect(page.getByRole('dialog').getByRole('alert')).toHaveText('Workout session was not deleted.');
-  await expect(page.locator('input[aria-label="Exercise"]')).toHaveValue('Squat');
+  await expect(page.locator('button[aria-label="Exercise"]')).toContainText('Squat');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).length)).toBe(4);
   await page.evaluate(() => localStorage.removeItem('qa-session-delete-fail'));
   await confirm.click();
@@ -135,7 +135,7 @@ test('session deletion requires confirmation, retains failed session and clears 
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes(':draft:qa-active')))).toEqual([]);
   await page.reload();
   await expect(page.getByRole('button', { name: 'Start Empty Workout', exact: true })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await expect(page.getByRole('button', { name: /qa-prior/ })).toHaveCount(1);
   await expect(page.getByRole('button', { name: /qa-active/ })).toHaveCount(0);
@@ -149,7 +149,7 @@ test('History is read-only and returning Live preserves session and complete dra
   await page.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('80');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
-  await page.getByRole('textbox', { name: 'RPE optional', exact: true }).fill('9');
+  await page.getByRole('button', { name: 'RPE 9', exact: true }).click();
   await page.getByRole('textbox', { name: 'Set notes', exact: true }).fill('Keep this draft');
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   const workspace = await page.evaluate(() => localStorage.getItem('lifeos:training:v1:qa-user-a:workspace'));
@@ -164,13 +164,13 @@ test('History is read-only and returning Live preserves session and complete dra
   await page.getByRole('button', { name: 'Back to History', exact: true }).click();
   await page.getByRole('button', { name: /qa-future/ }).click();
   await page.getByRole('button', { name: 'Live', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveValue('Barbell Curl');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Barbell Curl');
   await expect(page.getByRole('textbox', { name: 'Weight (kg)', exact: true })).toHaveValue('80');
   await expect(page.getByRole('textbox', { name: 'Reps', exact: true })).toHaveValue('8');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'RPE optional', exact: true })).toHaveValue('9');
+  await expect(page.getByRole('button', { name: 'RPE 9', exact: true })).toHaveAttribute('aria-pressed','true');
   await expect(page.getByRole('textbox', { name: 'Set notes', exact: true })).toHaveValue('Keep this draft');
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'Exercise', exact: true })).toHaveValue('Barbell Curl');
+  await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Barbell Curl');
   expect(errors).toEqual([]);
 });

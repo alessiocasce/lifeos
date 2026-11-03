@@ -40,7 +40,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     await page.screenshot({ path: info.outputPath('command.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole('region', { name: 'Active work' }).getByRole('button', { name: /Active Training/ }).click();
-    await expect(page.getByRole('textbox', { name: 'Exercise' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Exercise' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 }

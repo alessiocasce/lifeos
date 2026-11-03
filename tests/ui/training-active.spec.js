@@ -23,8 +23,9 @@ test.beforeEach(async ({ page }) => {
 });
 const field=(page,name)=>page.getByRole('textbox',{name,exact:true});
 async function switchPlan(page,name) {
-  await page.getByRole('button',{name:'Choose exercise',exact:true}).click();
+  await page.getByRole('button',{name:'Exercise',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:new RegExp(name)}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 test('exercise drafts are independent, durable, with own prefill and outcome state',async({page})=>{
@@ -32,7 +33,7 @@ test('exercise drafts are independent, durable, with own prefill and outcome sta
   await expect(field(page,'Weight (kg)')).toHaveValue('55');
   await field(page,'Weight (kg)').fill('57.5');
   await page.getByRole('button',{name:'More options',exact:true}).click();
-  await page.getByRole('button',{name:'RPE 7.5',exact:true}).click();
+  await page.getByRole('button',{name:'RPE 7',exact:true}).click();
   await field(page,'Set notes').fill('Only A');
   await page.getByRole('checkbox',{name:'Warmup set'}).check();
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
@@ -40,9 +41,10 @@ test('exercise drafts are independent, durable, with own prefill and outcome sta
   await expect(field(page,'Weight (kg)')).toHaveValue('30');
   await page.getByRole('button',{name:'More options',exact:true}).click();
   await expect(field(page,'Set notes')).toHaveValue('');
-  await expect(field(page,'RPE optional')).toHaveValue('');
+  await expect(page.getByRole('button',{name:'None',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(page.getByRole('checkbox',{name:'Warmup set'})).not.toBeChecked();
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await field(page,'Reps').fill('11');
   await page.reload();
   await expect(field(page,'Reps')).toHaveValue('11');
@@ -50,7 +52,7 @@ test('exercise drafts are independent, durable, with own prefill and outcome sta
   await expect(field(page,'Weight (kg)')).toHaveValue('57.5');
   await page.getByRole('button',{name:'More options',exact:true}).click();
   await expect(field(page,'Set notes')).toHaveValue('Only A');
-  await expect(field(page,'RPE optional')).toHaveValue('7.5');
+  await expect(page.getByRole('button',{name:'RPE 7',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.getByRole('button',{name:'None',exact:true}).click();
   await page.getByRole('checkbox',{name:'Warmup set'}).uncheck();
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
@@ -104,13 +106,12 @@ test('Manage is a saved-template library with a focused notes-free editor',async
   const create=page.getByRole('form',{name:'Create workout template'});
   await create.getByLabel('Template name').fill('My actual plan');
   await expect(create.getByLabel('Notes',{exact:true})).toHaveCount(0);
-  await create.getByText('Edit appearance',{exact:true}).click();
   await create.getByRole('button',{name:'Blue',exact:true}).click();
   await create.getByRole('button',{name:'Back',exact:true}).click();
   await create.getByRole('button',{name:'Create template',exact:true}).click();
   const add=page.getByRole('group',{name:'Add template exercise'});
   await selectExercise(page,'Barbell Curl',{label:'Add exercise',scope:add});
-  await add.getByRole('button',{name:'Add exercise',exact:true}).click();
+  await add.getByRole('button',{name:'Add exercise',exact:true}).filter({hasNot:page.locator('span')}).click();
   await page.getByRole('button',{name:'Your templates',exact:true}).click();
   await expect(page.getByRole('group',{name:'Add template exercise'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:/My actual plan/})).toContainText('1 exercises');
@@ -126,7 +127,7 @@ for(const width of [390,768,1024,1440]) test('approved active layout at '+width,
   await page.getByRole('button',{name:'More options',exact:true}).click();
   await page.screenshot({path:info.outputPath('options.png'),fullPage:true});
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
-  await page.getByRole('button',{name:'Choose exercise',exact:true}).click();
+  await page.getByRole('button',{name:'Exercise',exact:true}).click();
   await page.screenshot({path:info.outputPath('exercise-sheet.png'),fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
 });
