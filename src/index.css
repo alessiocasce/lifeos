@@ -155,7 +155,7 @@
   .header-date { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
   .workspace-content { max-width: 1600px; margin: 0 auto; padding: 20px 16px calc(100px + env(safe-area-inset-bottom)); }
   .workspace-content.has-training-dock { padding-bottom: calc(178px + env(safe-area-inset-bottom)); }
-  .mobile-dock { position: fixed; z-index: 40; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); min-height: 72px; padding: 4px 8px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #101216; }
+  .mobile-dock { position: fixed; z-index: 40; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: calc(63px + max(5px, env(safe-area-inset-bottom))); padding: 4px 8px max(5px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #101216; }
   .mobile-destination { display: flex; min-width: 0; min-height: 58px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: #9098a3; font-size: 10px; }
   .mobile-destination-icon { height: 28px; min-width: 42px; display: grid; place-items: center; border-radius: 4px; }
   .mobile-destination[aria-current] { color: white; }

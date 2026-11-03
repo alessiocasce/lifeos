@@ -351,3 +351,11 @@ are blocked during a live workout, including on other app tabs; after ending,
 Settings update changes the running build ID and retains user storage.
 No rest timers, schema/data edits or fake production workouts. Physical iPhone
 Safari/installed PWA and installed desktop PWA still need device acceptance.
+
+## Floating sheets and picker navigation
+
+Run `training-navigation.spec.js` for first-shell/tab dock measurements at
+375/390/430, floating outlines, 01 numbering, plan/catalog Back + scroll restore,
+and name-only empty workout creation (Rome midnight, failure/cancel/double-submit).
+See TRAINING_NAVIGATION_QA.md. Safari toolbar collapse and standalone cold launch
+remain physical acceptance; synthetic viewport changes are not device proof.

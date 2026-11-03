@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useState, useRef } from 'react';
 import { useLocalDay } from '../hooks/useLocalDay';
+import { localDate } from '../utils/date';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
 import { TrainingSheet } from '../components/TrainingSheet';
 import { prefillWorkoutTargets } from '../utils/workoutPrefill';
@@ -37,7 +38,6 @@ const WARMUP_SET_NUMBER_OFFSET = 1000;
 
 export function WorkoutTab() {
   const today = useLocalDay();
-  const priorDay = useRef(today);
   const {
     authUser,
     activeWorkoutId,
@@ -66,13 +66,10 @@ export function WorkoutTab() {
     workoutTemplatesStatus,
   } = useLifeOS();
 
-  const [sessionForm, setSessionForm] = useState({ name: 'Today Workout', performed_on: today, notes: '' });
+  const [sessionForm, setSessionForm] = useState({ name: '', notes: '' });
   const [showCustomSession, setShowCustomSession] = useState(false);
-  useEffect(() => {
-    const previous = priorDay.current;
-    priorDay.current = today;
-    if (!showCustomSession) setSessionForm((form) => form.performed_on === previous ? { ...form, performed_on: today } : form);
-  }, [today, showCustomSession]);
+  const creatingSession = useRef(false);
+  const closeNewWorkout = useRef(null);
   const [setForm, setSetForm, draftStorageUnavailable] = useWorkoutDraft(authUser?.id, activeWorkoutSession);
   const savingSetRef = useRef(false);
   const [editingSetId, setEditingSetId] = useState(null);
@@ -152,7 +149,7 @@ export function WorkoutTab() {
 
   const startWorkout = async (event) => {
     event.preventDefault();
-    if (savingSession || startingTemplateId) return;
+    if (creatingSession.current || savingSession || startingTemplateId) return;
     setFormError('');
 
     if (!sessionForm.name.trim()) {
@@ -160,26 +157,25 @@ export function WorkoutTab() {
       return;
     }
 
-    if (!isValidDate(sessionForm.performed_on)) {
-      setFormError(t("Workout date is invalid."));
-      return;
-    }
-
+    creatingSession.current = true;
     setSavingSession(true);
+    let completed = false;
     try {
+      const createdAt = new Date();
       await createWorkoutSession({
         name: sessionForm.name.trim(),
-        performed_on: sessionForm.performed_on,
-        started_at: new Date().toISOString(),
+        performed_on: localDate(0, createdAt),
+        started_at: createdAt.toISOString(),
         template_id: null,
         template_snapshot: [],
         notes: sessionForm.notes.trim(),
       });
-      setShowCustomSession(false);
+      completed = true;
+      closeNewWorkout.current?.();
     } catch (error) {
       setFormError(error.message || t("Failed to start workout session."));
     } finally {
-      setSavingSession(false);
+      if (!completed) { creatingSession.current = false; setSavingSession(false); }
     }
   };
 
@@ -526,7 +522,7 @@ export function WorkoutTab() {
         <>
           <div className="col-span-12 grid gap-3 xl:grid-cols-[minmax(0,760px)_1fr]">
             <WorkoutSessionControl
-              formError={formError}
+              formError={showCustomSession ? '' : formError}
               activeSession={activeWorkoutSession}
               activeWorkoutId={activeWorkoutId}
               createWorkoutTemplate={createWorkoutTemplate}
@@ -539,13 +535,10 @@ export function WorkoutTab() {
               onSelectToday={selectOrStartToday}
               onStartFromTemplate={startFromTemplate}
               onSetupTemplate={openTemplateSetup}
-              onStartWorkout={startWorkout}
               reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise}
               savingSession={savingSession}
               selectingToday={selectingToday}
-              sessionForm={sessionForm}
               setActiveWorkoutId={setActiveWorkoutId}
-              setSessionForm={setSessionForm}
               setShowCustomSession={setShowCustomSession}
               showCustomSession={showCustomSession}
               startingTemplateId={startingTemplateId}
@@ -562,6 +555,16 @@ export function WorkoutTab() {
           </div>
         </>
       )}
+      {showCustomSession ? <TrainingSheet title="New workout" requestCloseRef={closeNewWorkout} busy={savingSession} onClose={() => { setShowCustomSession(false); setSessionForm({name:'',notes:''}); setFormError(''); creatingSession.current = false; setSavingSession(false); }}>
+        <form aria-label={t('New workout')} className="grid gap-4" onSubmit={startWorkout}>
+          <fieldset disabled={savingSession} className="grid gap-4">
+            <CompactField label={t('Workout name')} value={sessionForm.name} onChange={name => setSessionForm(v => ({...v,name}))} />
+            {formError ? <p role="alert" className="text-sm text-red-300">{formError}</p> : null}
+            <button type="submit" className="primary-button min-h-12" disabled={savingSession}>{savingSession ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}{t(savingSession ? 'Starting' : 'Start workout')}</button>
+            <button type="button" className="min-h-11 text-sm text-zinc-400" disabled={savingSession} onClick={() => closeNewWorkout.current?.()}>{t('Cancel')}</button>
+          </fieldset>
+        </form>
+      </TrainingSheet> : null}
     </div>
   );
 }
@@ -616,15 +619,12 @@ function WorkoutSessionControl({
   onSelectToday,
   onStartFromTemplate,
   onSetupTemplate,
-  onStartWorkout,
   reorderWorkoutTemplateExercise,
   savingSession,
   selectingToday,
-  sessionForm,
   startingTemplateId,
   today,
   setActiveWorkoutId,
-  setSessionForm,
   setShowCustomSession,
   showCustomSession,
   updateWorkoutTemplate,
@@ -693,23 +693,6 @@ function WorkoutSessionControl({
             aria-description={t('Build your workout as you go')}
             className="training-empty-card"
           ><span className="training-empty-icon"><Plus size={27} strokeWidth={1.6} /></span><span className="training-template-copy"><span className="training-template-name">{t("Start empty workout")}</span><span className="training-template-detail">{t('Build your workout as you go')}</span></span><ChevronRight size={20} className="training-template-chevron" aria-hidden="true" /></button>
-        ) : null}
-
-        {!activeSession && showCustomSession ? (
-          <form aria-label={t("Start empty workout")} onSubmit={onStartWorkout} className="grid gap-3 py-3">
-            <fieldset disabled={savingSession || Boolean(startingTemplateId)} className="grid min-w-0 gap-3">
-            <CompactField label={t("Name")} value={sessionForm.name} onChange={(value) => setSessionForm((prev) => ({ ...prev, name: value }))} />
-            <CompactField label={t("Date")} type="date" value={sessionForm.performed_on} onChange={(value) => setSessionForm((prev) => ({ ...prev, performed_on: value }))} />
-            <button
-              type="submit"
-              disabled={savingSession || Boolean(startingTemplateId)}
-              className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50"
-            >
-              {savingSession ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {savingSession ? t("Starting") : t("Start Empty")}
-            </button>
-            </fieldset>
-          </form>
         ) : null}
 
         {activeSession ? (

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, Dumbbell, Repeat2, Plus } from 'lucide-react';
 import { TrainingSheet } from './TrainingSheet';
 import { getLanguage, t } from '../i18n';
@@ -13,7 +13,16 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [custom, setCustom] = useState(false);
-  const [showPlan, setShowPlan] = useState(false);
+  const [view, setView] = useState('catalog');
+  const [panelHeight, setPanelHeight] = useState(400);
+  const showPlan = view === 'plan';
+  const hasPlan = Boolean(templatePlan?.length);
+  const planContent = useRef(null);
+  const planScroll = useRef(null);
+  const savedPlanScroll = useRef(0);
+  const anotherExercise = useRef(null);
+  const backButton = useRef(null);
+  const hasOpenedCatalog = useRef(false);
   const trigger = useRef(null);
   const requestClose = useRef(null);
   const search = useRef(null);
@@ -28,7 +37,37 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
     requestClose.current?.();
   };
   const commit = exercise => { onCommit(exercise); close(); };
-  const begin = () => { setQuery(''); setCategory(''); setCustom(false); setShowPlan(Boolean(templatePlan?.length)); setOpen(true); };
+  const begin = () => {
+    setQuery(''); setCategory(''); setCustom(false); setView(hasPlan ? 'plan' : 'catalog');
+    setPanelHeight(hasPlan ? templatePlan.length * 52 + 62 : Math.min(640,window.innerHeight * .65));
+    savedPlanScroll.current = 0; hasOpenedCatalog.current = false; setOpen(true);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const measure = () => setPanelHeight(showPlan ? planContent.current?.scrollHeight || 114 : Math.min(640,(window.visualViewport?.height || window.innerHeight) * .65));
+    const observer = new ResizeObserver(measure);
+    if (planContent.current) observer.observe(planContent.current);
+    window.visualViewport?.addEventListener('resize',measure);
+    window.addEventListener('resize',measure);
+    measure();
+    return () => { observer.disconnect(); window.visualViewport?.removeEventListener('resize',measure); window.removeEventListener('resize',measure); };
+  },[open,showPlan]);
+  const openCatalog = () => {
+    savedPlanScroll.current = planScroll.current?.scrollTop || 0;
+    if (!hasOpenedCatalog.current && list.current) list.current.scrollTop = 0;
+    hasOpenedCatalog.current = true;
+    setView('catalog');
+  };
+  const back = () => setView('plan');
+  useEffect(() => {
+    if (open && !showPlan && hasPlan) backButton.current?.focus({preventScroll:true});
+  },[open,showPlan,hasPlan]);
+  useEffect(() => {
+    if (!open || !showPlan || !hasOpenedCatalog.current) return;
+    const restore = () => { if (planScroll.current) planScroll.current.scrollTop = savedPlanScroll.current; anotherExercise.current?.focus({preventScroll:true}); };
+    const timeout = setTimeout(restore,window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220);
+    return () => clearTimeout(timeout);
+  },[open,showPlan]);
   const navigate = event => {
     if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
     const buttons = [...list.current.querySelectorAll('[data-exercise-option]')];
@@ -55,8 +94,12 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
         className="exercise-trigger min-h-12 min-w-0 flex-1 bg-transparent text-left text-base font-medium text-zinc-100"
         onClick={begin}><span>{exerciseLabel({exercise:value,exercise_id:exerciseId},language) || t('Choose exercise')}</span><span aria-hidden="true">{compact ? <Repeat2 size={22} /> : <ChevronDown size={18} />}</span></button>
     </div>
-    {open && <TrainingSheet title="Choose exercise" onClose={() => setOpen(false)} requestCloseRef={requestClose} triggerRef={trigger} className={showPlan ? '' : 'training-catalog-sheet'}>
-      {showPlan ? <div className="training-exercise-plan" role="group" aria-label={t('Workout exercises')}>{templatePlan.map((exercise,index) => <button key={exercise.exercise_id || exercise.exercise} type="button" className="training-row" aria-pressed={exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value} onClick={() => commit({ exercise: exercise.exercise, exercise_id: exercise.exercise_id || null })}><span className="training-set-index">{index+1}</span><span className="min-w-0 flex-1 break-words text-left">{exerciseLabel(exercise,language)}</span>{(exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value) ? <Check size={19} /> : null}</button>)}<button type="button" className="training-row training-another-exercise" onClick={() => setShowPlan(false)}><Plus size={20} />{t('Choose another exercise')}</button></div> : <>
+    {open && <TrainingSheet title={showPlan ? 'Choose exercise' : 'All exercises'} ariaLabel="Choose exercise" onBack={!showPlan && hasPlan ? back : undefined} backRef={backButton} onClose={() => setOpen(false)} requestCloseRef={requestClose} triggerRef={trigger} className="training-picker-sheet">
+      <div className="training-picker-viewport" data-view={view} style={{height:panelHeight}}>
+      <div ref={planScroll} className="training-picker-view training-picker-plan" aria-hidden={!showPlan} inert={!showPlan ? '' : undefined}>
+        <div ref={planContent} className="training-exercise-plan" role="group" aria-label={t('Workout exercises')}>{(templatePlan || []).map((exercise,index) => <button key={exercise.exercise_id || exercise.exercise} type="button" className="training-row" aria-pressed={exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value} onClick={() => commit({ exercise: exercise.exercise, exercise_id: exercise.exercise_id || null })}><span className="training-exercise-number">{String(index+1).padStart(2,'0')}</span><span className="min-w-0 flex-1 break-words text-left">{exerciseLabel(exercise,language)}</span>{(exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value) ? <Check size={19} /> : null}</button>)}<button ref={anotherExercise} type="button" className="training-row training-another-exercise" onClick={openCatalog}><Plus size={20} />{t('Choose another exercise')}</button></div>
+      </div>
+      <div className="training-picker-view training-picker-catalog" aria-hidden={showPlan} inert={showPlan ? '' : undefined}>
       <div className="shrink-0 space-y-3 border-b border-white/10 p-4">
         <label className="flex min-h-12 items-center gap-3 rounded border border-white/20 bg-black/20 px-3"><Search size={18} className="shrink-0 text-zinc-400" />
           <input ref={search} aria-label={inputLabel} value={query} onChange={e => setQuery(e.target.value)}
@@ -77,9 +120,9 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
             {!matches.length ? <p className="px-4 py-8 text-sm text-zinc-400">{t('No matching exercises')}</p> : null}</>}
       </div>
       <footer className="shrink-0 border-t border-white/10 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
-        <button type="button" onClick={() => {setCustom(!custom);setQuery('');search.current?.focus();}} className="min-h-12 w-full rounded border border-white/15 text-sm font-medium">{t(custom ? 'Choose from catalog' : 'Other exercise')}</button>
+        <button type="button" onClick={() => {setCustom(!custom);setQuery('');}} className="min-h-12 w-full rounded border border-white/15 text-sm font-medium">{t(custom ? 'Choose from catalog' : 'Other exercise')}</button>
       </footer>
-      </>}
+      </div></div>
     </TrainingSheet>}
   </div>;
 }

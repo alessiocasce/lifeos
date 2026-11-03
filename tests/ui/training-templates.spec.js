@@ -114,17 +114,17 @@ test('failed template writes retain draft and failed delete retains persisted pl
 test('empty session start retains failed fields and starts exactly once', async ({ page }) => {
   await page.goto('/workout');
   await page.getByRole('button', { name: 'Start Empty Workout' }).click();
-  const form = page.getByRole('form', { name: 'Start empty workout' });
-  await form.getByLabel('Name', { exact: true }).fill('Custom training');
+  const form = page.getByRole('form', { name: 'New workout' });
+  await form.getByLabel('Workout name', { exact: true }).fill('Custom training');
   await expect(form.getByLabel('Notes', { exact: true })).toHaveCount(0);
   await page.evaluate(() => localStorage.setItem('qa-session-fail', 'true'));
-  await form.getByRole('button', { name: 'Start Empty', exact: true }).click();
-  await expect(form.getByLabel('Name', { exact: true })).toHaveValue('Custom training');
+  await form.getByRole('button', { name: 'Start workout', exact: true }).click();
+  await expect(form.getByLabel('Workout name', { exact: true })).toHaveValue('Custom training');
   await expect(page.getByText('Workout session was not started.', { exact: true })).toBeVisible();
   await page.evaluate(() => { localStorage.removeItem('qa-session-fail'); localStorage.setItem('qa-session-delay', '1000'); });
-  await form.getByRole('button', { name: 'Start Empty', exact: true }).click();
+  await form.getByRole('button', { name: 'Start workout', exact: true }).click();
   await expect(form.getByRole('button', { name: 'Starting', exact: true })).toBeDisabled();
-  await expect(form.getByLabel('Name', { exact: true })).toBeDisabled();
+  await expect(form.getByLabel('Workout name', { exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).length)).toBe(1);
 });

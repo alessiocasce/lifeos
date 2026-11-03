@@ -1,5 +1,17 @@
 # LifeOS Project Context
 
+## Floating Training sheets / picker navigation (2026-11-03)
+
+The mobile dock has shared CSS geometry across lazy Training and other tabs;
+Training only changes its appearance. No JavaScript positioning workaround.
+Sheets float 10px + safe area above the visual viewport bottom, with four rounded
+corners and safe area counted once. Exercise plans use 01 numbering and complete
+accent borders. One dialog now animates plan <-> catalog, with Back, independent
+scroll state and no search autofocus. Empty workouts use a name-only sheet;
+Rome date/timestamp are captured at submission, and duplicate/failure/exit handling
+preserves the existing logger. No schema rerun required. See
+docs/TRAINING_NAVIGATION_QA.md for measured QA and physical iOS limitations.
+
 ## Training UX / PWA corrections (2026-11-03)
 
 Approved structure is unchanged. Training sheets now share animated, content-sized

@@ -36,8 +36,8 @@
   .lifeos-shell[data-workspace='workout'] .workspace-content { padding-top: 0; padding-right: 18px; padding-left: 18px; }
   .lifeos-shell[data-workspace='workout'] .workspace-header h1 { font-weight: 700; }
   .lifeos-shell[data-workspace='workout'] .header-date { color: #b1bfd0; }
-  .lifeos-shell[data-workspace='workout'] .mobile-dock { min-height: 66px; background: #080f13f5; border-color: #243039; }
-  .lifeos-shell[data-workspace='workout'] .mobile-destination { min-height: 54px; color: #adbacb; font-size: 10px; }
+  .lifeos-shell[data-workspace='workout'] .mobile-dock { background: #080f13f5; border-color: #243039; }
+  .lifeos-shell[data-workspace='workout'] .mobile-destination { color: #adbacb; font-size: 10px; }
   .lifeos-shell[data-workspace='workout'] .mobile-destination[aria-current] { color: #f5f7fa; font-weight: 600; }
   .lifeos-shell[data-workspace='workout'] .training-destination .mobile-destination-icon { border-radius: 9px; }
 }
