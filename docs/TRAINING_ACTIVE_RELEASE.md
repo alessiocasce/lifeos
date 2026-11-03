@@ -25,6 +25,8 @@ retain drafts. Existing order, IDs and immutable workout snapshots are preserved
   envelopes now additionally hold a bounded exercise-keyed bank, scoped to user and
   workout, with the same 36-hour lifetime. Switching restores that exercise or starts
   clean with its own historical prefill. Saved targets reset RPE/notes as before.
+  Old v1 envelopes with only one draft are imported into the bank at the first
+  switch, even if the user has not edited that restored draft. Legacy fields survive.
 - Every avatar mount cleared its state and minted a signed URL. The shared in-memory
   cache keys viewer + object path, deduplicates in-flight work and reuses five-minute
   URLs with a 30-second refresh margin. Visibility resume checks validity, no regular

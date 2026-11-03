@@ -62,10 +62,16 @@ export function readWorkoutDraft(userId, sessionId, { storage, now = Date.now() 
 export function writeWorkoutDraft(userId, sessionId, draft, { storage, now = Date.now() } = {}) {
   if (!userId || !sessionId) return false;
   const key = keyFor(userId, `draft:${encodeURIComponent(sessionId)}`);
-  const previous = read(key, storage, now);
+  const saved = read(key, storage, now);
+  const previous = saved?.session_id === sessionId ? saved : null;
   const exercises = { ...(previous?.exercises || {}) };
+  const priorDraft = sanitizeSetDraft(previous?.draft);
+  if (priorDraft.exercise.trim()) exercises[draftExerciseKey(priorDraft)] = priorDraft;
   const next = sanitizeSetDraft(draft);
-  if (next.exercise.trim()) exercises[draftExerciseKey(next)] = next;
+  if (next.exercise.trim()) {
+    delete exercises[draftExerciseKey(next)];
+    exercises[draftExerciseKey(next)] = next;
+  }
   return write(key, {
     session_id: sessionId, draft: next, exercises: Object.fromEntries(Object.entries(exercises).slice(-100)),
   }, storage, now);

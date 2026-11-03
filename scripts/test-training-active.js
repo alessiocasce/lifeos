@@ -60,7 +60,10 @@ await cache.load(A,profile,loader);assert.equal(calls,1);assert.equal(cache.peek
 now=280000;await cache.load(A,profile,loader);assert.equal(calls,2);
 cache.invalidate(A,profile);assert.equal(cache.peek(A,profile),null);cache.clear();
 const data=new Map();const storage={getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)};
+storage.setItem(`lifeos:training:v1:${A}:draft:session`,JSON.stringify({version:1,updated_at:Date.now(),session_id:'session',draft:{...emptySetDraft(),exercise:'Legacy exercise',weight:'22.5',reps:'12',rpe:'8.5',notes:'Keep legacy'}}));
 writeWorkoutDraft(A,'session',{...emptySetDraft(),exercise:'Bench',weight:'50',reps:'8',rpe:'7.5',notes:'A'},{storage});
+assert.equal(readExerciseDraft(A,'session',{exercise:'Legacy exercise'},{storage}).weight,'22.5');
+assert.equal(readExerciseDraft(A,'session',{exercise:'Legacy exercise'},{storage}).notes,'Keep legacy');
 writeWorkoutDraft(A,'session',{...emptySetDraft(),exercise:'Curl',weight:'12',reps:'10'},{storage});
 assert.equal(readExerciseDraft(A,'session',{exercise:'Bench'},{storage}).weight,'50');
 assert.equal(readExerciseDraft(B,'session',{exercise:'Bench'},{storage}),null);
