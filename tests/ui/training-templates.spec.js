@@ -63,7 +63,7 @@ test('template and exercise CRUD, notes, ordering and compaction remain function
     await selectExercise(page,name,{label:'Add exercise',scope:add});
     await expect(add.getByLabel('Notes', { exact: true })).toHaveCount(0);
     await add.getByRole('button', { name: 'Add exercise', exact: true }).filter({hasNot:page.locator('span')}).click();
-    await expect(add.getByLabel('Add exercise', { exact: true })).toHaveValue('');
+    await expect(row.getByRole('group', { name: 'Template exercise ' + name })).toBeVisible();
   }
   await row.getByRole('group', { name: 'Template exercise Cable Row' }).getByRole('button', { name: /Exercise options/ }).click();
   await row.getByRole('group', { name: 'Template exercise Cable Row' }).getByRole('button', { name: 'Move up' }).click();

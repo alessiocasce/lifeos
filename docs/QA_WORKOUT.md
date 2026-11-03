@@ -120,30 +120,39 @@ Cancel, End and Delete before expiry. Simulate bridge offline beyond five minute
 alert expires, not delivered. Verify a pending Brain clarification retains ownership
 after a rest alert. Confirm Live/History and iPhone draft recovery still work.
 
-## Live / History and Full Last Time (2026-10-02)
+## Historical Workout Editing and Dock QA (2026-11-03)
 
-- Training exposes Live and History directly; no Advanced / Switch session.
-- History lists sessions newest-first with date, name, exercise and set counts.
-  Details are read-only, including warmups, working sets, RPE and wrapped notes.
-- Browsing does not change `activeWorkoutId` or persist a different workspace.
-  Session actions / Edit or reopen explicitly selects the record in Live;
-  ended records require Reopen before writes. Reload returns to Live.
-- Last Time uses the latest earlier session containing the exact normalized
-  selected exercise, includes warmups, and excludes current/future sessions.
-  Estimated 1RM and heaviest-set summaries are no longer in the logger.
-- Draft hook, continuity storage and PWA update deferral were not modified.
+Completed sessions remain completed while being corrected. Reopen is not part
+of Training. History opens read-only and shows Edit workout/Delete workout;
+exercise groups come only from saved sets. In edit mode, one control expands an
+exercise's set edits, add-set and delete-exercise actions. Add exercise is an
+explicit catalog choice and does not alter the template or snapshot. New sets
+are timestamped at noon UTC on the workout's recorded date. Existing set IDs,
+canonical identities, notes, fractional RPE and `ended_at` must be preserved.
+Existing Community triggers refresh or withdraw the projection; notes visibility
+continues to follow the user's separate notes-sharing preference.
 
-Focused checks: `npx playwright test tests/ui/training-history.spec.js`,
-`npx playwright test tests/ui/workout-continuity.spec.js -g "session switching"`,
-`npm run test:workout`, `npm run build`, `git diff --check`.
-Do not run the full reconstruction viewport matrix for this bounded change.
+The mobile nav/resume docks are portaled to body to escape transformed ancestors.
+Automated dock tests inspect dock bounds against `visualViewport` at cold load,
+scroll top/middle/bottom, viewport resize and a transformed-root fault injection.
+History detail scroll is independent: each detail opens at top; Back restores the
+list's previous offset. Manage exercise rows keep their number, name and options
+button on one compact row.
 
-Manual: enter exercise/load/reps/RPE/notes, browse multiple History records,
-return Live and verify every field and session. Switch exercise and verify Last
-Time changes. Inspect missing RPE, long notes/names and an empty session at
-390x844. Explicitly select/reopen an ended workout and verify editing still works.
-Owner confirmed physical iPhone continuity before this patch; repeat the new
-History round-trip on-device after deployment. No schema rerun required.
+Focused checks: `npm run test:workout`, `node scripts/test-workout-history-db.js`,
+`node scripts/test-workout-mutation-guards.js`, and Playwright specs
+`training-history.spec.js`, `workout-continuity.spec.js`, and
+`dock-long-scroll.spec.js`. Run with Chromium and WebKit when installed. Browser
+emulation does not prove iPhone Safari toolbar behavior or standalone cold launch.
+No schema rerun required.
+
+Manual after deployment: open a completed workout in History; correct its name,
+date and a set; add/remove a set and an exercise; confirm `ended_at` and history
+date remain unchanged. Check the public projection only for the owning test
+account and verify private notes remain hidden. On iPhone, scroll History through
+top/middle/bottom, change Safari toolbar state, open/close a sheet and keyboard,
+and repeat in standalone PWA. Confirm dock stays at usable viewport bottom and
+Home-indicator inset is clear. These iPhone checks require a physical device.
 
 ## Training Setup / Templates Checkpoint (2026-10-01)
 
@@ -178,7 +187,7 @@ last set and preserve the next draft. Previous performance remains available,
 now showing full Last Time sets, warmups, RPE and notes instead of live analytics.
 
 `npm run test:ui` checks seven mobile/desktop sizes, overflow, Resume navigation,
-save/edit/delete/end/reopen and continuity. Screenshots are written under ignored
+save/edit/delete/end and continuity. Screenshots are written under ignored
 `test-results/training-layout-*/training.png`. The browser QA server uses an isolated
 Vite cache so the SSR harness cannot invalidate its dependency graph.
 Physical iPhone keyboard behavior and process eviction remain manual QA.
@@ -229,9 +238,9 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 3. Start a workout and confirm the active command header shows the workout name, LIVE status, date, and visible End Workout button.
 4. Confirm End Workout is visible without scrolling or opening another panel.
 5. End the workout and confirm set logging/editing is blocked.
-6. Confirm the active command header changes to ENDED with a visible Reopen button.
-7. Reopen and confirm set logging/editing works again.
-8. Open Session Options, switch sessions through Advanced, and delete a session through the confirmation flow.
+6. Confirm the active command header changes to complete and set logging is blocked.
+7. Open History and confirm completed workout editing does not change completion.
+8. Delete only from the explicit confirmation flow and confirm other history remains.
 
 ## Template Persistence
 
@@ -299,21 +308,20 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 2. With a LIVE workout, confirm there is no blank space between the LifeOS shell header and Workout content.
 3. Confirm the active workout command header stays in normal flow and does not overlap Exercise Plan or Set Logger.
 4. Scroll up and down and confirm no Workout content is hidden behind the command header.
-5. End the workout and confirm the ENDED/Reopen command header does not overlap Logged Sets.
-6. Confirm End Workout/Reopen is immediately visible and thumb-friendly when the Workout tab opens.
+5. End the workout and confirm the completed header does not overlap Logged Sets.
+6. Confirm End Workout is immediately visible and thumb-friendly when the Workout tab opens.
 7. Confirm Exercise, Weight, Reps, RPE, Notes, and Save controls fit without horizontal scrolling.
 8. Confirm inputs do not zoom when focused.
 9. Confirm Save Set / Save Warmup remains above the bottom navigation.
 10. Confirm logged set edit/delete controls remain tappable.
 11. Refresh and background/reopen the app during a live template workout and confirm the active session and plan persist.
 
-## Training suggestion/history audit (2026-10-02)
+## Training History and Dock Regression (2026-11-03)
 
-The same `training-history.spec.js` suite checks warmup editing to working set 3
-and back to warmup 1001 without losing load/RPE/notes, and two-step session deletion
-with a failed request/retry. After deleting today's live session, reload shows the
-start surface; previous sessions remain selectable under Advanced. It does not
-automatically open an old ended session. The deletion button is at least 44px.
+The `training-history.spec.js` suite checks previous-performance display and
+completed History editing without changing completion time, plus failed session
+deletion/retry. History selection is browse-only and never switches the active
+Live workout. Session deletion remains confirmed and owner-scoped.
 
 Exercise suggestions are ordinary labeled buttons, not a fake ARIA combobox.
 From a focused Exercise input with matches, ArrowDown enters the first suggestion
@@ -322,10 +330,9 @@ selects and returns to input. Escape closes without changing text; leaving the
 group closes it. Pointer selection still works. Rows and Performance detail use
 44px targets. No delayed blur timer can dismiss a keyboard-focused suggestion.
 
-`tests/ui/training-history.spec.js` proves selection/dismissal/reload and checks
-previous performance against prior working sets, excluding warmups/future data.
-It also selects an ended historical session and checks sets/Reopen remain visible.
-Run `npm run test:ui -- tests/ui/training-history.spec.js` and `npm run test:workout`.
+`tests/ui/training-history.spec.js` verifies History browse/edit behavior,
+completion preservation, and list/detail scroll independence. Run
+`npm run test:ui -- tests/ui/training-history.spec.js` and `npm run test:workout`.
 This is isolated browser evidence, not physical iPhone or production Supabase QA.
 
 ## Training Live / Manage Release

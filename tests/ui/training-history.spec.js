@@ -74,38 +74,44 @@ test('full last time includes warmups, RPE and notes from the latest matching pr
   await page.getByRole('button', { name: /qa-prior/ }).click();
   await expect(page.getByRole('button', { name: 'Edit set', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Workout history' })).toContainText('100 kg × 1');
-  await page.getByText('Session actions', { exact: true }).click();
-  await page.getByRole('button', { name: 'Edit / reopen workout', exact: true }).click();
-  await expect(page.getByText('This workout is ended. Reopen it to add more sets.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Reopen', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Delete set', exact: true })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Edit workout', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete workout', exact: true })).toBeVisible();
+  await expect(page.getByText('Session actions', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Edit workout', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit Barbell Curl', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Delete set qa-set-1', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reopen', exact: true })).toHaveCount(0);
 });
 
-test('editing warmup classification preserves load, notes and separate set numbering', async ({ page }) => {
+test('completed workout can be corrected in History without changing its completion timestamp', async ({ page }, info) => {
   await page.goto('/workout');
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: /qa-prior/ }).click();
-  await page.getByText('Session actions', { exact: true }).click();
-  await page.getByRole('button', { name: 'Edit / reopen workout', exact: true }).click();
-  await page.getByRole('button', { name: 'Reopen', exact: true }).click();
-  await page.getByRole('button', { name: 'Edit set', exact: true }).first().click();
-  const editor = page.getByRole('group', { name: 'Edit workout set' });
-  const warmup = editor.getByRole('button', { name: /Warmup/ });
-  await expect(warmup).toHaveAttribute('aria-pressed', 'true');
-  await warmup.click();
-  await expect(warmup).toHaveAttribute('aria-pressed', 'false');
-  await editor.getByRole('button', { name: 'Save edit', exact: true }).click();
-  const row = () => page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))
-    .find((session) => session.id === 'qa-prior').workout_sets.find((set) => set.id === 'qa-warmup'));
-  expect(await row()).toMatchObject({ is_warmup: false, set_number: 3, weight: 100, reps: 1, rpe: null, notes: 'Controlled' });
-  await page.reload();
-  await page.getByRole('button', { name: 'Edit set', exact: true }).last().click();
-  await expect(editor.getByRole('textbox', { name: 'Weight kg', exact: true })).toHaveValue('100');
-  await expect(warmup).toHaveAttribute('aria-pressed', 'false');
-  await warmup.click();
-  await editor.getByRole('button', { name: 'Save edit', exact: true }).click();
-  await expect(editor).toHaveCount(0);
-  expect(await row()).toMatchObject({ is_warmup: true, set_number: 1001, weight: 100, reps: 1 });
+  await page.screenshot({ path: info.outputPath('history-detail-readonly.png') });
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).find(row => row.id === 'qa-prior').ended_at);
+  await page.getByRole('button', { name: 'Edit workout', exact: true }).click();
+  await page.screenshot({ path: info.outputPath('history-detail-edit-mode.png') });
+  await page.getByRole('button', { name: 'Edit workout details', exact: true }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Corrected chest day');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Corrected chest day' })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit Barbell Curl', exact: true }).click();
+  await page.screenshot({ path: info.outputPath('history-exercise-editor.png') });
+  await page.getByRole('button', { name: 'Edit set qa-set-1', exact: true }).click();
+  const editor = page.getByRole('form', { name: 'Historical set editor' });
+  await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('9');
+  await editor.getByRole('button', { name: 'Save set', exact: true }).click();
+  const workout = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).find(row => row.id === 'qa-prior'));
+  expect(workout.ended_at).toBe(before);
+  expect(workout.name).toBe('Corrected chest day');
+  expect(workout.workout_sets.find(set => set.id === 'qa-set-1').reps).toBe(9);
+  await page.getByRole('button', { name: 'Add set', exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Weight', exact: true }).fill('30');
+  await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('7');
+  await editor.getByRole('button', { name: 'Save set', exact: true }).click();
+  const afterAdd = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).find(row => row.id === 'qa-prior'));
+  expect(afterAdd.ended_at).toBe(before);
+  expect(afterAdd.workout_sets).toHaveLength(5);
 });
 
 test('session deletion requires confirmation, retains failed session and clears only its draft on retry', async ({ page }) => {
@@ -173,4 +179,47 @@ test('History is read-only and returning Live preserves session and complete dra
   await page.reload();
   await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Barbell Curl');
   expect(errors).toEqual([]);
+});
+
+test('History list position is independent and every selected workout opens at the top', async ({ page }) => {
+  await page.goto('/workout');
+  await page.evaluate(() => {
+    const sessions = Array.from({ length: 24 }, (_, index) => {
+      const date = new Date(Date.UTC(2026, 8, 30 - index)).toISOString().slice(0, 10);
+      return {
+        id: `history-${index + 1}`,
+        user_id: 'qa-user-a',
+        name: `History ${String(index + 1).padStart(2, '0')}`,
+        performed_on: date,
+        started_at: `${date}T10:00:00Z`,
+        ended_at: `${date}T11:00:00Z`,
+        workout_sets: Array.from({ length: index === 23 ? 20 : 2 }, (_, setIndex) => ({
+          id: `history-${index + 1}-set-${setIndex + 1}`,
+          workout_id: `history-${index + 1}`,
+          exercise: `Exercise ${setIndex < 10 ? 'A' : 'B'}`,
+          set_number: setIndex + 1,
+          is_warmup: false,
+          weight: 20,
+          reps: 8,
+          performed_at: `${date}T10:30:00Z`,
+        })),
+      };
+    });
+    localStorage.setItem('qa-workouts', JSON.stringify(sessions));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const historyY = await page.evaluate(() => window.scrollY);
+  expect(historyY).toBeGreaterThan(500);
+  await page.getByRole('button', { name: /History 24/ }).click();
+  await expect(page.getByRole('heading', { name: 'History 24' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Back to History', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(historyY);
+  await page.getByRole('button', { name: /History 23/ }).click();
+  await expect(page.getByRole('heading', { name: 'History 23' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });

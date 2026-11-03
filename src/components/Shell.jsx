@@ -2,6 +2,7 @@ import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
 import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLifeOS } from '../context/LifeOSContext';
 import { useLocalDay } from '../hooks/useLocalDay';
 import { readWorkoutDraft } from '../utils/workoutContinuity';
@@ -72,6 +73,7 @@ export function Shell({ children }) {
   }, [moreOpen]);
 
   const navigate = (tab) => {
+    if (!document.dispatchEvent(new Event('lifeos:before-navigate', { cancelable: true }))) return;
     setMoreOpen(false);
     setActiveTab(tab);
     window.scrollTo({ top: 0 });
@@ -122,6 +124,8 @@ export function Shell({ children }) {
           </div>
         </PullToRefresh>
       </main>
+      {/* Keep fixed docks outside app ancestors that can establish containing blocks. */}
+      {createPortal(<div className="shell-docks" data-workspace={activeTab}>
       {liveSession && activeTab !== 'workout' ? (
         <button className="training-dock" data-keyboard-open={keyboardOpen} onClick={resume}>
           <span className="training-dock-icon"><Dumbbell size={20} /></span>
@@ -139,6 +143,7 @@ export function Shell({ children }) {
           </button>;
         })}
       </nav>
+      </div>, document.body)}
       <dialog ref={sheetRef} className="utility-sheet" aria-labelledby="utility-title" onClose={() => setMoreOpen(false)} onClick={(event) => { if (event.target === sheetRef.current) setMoreOpen(false); }}>
         <div className="utility-sheet-content">
           <div className="flex items-center justify-between pb-4"><h2 id="utility-title" className="text-lg font-semibold">{t("Your system")}</h2><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label={t("Close utilities")}><X size={20} /></button></div>

@@ -1048,8 +1048,10 @@ export function LifeOSProvider({ children }) {
         setWorkoutSessionsStatus('ready');
         return created;
       },
-      updateWorkoutSession: async (id, patch) => {
-        const updated = await workoutApi.update(id, patch);
+      updateWorkoutSession: async (id, patch, options) => {
+        const userId = authUser?.id;
+        const updated = await workoutApi.update(id, patch, options);
+        if (!userId || lastAuthUserId.current !== userId) throw new Error('Account changed. Sign in to the original account to verify this workout.');
         if (updated.ended_at) clearWorkoutDraft(authUser?.id, id);
         setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
         return updated;
@@ -1060,8 +1062,10 @@ export function LifeOSProvider({ children }) {
         setWorkoutSessions((prev) => prev.map((session) => (session.id === id ? updated : session)));
         return updated;
       },
-      deleteWorkoutSession: async (id) => {
-        await workoutApi.delete(id);
+      deleteWorkoutSession: async (id, options) => {
+        const userId = authUser?.id;
+        await workoutApi.delete(id, options);
+        if (!userId || lastAuthUserId.current !== userId) throw new Error('Account changed. Sign in to the original account to verify this workout.');
         clearWorkoutDraft(authUser?.id, id);
         const remaining = workoutSessions.filter((session) => session.id !== id);
         setWorkoutSessions(remaining);
@@ -1093,8 +1097,10 @@ export function LifeOSProvider({ children }) {
         setWorkoutSessionsStatus('ready');
         return created;
       },
-      updateWorkoutSet: async (id, patch) => {
-        const updated = await workoutSetApi.update(id, patch);
+      updateWorkoutSet: async (id, patch, options) => {
+        const userId = authUser?.id;
+        const updated = await workoutSetApi.update(id, patch, options);
+        if (!userId || lastAuthUserId.current !== userId) throw new Error('Account changed. Sign in to the original account to verify this set.');
         setWorkoutSessions((prev) =>
           prev.map((session) =>
             session.id === updated.workout_id
@@ -1109,8 +1115,10 @@ export function LifeOSProvider({ children }) {
         );
         return updated;
       },
-      deleteWorkoutSet: async (id) => {
-        await workoutSetApi.delete(id);
+      deleteWorkoutSet: async (id, options) => {
+        const userId = authUser?.id;
+        await workoutSetApi.delete(id, options);
+        if (!userId || lastAuthUserId.current !== userId) throw new Error('Account changed. Sign in to the original account to verify this set.');
         setWorkoutSessions((prev) =>
           prev.map((session) => ({
             ...session,

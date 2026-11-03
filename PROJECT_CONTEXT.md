@@ -180,19 +180,32 @@ Physical WhatsApp/iPhone acceptance remains pending. Run
 `npm run test:workout:rest`, targeted `training-prefill-rest.spec.js`, History and
 continuity browser cases. See QA_WORKOUT for physical background/WhatsApp QA.
 
-## Training Live / History (2026-10-02)
+## Training History Editing (2026-11-03)
 
-Training has direct Live and History subviews. History selection is local UI
-state, never `activeWorkoutId`; inspecting records is read-only. Session actions
-explicitly select a record in Live, where ended sessions still require Reopen.
-Live Last Time shows every set (warmups, working sets, RPE and notes) from the
-latest prior session containing the exact normalized exercise. No live 1RM or
-heaviest-set summaries. Parent-owned drafts, storage keys, root resume and PWA
-update protection remain unchanged; reloading defaults to Live.
-Focused QA: `npx playwright test tests/ui/training-history.spec.js` and the
-session-switching case in `tests/ui/workout-continuity.spec.js`. No schema rerun required.
+Completed sessions stay completed. Reopen is removed; historical corrections
+occur in place in Training → History and never clear `ended_at` or change the
+Live `activeWorkoutId`. Details are read-only by default with visible Edit
+workout/Delete workout actions. Edit mode supports session name/date, per-exercise
+set editing/add/delete, exercise removal and explicit catalog exercise addition.
+History derives performed exercises only from saved sets, not the template
+snapshot. New historical sets use noon UTC on the workout's recorded date to
+avoid assigning them to the current day. Optimistic timestamps reject stale edits;
+Community projections continue to synchronize through existing database triggers.
 
-Last updated: 2026-10-02
+The mobile/resume docks render through a body portal so transformed app or
+PullToRefresh ancestors cannot capture their fixed positioning. History stores
+list scroll separately; details open at the top and return to the saved list
+offset. Manage template exercises use compact single-line option rows. Existing
+draft storage, active-session identity, root resume and PWA update protection
+remain unchanged. No schema rerun required.
+
+Focused QA: `npm run test:workout`, `node scripts/test-workout-history-db.js`,
+`node scripts/test-workout-mutation-guards.js`, and focused
+`tests/ui/training-history.spec.js`, `tests/ui/workout-continuity.spec.js`, and
+`tests/ui/dock-long-scroll.spec.js` Playwright specs. Desktop browser emulation
+does not verify physical iPhone Safari toolbar or standalone-PWA behavior.
+
+Last updated: 2026-11-03
 Current branch: `main`
 
 ## Frontend reconstruction local completion (2026-10-02)
@@ -1300,9 +1313,10 @@ Current behavior:
 - Template management shows clear validation/duplicate-name messages and compacts exercise order after deleting an exercise.
 - Advanced session switching and delete session controls are collapsed away from the primary logging flow.
 - On load, Workout prefers the latest unfinished session, then falls back to today's session.
-- End Workout or Reopen is immediately visible in the active workout command header.
-- Ended sessions cannot add or edit sets. The logger shows: "This workout is ended. Reopen it to add more sets."
-- Ended sessions can be reopened from the active workout command header, which sets `ended_at` back to `null`.
+- End Workout remains in the active workout command header. Completed sessions
+  cannot be edited in Live; the logger directs the user to History.
+- Historical editing is separate from session completion and must never write
+  `ended_at` or select a past workout as the active Live session.
 - Deleting a session requires confirmation and cascades sets through the database relationship.
 - Sets belong to workout sessions.
 - Sets include exercise, internal set number, warmup flag, weight, reps, optional RPE, performed timestamp, and notes.
@@ -1339,7 +1353,7 @@ Workout mobile direction:
 - The active workout command header stays in normal document flow on mobile and desktop.
 - Workout does not add a second sticky safe-area offset below the shell header, so it does not create blank space or overlap the Exercise Plan, Set Logger, or Logged Sets.
 - The Workout root uses horizontal clipping instead of a sticky-breaking hidden overflow container.
-- End Workout/Reopen remains visible in the active header without scrolling.
+- End Workout remains visible in the active header without scrolling.
 - Exercise input is full-width.
 - Exercise suggestions are thumb-friendly and fill the logger when tapped.
 - Weight, reps, and RPE use a compact mobile grid.
@@ -1464,11 +1478,10 @@ Workout mobile direction:
 - Test editing sets with comma decimals such as `32,5` and `8,5`.
 - Test duplicate set number behavior for the same exercise in one session.
 - Test ended sessions:
-  - End Workout should change to Reopen in the active command header.
-  - Adding sets should be blocked.
-  - Editing sets should be blocked.
-  - Delete session should still work.
-  - Reopen Workout should clear `ended_at` and restore logging.
+  - End Workout should mark the session complete and clear its live draft.
+  - Live set additions/edits remain blocked for completed sessions.
+  - History exposes Edit workout and Delete workout directly.
+  - Historical edits preserve the original `ended_at`; no reopen action exists.
 - Test iPhone Safari:
   - The shell header and normal-flow workout command header should not overlap or create a blank safe-area gap.
   - Bottom nav should not cover Save Set.

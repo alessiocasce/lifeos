@@ -64,7 +64,7 @@ test('failed mutation keeps draft through reload and never pretends it saved', a
   await expect(exercise(page)).toContainText('Barbell Curl');
 });
 
-test('saved sets remain editable, deletable and session can reopen', async ({ page }) => {
+test('saved sets remain editable and deletable; completed workouts stay completed', async ({ page }) => {
   await fillDraft(page);
   await page.getByRole('button', { name: 'Save Set', exact: true }).click();
   await expect(reps(page)).toHaveValue('8');
@@ -76,18 +76,24 @@ test('saved sets remain editable, deletable and session can reopen', async ({ pa
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].reps)).toBe(10);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
-  await page.getByRole('button', { name: 'Reopen', exact: true }).click();
-  await expect(exercise(page)).toBeVisible();
+  await expect(page.getByText('Edit completed workouts in History.')).toBeVisible();
+  const endedAt = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].ended_at);
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.getByRole('button', { name: /Pull session/ }).click();
+  await expect(page.getByRole('button', { name: 'Reopen', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Edit workout', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit Barbell Curl', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: 'Delete set', exact: true }).click();
-  await expect(page.getByText('No sets logged in this session.', { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets)).toEqual([]);
+  await page.getByRole('button', { name: /Delete exercise from workout/ }).click();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0]);
+  expect(saved.ended_at).toBe(endedAt);
+  expect(saved.workout_sets).toEqual([]);
 });
 
 test('confirmed end clears draft and new session starts clean', async ({ page }) => {
   await fillDraft(page);
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
-  await expect(page.getByText('This workout is ended. Reopen it to add more sets.')).toBeVisible();
+  await expect(page.getByText('Edit completed workouts in History.')).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes(':draft:')))).toEqual([]);
   await page.evaluate(() => {
     const rows = JSON.parse(localStorage.getItem('qa-workouts'));
@@ -135,12 +141,10 @@ test('session switching isolates fields and restores selected session ahead of n
   await expect(exercise(page)).toContainText('Barbell Curl');
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: /Other workout/ }).click();
-  await page.getByText('Session actions', { exact: true }).click();
-  await page.getByRole('button', { name: 'Select for logging', exact: true }).click();
-  await expect(exercise(page)).toContainText('Choose exercise');
-  await selectExercise(page,'Squat');
+  await expect(page.getByRole('button', { name: 'Edit workout', exact: true })).toBeVisible();
+  await expect(exercise(page)).toHaveCount(0);
   await page.reload();
-  await expect(exercise(page)).toContainText('Squat');
+  await expect(exercise(page)).toContainText('Barbell Curl');
 });
 
 test('deleted saved session does not restore stale draft or redirect root', async ({ page }) => {

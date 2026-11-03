@@ -380,6 +380,27 @@ export const profilePhotoApi = {
   },
 };
 
+// Undefined expectations preserve the legacy path; null uses SQL IS NULL.
+function guardWorkoutMutation(query, options = {}, session = false) {
+  if (options.expectedUpdatedAt !== undefined) {
+    query = options.expectedUpdatedAt === null
+      ? query.is('updated_at', null) : query.eq('updated_at', options.expectedUpdatedAt);
+  }
+  if (session && options.expectedEndedAt !== undefined) {
+    query = options.expectedEndedAt === null
+      ? query.is('ended_at', null) : query.eq('ended_at', options.expectedEndedAt);
+  }
+  return query;
+}
+
+function throwWorkoutMutationError(result, options = {}) {
+  if (result.error?.code === 'PGRST116'
+    && (options.expectedUpdatedAt !== undefined || options.expectedEndedAt !== undefined)) {
+    throw new Error('This record changed since it was loaded. Refresh History and try again.');
+  }
+  return throwIfError(result);
+}
+
 export const workoutApi = {
   async list(limit = 25) {
     const rows = throwIfError(
@@ -414,15 +435,17 @@ export const workoutApi = {
     return normalizeWorkout(row);
   },
 
-  async update(id, patch) {
-    const row = throwIfError(
-      await requireSupabase().from('workouts').update(prepareWorkoutPayload(patch)).eq('id', id).select(workoutSelect).single(),
+  async update(id, patch, options = {}) {
+    const row = throwWorkoutMutationError(
+      await guardWorkoutMutation(requireSupabase().from('workouts').update(prepareWorkoutPayload(patch)).eq('id', id), options, true).select(workoutSelect).single(), options,
     );
     return normalizeWorkout(row);
   },
 
-  async delete(id) {
-    return throwIfError(await requireSupabase().from('workouts').delete().eq('id', id));
+  async delete(id, options = {}) {
+    let query = guardWorkoutMutation(requireSupabase().from('workouts').delete().eq('id', id), options, true);
+    if (options.expectedUpdatedAt !== undefined || options.expectedEndedAt !== undefined) query = query.select('id').single();
+    return throwWorkoutMutationError(await query, options);
   },
 };
 
@@ -450,21 +473,23 @@ export const workoutSetApi = {
     );
   },
 
-  async update(id, patch) {
-    return throwIfError(
-      await requireSupabase()
+  async update(id, patch, options = {}) {
+    return throwWorkoutMutationError(
+      await guardWorkoutMutation(requireSupabase()
         .from('workout_sets')
         .update(prepareWorkoutSetPayload(patch))
-        .eq('id', id)
+        .eq('id', id), options)
         .select(
           'id, user_id, workout_id, exercise, exercise_id, set_number, is_warmup, weight, reps, rpe, performed_at, notes, created_at, updated_at',
         )
-        .single(),
+        .single(), options,
     );
   },
 
-  async delete(id) {
-    return throwIfError(await requireSupabase().from('workout_sets').delete().eq('id', id));
+  async delete(id, options = {}) {
+    let query = guardWorkoutMutation(requireSupabase().from('workout_sets').delete().eq('id', id), options);
+    if (options.expectedUpdatedAt !== undefined) query = query.select('id').single();
+    return throwWorkoutMutationError(await query, options);
   },
 };
 

@@ -7,6 +7,18 @@ const initialSession = () => ({
 });
 const read = () => JSON.parse(localStorage.getItem('qa-workouts') || JSON.stringify([initialSession()]));
 const write = (rows) => { localStorage.setItem('qa-workouts', JSON.stringify(rows)); reconcileCommunityUser(user()?.id); };
+const workoutMutation = async (operation, id, patch, options = {}) => {
+  const calls = JSON.parse(localStorage.getItem('qa-workout-mutations') || '[]');
+  localStorage.setItem('qa-workout-mutations', JSON.stringify([...calls, { operation, id, patch, options }]));
+  await new Promise(resolve => setTimeout(resolve, Number(localStorage.getItem(`qa-${operation}-delay`) || 0)));
+  if (operation !== 'session-delete' && localStorage.getItem(`qa-${operation}-fail`)) throw new Error('Historical changes were not saved.');
+  const row = operation.startsWith('session') ? read().find(row => row.id === id)
+    : read().flatMap(row => row.workout_sets).find(row => row.id === id);
+  if (Object.entries({ expectedUpdatedAt: 'updated_at', expectedEndedAt: 'ended_at' })
+    .some(([key, field]) => options[key] !== undefined && (!row || row[field] !== options[key]))) {
+    throw new Error('This record changed. Refresh History before editing.');
+  }
+};
 let authListener;
 window.__qaSignIn = (id) => {
   const next = { id, email: `${id}@example.test` };
@@ -46,11 +58,13 @@ export const workoutApi = {
     const row = { ...payload, id: crypto.randomUUID(), user_id: user().id, workout_sets: [] };
     write([row, ...read()]); return row;
   },
-  update: async (id, patch) => {
+  update: async (id, patch, options) => {
+    await workoutMutation('session-update', id, patch, options);
     const rows = read().map((row) => row.id === id ? { ...row, ...patch } : row);
     write(rows); return rows.find((row) => row.id === id);
   },
-  delete: async (id) => {
+  delete: async (id, options) => {
+    await workoutMutation('session-delete', id, undefined, options);
     await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-session-delete-delay') || 0)));
     if (localStorage.getItem('qa-session-delete-fail')) throw new Error('Workout session was not deleted.');
     write(read().filter((row) => row.id !== id));
@@ -58,20 +72,25 @@ export const workoutApi = {
 };
 export const workoutSetApi = {
   create: async (payload) => {
+    await workoutMutation('set-create', payload.workout_id, payload);
     if (localStorage.getItem('qa-fail-save')) throw new Error('Test connection lost. Set not saved.');
     const row = { ...payload, id: crypto.randomUUID(), user_id: user().id };
     write(read().map((session) => session.id === row.workout_id ? { ...session, workout_sets: [...session.workout_sets, row] } : session));
     return row;
   },
-  update: async (id, patch) => {
+  update: async (id, patch, options) => {
+    await workoutMutation('set-update', id, patch, options);
     let updated;
     write(read().map((session) => ({ ...session, workout_sets: session.workout_sets.map((set) => {
       if (set.id !== id) return set;
-      updated = { ...set, ...patch }; return updated;
+      updated = { ...set, workout_id: session.id, ...patch }; return updated;
     }) })));
     return updated;
   },
-  delete: async (id) => write(read().map((session) => ({ ...session, workout_sets: session.workout_sets.filter((set) => set.id !== id) }))),
+  delete: async (id, options) => {
+    await workoutMutation('set-delete', id, undefined, options);
+    write(read().map((session) => ({ ...session, workout_sets: session.workout_sets.filter((set) => set.id !== id) })));
+  },
 };
 const templateRows = () => JSON.parse(localStorage.getItem('qa-templates') || '[]');
 const saveTemplates = (rows) => localStorage.setItem('qa-templates', JSON.stringify(rows));
