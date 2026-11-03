@@ -15,6 +15,9 @@ Avatar URLs are viewer-scoped/deduplicated in memory; photos use content validat
 Signup requires username; confirmed-user finalization and mandatory missing-profile
 onboarding preserve genuine email verification and case-insensitive uniqueness.
 See docs/TRAINING_ACTIVE_RELEASE.md for the exact migration, QA and limitations.
+Production applied/sealed `20261103023105_training_active_identity_media.sql`.
+Historical source hashes match (48 workouts/483 sets/4 templates/3 profiles/47 shares),
+pending rest is zero, and rollback-only A/B/anonymous role smoke left no records.
 
 ## Approved Training visual reference (2026-11-02)
 

@@ -86,3 +86,29 @@ Physical iPhone process eviction/keyboard/HEIC, Safari encoder behavior, actual 
 mailbox verification, and physical WhatsApp cessation require device-level evidence.
 Browser fixtures do not prove these. Next work should be acceptance fixes, not a
 new Training redesign or unrelated Companion/OAuth changes.
+
+## Production Database Verification (3 November)
+
+Applied only `20261103023105_training_active_identity_media.sql` to
+`wrqscqhclepwxxkazbnc` via the targeted migration connector. Supabase's assigned
+version replaces the local creation timestamp. Normalized ledger SQL matches the
+checked-in source; its SHA256 is sealed in catalog-migrations.json.
+
+Before/after content hashes match for 48 workouts, 483 sets, 4 templates, 19 template
+exercises, 3 profiles, 3 preferences, 47 public projections and the inert rest
+preferences. The new nullable workout column is excluded from historical-content
+hashing. Pending rest rows went from one to zero. No timer scheduling/control
+functions remain; both new guard/capture triggers exist. Bucket stays private,
+1MB, allowing WebP/JPEG. Grants and fixed search paths were inspected directly.
+
+Rollback-only production SQL under actual authenticated A/B and anonymous roles
+verified owned set insertion, appearance capture, cross-user read/write rejection,
+availability, existing-profile no-op finalization and anonymous finalization/profile
+read denial. Source hashes matched again after rollback; no QA records remained.
+
+Security advisors flag the deliberately callable availability/finalization definer
+RPCs: availability returns one boolean, finalization checks confirmed auth.uid() and
+cannot overwrite identities. These are intentional limited APIs, not admin grants.
+Pre-existing mutable search-path functions, service-only no-policy tables and leaked
+password-protection warning remain outside this release. Review:
+https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable

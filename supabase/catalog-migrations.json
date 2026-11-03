@@ -30,5 +30,9 @@
   {
     "file": "20261102115554_username_only_cleanup.sql",
     "sha256": "9282b1e2b1671e2fb1a030f467707d39d2d262322af8fffcd4da09235823b10b"
+  },
+  {
+    "file": "20261103023105_training_active_identity_media.sql",
+    "sha256": "51ae9f1cd40190615ab18627437c5f1ab7e5388bcbf51da98aa008bc0506e620"
   }
 ]
