@@ -1,5 +1,56 @@
 # LifeOS Workout QA
 
+## History design review - approved for release
+
+The local mockup-driven UI defaults to three compact collapsed exercise cards in
+the visual fixture. Summaries expose only saved exercise identity/order and set
+count. Read-only date is text, with no completion/Community/details controls.
+Edit opens title/date in place without focusing the keyboard. Done editing alone
+saves header corrections; there is no Save changes action. Name/date drafts
+survive exercise switching and set saves. A dirty inline set requires Save set
+or Cancel before continuing. Exercise context Back returns to workout editing,
+not History, and preserves the workout draft.
+The selected set form is immediately under that saved row; warmup is a checkbox,
+RPE is a compact select retaining fractions, and notes remain optional. Exercise
+deletion lives behind its overflow control and still invokes the atomic RPC.
+
+Focused specs: training-history-design, training-history and workout-continuity.
+Capture 390x844 read-only, workout edit, expanded exercise, Set 2 edit, Add set,
+and long-detail bottom. Check 375/430 overflow, saved accent, native date field,
+Save/Cancel clearance above the opaque dock, dirty/failure behavior and unchanged
+completion/IDs. No database, catalog, auth, Community sync or portal changes.
+Local fixtures only; owner approval received for the targeted release. No physical iPhone
+acceptance is claimed.
+
+## Unified edit session and completion review
+
+Run training-edit-session.spec.js, training-completion.spec.js and the existing
+History/design/continuity specs using the isolated UI QA server. No production
+workout writes. Verify name/date -> set edit/save -> another exercise -> Done;
+name/date remain unsaved until Done. Failed Done retains both values. Dirty
+inline sets cannot be silently discarded by Done. Leaving History or the app
+tab opens one custom Discard changes dialog: Keep editing/Escape preserve drafts,
+Discard changes resumes the requested navigation. Hard reload/close protection
+remains the browser's beforeunload prompt, which cannot be replaced safely.
+
+Delete workout/set/exercise uses ConfirmationDialog: Cancel receives focus,
+Escape cancels, backdrop never confirms, mutations lock repeated submissions,
+and failures stay visible without closing the dialog. Existing atomic deletion,
+ownership and concurrency APIs are unchanged.
+
+End failure must keep the active logger with no success hero. Successful End
+opens completion at scroll top. Check short/24-set summaries, warmups, recorded
+RPE/notes, singular counts, Back to training without any creation, and View
+history selecting the completed workout. Mixed/custom/bodyweight/per-implement
+or machine-display sets omit aggregate volume; total_external bilateral loads
+sum recorded weight * reps. Missing/invalid or >12h duration is omitted. A valid
+duration is displayed in whole elapsed minutes. No gamification or rest timer.
+
+Captures at 390x844 are under test-results/training-final-confirmations:
+unified draft, discard/delete dialogs, short/long completion and bottom clearance.
+375/430 overflow and seven WebKit cases also pass. Physical iPhone toolbar,
+keyboard and installed-PWA acceptance remain pending. No schema rerun required.
+
 ## Corrective Recovery (2026-11-03)
 
 See `TRAINING_CORRECTIVE_RECOVERY.md` for the requirement audit and release evidence.

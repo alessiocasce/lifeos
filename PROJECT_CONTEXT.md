@@ -1,5 +1,38 @@
 # LifeOS Project Context
 
+## Unified Training editing and completion - approved release (2026-11-03)
+
+Built on the uncommitted History visual refinement. Done editing is the only
+workout-detail save action; name/date drafts survive internal exercise/set
+navigation and individually saved set mutations. Dirty inline sets require Save
+set or Cancel before switching context/finishing. Failed mutations retain drafts.
+History discard/deletion uses the accessible ConfirmationDialog, including
+continuation-aware application navigation. Browser unload protection remains
+browser-managed; no native confirm/alert calls remain in the History editor.
+
+Persisted ended sessions now show a dedicated completion screen, recorded-set
+summary, Back to training (clear selection only), and View history. Aggregate
+load-volume is shown only when every set has known total_external, bilateral
+catalog semantics and valid weight/reps; bodyweight, assistance, machine-display,
+per-implement and custom/unknown movements suppress it. Duration is shown only
+for valid start/end intervals of 1 minute through 12 hours. No rewards or timer.
+No backend, schema, Community projection or PWA activation changes. No schema
+rerun required. Owner approved the visual review and authorized the targeted
+release. QA preview fixtures are isolated to scripts/serve-ui-qa.js substitutions
+and tests/ui/fixtureApi.js, never imported by the production Vite configuration.
+
+## History visual review - local only (2026-11-03)
+
+Uncommitted frontend refinement against the approved three History mockups:
+collapsed exercise cards, directly editable title/date, green Done editing,
+inline per-set form, compact warmup/RPE, contextual Back to workout and overflow
+exercise deletion. Read-only History no longer exposes View in Community or the
+completion label. Persisted template appearance supplies the accent, falling back
+to the LifeOS token. Dock geometry/portal is unchanged; its Training surface is
+opaque. Existing mutation APIs, pagination, concurrency, completion and Community
+sync are untouched. No schema rerun required. The owner subsequently approved
+this design for the unified Training release. See design-qa.md and QA_WORKOUT.
+
 ## Floating Training sheets / picker navigation (2026-11-03)
 
 The mobile dock has shared CSS geometry across lazy Training and other tabs;

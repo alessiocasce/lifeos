@@ -76,15 +76,17 @@ test('saved sets remain editable and deletable; completed workouts stay complete
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].reps)).toBe(10);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
-  await expect(page.getByText('Edit completed workouts in History.')).toBeVisible();
+  await expect(page.getByText('Workout completed!', { exact: true })).toBeVisible();
   const endedAt = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0].ended_at);
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await page.getByRole('button', { name: /Pull session/ }).click();
   await expect(page.getByRole('button', { name: 'Reopen', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit workout', exact: true }).click();
   await page.getByRole('button', { name: 'Edit Barbell Curl', exact: true }).click();
-  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Exercise options Barbell Curl', exact: true }).click();
   await page.getByRole('button', { name: /Delete exercise from workout/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete exercise', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts'))[0]);
   expect(saved.ended_at).toBe(endedAt);
   expect(saved.workout_sets).toEqual([]);
@@ -93,7 +95,7 @@ test('saved sets remain editable and deletable; completed workouts stay complete
 test('confirmed end clears draft and new session starts clean', async ({ page }) => {
   await fillDraft(page);
   await page.getByRole('button', { name: 'End Workout', exact: true }).click();
-  await expect(page.getByText('Edit completed workouts in History.')).toBeVisible();
+  await expect(page.getByText('Workout completed!', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes(':draft:')))).toEqual([]);
   await page.evaluate(() => {
     const rows = JSON.parse(localStorage.getItem('qa-workouts'));

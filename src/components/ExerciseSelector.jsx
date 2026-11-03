@@ -8,7 +8,7 @@ const equipmentLabels = { barbell:'Barbell',dumbbell:'Dumbbell',smith:'Smith mac
   bodyweight:'Bodyweight',assisted_machine:'Assisted machine',ez_bar:'EZ bar',landmine:'Landmine',plate:'Plate',
   kettlebell:'Kettlebell',trap_bar:'Trap bar',sled:'Sled',rope:'Rope',boxing_bag:'Boxing bag',unspecified:'Unspecified' };
 
-export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions=[], language=getLanguage(), inputLabel=t('Exercise'), templatePlan=null, compact=false }) {
+export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions=[], language=getLanguage(), inputLabel=t('Exercise'), templatePlan=null, compact=false, emptyLabel=t('Choose exercise'), triggerIcon: TriggerIcon=Search }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
@@ -89,10 +89,10 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
 
   return <div className="min-w-0">
     <div aria-hidden={open || undefined} className={compact ? 'training-exercise-row' : 'flex min-h-12 min-w-0 items-center gap-2 border-b border-white/15'}>
-      {compact ? <Dumbbell size={25} /> : <Search size={17} className="shrink-0 text-zinc-400" />}
+      {compact ? <Dumbbell size={25} /> : <TriggerIcon size={17} className="shrink-0 text-zinc-400" />}
       <button ref={trigger} type="button" aria-label={inputLabel} aria-haspopup="dialog" aria-expanded={open}
         className="exercise-trigger min-h-12 min-w-0 flex-1 bg-transparent text-left text-base font-medium text-zinc-100"
-        onClick={begin}><span>{exerciseLabel({exercise:value,exercise_id:exerciseId},language) || t('Choose exercise')}</span><span aria-hidden="true">{compact ? <Repeat2 size={22} /> : <ChevronDown size={18} />}</span></button>
+        onClick={begin}><span>{exerciseLabel({exercise:value,exercise_id:exerciseId},language) || emptyLabel}</span><span aria-hidden="true">{compact ? <Repeat2 size={22} /> : <ChevronDown size={18} />}</span></button>
     </div>
     {open && <TrainingSheet title={showPlan ? 'Choose exercise' : 'All exercises'} ariaLabel="Choose exercise" onBack={!showPlan && hasPlan ? back : undefined} backRef={backButton} onClose={() => setOpen(false)} requestCloseRef={requestClose} triggerRef={trigger} className="training-picker-sheet">
       <div className="training-picker-viewport" data-view={view} style={{height:panelHeight}}>

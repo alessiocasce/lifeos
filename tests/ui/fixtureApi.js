@@ -1,5 +1,23 @@
 import { localDate } from '../../src/utils/date';
-import { exerciseIdentityKey } from '../../src/utils/exerciseCatalog';
+import { exerciseIdentityKey, resolveExercise } from '../../src/utils/exerciseCatalog';
+
+// Opt-in preview data on the isolated QA origin, never the production API.
+if (location.hostname === '127.0.0.1' && new URLSearchParams(location.search).get('history-preview') === '1'
+  && !sessionStorage.getItem('qa-history-preview-seeded')) {
+  sessionStorage.setItem('qa-history-preview-seeded', 'true');
+  localStorage.setItem('qa-user', JSON.stringify({ id: 'qa-user-a', email: 'qa@example.test' }));
+  localStorage.setItem('qa-workouts', JSON.stringify([{
+    id: 'preview-chest', user_id: 'qa-user-a', name: 'Chest', performed_on: '2026-10-28',
+    started_at: '2026-10-28T09:00:00Z', ended_at: '2026-10-28T10:00:00Z', updated_at: '2026-10-28T10:00:00Z',
+    template_appearance: { color_key: 'blue', icon_key: 'chest' },
+    workout_sets: ['Incline Barbell Bench Press','Dumbbell Bench Press','Pectoral Machine'].flatMap((exercise,index) =>
+      [1,2,3].map(number => ({ id: 'preview-' + index + '-' + number, workout_id: 'preview-chest', user_id: 'qa-user-a',
+        exercise, exercise_id: resolveExercise(exercise)?.id || null, set_number: number, is_warmup: false,
+        weight: index === 1 ? 30 : 50, reps: 10, rpe: number === 2 ? 10 : null,
+        notes: index === 0 && number === 2 ? 'Paused last rep' : null,
+        performed_at: '2026-10-28T09:30:00Z', updated_at: '2026-10-28T10:00:00Z' }))),
+  }]));
+}
 
 const user = () => JSON.parse(localStorage.getItem('qa-user') ?? '{"id":"qa-user-a","email":"qa@example.test"}');
 const initialSession = () => ({

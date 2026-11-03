@@ -136,7 +136,7 @@ export function LifeOSProvider({ children }) {
 
   const setActiveTab = useCallback((tabId) => {
     const nextTab = isValidTabId(tabId) ? tabId : 'home';
-    if (nextTab !== activeTabRef.current && !document.dispatchEvent(new Event('lifeos:before-navigate', { cancelable: true }))) return false;
+    if (nextTab !== activeTabRef.current && !document.dispatchEvent(new CustomEvent('lifeos:before-navigate', { cancelable: true, detail: { proceed: () => setActiveTab(nextTab) } }))) return false;
     userNavigatedRef.current = true;
     setActiveTabState(nextTab);
     writeTrainingWorkspace(lastAuthUserId.current, { tab: nextTab, sessionId: activeWorkoutIdRef.current });
@@ -154,7 +154,7 @@ export function LifeOSProvider({ children }) {
     if (typeof window === 'undefined') return undefined;
     const handlePopState = () => {
       const tab = pathToTab(window.location.pathname);
-      if (tab !== activeTabRef.current && !document.dispatchEvent(new Event('lifeos:before-navigate', { cancelable: true }))) {
+      if (tab !== activeTabRef.current && !document.dispatchEvent(new CustomEvent('lifeos:before-navigate', { cancelable: true, detail: { proceed: () => setActiveTab(tab) } }))) {
         window.history.replaceState({}, '', tabToPath(activeTabRef.current));
         return;
       }

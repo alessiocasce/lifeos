@@ -2,6 +2,7 @@ import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
 import {
   ArrowLeft,
+  CalendarDays,
   Check,
   ChevronRight,
   ChevronDown,
@@ -22,10 +23,11 @@ import { useLocalDay } from '../hooks/useLocalDay';
 import { localDate } from '../utils/date';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
 import { TrainingSheet } from '../components/TrainingSheet';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { prefillWorkoutTargets } from '../utils/workoutPrefill';
+import { workoutCompletionMetrics } from '../utils/workoutCompletion';
 import { exerciseIdentityKey, exerciseLabel, resolveExercise } from '../utils/exerciseCatalog';
 import { ExerciseSelector } from '../components/ExerciseSelector';
-import { WorkoutSharing } from '../components/WorkoutSharing';
 import { TrainingQuickStart, TemplateAppearanceEditor, TrainingTemplateIcon } from '../components/TrainingTemplates';
 import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateAppearance';
 import { emptySetDraft, readExerciseDraft, writeWorkoutDraft, withDraftBaseline, hasWorkoutDraftEdits, draftHasEdits } from '../utils/workoutContinuity';
@@ -91,7 +93,7 @@ export function WorkoutTab() {
   const [trainingView, setTrainingView] = useState('live');
   const [historySessionId, setHistorySessionId] = useState(null);
   const historyListScroll = useRef(0);
-  const historyLeave = useRef(() => true);
+  const historyLeave = useRef(action => { action?.(); return true; });
   const [templateSetup, setTemplateSetup] = useState(null);
   const [templateBusy, setTemplateBusy] = useState(false);
   const openTemplateSetup = (template) => {
@@ -413,10 +415,10 @@ export function WorkoutTab() {
   };
 
   return (
-    <div className={`grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4 ${activeWorkoutSession && trainingView === 'live' ? 'training-active' : ''}`} style={{ '--workout-accent': TEMPLATE_COLORS[appearance.color_key] }}>
+    <div className={`grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4 ${activeWorkoutSession && !activeWorkoutSession.ended_at && trainingView === 'live' ? 'training-active' : ''}`} style={{ '--workout-accent': TEMPLATE_COLORS[appearance.color_key] }}>
       <div role="group" aria-label={t("Training view")} className="training-views col-span-12 flex gap-1 border-b border-white/10">
         {['live', 'history', 'manage'].map((view) => (
-          <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => { if (view !== trainingView && historyLeave.current()) setTrainingView(view); }} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
+          <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => { if (view !== trainingView) historyLeave.current(() => setTrainingView(view)); }} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
             {view === 'live' ? t("Live") : view === 'history' ? t("History") : t("Manage")}
           </button>
         ))}
@@ -440,13 +442,16 @@ export function WorkoutTab() {
           onSelect={setHistorySessionId}
           listScroll={historyListScroll}
           leaveRef={historyLeave}
-          onResume={() => { if (historyLeave.current()) setTrainingView('live'); }}
+          onResume={() => historyLeave.current(() => setTrainingView('live'))}
           pagination={workoutHistory}
           onLoadMore={loadMoreWorkoutSessions}
           onRetry={reloadWorkoutSessions}
           status={workoutSessionsStatus}
           error={workoutSessionsError}
         />
+      ) : activeWorkoutSession?.ended_at ? (
+        <WorkoutCompleted session={activeWorkoutSession} onBack={() => { setActiveWorkoutId(null); setFormError(''); }}
+          onHistory={() => { setHistorySessionId(activeWorkoutSession.id); setTrainingView('history'); }} />
       ) : activeWorkoutSession ? (
         <>
           <ActiveWorkoutHeader
@@ -507,7 +512,7 @@ export function WorkoutTab() {
                 setEditingSetId={setEditingSetId}
                 workoutSessionsStatus={workoutSessionsStatus}
               />
-              {!activeWorkoutSession.ended_at ? <button type="button" className="training-end" disabled={Boolean(endingSessionId) || savingSet} onClick={() => endSession(activeWorkoutSession.id)}><Flag size={22} />{t('End Workout')}</button> : <button className="training-row" onClick={() => setActiveWorkoutId(null)}>{t('New session')}</button>}
+              <button type="button" className="training-end" disabled={Boolean(endingSessionId) || savingSet} onClick={() => endSession(activeWorkoutSession.id)}><Flag size={22} />{t('End Workout')}</button>
             </div>
 
           </div>
@@ -1081,6 +1086,35 @@ function HistoricalSets({ sets }) {
   ))}</div>;
 }
 
+function WorkoutCompleted({ session, onBack, onHistory }) {
+  useLayoutEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [session.id]);
+  const groups = Object.entries(groupSetsByExercise(session.workout_sets || []));
+  const count = session.workout_sets?.length || 0;
+  const metrics = workoutCompletionMetrics(session);
+  const completed = new Date(session.ended_at);
+  return <section className="workout-completed col-span-12" aria-label={t('Completed workout')}>
+    <header className="completion-hero"><span className="completion-success"><Check size={26} strokeWidth={2} /></span>
+      <h2>{t('Workout completed!')}</h2><p>{t('Your workout has been saved.')}</p>
+    </header>
+    <button type="button" className="completion-back" onClick={onBack}>{t('Back to training')}<ArrowLeft size={19} /></button>
+    <section className="completion-overview" aria-label={t('Workout overview')}>
+      <h3>{session.name}</h3><time dateTime={session.ended_at}>{formatDate(Number.isFinite(completed.getTime()) ? localDate(0, completed) : session.performed_on)}</time>
+      <dl><div><dt>{t('Exercises')}</dt><dd>{groups.length}</dd></div><div><dt>{t('Recorded sets')}</dt><dd>{count}</dd></div>
+        {metrics.volume !== null ? <div><dt>{t('Load-volume')}</dt><dd>{formatNumber(metrics.volume)} <small>kg</small></dd></div> : null}
+        {metrics.durationMinutes !== null ? <div><dt>{t('Duration')}</dt><dd>{metrics.durationMinutes} <small>min</small></dd></div> : null}
+      </dl>
+    </section>
+    <div className="completion-summary"><h3>{t('Workout summary')}</h3>
+      {groups.map(([key, sets], index) => <section className="completion-exercise" key={key} aria-label={exerciseLabel(sets[0])}>
+        <header><span>{String(index + 1).padStart(2, '0')}</span><h4>{exerciseLabel(sets[0])}</h4><small>{sets.length} {t(sets.length === 1 ? 'set' : 'sets')}</small></header>
+        <HistoricalSets sets={sets} />
+      </section>)}
+      {!count ? <p>{t('No sets recorded.')}</p> : null}
+    </div>
+    <button type="button" className="completion-history" onClick={onHistory}><History size={18} />{t('View history')}<ChevronRight size={18} /></button>
+  </section>;
+}
+
 function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResume, listScroll, leaveRef, status, error, pagination, onLoadMore, onRetry }) {
   const { retainHistoryWorkout } = useLifeOS();
   useEffect(() => {
@@ -1094,7 +1128,7 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
   },[selectedId,listScroll]);
   const open = id => { listScroll.current = window.scrollY; onSelect(id); };
   return <section aria-label={t("Workout history")} className="col-span-12 min-w-0 max-w-3xl">
-    {activeSession && !activeSession.ended_at ? <div className="mb-5 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+    {!selected && activeSession && !activeSession.ended_at ? <div className="mb-5 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
       <div className="min-w-0"><p className="text-xs text-zinc-400">{t("Training in progress")}</p><p className="break-words text-sm text-zinc-100">{activeSession.name}</p></div>
       <button type="button" className="min-h-11 px-3 text-sm text-zinc-200" onClick={onResume}>{t("Resume")}</button>
     </div> : null}
@@ -1115,7 +1149,7 @@ function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResum
 }
 
 function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
-  const {updateWorkoutSession,deleteWorkoutSession,createWorkoutSet,updateWorkoutSet,deleteWorkoutSet,deleteWorkoutExercise,setUnsavedWork} = useLifeOS();
+  const {updateWorkoutSession,deleteWorkoutSession,createWorkoutSet,updateWorkoutSet,deleteWorkoutSet,deleteWorkoutExercise,setUnsavedWork,workoutTemplates} = useLifeOS();
   const [editing,setEditing] = useState(false);
   const [details,setDetails] = useState(null);
   const [expanded,setExpanded] = useState(null);
@@ -1126,35 +1160,73 @@ function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
   const lock = useRef(false);
   const [failure,setFailure] = useState('');
   const [success,setSuccess] = useState('');
+  const [exerciseMenu,setExerciseMenu] = useState(null);
+  const [confirmation,setConfirmation] = useState(null);
+  const allowNavigation = useRef(false);
   const groups = Object.entries(groupSetsByExercise(session.workout_sets || []));
-  const dirty = Boolean(details && (details.name !== details.original.name || details.performed_on !== details.original.performed_on)
-    || form && JSON.stringify(form) !== JSON.stringify(baseline));
-  const canLeave = () => !lock.current && (!dirty || window.confirm(t('Discard unsaved changes?')));
-  leaveRef.current = canLeave;
+  const detailsDirty = Boolean(details && (details.name !== details.original.name || details.performed_on !== details.original.performed_on));
+  const formDirty = Boolean(form && JSON.stringify(form) !== JSON.stringify(baseline));
+  const dirty = detailsDirty || formDirty;
+  const appearance = session.template_appearance || workoutTemplates?.find(template => template.id === session.template_id);
+  const accent = TEMPLATE_COLORS[appearance?.color_key] || 'var(--accent)';
+  const detailDraft = (row = session) => ({ name: row.name, performed_on: row.performed_on, original: { ...row } });
+  const requestLeave = action => {
+    if (lock.current) return false;
+    if (dirty) {
+      setConfirmation(value => value || { title: t('Discard changes?'), message: t('You have unsaved changes to this workout. Leave without saving them?'),
+        label: t('Discard changes'), cancel: t('Keep editing'), action: () => { allowNavigation.current = true; action?.(); } });
+      return false;
+    }
+    action?.();
+    return true;
+  };
+  leaveRef.current = requestLeave;
   useEffect(() => {
+    leaveRef.current = requestLeave;
     setUnsavedWork('workout-history',dirty || busy,'Save historical workout changes first.');
-    const leaving = event => { if (!canLeave()) event.preventDefault(); };
+    const leaving = event => {
+      if (allowNavigation.current) { allowNavigation.current = false; return; }
+      if (dirty || lock.current) { event.preventDefault(); requestLeave(event.detail?.proceed); }
+    };
     const unload = event => { if (dirty || lock.current) { event.preventDefault(); event.returnValue = ''; } };
     document.addEventListener('lifeos:before-navigate',leaving);
     window.addEventListener('beforeunload',unload);
-    return () => { setUnsavedWork('workout-history',false); document.removeEventListener('lifeos:before-navigate',leaving); window.removeEventListener('beforeunload',unload); leaveRef.current = () => true; };
+    return () => { setUnsavedWork('workout-history',false); document.removeEventListener('lifeos:before-navigate',leaving); window.removeEventListener('beforeunload',unload); leaveRef.current = action => { action?.(); return true; }; };
   },[dirty,busy,setUnsavedWork,leaveRef]);
   const resetForm = () => { setForm(null); setBaseline(null); };
   const run = async (operation,after) => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setFailure(''); setSuccess('');
-    try { await operation(); after?.(); setSuccess(t('Changes saved.')); }
-    catch (error) { setFailure(error.message || t('Changes were not saved.')); }
+    try { const result = await operation(); after?.(result); setSuccess(t('Changes saved.')); return true; }
+    catch (error) { setFailure(error.message || t('Changes were not saved.')); return false; }
     finally { lock.current = false; setBusy(false); }
   };
   const guard = row => ({expectedUpdatedAt:row.updated_at,...(row.ended_at ? {expectedEndedAt:row.ended_at} : {})});
-  const closeForm = () => { if (!canLeave()) return; resetForm(); setAddition(null); };
+  const exitEditing = () => { setEditing(false); setDetails(null); setExpanded(null); setAddition(null); setExerciseMenu(null); resetForm(); };
+  const resolveSet = () => {
+    if (lock.current) return false;
+    if (!formDirty) return true;
+    setFailure(t('Save or cancel the current set before continuing.'));
+    return false;
+  };
+  const doneEditing = () => {
+    if (!resolveSet() || !details) return;
+    if (!details.name.trim() || !isValidDate(details.performed_on)) { setFailure(t('Enter a workout name and valid date.')); return; }
+    if (detailsDirty) run(() => updateWorkoutSession(session.id, { name: details.name.trim(), performed_on: details.performed_on }, guard(details.original)), exitEditing);
+    else exitEditing();
+  };
+  const exerciseContext = editing && Boolean(expanded || addition || form);
+  const closeExercise = () => {
+    if (!resolveSet()) return;
+    resetForm(); setExpanded(null); setAddition(null); setExerciseMenu(null);
+  };
+  const closeForm = () => { if (lock.current) return; resetForm(); setAddition(null); setFailure(''); };
   const startSet = (exercise,set = null) => {
-    if (!canLeave()) return false;
+    if (!resolveSet()) return false;
     const next = {id:set?.id || null,exercise:exercise.exercise,exercise_id:exercise.exercise_id || null,
       set_number:set?.set_number || getNextSetNumber(session,exercise),is_warmup:set ? isWarmupSet(set) : false,
       weight:set ? String(set.weight) : '',reps:set ? String(set.reps) : '',rpe:set?.rpe == null ? '' : String(set.rpe),notes:set?.notes || '',...(set ? {source:{...set}} : {})};
-    setForm(next); setBaseline(next); setDetails(null);
+    setForm(next); setBaseline(next); setExerciseMenu(null); setFailure('');
     return true;
   };
   const saveSet = event => {
@@ -1173,47 +1245,93 @@ function HistoricalWorkoutDetail({session,onBack,leaveRef}) {
     }),() => { resetForm(); if (addition) setExpanded(normalizeExercise(addition)); setAddition(null); });
   };
   const removeSet = set => {
-    if (!canLeave() || !window.confirm(t('Delete this set?'))) return;
-    run(() => deleteWorkoutSet(set.id,guard(set)),resetForm);
+    if (!resolveSet()) return;
+    setFailure('');
+    setConfirmation({ title:t('Delete set?'), message:t('This recorded set will be permanently deleted.'), label:t('Delete set'),
+      action:() => run(() => deleteWorkoutSet(set.id,guard(set)),resetForm) });
   };
   const removeExercise = sets => {
-    if (!canLeave() || !window.confirm(t('Delete {count} sets from this workout only?',{count:sets.length}))) return;
-    run(() => deleteWorkoutExercise(session.id, session.ended_at, sets),() => {resetForm();setExpanded(null);});
+    if (!resolveSet()) return;
+    setFailure('');
+    setConfirmation({ title:t('Delete exercise?'), message:t('Delete {count} sets from this workout only?',{count:sets.length}), label:t('Delete exercise'),
+      action:() => run(() => deleteWorkoutExercise(session.id, session.ended_at, sets),() => {resetForm();setExpanded(null);}) });
   };
-  const setEditor = form ? <form aria-label={t('Historical set editor')} onSubmit={saveSet} className="grid gap-3 border-t border-white/20 pt-3">
-    <h3 className="break-words font-semibold">{exerciseLabel(form)}</h3><fieldset disabled={busy} className="grid grid-cols-2 gap-3">
-      <CompactField label={t('Weight')} inputMode="decimal" value={form.weight} onChange={weight=>setForm(v=>({...v,weight}))}/><CompactField label={t('Reps')} inputMode="numeric" value={form.reps} onChange={reps=>setForm(v=>({...v,reps}))}/>
-      <WarmupToggle checked={form.is_warmup} onChange={is_warmup=>setForm(v=>({...v,is_warmup}))}/><RpeSelector value={form.rpe} onChange={rpe=>setForm(v=>({...v,rpe}))}/>
-      <div className="col-span-full"><CompactField label={t('Set notes')} value={form.notes} onChange={notes=>setForm(v=>({...v,notes}))}/></div>
-      <button type="submit" className="primary-button min-h-11">{t('Save set')}</button><button type="button" className="min-h-11" onClick={closeForm}>{t('Cancel')}</button>
+  const setEditor = form ? <form aria-label={t('Historical set editor')} onSubmit={saveSet} className="history-set-editor">
+    <fieldset disabled={busy}>
+      <label>{t('Weight (kg)')}<input inputMode="decimal" aria-label={t('Weight (kg)')} value={form.weight} onChange={event => setForm(value => ({ ...value, weight: event.target.value }))} /></label>
+      <label>{t('Reps')}<input inputMode="numeric" value={form.reps} onChange={event => setForm(value => ({ ...value, reps: event.target.value }))} /></label>
+      <label className="history-warmup"><input type="checkbox" checked={form.is_warmup} onChange={event => setForm(value => ({ ...value, is_warmup: event.target.checked }))} />{t('Warmup')}</label>
+      <label>RPE<select value={form.rpe} onChange={event => setForm(value => ({ ...value, rpe: event.target.value }))}>
+        <option value="">{t('None')}</option>
+        {form.rpe && !['6','7','8','9','10'].includes(form.rpe) ? <option value={form.rpe}>{form.rpe}</option> : null}
+        {['6','7','8','9','10'].map(value => <option key={value} value={value}>{value}</option>)}
+      </select></label>
+      <label className="history-notes">{t('Set notes')}<textarea rows={1} placeholder={t('Add a note (optional)...')} value={form.notes} onChange={event => setForm(value => ({ ...value, notes: event.target.value }))} /></label>
+      <div className="history-editor-actions"><button type="submit" className="history-primary"><Check size={17} />{t('Save set')}</button><button type="button" className="history-secondary" onClick={closeForm}>{t('Cancel')}</button></div>
     </fieldset>
   </form> : null;
-  return <div className="grid min-w-0 gap-4" aria-label={t('Historical workout detail')}>
-    <button type="button" className="training-row justify-start" onClick={() => { if (canLeave()) onBack(); }}><ArrowLeft size={16} />{t('Back to History')}</button>
-    <header><h2 className="break-words text-xl font-semibold">{session.name}</h2><time className="text-sm text-zinc-400">{formatDate(session.performed_on)}</time><p className="text-xs text-zinc-400">{t(session.ended_at ? 'Session complete' : 'Workout in progress')}</p></header>
-    <div className="flex flex-wrap gap-3">
-      <button type="button" disabled={busy} className="training-row" onClick={() => { if (!canLeave()) return; setEditing(!editing);setDetails(null);setExpanded(null);setAddition(null);resetForm(); }}><Pencil size={17} />{t(editing ? 'Done editing' : 'Edit workout')}</button>
-      <button type="button" disabled={busy} className="training-row text-red-400" onClick={() => { if (canLeave() && window.confirm(t('Delete this workout and all its sets? Templates and other workouts are kept.'))) run(() => deleteWorkoutSession(session.id,guard(session)),onBack); }}><Trash2 size={17} />{t('Delete workout')}</button>
+  const toggleExercise = key => {
+    if (!resolveSet()) return;
+    resetForm(); setAddition(null); setExerciseMenu(null);
+    setExpanded(expanded === key ? null : key);
+  };
+  return <div className="history-detail" style={{ '--history-accent': accent }} aria-label={t('Historical workout detail')}>
+    <button type="button" className="history-back" onClick={() => exerciseContext ? closeExercise() : requestLeave(onBack)}>
+      <ArrowLeft size={19} />{t(exerciseContext ? 'Back to workout' : 'Back to History')}
+    </button>
+    {editing && details ? <form className="history-details-form" aria-label={t('Edit workout details')} onSubmit={event => { event.preventDefault(); doneEditing(); }}>
+      <input className="history-title-input" aria-label={t('Name')} value={details.name} disabled={busy} onChange={event => setDetails(value => ({ ...value, name: event.target.value }))} />
+      <label className="history-date-field"><CalendarDays size={19} /><input type="date" aria-label={t('Date')} value={details.performed_on} disabled={busy} onChange={event => setDetails(value => ({ ...value, performed_on: event.target.value }))} /></label>
+    </form> : <header className="history-heading"><h2>{session.name}</h2><time dateTime={session.performed_on}>{formatDate(session.performed_on)}</time></header>}
+    <div className="history-workout-actions">
+      <button type="button" disabled={busy} className={editing ? 'history-done' : 'history-primary'} onClick={() => {
+        if (editing) doneEditing();
+        else { setEditing(true); setDetails(detailDraft()); setExpanded(null); setSuccess(''); }
+      }}>{editing ? <Check size={19} /> : <Pencil size={18} />}{t(editing ? 'Done editing' : 'Edit workout')}</button>
+      <button type="button" disabled={busy} className="history-delete" aria-label={t('Delete workout')} title={t('Delete workout')} onClick={() => {
+        setFailure('');
+        setConfirmation({ title:t('Delete workout?'), message:t('This workout and its recorded sets will be permanently deleted. This action cannot be undone.'), label:t('Delete workout'),
+          action:() => run(() => deleteWorkoutSession(session.id,guard(session)),onBack) });
+      }}><Trash2 size={20} /></button>
     </div>
-    <WorkoutSharing workout={session} />
-    {failure ? <p role="alert" className="text-sm text-red-300">{failure}</p> : null}
-    {success ? <p role="status" className="text-sm text-emerald-300">{success}</p> : null}
-    {busy ? <p role="status" className="text-sm text-zinc-400">{t('Saving...')}</p> : null}
-    {editing ? details ? <form aria-label={t('Edit workout details')} className="grid gap-3" onSubmit={event => { event.preventDefault(); if (!details.name.trim() || !isValidDate(details.performed_on)) {setFailure(t('Enter a workout name and valid date.'));return;} run(() => updateWorkoutSession(session.id,{name:details.name.trim(),performed_on:details.performed_on},guard(details.original)),() => setDetails(null)); }}>
-      <fieldset disabled={busy} className="grid gap-3"><CompactField label={t('Name')} value={details.name} onChange={name => setDetails(v=>({...v,name}))} /><CompactField label={t('Date')} type="date" value={details.performed_on} onChange={performed_on=>setDetails(v=>({...v,performed_on}))} /><button className="primary-button min-h-11">{t('Save changes')}</button><button type="button" className="min-h-11" onClick={()=>{if(canLeave())setDetails(null);}}>{t('Cancel')}</button></fieldset>
-    </form> : <button type="button" disabled={busy} className="training-row justify-start" onClick={()=>{if(!canLeave())return;resetForm();setDetails({name:session.name,performed_on:session.performed_on,original:{...session}});}}>{t('Edit workout details')}</button> : null}
-    {groups.map(([key,sets],index)=><section key={key} aria-label={exerciseLabel(sets[0])} className="min-w-0 border-t border-white/10 pt-3">
-      <header className="mb-3 flex min-h-11 items-center gap-3"><span className="training-exercise-number">{String(index+1).padStart(2,'0')}</span><h3 className="min-w-0 flex-1 break-words text-sm font-semibold">{exerciseLabel(sets[0])}</h3>{editing ? <button type="button" disabled={busy} className="min-h-11 px-3 text-sm" aria-label={t('Edit')+' '+exerciseLabel(sets[0])} onClick={()=>{if(!canLeave())return;resetForm();setDetails(null);setAddition(null);setExpanded(expanded===key?null:key);}}>{t(expanded===key?'Close':'Edit')}</button>:null}</header>
-      {editing && expanded===key ? <div className="grid gap-3">
-        {sets.map(set=><div key={set.id} className="border-b border-white/10 pb-2"><HistoricalSets sets={[set]} /><div className="flex gap-3"><button type="button" disabled={busy} className="min-h-11 text-sm" aria-label={t('Edit set')+' '+set.id} onClick={()=>startSet(sets[0],set)}>{t('Edit set')}</button><button type="button" disabled={busy} className="min-h-11 text-sm text-red-400" aria-label={t('Delete set')+' '+set.id} onClick={()=>removeSet(set)}>{t('Delete set')}</button></div></div>)}
-        {form && !addition && normalizeExercise(form) === key ? setEditor : null}
-        <button type="button" disabled={busy} className="training-row justify-start" onClick={()=>startSet(sets[0])}><Plus size={17}/>{t('Add set')}</button>
-        <button type="button" disabled={busy} className="min-h-11 text-left text-sm text-red-400" onClick={()=>removeExercise(sets)}>{t('Delete exercise from workout')}</button>
-      </div>:<HistoricalSets sets={sets} />}
-    </section>)}
-    {!groups.length ? <p className="text-sm text-zinc-400">{t('No sets recorded.')}</p> : null}
-    {editing ? <ExerciseSelector inputLabel={t('Add exercise')} value={addition?.exercise || ''} exerciseId={addition?.exercise_id} onCommit={exercise=>{if(!startSet(exercise))return;setAddition(exercise);setExpanded(null);}} /> : null}
-    {editing && addition ? setEditor : null}
+    {failure && !confirmation ? <p role="alert" className="history-error">{failure}</p> : null}
+    {busy ? <p role="status" className="history-feedback">{t('Saving...')}</p> : success ? <p role="status" className="history-feedback">{success}</p> : null}
+    <div className="history-exercises-heading"><h3>{t('Exercises')}</h3><span>{groups.length} {t('exercises')}</span></div>
+    <div className="history-exercises">{groups.map(([key,sets],index) => {
+      const open = expanded === key;
+      return <section key={key} aria-label={exerciseLabel(sets[0])} className="history-exercise" data-open={open}>
+        <button type="button" className="history-exercise-summary" disabled={busy} aria-expanded={open} aria-label={(editing ? t('Edit') : t('Show')) + ' ' + exerciseLabel(sets[0])} onClick={() => toggleExercise(key)}>
+          <span className="history-exercise-number">{String(index+1).padStart(2,'0')}</span>
+          <span className="history-exercise-copy"><strong>{exerciseLabel(sets[0])}</strong><span>{sets.length} {t(sets.length === 1 ? 'set' : 'sets')}</span></span>
+          <ChevronDown size={19} className={open ? 'history-chevron-open' : ''} />
+        </button>
+        {open ? <div className="history-exercise-content">{sortSetsForDisplay(sets).map(set => <div key={set.id} className="history-set" data-editing={form?.id === set.id}>
+          <div className="history-set-row">
+            <span className="history-set-label">{formatSetLabel(set,sets)}</span><strong>{formatNumber(set.weight)}{t(' kg × ')}{set.reps}</strong>
+            {set.rpe != null ? <span className="history-set-rpe">RPE {formatRpe(set.rpe)}</span> : null}
+            {editing ? <span className="history-set-tools"><button type="button" disabled={busy} aria-label={t('Edit set')+' '+set.id} onClick={() => startSet(sets[0],set)}><Pencil size={15} /></button><button type="button" disabled={busy} className="history-set-delete" aria-label={t('Delete set')+' '+set.id} onClick={() => removeSet(set)}><Trash2 size={15} /></button></span> : null}
+          </div>
+          {set.notes?.trim() && form?.id !== set.id ? <p className="history-set-note">{set.notes}</p> : null}
+          {editing && form?.id === set.id ? setEditor : null}
+        </div>)}
+          {editing && form && !form.id && !addition && normalizeExercise(form) === key ? <div className="history-new-set">{setEditor}</div> : null}
+          {editing ? <div className="history-exercise-actions"><button type="button" disabled={busy} className="history-add-set" onClick={() => startSet(sets[0])}><Plus size={17} />{t('Add set')}</button>
+            <div className="history-exercise-options" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setExerciseMenu(null); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setExerciseMenu(null); event.currentTarget.querySelector('.history-options-button')?.focus({ preventScroll: true }); } }}><button type="button" disabled={busy} className="history-options-button" aria-label={t('Exercise options')+' '+exerciseLabel(sets[0])} aria-expanded={exerciseMenu === key} onClick={() => setExerciseMenu(exerciseMenu === key ? null : key)}><MoreHorizontal size={20} /></button>
+              {exerciseMenu === key ? <div className="history-options-menu"><button type="button" disabled={busy} onClick={() => removeExercise(sets)}><Trash2 size={16} />{t('Delete exercise from workout')}</button></div> : null}
+            </div>
+          </div> : null}
+        </div> : null}
+      </section>;
+    })}</div>
+    {!groups.length ? <p className="history-feedback">{t('No sets recorded.')}</p> : null}
+    {editing ? <div className="history-add-exercise"><ExerciseSelector inputLabel={t('Add exercise')} emptyLabel={t('Add exercise')} triggerIcon={Plus} value="" exerciseId={null} onCommit={exercise => {
+      if (!startSet(exercise)) return;
+      setAddition(exercise); setExpanded(null);
+    }} /></div> : null}
+    {editing && addition ? <section className="history-exercise history-added-exercise"><h3>{exerciseLabel(addition)}</h3>{setEditor}</section> : null}
+    {confirmation ? <ConfirmationDialog title={confirmation.title} message={confirmation.message} confirmLabel={confirmation.label} cancelLabel={confirmation.cancel}
+      busy={busy} error={failure} onCancel={() => { if (!lock.current) { setConfirmation(null); setFailure(''); } }}
+      onConfirm={async () => { if (lock.current) return; const ok = await confirmation.action(); if (ok !== false) setConfirmation(null); }} /> : null}
   </div>;
 }
 
