@@ -4,9 +4,10 @@ const path = require('node:path');
 module.exports = { apps: [{
   name: 'lifeos-workout-push',
   cwd: path.resolve(__dirname, '../..'),
-  script: 'scripts/workout-push-worker.js',
-  interpreter: 'node',
-  node_args: '--env-file=/etc/lifeos-workout-push/worker.env',
+  // Supervise the executable directly: PM2's JS wrapper changes argv[1].
+  script: process.execPath,
+  interpreter: 'none',
+  args: ['--env-file=/etc/lifeos-workout-push/worker.env', 'scripts/workout-push-worker.js'],
   instances: 1,
   exec_mode: 'fork',
   autorestart: true,
