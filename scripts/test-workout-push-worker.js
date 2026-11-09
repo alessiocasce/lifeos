@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { workerConfiguration, dispatchOnce } from './workout-push-worker.js';
 import { workerHealthy } from '../ops/workout-push/healthcheck.mjs';
+import supervisor from '../ops/workout-push/ecosystem.config.cjs';
+assert.equal(supervisor.apps[0].interpreter,'none','PM2 must supervise Node directly, not wrap the ESM entrypoint');
+assert.equal(supervisor.apps[0].script,process.execPath);
 
 assert.throws(()=>workerConfiguration({LIFEOS_PUSH_ORIGIN:'http://example.test',LIFEOS_PUSH_DISPATCH_SECRET:'secret'}),/HTTPS/);
 assert.throws(()=>workerConfiguration({LIFEOS_PUSH_ORIGIN:'https://user:password@example.test',LIFEOS_PUSH_DISPATCH_SECRET:'secret'}),/origin/);
