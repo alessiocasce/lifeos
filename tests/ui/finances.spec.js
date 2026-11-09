@@ -32,8 +32,8 @@ test('expense capture, comma decimals, custom category, edit, delete and reload'
   await edit.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Bookshop revised', { exact: true })).toBeVisible();
   await page.reload();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('article').filter({ hasText: 'Bookshop revised' }).getByRole('button', { name: 'Delete expense' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete expense', exact: true }).click();
   await expect(page.getByText('Bookshop revised', { exact: true })).toHaveCount(0);
 });
 
@@ -60,8 +60,10 @@ test('failed writes preserve capture and edit fields; failed delete keeps row', 
   await expect(capture.getByLabel('Vendor', { exact: true })).toHaveValue('Keep this draft');
   await expect(capture.getByText('Expense saved.', { exact: true })).toHaveCount(0);
   const row = page.locator('article').filter({ hasText: 'Coffee shop' });
-  page.once('dialog', (dialog) => dialog.accept());
   await row.getByRole('button', { name: 'Delete expense' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete expense', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Edit expense' }).click();
   const edit = page.getByRole('form', { name: 'Edit expense Coffee shop' });

@@ -1,5 +1,3 @@
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
-
 export function Panel({ children, className = '' }) {
   return <section className={`terminal-card min-w-0 ${className}`}>{children}</section>;
 }
@@ -32,51 +30,6 @@ export function Tag({ children, tone = 'zinc' }) {
   );
 }
 
-export function ProgressRing({ value, max, label, accent = '#22d3ee', size = 88 }) {
-  const radius = 38;
-  const stroke = 7;
-  const circumference = 2 * Math.PI * radius;
-  const pct = Math.min(value / max, 1);
-  const offset = circumference - pct * circumference;
-
-  return (
-    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox="0 0 88 88" aria-hidden="true">
-        <circle cx="44" cy="44" r={radius} stroke="#27272a" strokeWidth={stroke} fill="none" />
-        <circle
-          cx="44"
-          cy="44"
-          r={radius}
-          stroke={accent}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform="rotate(-90 44 44)"
-        />
-      </svg>
-      <div className="absolute text-center">
-        <div className="data-text text-lg font-bold text-zinc-100">{value}/{max}</div>
-        <div className="text-[10px] uppercase text-zinc-500">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-export function Sparkline({ data, color = '#22c55e' }) {
-  const chartData = data.map((value, index) => ({ index, value }));
-  return (
-    <div className="h-8 w-24">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-          <Area type="monotone" dataKey="value" stroke={color} fill={color} fillOpacity={0.16} strokeWidth={2} />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export function MiniMetric({ label, value, tone = 'text-zinc-100', sub }) {
   return (
     <div className="min-w-0 rounded-md border border-white/5 bg-black/20 px-3 py-2">
@@ -85,9 +38,4 @@ export function MiniMetric({ label, value, tone = 'text-zinc-100', sub }) {
       {sub ? <p className="data-text truncate text-[10px] text-zinc-500">{sub}</p> : null}
     </div>
   );
-}
-
-export function PriorityDot({ priority }) {
-  const color = priority === 'high' ? 'bg-red-400' : priority === 'medium' ? 'bg-amber-400' : 'bg-zinc-600';
-  return <span className={`h-1.5 w-1.5 rounded-full ${color}`} />;
 }

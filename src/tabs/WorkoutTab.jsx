@@ -21,25 +21,32 @@ import {
 import { useEffect, useLayoutEffect, useId, useMemo, useState, useRef } from 'react';
 import { useLocalDay } from '../hooks/useLocalDay';
 import { localDate } from '../utils/date';
+import { addDays } from '../utils/date';
+import { weekDates } from '../utils/workoutHistoryFilter';
 import { useWorkoutDraft } from '../hooks/useWorkoutDraft';
 import { TrainingSheet } from '../components/TrainingSheet';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
-import { prefillWorkoutTargets } from '../utils/workoutPrefill';
-import { workoutCompletionMetrics } from '../utils/workoutCompletion';
-import { exerciseIdentityKey, exerciseLabel, resolveExercise } from '../utils/exerciseCatalog';
+import { useDestructiveConfirmation } from '../hooks/useDestructiveConfirmation';
+import { prefillWorkoutTargets, nextWorkoutDraft } from '../utils/workoutPrefill';
+import { workoutCompletionMetrics, completedTemplateExercises, workoutWeightLabel, trainingExerciseLabel } from '../utils/workoutCompletion';
+import { exerciseIdentityKey, resolveExercise } from '../utils/exerciseCatalog';
+import { WorkoutRestTimer } from '../components/WorkoutRestTimer';
+import { useWorkoutHistoryFilter } from '../hooks/useWorkoutHistoryFilter';
 import { ExerciseSelector } from '../components/ExerciseSelector';
 import { TrainingQuickStart, TemplateAppearanceEditor, TrainingTemplateIcon } from '../components/TrainingTemplates';
 import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateAppearance';
-import { emptySetDraft, readExerciseDraft, writeWorkoutDraft, withDraftBaseline, hasWorkoutDraftEdits, draftHasEdits } from '../utils/workoutContinuity';
+import { emptySetDraft, readExerciseDraft, writeWorkoutDraft, withDraftBaseline, hasWorkoutDraftEdits, draftHasEdits, acknowledgeWorkoutCompletion, isWorkoutCompletionAcknowledged, readCompletionTemplate, writeCompletionTemplate } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
 import { MiniMetric, Panel, PanelHeader, Tag } from '../components/ui';
 import '../styles/trainingStart.css';
 import '../styles/trainingActive.css';
 
 const WARMUP_SET_NUMBER_OFFSET = 1000;
+const exerciseLabel = value => trainingExerciseLabel(value, getLocale().startsWith('it') ? 'it' : 'en');
 
 export function WorkoutTab() {
   const today = useLocalDay();
+  const liveConfirmation = useDestructiveConfirmation();
   const {
     authUser,
     activeWorkoutId,
@@ -92,10 +99,14 @@ export function WorkoutTab() {
   const [lastSavedSet, setLastSavedSet] = useState(null);
   const [trainingView, setTrainingView] = useState('live');
   const [historySessionId, setHistorySessionId] = useState(null);
+  const [historyFilters, setHistoryFilters] = useState({ mode: 'all', week: today, day: null, templateId: '', open: false });
   const historyListScroll = useRef(0);
   const historyLeave = useRef(action => { action?.(); return true; });
   const [templateSetup, setTemplateSetup] = useState(null);
   const [templateBusy, setTemplateBusy] = useState(false);
+  const [dismissedCompletion, setDismissedCompletion] = useState(null);
+  const completionDismissed = activeWorkoutSession?.ended_at && (dismissedCompletion === `${authUser?.id}:${activeWorkoutSession.id}`
+    || isWorkoutCompletionAcknowledged(authUser?.id, activeWorkoutSession.id));
   const openTemplateSetup = (template) => {
     setTemplateSetup({ ...template, ...normalizeTemplateAppearance(template), notes: template.notes || '' });
     setTrainingView('manage');
@@ -296,12 +307,8 @@ export function WorkoutTab() {
         ...activeWorkoutSession,
         workout_sets: [...(activeWorkoutSession.workout_sets ?? []), createdSet],
       };
-      const nextDraft = withDraftBaseline(prefillWorkoutTargets({
-        ...setForm,
-        set_number: setForm.is_warmup
-          ? getNextWarmupSetNumber(projectedSession, setForm)
-          : getNextSetNumber(projectedSession, setForm),
-      }, previousPerformance?.sets, { afterSave: true, savedSet: createdSet }));
+      const nextDraft = withDraftBaseline(nextWorkoutDraft(setForm, previousPerformance?.sets,
+        createdSet, getNextSetNumber(projectedSession, setForm)));
       writeWorkoutDraft(authUser?.id, activeWorkoutSession.id, nextDraft);
       setSetForm(nextDraft);
       setLastSavedSet(createdSet);
@@ -370,18 +377,11 @@ export function WorkoutTab() {
     }
   };
 
-  const removeSet = async (setId) => {
-    if (!window.confirm(t('Delete this set?'))) return;
-    setDeletingSetId(setId);
-    setFormError('');
-    try {
-      await deleteWorkoutSet(setId);
-    } catch (error) {
-      setFormError(error.message || t("Failed to delete set."));
-    } finally {
-      setDeletingSetId(null);
-    }
-  };
+  const removeSet = setId => liveConfirmation.ask({ title: 'Delete set?', message: 'Delete this set?', label: 'Delete set', action: async () => {
+    setDeletingSetId(setId); setFormError('');
+    try { await deleteWorkoutSet(setId); }
+    finally { setDeletingSetId(null); }
+  } });
 
   const endSession = async (sessionId) => {
     if (endingSessionId || savingSetRef.current) return;
@@ -416,6 +416,7 @@ export function WorkoutTab() {
 
   return (
     <div className={`grid min-w-0 grid-cols-12 gap-3 overflow-x-clip pb-4 ${activeWorkoutSession && !activeWorkoutSession.ended_at && trainingView === 'live' ? 'training-active' : ''}`} style={{ '--workout-accent': TEMPLATE_COLORS[appearance.color_key] }}>
+      {liveConfirmation.dialog}
       <div role="group" aria-label={t("Training view")} className="training-views col-span-12 flex gap-1 border-b border-white/10">
         {['live', 'history', 'manage'].map((view) => (
           <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => { if (view !== trainingView) historyLeave.current(() => setTrainingView(view)); }} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
@@ -439,6 +440,8 @@ export function WorkoutTab() {
           sessions={workoutSessions}
           activeSession={activeWorkoutSession}
           selectedId={historySessionId}
+          filters={historyFilters}
+          onFilterChange={setHistoryFilters}
           onSelect={setHistorySessionId}
           listScroll={historyListScroll}
           leaveRef={historyLeave}
@@ -449,10 +452,13 @@ export function WorkoutTab() {
           status={workoutSessionsStatus}
           error={workoutSessionsError}
         />
-      ) : activeWorkoutSession?.ended_at ? (
-        <WorkoutCompleted session={activeWorkoutSession} onBack={() => { setActiveWorkoutId(null); setFormError(''); }}
-          onHistory={() => { setHistorySessionId(activeWorkoutSession.id); setTrainingView('history'); }} />
-      ) : activeWorkoutSession ? (
+      ) : activeWorkoutSession?.ended_at && !completionDismissed ? (
+        <WorkoutCompleted key={`${authUser?.id}:${activeWorkoutSession.id}`} session={activeWorkoutSession} onBack={() => {
+          acknowledgeWorkoutCompletion(authUser?.id, activeWorkoutSession.id);
+          setDismissedCompletion(`${authUser?.id}:${activeWorkoutSession.id}`);
+          setActiveWorkoutId(null); setFormError('');
+        }} />
+      ) : activeWorkoutSession && !activeWorkoutSession.ended_at ? (
         <>
           <ActiveWorkoutHeader
             key={activeWorkoutSession.id}
@@ -522,8 +528,8 @@ export function WorkoutTab() {
           <div className="col-span-12 grid gap-3 xl:grid-cols-[minmax(0,760px)_1fr]">
             <WorkoutSessionControl
               formError={showCustomSession ? '' : formError}
-              activeSession={activeWorkoutSession}
-              activeWorkoutId={activeWorkoutId}
+              activeSession={completionDismissed ? null : activeWorkoutSession}
+              activeWorkoutId={completionDismissed ? null : activeWorkoutId}
               createWorkoutTemplate={createWorkoutTemplate}
               createWorkoutTemplateExercise={createWorkoutTemplateExercise}
               deleteConfirmId={deleteConfirmId}
@@ -587,6 +593,7 @@ function ActiveWorkoutHeader({ activeSession, appearance, ending, onUpdate, onDe
   return <section className="training-workout-header col-span-12">
     <span className="training-workout-icon"><TrainingTemplateIcon iconKey={appearance.icon_key} size={36} /></span>
     <div className="min-w-0 flex-1"><h2>{activeSession.name}</h2><p><span className={ended ? 'status-dot offline' : 'status-dot'} />{t(ended ? 'Session complete' : 'Workout in progress')}</p></div>
+    <WorkoutRestTimer session={activeSession} />
     <button type="button" className="training-options" aria-label={t('Workout options')} title={t('Workout options')} disabled={ending} onClick={() => setSheet('options')}><MoreHorizontal size={24} /></button>
     {sheet === 'options' ? <TrainingSheet title="Workout options" onClose={() => setSheet(null)} requestCloseRef={closeOptions} busy={deleting}>
       <button type="button" className="training-row" onClick={() => { setDetails({ name: activeSession.name, performed_on: activeSession.performed_on }); closeOptions.current?.(() => setSheet('edit')); }}><Pencil size={21} /><span>{t('Edit workout details')}</span><ChevronRight size={18} /></button>
@@ -770,6 +777,7 @@ function TemplateManager({
   workoutTemplates,
   workoutTemplatesStatus,
 }) {
+  const deletion = useDestructiveConfirmation();
   const [templateForm, setTemplateForm] = useState({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' });
   const [templateLoading, setTemplateLoading] = useState('');
   const [templateError, setTemplateError] = useState('');
@@ -879,32 +887,26 @@ function TemplateManager({
     }
   };
 
-  const removeTemplate = async (templateId) => {
-    if (!window.confirm(t("Delete this template and its exercises? Existing workout snapshots are kept."))) return;
+  const removeTemplate = templateId => deletion.ask({ title: 'Delete template?', message: 'Delete this template and its exercises? Existing workout snapshots are kept.', label: 'Delete template', action: async () => {
     setTemplateError('');
     setTemplateLoading(`template-delete-${templateId}`);
     try {
       await deleteWorkoutTemplate(templateId);
       setEditorId(null);
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to delete template.'));
     } finally {
       setTemplateLoading('');
     }
-  };
+  } });
 
-  const removeExercise = async (exerciseId) => {
-    if (!window.confirm(t("Remove this exercise from the template? Existing workout snapshots are kept."))) return;
+  const removeExercise = exerciseId => deletion.ask({ title: 'Delete exercise?', message: 'Remove this exercise from the template? Existing workout snapshots are kept.', label: 'Delete exercise', action: async () => {
     setTemplateError('');
     setTemplateLoading(`exercise-delete-${exerciseId}`);
     try {
       await deleteWorkoutTemplateExercise(exerciseId);
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to delete exercise.'));
     } finally {
       setTemplateLoading('');
     }
-  };
+  } });
 
   const moveExercise = async (templateId, exerciseId, direction) => {
     setTemplateError('');
@@ -925,6 +927,7 @@ function TemplateManager({
   </section>;
   return (
     <fieldset disabled={Boolean(templateLoading)} aria-label={t("Workout template management")} className="grid min-w-0 gap-5">
+      {deletion.dialog}
       <button type="button" className="training-row justify-start" onClick={() => { setEditorId(null); setEditingTemplateId(null); }}><ArrowLeft size={18} />{t('Your templates')}</button>
       {templateError ? <p role="alert" className="text-sm text-red-300">{t(templateError)}</p> : null}
       {editorId === 'new' ? <form ref={setup?.id ? null : setupTarget} aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
@@ -1049,9 +1052,10 @@ function SetLogger({ activeSession, plan, exerciseSuggestions, formError, onSetS
           onCommit={value => updateSetForm('exercise_selection', value)} />
         <PreviousPerformanceCard key={exerciseIdentityKey(setFormValue)} performance={previousPerformance} />
         <div className="grid grid-cols-2 gap-3">
-          <TargetControl label={t(resolveExercise(setFormValue)?.uses_external_load === false ? 'Weight optional' : 'Weight (kg)')} value={setFormValue.weight} step={2.5} onChange={v => updateSetForm('weight', v)} />
+          <TargetControl label={t(workoutWeightLabel(setFormValue))} value={setFormValue.weight} step={2.5} onChange={v => updateSetForm('weight', v)} />
           <TargetControl label={t('Reps')} value={setFormValue.reps} step={1} onChange={v => updateSetForm('reps', v)} />
         </div>
+        <label className="training-warmup"><input type="checkbox" checked={setFormValue.is_warmup} onChange={e => updateSetForm('is_warmup', e.target.checked)} />{t('Warmup set')}</label>
         <button type="button" className="training-row training-surface" onClick={() => setOptions(true)}><Settings2 size={23} />{t('More options')}</button>
         <button type="submit" disabled={savingSet || !setFormValue.exercise} className="training-save"><Plus size={25} />{t(savingSet ? 'Saving Set' : 'Save Set')}</button>
         {formError ? <p role="alert" className="text-sm text-red-300">{t(formError)}</p> : null}
@@ -1060,7 +1064,6 @@ function SetLogger({ activeSession, plan, exerciseSuggestions, formError, onSetS
     </form>
     {options ? <TrainingSheet title="More options" onClose={() => setOptions(false)} busy={savingSet}>
       <fieldset disabled={savingSet} className="grid gap-4">
-        <label className="training-row"><input type="checkbox" className="h-5 w-5" checked={setFormValue.is_warmup} onChange={e => updateSetForm('is_warmup', e.target.checked)} />{t('Warmup set')}</label>
         <RpeSelector value={setFormValue.rpe} onChange={v => updateSetForm('rpe',v)} />
         <CompactField label={t('Set notes')} value={setFormValue.notes} onChange={v => updateSetForm('notes', v)} />
       </fieldset>
@@ -1086,7 +1089,58 @@ function HistoricalSets({ sets }) {
   ))}</div>;
 }
 
-function WorkoutCompleted({ session, onBack, onHistory }) {
+function WorkoutCompleted({ session, onBack }) {
+  const { authUser, workoutTemplates, createWorkoutTemplate, createWorkoutTemplateExercise, reloadWorkoutTemplates } = useLifeOS();
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(() => readCompletionTemplate(authUser?.id, session.id)?.done === true);
+  const [templateError, setTemplateError] = useState('');
+  const templateLock = useRef(false);
+  const templatesRef = useRef(workoutTemplates);
+  templatesRef.current = workoutTemplates;
+  const pendingTemplate = useRef(readCompletionTemplate(authUser?.id, session.id));
+  const rememberTemplate = done => writeCompletionTemplate(authUser?.id, session.id, { ...pendingTemplate.current, done });
+  const saveTemplate = async () => {
+    if (templateLock.current || templateSaved) return;
+    const exercises = completedTemplateExercises(session);
+    if (!exercises.length) return;
+    templateLock.current = true; setSavingTemplate(true); setTemplateError('');
+    try {
+      let template = pendingTemplate.current;
+      if (!template) {
+        const names = new Set(workoutTemplates.map(row => row.name.trim().toLocaleLowerCase()));
+        let name = session.name.trim();
+        let suffix = 2;
+        while (names.has(name.toLocaleLowerCase())) name = `${session.name.trim()} (${suffix++})`;
+        const palette = Object.keys(TEMPLATE_COLORS);
+        const color_key = palette[Math.floor(Math.random() * palette.length)];
+        template = await createWorkoutTemplate({ name, color_key, icon_key: 'dumbbell' });
+        pendingTemplate.current = { id: template.id, saved: [] };
+        rememberTemplate(false);
+      }
+      const confirmed = templatesRef.current.find(row => row.id === template.id);
+      for (const exercise of confirmed?.workout_template_exercises || []) {
+        const key = exerciseIdentityKey(exercise);
+        if (!pendingTemplate.current.saved.includes(key)) pendingTemplate.current.saved.push(key);
+      }
+      for (const exercise of exercises) {
+        const key = exerciseIdentityKey(exercise);
+        if (pendingTemplate.current.saved.includes(key)) continue;
+        await createWorkoutTemplateExercise({ ...exercise, template_id: template.id });
+        pendingTemplate.current.saved.push(key);
+        rememberTemplate(false);
+      }
+      rememberTemplate(true); setTemplateSaved(true);
+    } catch (error) {
+      setTemplateError(error.message || t('Template could not be saved. Retry to finish it.'));
+      // Refresh successful partial writes before offering a retry. Retry reuses
+      // the same template and skips exercises already confirmed by the server.
+      if (pendingTemplate.current) {
+        try {
+          await reloadWorkoutTemplates?.();
+        } catch { /* Keep the original actionable failure. */ }
+      }
+    } finally { templateLock.current = false; setSavingTemplate(false); }
+  };
   useLayoutEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [session.id]);
   const groups = Object.entries(groupSetsByExercise(session.workout_sets || []));
   const count = session.workout_sets?.length || 0;
@@ -1096,7 +1150,7 @@ function WorkoutCompleted({ session, onBack, onHistory }) {
     <header className="completion-hero"><span className="completion-success"><Check size={26} strokeWidth={2} /></span>
       <h2>{t('Workout completed!')}</h2><p>{t('Your workout has been saved.')}</p>
     </header>
-    <button type="button" className="completion-back" onClick={onBack}>{t('Back to training')}<ArrowLeft size={19} /></button>
+    <button type="button" className="completion-back" onClick={onBack} disabled={savingTemplate}><ArrowLeft size={19} />{t('Back to training')}</button>
     <section className="completion-overview" aria-label={t('Workout overview')}>
       <h3>{session.name}</h3><time dateTime={session.ended_at}>{formatDate(Number.isFinite(completed.getTime()) ? localDate(0, completed) : session.performed_on)}</time>
       <dl><div><dt>{t('Exercises')}</dt><dd>{groups.length}</dd></div><div><dt>{t('Recorded sets')}</dt><dd>{count}</dd></div>
@@ -1111,39 +1165,75 @@ function WorkoutCompleted({ session, onBack, onHistory }) {
       </section>)}
       {!count ? <p>{t('No sets recorded.')}</p> : null}
     </div>
-    <button type="button" className="completion-history" onClick={onHistory}><History size={18} />{t('View history')}<ChevronRight size={18} /></button>
+    <button type="button" className="completion-template" disabled={savingTemplate || templateSaved || !count} onClick={saveTemplate}>
+      {templateSaved ? <Check size={18} /> : <ClipboardList size={18} />}{t(templateSaved ? 'Template saved' : savingTemplate ? 'Saving...' : 'Save as template')}
+    </button>
+    {templateError ? <p role="alert" className="text-sm text-red-300">{templateError}</p> : null}
   </section>;
 }
 
-function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResume, listScroll, leaveRef, status, error, pagination, onLoadMore, onRetry }) {
-  const { retainHistoryWorkout } = useLifeOS();
+function WorkoutHistory({ sessions, activeSession, selectedId, onSelect, onResume, listScroll, leaveRef, status, error, pagination, onLoadMore, onRetry, filters, onFilterChange }) {
+  const { retainHistoryWorkout, authUser, workoutTemplates } = useLifeOS();
+  const templateFilterId = useId();
+  const { mode, week, day, templateId, open: filterOpen } = filters;
+  const change = (key,value) => onFilterChange(previous => ({ ...previous, [key]: typeof value === 'function' ? value(previous[key]) : value }));
+  const setFilterOpen = value => change('open',value);
+  const setMode = value => change('mode',value);
+  const setWeek = value => change('week',value);
+  const setDay = value => change('day',value);
+  const setTemplateId = value => change('templateId',value);
+  const dates = weekDates(week);
+  const filter = mode === 'week' ? { from: dates[0], to: dates[6] }
+    : mode === 'template' && templateId ? { templateId: templateId === 'none' ? null : templateId } : {};
+  const filtered = useWorkoutHistoryFilter(authUser?.id, filter, mode !== 'all');
+  const source = mode === 'all' ? sessions : filtered.rows;
+  const paging = mode === 'all' ? pagination : filtered;
+  const loading = mode === 'all' ? status === 'loading' : filtered.loading;
+  const failure = mode === 'all' ? error : filtered.error;
+  const loadMore = mode === 'all' ? onLoadMore : filtered.loadMore;
+  const retry = mode === 'all' ? onRetry : filtered.reload;
   useEffect(() => {
     retainHistoryWorkout?.(selectedId);
     return () => retainHistoryWorkout?.(null);
   }, [selectedId, retainHistoryWorkout]);
-  const selected = sessions.find((session) => session.id === selectedId);
-  const history = sessions.filter((session) => session.id !== activeSession?.id || session.ended_at).slice().sort(compareSessionsDescending);
+  const selected = sessions.find((session) => session.id === selectedId) || source.find(session => session.id === selectedId);
+  const history = source.filter(session => (session.id !== activeSession?.id || session.ended_at)
+    && (mode !== 'week' || !day || session.performed_on === day)).slice().sort(compareSessionsDescending);
+  const templateOptions = [...new Map([
+    ...workoutTemplates.map(row => [row.id, row.name]),
+    ...sessions.filter(row => row.template_id && !workoutTemplates.some(template => template.id === row.template_id))
+      .map(row => [row.template_id, row.name + ' (' + t('Unavailable template') + ')']),
+  ]).entries()];
   useLayoutEffect(() => {
     window.scrollTo(0, selectedId ? 0 : listScroll.current);
   },[selectedId,listScroll]);
-  const open = id => { listScroll.current = window.scrollY; onSelect(id); };
+  const open = id => { listScroll.current = window.scrollY; retainHistoryWorkout?.(id, source.find(row => row.id === id)); onSelect(id); };
   return <section aria-label={t("Workout history")} className="col-span-12 min-w-0 max-w-3xl">
     {!selected && activeSession && !activeSession.ended_at ? <div className="mb-5 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
       <div className="min-w-0"><p className="text-xs text-zinc-400">{t("Training in progress")}</p><p className="break-words text-sm text-zinc-100">{activeSession.name}</p></div>
       <button type="button" className="min-h-11 px-3 text-sm text-zinc-200" onClick={onResume}>{t("Resume")}</button>
     </div> : null}
-    {error ? <div role="alert" className="mb-3 text-sm text-red-300">{error}<button type="button" className="min-h-11 px-3" onClick={onRetry}>{t('Retry')}</button></div> : null}
-    {selected ? <HistoricalWorkoutDetail key={selected.id} session={selected} onBack={() => onSelect(null)} leaveRef={leaveRef} /> : <>
-      <h2 className="mb-3 text-sm font-semibold text-zinc-200">{t("Recent workouts")}</h2>
-      {status === 'loading' && !history.length ? <LoadingCard label={t("Loading workout history")} /> : null}
+    {failure ? <div role="alert" className="mb-3 text-sm text-red-300">{failure}<button type="button" className="min-h-11 px-3" onClick={retry}>{t('Retry')}</button></div> : null}
+    {selected ? <HistoricalWorkoutDetail key={selected.id} session={selected} onBack={() => { onSelect(null); if (mode !== 'all') filtered.reload(); }} leaveRef={leaveRef} /> : <>
+      <div className="training-history-heading"><h2>{t('Recent workouts')}</h2><button type="button" aria-expanded={filterOpen} onClick={() => setFilterOpen(value => !value)}><Settings2 size={17} />{t('Filter')}</button></div>
+      {filterOpen ? <div className="training-history-filters">
+        <div className="training-filter-modes" role="group" aria-label={t('History filter')}>{[['all','All workouts'],['week','By week'],['template','By template']].map(([value,label]) => <button type="button" key={value} aria-pressed={mode === value} onClick={() => { setMode(value); setDay(null); listScroll.current = 0; }}>{t(label)}</button>)}</div>
+        {mode === 'week' ? <div className="training-week">
+          <div className="training-week-heading"><button type="button" aria-label={t('Previous week')} onClick={() => { setWeek(addDays(week,-7)); setDay(null); }}><ArrowLeft size={18} /></button><span>{formatDate(dates[0])} - {formatDate(dates[6])}</span><button type="button" aria-label={t('Next week')} onClick={() => { setWeek(addDays(week,7)); setDay(null); }}><ArrowLeft size={18} style={{ transform: 'rotate(180deg)' }} /></button></div>
+          <div className="training-week-days">{dates.map(date => <button type="button" key={date} aria-pressed={day === date} aria-label={formatDate(date)} onClick={() => setDay(day === date ? null : date)}><span>{new Intl.DateTimeFormat(getLocale(),{weekday:'short',timeZone:'UTC'}).format(new Date(`${date}T12:00:00Z`))}</span><strong>{Number(date.slice(-2))}</strong><i data-workout={source.some(row => row.performed_on === date)} /></button>)}</div>
+          {paging?.hasMore ? <p className="text-xs text-zinc-400">{t('Load more to see all days with workouts.')}</p> : null}
+        </div> : null}
+        {mode === 'template' ? <div className="training-template-filter"><label htmlFor={templateFilterId}>{t('Template')}</label><select id={templateFilterId} aria-describedby={`${templateFilterId}-help`} value={templateId} onChange={event => { setTemplateId(event.target.value); listScroll.current = 0; }}><option value="">{t('All templates')}</option><option value="none">{t('No current template')}</option>{templateOptions.map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select><small id={`${templateFilterId}-help`}>{t('Deleted template links may appear under No current template.')}</small></div> : null}
+      </div> : null}
+      {loading && !history.length ? <LoadingCard label={t("Loading workout history")} /> : null}
       {history.map((session) => <button type="button" key={session.id} onClick={() => open(session.id)} className="grid min-h-20 w-full gap-1 border-b border-white/10 py-4 text-left">
         <time className="text-xs text-zinc-400">{formatDate(session.performed_on)}</time>
         <span className="break-words text-sm font-medium text-zinc-100">{session.name}</span>
         <span className="text-xs text-zinc-400">{Object.keys(groupSetsByExercise(session.workout_sets ?? [])).length}{t(" exercises · ")}{session.workout_sets?.length ?? 0}{t(" sets")}</span>
       </button>)}
-      {pagination?.error && !error ? <p role="alert" className="text-sm text-red-300">{pagination.error}</p> : null}
-      {pagination?.hasMore ? <button type="button" className="training-row mt-3" disabled={pagination.loading} onClick={onLoadMore}>{t(pagination.loading ? 'Loading...' : 'Load older workouts')}</button> : null}
-      {status !== 'loading' && !history.length ? <p className="py-4 text-sm text-zinc-400">{t("No past workouts yet.")}</p> : null}
+      {paging?.error && !failure ? <p role="alert" className="text-sm text-red-300">{paging.error}</p> : null}
+      {paging?.hasMore ? <button type="button" className="training-row mt-3" disabled={paging.loading} onClick={loadMore}>{t(paging.loading ? 'Loading...' : 'Load older workouts')}</button> : null}
+      {!loading && !history.length && !paging?.hasMore ? <p className="py-4 text-sm text-zinc-400">{t(mode === 'all' ? 'No past workouts yet.' : 'No workouts match this filter.')}</p> : null}
     </>}
   </section>;
 }

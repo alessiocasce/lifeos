@@ -15,7 +15,7 @@ export const catalog = Object.entries(exerciseGroups).flatMap(([muscle, rows]) =
   return { id,slug,name_en,name_it,category: muscle,primary_muscle_group: muscle,equipment,load_type,
     uses_external_load: !['bodyweight','rope','boxing_bag','unspecified'].includes(equipment),is_unilateral: /one_arm|single_leg|alternating|bulgarian|lunge|step_up|concentration|bayesian|kickback|cable_hip_/.test(slug),
     leaderboard_eligible: comparable.has(slug),active:active.has(slug),
-    aliases:[...new Set([original_en,original_it,...(curatedAliases[slug] || [])])].filter(name=>name!==name_en && name!==name_it) };
+    aliases:[...new Set([original_en,original_it,...(curatedAliases[slug] || []),...(slug==='ez_bar_curl' ? ['EZ Bar Curl','Curl con bilanciere'] : [])])].filter(name=>name!==name_en && name!==name_it) };
 }));
 assertCatalog();
 function assertCatalog() {

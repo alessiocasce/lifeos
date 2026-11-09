@@ -1,22 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  agendaBlocks,
-  calendarWeeks,
-  currentDate,
-  financeData,
-  initialHealth,
-  mockNowMinutes,
-  selectedDayAgenda,
-  tabs,
-  workoutData,
-} from '../data/lifeosData';
+import { recoveryReturn } from '../utils/authRecovery';
 import { isSupabaseConfigured } from '../lib/supabaseClient';
 import { useUserSettings } from '../hooks/useUserSettings';
+import { workoutRestApi } from '../services/workoutRestApi';
 import { setLanguage } from '../i18n';
 import { avatarCache } from '../utils/avatarCache';
 import { isValidTabId, pathToTab, tabFromCurrentPath, tabToPath } from '../utils/tabRoutes';
-import { localDate, localTime } from '../utils/date';
-import { buildHabitUpdate, getHabitEntry, normalizeHygieneObject } from '../utils/habits';
+import { localDate } from '../utils/date';
+import { normalizeHygieneObject } from '../utils/habits';
 import { chooseWorkoutSession, clearTrainingUser, clearWorkoutDraft, readTrainingWorkspace, shouldResumeTraining, writeTrainingWorkspace } from '../utils/workoutContinuity';
 import {
   authApi,
@@ -43,19 +34,10 @@ import {
 const LifeOSContext = createContext(null);
 const today = () => localDate();
 
-const toMinutes = (time) => {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
-};
-
 export function LifeOSProvider({ children }) {
   const [activeTab, setActiveTabState] = useState(() => tabFromCurrentPath());
-  const [selectedDay, setSelectedDay] = useState(11);
-  const [aiTriage, setAiTriage] = useState(true);
-  const [health, setHealth] = useState(initialHealth);
-  const [finance, setFinance] = useState(financeData);
-  const [expandedWorkout, setExpandedWorkout] = useState(workoutData.history[0].date);
   const [authUser, setAuthUser] = useState(null);
+  const [passwordRecovery, setPasswordRecovery] = useState(recoveryReturn);
   const userSettings = useUserSettings(authUser?.id);
   useEffect(() => { avatarCache.clear(); return () => avatarCache.clear(); }, [authUser?.id]);
   useEffect(() => { setLanguage(userSettings.preferences.language); }, [authUser?.id, userSettings.preferences.language]);
@@ -68,7 +50,12 @@ export function LifeOSProvider({ children }) {
   const [workoutHistory, setWorkoutHistory] = useState({ hasMore: false, loading: false, error: '' });
   const historyPaging = useRef({ cursor: null, pages: 1, generation: 0, loading: false, hasMore: false });
   const pinnedHistoryWorkout = useRef(null);
-  const retainHistoryWorkout = useCallback(id => { pinnedHistoryWorkout.current = id; }, []);
+  const retainHistoryWorkout = useCallback((id, row) => {
+    pinnedHistoryWorkout.current = id;
+    if (row?.id === id && row.user_id === authUser?.id) {
+      setWorkoutSessions(previous => previous.some(session => session.id === id) ? previous : [...previous, row]);
+    }
+  }, [authUser?.id]);
   const [workoutTemplates, setWorkoutTemplates] = useState([]);
   const [workoutTemplatesStatus, setWorkoutTemplatesStatus] = useState(isSupabaseConfigured ? 'idle' : 'not-configured');
   const [workoutTemplatesError, setWorkoutTemplatesError] = useState('');
@@ -178,7 +165,6 @@ export function LifeOSProvider({ children }) {
     setWorkoutTemplatesError('');
     setWorkoutTemplatesStatus(status);
     setHealthLogs([]);
-    setHealth(initialHealth);
     setHealthLogsError('');
     setHealthLogsStatus(status);
     setExpenses([]);
@@ -260,9 +246,14 @@ export function LifeOSProvider({ children }) {
       });
 
     const subscription = authApi.onAuthStateChange((_event, session) => {
+      if (_event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+      if (_event === 'SIGNED_OUT') setPasswordRecovery(false);
       const nextUser = session?.user ?? null;
       if (lastAuthUserId.current !== (nextUser?.id ?? null)) {
-        if (lastAuthUserId.current) clearTrainingUser(lastAuthUserId.current);
+        if (lastAuthUserId.current) {
+          clearTrainingUser(lastAuthUserId.current);
+          workoutRestApi.detachLocalDevice().catch(() => {});
+        }
         workspaceRestoredFor.current = null;
         clearUserScopedState(nextUser ? 'idle' : 'no-session');
         lastAuthUserId.current = nextUser?.id ?? null;
@@ -423,7 +414,6 @@ export function LifeOSProvider({ children }) {
 
     if (!authUser) {
       setHealthLogs([]);
-      setHealth(initialHealth);
       setHealthLogsStatus('no-session');
       return;
     }
@@ -435,7 +425,6 @@ export function LifeOSProvider({ children }) {
       if (lastAuthUserId.current !== authUser.id) return;
       const sortedRows = sortHealthLogs(rows ?? []);
       setHealthLogs(sortedRows);
-      setHealth(healthSnapshotFromLog(sortedRows.find((log) => log.logged_on === today()) ?? sortedRows[0]));
       setHealthLogsStatus('ready');
     } catch (error) {
       setHealthLogsError(error.message || 'Failed to load health logs.');
@@ -1017,61 +1006,10 @@ export function LifeOSProvider({ children }) {
     [workoutSessions],
   );
 
-  const workoutStatus = useMemo(() => {
-    const workoutStart = toMinutes('15:00');
-    const workoutEnd = toMinutes('16:10');
-    if (mockNowMinutes < workoutStart) {
-      return {
-        mode: 'scheduled',
-        label: 'Scheduled: Push Day',
-        detail: '6 exercises | 15:00 launch',
-        accent: 'text-cyan-400',
-      };
-    }
-    if (mockNowMinutes <= workoutEnd) {
-      return {
-        mode: 'live',
-        label: 'Live: Push Day',
-        detail: 'Set 3 active | session live',
-        accent: 'text-red-400',
-      };
-    }
-    return {
-      mode: 'complete',
-      label: 'Completed: 45m Push Day',
-      detail: '1 PR | 10,680kg volume',
-      accent: 'text-emerald-400',
-    };
-  }, []);
-
-  const timelineWindow = useMemo(() => {
-    const first = toMinutes(agendaBlocks[0].start);
-    const last = toMinutes(agendaBlocks[agendaBlocks.length - 1].end);
-    return { first, last, nowPct: ((mockNowMinutes - first) / (last - first)) * 100 };
-  }, []);
-
   const actions = useMemo(
     () => ({
       setActiveTab,
-      setSelectedDay,
-      setAiTriage,
-      updateSleepHours: (value) => setHealth((prev) => ({ ...prev, sleepHours: Number(value) })),
-      updateSleepQuality: (value) => setHealth((prev) => ({ ...prev, sleepQuality: Number(value) })),
-      stepCoffee: (delta) =>
-        setHealth((prev) => ({ ...prev, coffee: Math.max(0, Math.min(6, prev.coffee + delta)) })),
-      stepWater: (delta) =>
-        setHealth((prev) => ({ ...prev, water: Math.max(0, Math.min(8, prev.water + delta)) })),
-      toggleHygiene: (id) =>
-        setHealth((prev) => ({
-          ...prev,
-          hygiene: buildHabitUpdate(
-            prev.hygiene,
-            id,
-            getHabitEntry(prev.hygiene, id).count > 0 ? -getHabitEntry(prev.hygiene, id).count : 1,
-            localTime(),
-          ),
-        })),
-      setExpandedWorkout,
+      finishPasswordRecovery: () => { setPasswordRecovery(false); setActiveTab('home'); },
       setActiveWorkoutId,
       signIn: async (credentials) => {
         setAuthError('');
@@ -1086,6 +1024,9 @@ export function LifeOSProvider({ children }) {
         return data;
       },
       signOut: async () => {
+        // Unbind this installation before auth is lost; offline logout still unsubscribes locally.
+        try { await workoutRestApi.cancel(); } catch { /* Logout must remain available offline. */ }
+        try { await workoutRestApi.detachDevice(); } catch { /* No push support or already unbound. */ }
         await authApi.signOut();
         clearTrainingUser(authUser?.id);
         lastAuthUserId.current = null;
@@ -1139,6 +1080,7 @@ export function LifeOSProvider({ children }) {
         setWorkoutSessionsError('');
         const created = await workoutSetApi.create(payload);
         if (lastAuthUserId.current !== authUser.id) throw new Error('Account changed. Sign in to the original account to verify this set.');
+        window.dispatchEvent(new CustomEvent('lifeos:workout-set-saved', { detail: { userId: authUser.id, sessionId: created.workout_id } }));
         setWorkoutSessions((prev) =>
           prev.map((session) =>
             session.id === created.workout_id
@@ -1195,7 +1137,8 @@ export function LifeOSProvider({ children }) {
           throw new Error('Sign in before creating a workout template.');
         }
         setWorkoutTemplatesError('');
-        const created = await workoutTemplateApi.create(normalizeWorkoutTemplatePayload(payload));
+        const created = await workoutTemplateApi.create(normalizeWorkoutTemplatePayload(payload), authUser.id);
+        if (lastAuthUserId.current !== authUser.id) throw new Error('Account changed. Reopen Training before saving a template.');
         setWorkoutTemplates((prev) => sortWorkoutTemplates([created, ...prev]));
         setWorkoutTemplatesStatus('ready');
         return created;
@@ -1227,7 +1170,8 @@ export function LifeOSProvider({ children }) {
         const created = await workoutTemplateExerciseApi.create({
           ...normalizeWorkoutTemplateExercisePayload(payload),
           template_id: payload.template_id,
-        });
+        }, authUser.id);
+        if (lastAuthUserId.current !== authUser.id) throw new Error('Account changed. Reopen Training before saving a template.');
         setWorkoutTemplates((prev) => updateTemplateExercises(prev, created.template_id, (exercises) => sortWorkoutTemplateExercises([...exercises, created])));
         setWorkoutTemplatesStatus('ready');
         return created;
@@ -1326,7 +1270,6 @@ export function LifeOSProvider({ children }) {
         const refreshedRows = sortHealthLogs(await healthLogApi.list());
         setHealthLogs(refreshedRows);
         const refreshedSaved = refreshedRows.find((log) => log.logged_on === normalizedPayload.logged_on) ?? saved;
-        setHealth(healthSnapshotFromLog(refreshedRows.find((log) => log.logged_on === today()) ?? refreshedRows[0]));
         setHealthLogsStatus('ready');
         return refreshedSaved;
       },
@@ -1749,38 +1692,15 @@ export function LifeOSProvider({ children }) {
         setDailyReviewsStatus('ready');
         return saved;
       },
-      addTransaction: ({ amount, category }) =>
-        setFinance((prev) => {
-          const numericAmount = Number(amount);
-          if (!Number.isFinite(numericAmount) || numericAmount === 0) return prev;
-          const entry = {
-            id: Date.now(),
-            date: 'May 11',
-            vendor: 'Rapid Entry',
-            category,
-            amount: -Math.abs(numericAmount),
-            signal: 'normal',
-          };
-          return {
-            ...prev,
-            balance: prev.balance + entry.amount,
-            monthlySpend: prev.monthlySpend + Math.abs(entry.amount),
-            entries: [entry, ...prev.entries],
-          };
-        }),
     }),
     [activeAiThreadId, activeWorkoutId, aiChatThreads, authUser, clearUserScopedState, dailyReviews, healthLogs, loadAiActionLogs, loadAiChatMessages, loadAiChatThreads, loadAiInsights, loadAiMemories, loadAiVaultDocuments, loadCalendarRange, loadDailyReviews, loadExpenseMonth, loadExpenseRange, loadExpenses, loadHealthLogs, loadMemos, loadProjectMoneyEntries, loadProjects, loadWorkoutSessions, loadWorkoutTemplates, projectSessions, projects, refreshLifeOS, setActiveTab, setUnsavedWork, workoutSessions, workoutTemplates],
   );
 
   const value = {
     activeTab,
-    selectedDay,
-    aiTriage,
-    health,
     healthLogs,
     healthLogsError,
     healthLogsStatus,
-    finance,
     expenses,
     expensesError,
     expensesStatus,
@@ -1828,19 +1748,11 @@ export function LifeOSProvider({ children }) {
     refreshError,
     lastRefreshAt,
     meaningfulUnsavedWork,
-    expandedWorkout,
     authError,
     authStatus,
     authUser,
+    passwordRecovery,
     isSupabaseConfigured,
-    agendaBlocks,
-    calendarWeeks,
-    currentDate,
-    mockNowMinutes,
-    selectedDayAgenda,
-    tabs,
-    timelineWindow,
-    workout: workoutData,
     activeWorkoutId,
     activeWorkoutSession,
     workoutSets,
@@ -1855,7 +1767,6 @@ export function LifeOSProvider({ children }) {
     workoutTemplatesStatus,
     workoutSetsError: workoutSessionsError,
     workoutSetsStatus: workoutSessionsStatus,
-    workoutStatus,
     ...actions,
   };
 
@@ -2187,21 +2098,6 @@ function normalizeDailyReviewPayload(payload) {
       ? payload.next_actions.map((action) => String(action ?? '').trim()).filter(Boolean)
       : [],
     score: integerOrNull(score),
-  };
-}
-
-function healthSnapshotFromLog(log) {
-  if (!log) return initialHealth;
-  return {
-    ...initialHealth,
-    sleepHours: Number(log.sleep_hours ?? initialHealth.sleepHours),
-    sleepQuality: Number(log.sleep_quality ?? initialHealth.sleepQuality),
-    coffee: Number(log.coffee ?? initialHealth.coffee),
-    water: Number(log.water ?? initialHealth.water),
-    adc: Number(log.adc ?? initialHealth.adc ?? 0),
-    energy: Number(log.energy ?? initialHealth.energy ?? 0),
-    mood: Number(log.mood ?? initialHealth.mood),
-    hygiene: normalizeHygieneObject(log.hygiene),
   };
 }
 

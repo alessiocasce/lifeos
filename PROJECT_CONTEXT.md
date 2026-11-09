@@ -1,5 +1,34 @@
 # LifeOS Project Context
 
+## Local modernization review (2026-11-08, not deployed)
+
+The uncommitted `codex/lifeos-ui-modernization` branch adds Settings/profile polish,
+Italian defaults with explicit English retained, lowercase username normalization,
+independent autosaved preferences, and password recovery. Training has direct warmup
+control (OFF after successful save), convention-aware load labels, completion
+acknowledgment/template creation, and server-filtered All/Week/Template History.
+Filtered older sessions are retained in the mutation cache without changing the
+active workout. The owner's confirmed Barbell Curl history uses the existing EZ
+UUID exclusively; the retired picker UUID stays as an inactive catalog definition.
+The pending reconciliation preserves performance text/fields (224 total, 79 active).
+
+The new PWA-only rest timer uses server deadlines, private subscriptions and a
+separate Web Push worker. It does not revive WhatsApp/outbox timers. Three forward
+migrations are prepared but **not applied**; VAPID/worker configuration and physical
+device delivery acceptance are pending. Do not deploy the branch before explicit
+approval and targeted database review. No schema rerun required; never broad-replay
+migrations. See `docs/WORKOUT_WEB_PUSH.md` for exact pending files and requirements.
+
+More/Community navigation uses account-scoped memory caching, preserving search,
+pages and scroll while revalidating privacy. Shared confirmations, lazy-workspace
+recovery and the existing PWA guarded activation are retained/improved. Dead demo
+state, mock finance actions, unused decorative chart helpers and `recharts` are
+removed; `tabRoutes` owns route identities directly. Rankings plans remain untouched.
+
+This local section supersedes older rest-timer-absence/catalog-count/UI descriptions
+below, which document past releases rather than the uncommitted branch. Evidence:
+`docs/audits/LIFEOS_UI_UX_MODERNIZATION.md`.
+
 ## Unified Training editing and completion - approved release (2026-11-03)
 
 Built on the uncommitted History visual refinement. Done editing is the only
@@ -550,7 +579,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `api/actions.js` is the token-protected multiplexed Vercel Serverless Function for external automation. It routes `expense`, `health`, `wake`, `sleep-start`, `habit`, and `calendar` actions and uses `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
 - `api/ai/chat.js` contains the in-app Gemini-powered LifeOS assistant endpoint. Gemini plans intent, while backend-controlled tools read/write Supabase.
-- `src/data/lifeosData.js` contains remaining local mock data for legacy/unconverted surfaces, but the real Workout tab no longer displays a mock workout archive.
+- Legacy `src/data/lifeosData.js` demonstration exports have been removed locally; real workspaces use persisted APIs and route validation no longer imports demo data.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Action API docs live in `docs/ACTION_API.md`.
 - AI Assistant QA lives in `docs/QA_AI_ASSISTANT.md`.

@@ -38,18 +38,24 @@ const workoutMutation = async (operation, id, patch, options = {}) => {
     throw new Error('This record changed. Refresh History before editing.');
   }
 };
-let authListener;
+// Vite may serve this adapter with different HMR query strings. Model one
+// browser auth event source, as the real Supabase client does, across adapters.
+const authListeners = window.__qaAuthListeners ||= new Set();
+const emitAuth = (event, session) => authListeners.forEach(listener => listener(event, session));
 window.__qaSignIn = (id) => {
   const next = { id, email: `${id}@example.test` };
   localStorage.setItem('qa-user', JSON.stringify(next));
-  authListener?.('SIGNED_IN', { user: next });
+  emitAuth('SIGNED_IN', { user: next });
 };
-window.__qaAuthRefresh = () => authListener?.('TOKEN_REFRESHED', { user: user() });
+window.__qaAuthRefresh = () => emitAuth('TOKEN_REFRESHED', { user: user() });
+window.__qaPasswordRecovery = () => emitAuth('PASSWORD_RECOVERY', { user: user() });
 const emptyApi = new Proxy({}, { get: () => async () => [] });
 export const authApi = {
+  requestPasswordReset: async () => { localStorage.setItem('qa-reset-requests', String(Number(localStorage.getItem('qa-reset-requests') || 0) + 1)); await new Promise(resolve => setTimeout(resolve, 100)); },
+  updatePassword: async () => { if (localStorage.getItem('qa-reset-fail')) throw new Error('Password update failed. Request another reset link if it expired.'); },
   getSession: async () => ({ session: user() ? { user: user() } : null }),
-  onAuthStateChange: (fn) => { authListener = fn; return { unsubscribe() { authListener = null; } }; },
-  signOut: async () => { localStorage.setItem('qa-user', 'null'); authListener?.('SIGNED_OUT', null); },
+  onAuthStateChange: (fn) => { authListeners.add(fn); return { unsubscribe() { authListeners.delete(fn); } }; },
+  signOut: async () => { localStorage.setItem('qa-user', 'null'); emitAuth('SIGNED_OUT', null); },
   signInWithPassword: async () => {
     localStorage.setItem('qa-auth-attempts', String(Number(localStorage.getItem('qa-auth-attempts') || 0) + 1));
     await new Promise((resolve) => setTimeout(resolve, Number(localStorage.getItem('qa-auth-delay') || 0)));

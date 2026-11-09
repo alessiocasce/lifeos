@@ -35,7 +35,9 @@ try {
     localStorage.setItem('preserve-draft-sentinel','do not erase');
   });
   await page.goto('http://127.0.0.1:4189/settings');
-  await page.getByRole('region',{name:'Application',exact:true}).getByText('qa-build-A',{exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Settings',exact:true}).waitFor();
+  await page.waitForFunction(()=>window.__qaAppUpdate?.getSnapshot().buildId==='qa-build-A');
+  assert.equal(await page.getByRole('region',{name:'Application',exact:true}).count(),0);
   await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));await page.reload();
   version='B';
   // The update is available during a live session, but must not activate it.
@@ -44,27 +46,29 @@ try {
   const observer=await context.newPage();
   await observer.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
   await observer.goto('http://127.0.0.1:4189/settings');
-  await observer.getByText('qa-build-A',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Check for updates',exact:true}).click();
+  await observer.waitForFunction(()=>window.__qaAppUpdate?.getSnapshot().buildId==='qa-build-A');
+  await page.evaluate(()=>window.__qaAppUpdate.check());
   await page.getByRole('complementary',{name:'LifeOS update available'}).waitFor({timeout:30000});
   await mkdir(root,{recursive:true});await page.screenshot({path:root+'/desktop-update-ready.png'});
-  await page.getByRole('region',{name:'Application',exact:true}).getByRole('button',{name:'Update now',exact:true}).click();
-  await page.getByRole('region',{name:'Application',exact:true}).getByText('Update ready - finish your workout first.',{exact:true}).waitFor();
+  await page.getByRole('complementary',{name:'LifeOS update available'}).getByRole('button',{name:'Update now',exact:true}).click();
+  await page.getByText('Update ready - finish your workout first.',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>Boolean(navigator.serviceWorker.controller)),true);
   await page.getByRole('button',{name:'Training',exact:true}).click();
   await page.getByRole('button',{name:'End Workout',exact:true}).click();
-  await page.getByText('Session complete',{exact:true}).waitFor();
+  await page.getByText('Workout completed!',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Settings',exact:true}).click();
   await page.getByRole('button',{name:'Later',exact:true}).click();
   assert.equal(await page.getByRole('complementary',{name:'LifeOS update available'}).count(),0);
-  await page.getByRole('region',{name:'Application',exact:true}).getByRole('button',{name:'Update now',exact:true}).click();
-  await page.getByRole('region',{name:'Application',exact:true}).getByText('qa-build-B',{exact:true}).waitFor({timeout:30000});
+  await page.evaluate(()=>{void window.__qaAppUpdate.apply();});
+  await page.waitForFunction(()=>window.__qaAppUpdate?.getSnapshot().buildId==='qa-build-B',{},{timeout:30000});
   // Workbox must not reload a different tab when this tab activates the worker.
-  await observer.getByText('qa-build-A',{exact:true}).waitFor();
+  assert.equal(await observer.evaluate(()=>window.__qaAppUpdate.getSnapshot().buildId),'qa-build-A');
   assert.equal(await page.evaluate(()=>localStorage.getItem('preserve-draft-sentinel')),'do not erase');
-  await page.getByText('The new LifeOS version is running.',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Check for updates',exact:true}).click();await page.getByText("You're running the latest LifeOS version.",{exact:true}).waitFor();
-  await context.setOffline(true);await page.getByRole('button',{name:'Check for updates',exact:true}).click();await page.getByText("Can't check for updates while offline.",{exact:true}).waitFor();await context.setOffline(false);
+  await page.waitForFunction(()=>window.__qaAppUpdate.getSnapshot().confirmedVersion==='qa-build-B');
+  await page.evaluate(()=>window.__qaAppUpdate.check());
+  assert.equal(await page.evaluate(()=>window.__qaAppUpdate.getSnapshot().status),'current');
+  await context.setOffline(true);await page.evaluate(()=>window.__qaAppUpdate.check());
+  assert.equal(await page.evaluate(()=>window.__qaAppUpdate.getSnapshot().status),'offline');await context.setOffline(false);
   await page.screenshot({path:root+'/desktop-updated-B.png'});
   console.log('PASS real production-mode Workbox A -> B: prompt, active-workout block, end then update, Later, activation/controllerchange, no other-tab reload, changed build, preserved storage, current/offline states');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}

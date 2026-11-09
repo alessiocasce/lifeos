@@ -3,14 +3,16 @@ import { Loader2, LogIn, ShieldCheck, UserPlus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { setLanguage, useLanguage } from '../i18n';
-import { identityApi } from '../services/lifeosApi';
+import { authApi, identityApi } from '../services/lifeosApi';
+import { normalizeUsername } from '../utils/userSettingsIdentity';
+import { expiredRecoveryReturn } from '../utils/authRecovery';
 
 export function AuthScreen() {
   const language=useLanguage();
   const { authError, signIn, signUp } = useLifeOS();
   const [mode, setMode] = useState('sign-in');
   const [form, setForm] = useState({ username: '', email: '', password: '' });
-  const [formError, setFormError] = useState('');
+  const [formError, setFormError] = useState(expiredRecoveryReturn ? 'This reset link is invalid or expired. Request a new reset link.' : '');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [availability, setAvailability] = useState('');
@@ -63,6 +65,7 @@ export function AuthScreen() {
     }
   };
 
+  if (mode === 'reset-request') return <PasswordResetRequest onBack={() => setMode('sign-in')} />;
   return (
     <AuthFrame eyebrow={t("Private workspace")} title={t("LifeOS")}>
       <div className="border-t border-white/15 pt-6">
@@ -75,11 +78,11 @@ export function AuthScreen() {
           </div>
         </div>
 
-        <label className="mb-4 grid gap-2 text-sm">{t('Language')}<select className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
+        <label className="mb-4 grid gap-2 text-sm">{t('Language')}<select aria-label={t('Language')} className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={language} onChange={e=>setLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
         <form onSubmit={submit} aria-busy={loading}>
           {isSignUp ? <p className="mb-4 text-sm leading-relaxed text-zinc-400">{t('Completed workouts are shared with signed-in members once your public profile is set up. You can turn this off in Settings. Notes stay private unless enabled.')}</p> : null}
           <fieldset disabled={loading} className="grid min-w-0 gap-4">
-            {isSignUp ? <label className="grid gap-2"><span className="text-sm text-zinc-300">{t('Username')}</span><input aria-label={t('Username')} autoComplete="username" autoCapitalize="none" spellCheck={false} required minLength={3} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9_]{2,23}" className="min-h-12 rounded border border-white/15 bg-[#14171b] px-3" value={form.username} onBlur={checkUsername} onChange={e => { availabilityRequest.current++; setAvailability(''); setForm(v => ({ ...v, username: e.target.value })); }} /><span className="text-xs text-zinc-400">{t('Your username is visible to other LifeOS members.')}</span>{availability ? <span role="status" className="text-xs text-zinc-300">{t(availability)}</span> : null}</label> : null}
+            {isSignUp ? <label className="grid gap-2"><span className="text-sm text-zinc-300">{t('Username')}</span><input aria-label={t('Username')} autoComplete="username" autoCapitalize="none" spellCheck={false} required minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" className="min-h-12 rounded border border-white/15 bg-[#14171b] px-3" value={form.username} onBlur={checkUsername} onChange={e => { availabilityRequest.current++; setAvailability(''); setForm(v => ({ ...v, username: normalizeUsername(e.target.value) })); }} /><span className="text-xs text-zinc-400">{t('Your username is visible to other LifeOS members.')}</span>{availability ? <span role="status" className="text-xs text-zinc-300">{t(availability)}</span> : null}</label> : null}
             <AuthField
               label={t("Email")}
               type="email"
@@ -119,6 +122,7 @@ export function AuthScreen() {
           >
             {isSignUp ? t("Use existing account") : t("Create account")}
           </button>
+          {!isSignUp && <button type="button" className="min-h-11 px-2 text-sm text-zinc-300" disabled={loading} onClick={() => setMode('reset-request')}>{t('Forgot password?')}</button>}
         </div>
 
         {message ? <p role="status" className="mt-3 border-l-2 border-emerald-400/50 px-3 py-2 text-sm leading-6 text-emerald-200">{t(message)}</p> : null}
@@ -126,6 +130,43 @@ export function AuthScreen() {
       </div>
     </AuthFrame>
   );
+}
+
+function PasswordResetRequest({ onBack }) {
+  const [email, setEmail] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [sent, setSent] = useState(false);
+  const locked = useRef(false);
+  return <AuthFrame eyebrow={t('Private workspace')} title="LifeOS"><h2 className="mb-6 text-xl font-semibold">{t('Reset password')}</h2>
+    <form className="grid gap-4" onSubmit={async event => {
+      event.preventDefault(); if (locked.current) return;
+      locked.current = true; setBusy(true); setError('');
+      try { await authApi.requestPasswordReset(email); setSent(true); }
+      catch { setError('The reset link could not be requested. Try again later.'); }
+      finally { locked.current = false; setBusy(false); }
+    }}><AuthField label={t('Email')} type="email" autoComplete="email" value={email} onChange={setEmail} />
+      <button type="submit" disabled={busy || sent || !email.trim()} className="primary-button min-h-12">{t(busy ? 'Sending...' : 'Send reset link')}</button>
+      <button type="button" disabled={busy} className="min-h-11 text-zinc-300" onClick={onBack}>{t('Back to sign in')}</button>
+    </form>{sent && <p role="status" className="mt-4 text-sm leading-6 text-zinc-300">{t('If an account exists, a password reset link will arrive by email. Check your inbox and spam folder.')}</p>}
+    {error && <p role="alert" className="mt-4 text-sm text-red-300">{t(error)}</p>}
+  </AuthFrame>;
+}
+
+export function PasswordRecoveryScreen({ onDone }) {
+  const [password, setPassword] = useState(''), [confirmation, setConfirmation] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const locked = useRef(false);
+  return <AuthFrame eyebrow={t('Private workspace')} title="LifeOS"><h2 className="mb-6 text-xl font-semibold">{t('Choose a new password')}</h2>
+    <form className="grid gap-4" onSubmit={async event => {
+      event.preventDefault(); if (locked.current) return;
+      if (password.length < 8) { setError('Use at least 8 characters.'); return; }
+      if (password !== confirmation) { setError('Passwords do not match.'); return; }
+      locked.current = true; setBusy(true); setError('');
+      try { await authApi.updatePassword(password); setPassword(''); setConfirmation(''); onDone(); }
+      catch (failure) { setError(failure.message || 'Password update failed. Request another reset link if it expired.'); }
+      finally { locked.current = false; setBusy(false); }
+    }}><AuthField label={t('New password')} type="password" autoComplete="new-password" value={password} onChange={setPassword} />
+      <AuthField label={t('Confirm password')} type="password" autoComplete="new-password" value={confirmation} onChange={setConfirmation} />
+      <button type="submit" disabled={busy} className="primary-button min-h-12">{t(busy ? 'Saving...' : 'Update password')}</button>
+    </form>{error && <p role="alert" className="mt-4 text-sm text-red-300">{t(error)}</p>}
+  </AuthFrame>;
 }
 
 export function AuthLoadingScreen() {

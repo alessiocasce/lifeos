@@ -18,6 +18,8 @@
     "test:bridge": "node scripts/test-whatsapp-bridge-contract.js",
     "test:workout": "node scripts/test-workout-render.js && node scripts/test-workout-continuity.js",
     "test:workout:rest": "node scripts/test-workout-rest.js",
+    "test:workout:push": "node scripts/test-workout-push.js && node scripts/test-workout-push-db.js && node scripts/test-workout-push-api.js && node scripts/test-workout-push-sw.js && node scripts/test-workout-push-worker.js",
+    "worker:workout-push": "node scripts/workout-push-worker.js",
     "test:social-training": "node scripts/test-social-training.js",
     "test:community": "node scripts/test-second-training-cohort.js && node scripts/test-community.js",
     "test:ui": "playwright test",
@@ -36,8 +38,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
-    "recharts": "^2.15.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "web-push": "4.0.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

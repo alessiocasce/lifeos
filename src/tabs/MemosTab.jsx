@@ -1,5 +1,6 @@
 import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
+import { useDestructiveConfirmation } from '../hooks/useDestructiveConfirmation';
 import {
   AlarmClock,
   Bell,
@@ -28,6 +29,7 @@ const emptyForm = () => ({
 });
 
 export function MemosTab() {
+  const confirmation = useDestructiveConfirmation();
   const {
     createMemo,
     deleteMemo,
@@ -163,8 +165,7 @@ export function MemosTab() {
     }
   };
 
-  const removeMemo = async (memo) => {
-    if (!window.confirm(t("Delete memo \"{v0}\"?", { v0: memo.title }))) return;
+  const removeMemo = memo => confirmation.ask({ title: 'Delete memo?', message: t('Delete memo "{v0}"?', { v0: memo.title }), label: 'Delete memo', action: async () => {
     setBusyId(`${memo.id}-delete`);
     setActionError('');
     try {
@@ -172,13 +173,15 @@ export function MemosTab() {
       if (editingId === memo.id) closeModal();
     } catch (error) {
       setActionError(error.message || t("Failed to delete memo."));
+      throw error;
     } finally {
       setBusyId(null);
     }
-  };
+  } });
 
   return (
     <div className="memo-workspace grid min-w-0 gap-6 pb-6">
+      {confirmation.dialog}
         <header className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
             <p className="text-xs text-zinc-500">{t("Reminders")}</p>

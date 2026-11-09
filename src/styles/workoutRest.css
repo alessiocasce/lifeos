@@ -1,0 +1,13 @@
+.workout-rest-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 62px; min-height: 44px; padding: 7px; border: 1px solid var(--line, #30343c); border-radius: 12px; background: #13161c; color: #e8eaf0; font-variant-numeric: tabular-nums; font-size: 13px; }
+.workout-rest-trigger[data-tone='warning'], .workout-rest-countdown[data-tone='warning'] { color: #fbbf24; }
+.workout-rest-trigger[data-tone='urgent'], .workout-rest-countdown[data-tone='urgent'] { color: #fb7185; }
+.workout-rest-trigger[data-tone='ended'] { color: #a3aab8; }
+.workout-rest-settings { display: grid; gap: 18px; padding-bottom: 8px; }
+.workout-rest-option { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 44px; }
+.workout-rest-option input { width: 22px; height: 22px; accent-color: var(--workout-accent, #a78bfa); }
+.workout-rest-option select { min-height: 44px; font-size: 16px; background: #181b22; border: 1px solid #373d49; border-radius: 8px; padding: 8px; color: #f5f5f7; }
+.workout-rest-help { font-size: 13px; line-height: 1.5; color: #aeb5c2; }
+.workout-rest-countdown { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.workout-rest-countdown strong { font-size: 32px; font-variant-numeric: tabular-nums; }
+.workout-rest-countdown .button-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 12px; border: 1px solid #373d49; border-radius: 8px; color: #d9dfe7; }
+.workout-rest-trigger { flex-shrink: 0; }

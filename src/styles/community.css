@@ -1,0 +1,30 @@
+.community-workspace { color: var(--ink); }
+.community-intro { max-width: 52ch; margin-bottom: 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.community-tabs { position: sticky; top: calc(60px + env(safe-area-inset-top)); z-index: 10; display: flex; gap: 24px; margin-bottom: 22px; border-bottom: 1px solid var(--line); background: var(--canvas); }
+.community-tabs [role='tab'] { min-width: 72px; font-weight: 600; }
+.community-search { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 0 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); }
+.community-search:focus-within { border-color: var(--accent); outline: 1px solid var(--accent); }
+.community-search input { flex: 1; width: 100%; min-width: 0; padding: 12px 0; background: transparent; color: var(--ink); font-size: 16px; outline: none; }
+.community-member-row { padding: 16px 2px; border-bottom: 1px solid var(--line); }
+.community-member-row > button { width: 100%; }
+.community-identity { display: flex; min-width: 0; min-height: 44px; align-items: center; gap: 12px; text-align: left; }
+.community-identity-copy { display: grid; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
+.community-identity-copy strong { color: var(--ink); font-size: 14px; font-weight: 600; }
+.community-identity-copy small { color: var(--muted); font-size: 13px; }
+.community-card { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.community-card-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.community-card time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.community-card-open { display: block; width: 100%; min-width: 0; text-align: left; }
+.community-card-open h2 { color: var(--ink); overflow-wrap: anywhere; font-size: 20px; font-weight: 650; line-height: 1.35; }
+.community-card-counts { display: flex; gap: 16px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+.community-card-preview { margin-top: 14px; overflow-wrap: anywhere; color: #c1c8d1; font-size: 14px; line-height: 1.6; }
+.community-card-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin-top: 14px; color: var(--ink); font-size: 14px; font-weight: 600; }
+.community-card-open:hover .community-card-action { color: var(--accent); }
+.community-load-more { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; margin-top: 20px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); font-size: 14px; }
+.community-load-more:disabled { opacity: .5; }
+.community-empty { padding: 32px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; line-height: 1.6; }
+.community-workspace button:focus-visible,.community-card button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.community-set-note { grid-column: 2 / -1; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.community-detail > h2 { line-height: 1.3; text-wrap: balance; }
+.community-profile > div:first-of-type .community-identity-copy strong { font-size: 20px; }
+@media (min-width: 768px) { .community-tabs { top: calc(68px + env(safe-area-inset-top)); } }

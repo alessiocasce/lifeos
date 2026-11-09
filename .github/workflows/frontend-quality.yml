@@ -1,0 +1,68 @@
+name: Frontend Quality
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'api/ai/actions.js'
+      - 'api/_utils/workoutPush.js'
+      - 'public/workout-push-sw.js'
+      - 'supabase/migrations/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'package*.json'
+      - 'vite.config.js'
+      - 'playwright.config.js'
+      - '.github/workflows/frontend-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  targeted-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Deterministic frontend and database contracts
+        run: |
+          node --test tests/settings/*.test.js tests/workout/modernTraining.test.js tests/workout/modernWorkoutApi.test.js tests/workout/exerciseSelectorLabels.test.js
+          npm run test:workout
+          npm run test:workout:push
+          node scripts/test-settings-identity.js
+          node scripts/test-workout-history-db.js
+          node scripts/test-workout-mutation-guards.js
+          node scripts/test-curl-reconciliation.js
+          node scripts/test-release-migrations.js
+          node scripts/test-workout-push-cron.js
+          node scripts/generate-exercise-catalog.js --check
+          node scripts/generate-catalog-migration.js --check
+      - name: Existing backend safety gates
+        run: |
+          npm run test:brain
+          npm run test:social-training
+          npm run test:community
+          npm run test:schema
+          npm run check:functions
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Focused Chromium UI
+        run: npm run test:ui -- tests/ui/modern-training.spec.js tests/ui/modern-settings.spec.js tests/ui/modern-community.spec.js tests/ui/workout-push.spec.js tests/ui/auth-recovery.spec.js tests/ui/workspace-recovery.spec.js tests/ui/shell-continuity.spec.js
+      - name: Focused WebKit UI
+        env:
+          LIFEOS_QA_BROWSER: webkit
+        run: npm run test:ui -- tests/ui/modern-settings.spec.js tests/ui/workout-push.spec.js --grep 'photo viewer is circular|successful set event|countdown states'
+      - run: npm run build
+      - run: npm run test:pwa
+      - run: git diff --check

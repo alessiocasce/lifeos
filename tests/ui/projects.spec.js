@@ -59,8 +59,8 @@ test('project session target/proof, manual progress and history stay functional'
   await page.getByLabel('Add tasks', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Add Progress', exact: true }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('qa-projects'))[0].current_value)).toBe(3);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Delete session', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete session', exact: true }).click();
   await expect(page.getByText('Checklist verified and published')).toHaveCount(0);
 });
 
@@ -102,8 +102,8 @@ test('project money create/edit/delete stays behind a secondary surface', async 
   await editor.getByLabel('Amount').fill('30');
   await editor.getByRole('button', { name: 'Update Entry' }).click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('qa-project-money'))[0].amount)).toBe(30);
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Delete money entry' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete entry', exact: true }).click();
   await expect(page.getByText('Release tooling')).toHaveCount(0);
 });
 
@@ -112,9 +112,9 @@ test('failed project delete stays on the detail without unhandled exceptions', a
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.evaluate(() => localStorage.setItem('qa-project-fail', 'true'));
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Delete project', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('not saved');
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete project', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('not saved');
   await expect(page.getByRole('heading', { name: 'Release LifeOS' })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -122,11 +122,11 @@ test('failed project delete stays on the detail without unhandled exceptions', a
 test('changing projects never silently reuses a session draft', async ({ page }) => {
   await openProject(page);
   await page.getByLabel('Target Output').fill('Only for Release LifeOS');
-  page.once('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByLabel('Target Output')).toHaveValue('Only for Release LifeOS');
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard changes', exact: true }).click();
   await page.getByRole('button', { name: /Study archive/ }).click();
   await expect(page.getByLabel('Target Output')).toHaveValue('');
 });

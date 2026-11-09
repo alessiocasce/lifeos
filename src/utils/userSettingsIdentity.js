@@ -1,3 +1,5 @@
+export const normalizeUsername = value => String(value ?? '').trim().toLowerCase();
+
 export async function captureSettingsIdentity(client, expectedUserId) {
   const { data: sessionData, error: sessionError } = await client.auth.getSession();
   const token = sessionData?.session?.access_token;

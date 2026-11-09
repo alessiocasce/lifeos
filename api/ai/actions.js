@@ -12,15 +12,36 @@ import { getActionUserId, requireConfiguredUserAccess } from '../_utils/supabase
 import { listAiActionLogs } from '../_utils/lifeosTools.js';
 import { readProjectWatch, readCompanionContext, mutateCompanionApp } from '../_utils/companionApp.js';
 import { loadMonitorPermissions } from '../_utils/brainMonitorPermissions.js';
+import { requireTrainingUser, manageWorkoutPush, verifyWorkoutPush, dispatchWorkoutPush } from '../_utils/workoutPush.js';
 
 export function createActionsHandler({ requireUser = requireConfiguredUserAccess, readWatch = readProjectWatch,
-  mutate = mutateCompanionApp, permissions = loadMonitorPermissions, readContext = readCompanionContext } = {}) {
+  mutate = mutateCompanionApp, permissions = loadMonitorPermissions, readContext = readCompanionContext,
+  requireTraining = requireTrainingUser, trainingPush = manageWorkoutPush, verifyPush = verifyWorkoutPush, dispatchPush = dispatchWorkoutPush } = {}) {
   return async function handler(req, res) {
     const context = createRequestContext(req, res);
     res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
     try {
       if (handleOptions(req, res)) return;
       const url = new URL(req.url, 'http://localhost');
+      if (req.method === 'POST') {
+        const body = await readJsonBody(req);
+        req.body = body;
+        if (body.action === 'training_push_verify') {
+          res.setHeader('cache-control', 'no-store');
+          return sendSuccess(res, 200, await verifyPush(body.token), context);
+        }
+        if (body.action === 'training_push_dispatch') {
+          if (!matchesSecret(getBearerToken(req), process.env.LIFEOS_PUSH_DISPATCH_SECRET)) throw new HttpError(401, 'Unauthorized.');
+          return sendSuccess(res, 200, await dispatchPush(), context);
+        }
+        if (body.action === 'training_notifications') {
+          const token = getBearerToken(req);
+          if (!token || matchesSecret(token, process.env.LIFEOS_ACTION_TOKEN) || matchesSecret(token, process.env.LIFEOS_PUSH_DISPATCH_SECRET)) throw new HttpError(401, 'Sign in to manage notifications.');
+          const user = await requireTraining(token);
+          res.setHeader('cache-control', 'no-store');
+          return sendSuccess(res, 200, await trainingPush({ userId: user.id, body }), context);
+        }
+      }
       if (req.method === 'POST' || url.searchParams.has('view')) {
         if (!['GET', 'POST'].includes(req.method)) throw new HttpError(405, 'Method not allowed.');
         // Unlike legacy action-log reads, app control never accepts automation tokens.

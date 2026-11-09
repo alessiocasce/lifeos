@@ -1,5 +1,6 @@
 import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
+import { useDestructiveConfirmation } from '../hooks/useDestructiveConfirmation';
 import {
   CalendarDays,
   ChevronLeft,
@@ -37,6 +38,7 @@ const emptyForm = (date = todayString()) => ({
 });
 
 export function CalendarTab() {
+  const confirmation = useDestructiveConfirmation();
   const today = useLocalDay();
   const priorDay = useRef(today);
   const {
@@ -172,8 +174,7 @@ export function CalendarTab() {
     }
   };
 
-  const removeEvent = async (id) => {
-    if (!window.confirm(t("Delete this calendar event?"))) return;
+  const removeEvent = id => confirmation.ask({ title: 'Delete event?', message: 'Delete this calendar event?', label: 'Delete event', action: async () => {
     setDeleteId(id);
     setFormError('');
     setEventActionError('');
@@ -183,10 +184,11 @@ export function CalendarTab() {
       if (editingId === id) closeModal();
     } catch (error) {
       setEventActionError(error.message || t("Failed to delete calendar event."));
+      throw error;
     } finally {
       setDeleteId(null);
     }
-  };
+  } });
 
   const updateEventStatus = async (event, nextStatus) => {
     if (!statuses.includes(nextStatus) || event.status === nextStatus) return;
@@ -216,6 +218,7 @@ export function CalendarTab() {
 
   return (
     <div className="grid min-w-0 gap-6 pb-6">
+      {confirmation.dialog}
         <header className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
           <div className="min-w-0">
             <p className="text-xs text-zinc-500">

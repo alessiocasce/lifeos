@@ -1,69 +1,79 @@
-import { t } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
-import { Save, RefreshCw } from 'lucide-react';
+import { Check, Info, Pencil, RefreshCw, X } from 'lucide-react';
+import { t } from '../i18n';
 import { useLifeOS } from '../context/LifeOSContext';
 import { ProfilePhotoEditor } from '../components/ProfilePhotoEditor';
-import { ApplicationUpdates } from '../components/AppUpdates';
+import { SettingsDialog } from '../components/SettingsDialog';
+import { normalizeUsername } from '../utils/userSettingsIdentity';
+import '../styles/settings.css';
 
 export function SettingsTab() {
-  const { authUser, userSettings: settings } = useLifeOS();
-  return <SettingsForm key={authUser?.id || 'guest'} authUser={authUser} settings={settings} />;
+  const { authUser, userSettings } = useLifeOS();
+  return <SettingsForm key={authUser?.id || 'guest'} authUser={authUser} settings={userSettings} />;
+}
+
+function Information({ title, children }) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef(null);
+  return <><button ref={trigger} type="button" className="settings-info" aria-label={t('About {subject}', { subject: t(title) })} onClick={() => setOpen(true)}><Info size={18} /></button>{open ? <SettingsDialog triggerRef={trigger} title={title} onClose={() => setOpen(false)}><p className="settings-information">{children}</p></SettingsDialog> : null}</>;
 }
 
 function SettingsForm({ authUser, settings }) {
-  const [profile, setProfile] = useState({ username: '' });
-  const [preferences, setPreferences] = useState(settings.preferences);
-  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [username, setUsername] = useState('');
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [photoProfile, setPhotoProfile] = useState(null);
-  const lock = useRef(false);
-  const mounted = useRef(true);
+  const [photoProfile, setPhotoProfile] = useState(settings.profile);
   const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const mounted = useRef(true);
+  const lock = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    setProfile({ username: settings.profile?.username || '' });
-    setNotice('');
-  }, [authUser?.id, settings.profile?.username]);
-  useEffect(() => setPhotoProfile(settings.profile), [settings.profile]);
-  useEffect(()=>setPreferences(settings.preferences),[authUser?.id,settings.preferences.language,settings.preferences.workout_sharing,settings.preferences.share_workout_notes]);
-  const changeLanguage = async (language) => {
-    if (lock.current || photoBusy) return;
+    if (!notice) return;
+    const timeout = setTimeout(() => setNotice(''), 3500);
+    return () => clearTimeout(timeout);
+  }, [notice]);
+  useEffect(() => { setPhotoProfile(settings.profile); }, [settings.profile]);
+  const disabled = settings.saving || photoBusy || settings.status !== 'ready';
+  const run = async (operation, success) => {
+    if (lock.current || disabled) return;
     lock.current = true;
-    setBusy(true); setNotice('');
-    try { await settings.updateLanguage(language); }
-    catch { setNotice(t("Language could not be saved. Try again.")); }
-    finally { lock.current = false; setBusy(false); }
-  };
-  const save = async (event) => {
-    event.preventDefault(); if (lock.current || photoBusy) return;
-    lock.current = true;
-    setBusy(true); setNotice('');
+    setError(''); setNotice('');
     try {
-      await settings.saveSettings({ username: profile.username }, preferences);
-      if (mounted.current) { setNotice(t("Settings saved.")); window.dispatchEvent(new Event('lifeos:profile-updated')); }
-    }
-    catch (error) { setNotice(error.code === '23505' ? t("That username is already taken.") : error.message); }
-    finally { lock.current = false; setBusy(false); }
+      await operation();
+      if (mounted.current) { setNotice(success); return true; }
+    } catch (failure) {
+      if (mounted.current) setError(failure.code === '23505' ? 'That username is already taken.' : failure.message || 'Changes could not be saved. Try again.');
+    } finally { lock.current = false; }
+    return false;
   };
-  return <div className="max-w-xl space-y-8">
-    <ApplicationUpdates />
-    <ProfilePhotoEditor key={authUser?.id || 'guest'} profile={photoProfile} userId={authUser?.id} disabled={busy || settings.status !== 'ready' || !settings.profile} onBusyChange={setPhotoBusy} onChange={async next => { setPhotoProfile(next); await settings.reloadSettings(); }} />
-    <form onSubmit={save} className="space-y-6">
-      <fieldset disabled={busy || photoBusy || settings.status !== 'ready'} className="grid gap-5">
-        <h2 className="text-lg font-semibold">{t("Public profile")}</h2>
-        <p className="text-sm text-zinc-400">{t('Your public profile and shared completed workouts are visible to signed-in members. Your email and other personal records stay private.')}</p>
-        <label className="grid gap-2 text-sm">{t("Username")}<input className="min-h-11 rounded border border-white/15 bg-black/30 px-3" autoCapitalize="none" autoComplete="off" minLength={3} maxLength={24} pattern="[a-zA-Z][a-zA-Z0-9_]{2,23}" required value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} /></label>
-        <h2 className="border-t border-white/10 pt-5 text-lg font-semibold">{t("Preferences")}</h2>
-        <label className="grid gap-2 text-sm">{t("Language")}<select className="min-h-11 rounded border border-white/15 bg-[#14171b] px-3" value={preferences.language} onChange={e => void changeLanguage(e.target.value)}><option value="en">{t("English")}</option><option value="it">{t("Italiano")}</option></select></label>
-        <h2 className="border-t border-white/10 pt-5 text-lg font-semibold">{t("Training privacy")}</h2>
-        <p className="text-sm text-zinc-400">{t('When Workout Sharing is on, all completed workouts, including past workouts, are automatically visible to signed-in LifeOS members. Turn it off to hide them all. Turning it back on restores them. New accounts start with sharing on.')}</p>
-        <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={preferences.workout_sharing} onChange={e => setPreferences({ ...preferences, workout_sharing: e.target.checked })} />{t("Share completed workouts")}</label>
-        <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={preferences.share_workout_notes} onChange={e => setPreferences({ ...preferences, share_workout_notes: e.target.checked })} />{t("Share set notes")}</label>
-        <p className="text-xs leading-relaxed text-zinc-400">{t('Notes are private by default. Enabling notes shares workout and set notes, including past notes. Turning notes off removes them from Community immediately.')}</p>
-        <button className="flex min-h-11 items-center justify-center gap-2 rounded border border-white/20 px-4" type="submit"><Save size={17} />{busy ? t("Saving") : t("Save settings")}</button>
-      </fieldset>
-    </form>
-    {settings.error ? <div role="alert" className="text-sm text-amber-300">{t(settings.error)}<button className="icon-button" aria-label={t("Retry settings")} onClick={settings.reloadSettings}><RefreshCw size={18} /></button></div> : null}
-    {notice ? <p role="status" className="text-sm text-zinc-300">{t(notice)}</p> : null}
+  const saveProfile = async event => {
+    event.preventDefault();
+    if (await run(() => settings.saveProfile({ username }), 'Profile saved.')) setEditing(false);
+  };
+  const changePreference = patch => void run(() => settings.updatePreferences(patch), 'Preferences saved.');
+  return <div className="settings-page" aria-busy={settings.saving}>
+    <section className="settings-section" aria-labelledby="settings-profile-title">
+      <div className="settings-heading"><h2 id="settings-profile-title">{t('Public profile')}</h2><Information title="Public profile">{t('Your profile is visible to signed-in members. Your email and private records stay private.')}</Information></div>
+      <form onSubmit={saveProfile}>
+        <div className="settings-profile-row">
+          <ProfilePhotoEditor profile={photoProfile} userId={authUser?.id} editing={editing} disabled={disabled || !settings.profile} onBusyChange={setPhotoBusy} onChange={async next => { setPhotoProfile(next); await settings.reloadSettings(); }} />
+          <div className="settings-profile-identity">{editing ? <label>{t('Username')}<input name="username" aria-label={t('Username')} value={username} onChange={event => setUsername(normalizeUsername(event.target.value))} minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" autoComplete="username" autoCapitalize="none" spellCheck={false} required disabled={disabled} /></label> : <p className="settings-username">{settings.profile?.username ? `@${settings.profile.username}` : t('Choose your username')}</p>}</div>
+        </div>
+        <div className="settings-profile-actions">{editing ? <><button key="save-profile" className="settings-primary" disabled={disabled} type="submit"><Check size={17} />{t(settings.saving ? 'Saving' : 'Save profile')}</button><button className="settings-secondary" type="button" disabled={disabled} onClick={() => { setEditing(false); setError(''); }}><X size={17} />{t('Cancel')}</button></> : <button key="edit-profile" className="settings-secondary" type="button" disabled={disabled} onClick={event => { event.preventDefault(); setUsername(settings.profile?.username || ''); setEditing(true); setError(''); setNotice(''); }}><Pencil size={16} />{t('Edit profile')}</button>}</div>
+      </form>
+    </section>
+    <section className="settings-section" aria-labelledby="settings-preferences-title">
+      <h2 id="settings-preferences-title">{t('Preferences')}</h2>
+      <label className="settings-preference-row"><span>{t('Language')}</span><select aria-label={t('Language')} disabled={disabled} value={settings.preferences.language} onChange={event => changePreference({ language: event.target.value })}><option value="it">Italiano</option><option value="en">English</option></select></label>
+    </section>
+    <section className="settings-section" aria-labelledby="settings-privacy-title">
+      <h2 id="settings-privacy-title">{t('Training privacy')}</h2>
+      <div className="settings-preference-row"><div className="settings-control-label"><label htmlFor="settings-sharing">{t('Share completed workouts')}</label><Information title="Share completed workouts">{t('Completed workouts, including past workouts, are visible to signed-in LifeOS members while sharing is on. Turn it off to hide them all. Rankings enrollment is separate.')}</Information></div><input id="settings-sharing" type="checkbox" role="switch" aria-label={t('Share completed workouts')} disabled={disabled} checked={settings.preferences.workout_sharing} onChange={event => changePreference({ workout_sharing: event.target.checked })} /></div>
+      <div className="settings-preference-row"><div className="settings-control-label"><label htmlFor="settings-notes">{t('Share set notes')}</label><Information title="Share set notes">{t('Notes stay private by default. Turning this on also shares past workout and set notes. Turning it off removes notes from Community immediately.')}</Information></div><input id="settings-notes" type="checkbox" role="switch" aria-label={t('Share set notes')} disabled={disabled} checked={settings.preferences.share_workout_notes} onChange={event => changePreference({ share_workout_notes: event.target.checked })} /></div>
+    </section>
+    {settings.error ? <div role="alert" className="settings-error">{t(settings.error)}<button className="icon-button" aria-label={t('Retry settings')} onClick={settings.reloadSettings}><RefreshCw size={18} /></button></div> : null}
+    {error ? <p role="alert" className="settings-error">{t(error)}</p> : null}
+    <p role="status" className="settings-status">{settings.saving ? t('Saving') : notice ? t(notice) : ''}</p>
   </div>;
 }

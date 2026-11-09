@@ -45,7 +45,7 @@ test('reconnection refresh retains visible draft and browser back retains user a
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/workout');
   await selectExercise(page,'Barbell Curl');
-  await page.getByRole('textbox', { name: /Weight/ }).fill('25');
+  await page.getByRole('textbox', { name: /Weight|Total load/ }).fill('25');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.evaluate(() => {
     localStorage.setItem('qa-load-delay', '1000');

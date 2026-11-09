@@ -2,9 +2,33 @@
 .lifeos-shell[data-workspace='workout'] { background: #060b0d; }
 .training-brand { display: grid; place-items: center; width: 26px; height: 28px; }
 .training-brand > svg { grid-area: 1 / 1; }
-.training-views { min-height: 44px; border-color: #1c282e; }
-.training-views > button { min-width: 88px; padding: 0 18px 12px; color: #a7b6c8; font-size: 13px; }
-.training-views > button[aria-pressed='true'] { color: #f7f8fa; border-color: #edf4f6; }
+.training-views { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; min-height: 52px; padding: 4px; margin: 4px 0 12px; border: 1px solid #ffffff1a; border-radius: 12px; background: #171e24; box-shadow: inset 0 1px 0 #ffffff0b, 0 4px 12px #0002; }
+.training-views > button { min-width: 0; min-height: 44px; padding: 8px; border: 1px solid transparent; border-radius: 8px; color: #acbac9; font-size: 14px; transition: background-color .18s,border-color .18s,color .18s; }
+.training-views > button[aria-pressed='true'] { color: #f7f8fa; border-color: #ffffff26; background: #ffffff13; box-shadow: 0 2px 8px #0002; }
+@supports (backdrop-filter: blur(12px)) { .training-views { background: #171e24c9; backdrop-filter: blur(12px); } }
+.training-views > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.training-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.training-history-heading h2 { font-size: 16px; font-weight: 600; }
+.training-history-heading button { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; }
+.training-history-filters { display: grid; gap: 14px; padding: 12px 0 16px; border-bottom: 1px solid var(--line); }
+.training-filter-modes { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; }
+.training-filter-modes button { min-height: 44px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.training-filter-modes button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 12%,transparent); }
+.training-history-filters label { display: grid; gap: 8px; font-size: 14px; }
+.training-template-filter { display: grid; gap: 8px; }
+.training-history-filters select { width: 100%; min-height: 44px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 16px; }
+.training-history-filters small { color: var(--muted); font-size: 12px; }
+.training-week-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.training-week-heading button { display: grid; place-items: center; width: 44px; height: 44px; flex: none; }
+.training-week-days { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px; }
+.training-week-days button { display: grid; justify-items: center; gap: 5px; min-width: 0; min-height: 72px; padding: 8px 0; border: 1px solid transparent; border-radius: 8px; }
+.training-week-days button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 12%,transparent); }
+.training-week-days span { font-size: 11px; color: var(--muted); }
+.training-week-days strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.training-week-days i { width: 4px; height: 4px; border-radius: 50%; }
+.training-week-days i[data-workout='true'] { background: var(--accent); }
+.training-history-heading button:focus-visible,.training-history-filters button:focus-visible,.training-history-filters select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.training-history-heading button:hover,.training-filter-modes button:hover { background-color: #ffffff0a; }
 .training-start { width: 100%; max-width: 680px; }
 .training-start-content { min-width: 0; }
 .training-start-main { display: grid; min-width: 0; gap: 20px; }
@@ -50,4 +74,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .training-template-card, .training-empty-card { transition: none; }
+  .training-views > button { transition: none; }
 }

@@ -1,5 +1,6 @@
 import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
+import { useDestructiveConfirmation } from '../hooks/useDestructiveConfirmation';
 import {
   ArrowLeft,
   Briefcase,
@@ -44,6 +45,7 @@ const emptyMoneyForm = (type = 'expense') => ({
 });
 
 export function ProjectsTab() {
+  const confirmation = useDestructiveConfirmation();
   const {
     createProjectMoneyEntry,
     createProject,
@@ -109,14 +111,12 @@ export function ProjectsTab() {
 
   const selectProject = (id) => {
     if (id === selectedProjectId) return;
-    if ((sessionTarget.trim() || sessionProof.trim() || sessionDelta || progressInput)
-      && !window.confirm(t("Discard the unsaved project session/progress draft?"))) return;
-    setSessionTarget('');
-    setSessionProof('');
-    setSessionDelta('');
-    setProgressInput('');
-    setSessionError('');
-    setSelectedProjectId(id);
+    const select = () => {
+      setSessionTarget(''); setSessionProof(''); setSessionDelta(''); setProgressInput(''); setSessionError(''); setSelectedProjectId(id);
+    };
+    if (sessionTarget.trim() || sessionProof.trim() || sessionDelta || progressInput) {
+      confirmation.ask({ title: 'Discard changes?', message: 'Discard the unsaved project session/progress draft?', label: 'Discard changes', action: select });
+    } else select();
   };
 
   useEffect(() => {
@@ -206,8 +206,7 @@ export function ProjectsTab() {
     }
   };
 
-  const removeProject = async (project) => {
-    if (!window.confirm(t("Delete project \"{v0}\" and its sessions?", { v0: project.name }))) return;
+  const removeProject = project => confirmation.ask({ title: 'Delete project?', message: t('Delete project "{v0}" and its sessions?', { v0: project.name }), label: 'Delete project', action: async () => {
     setBusyId(`project:${project.id}:delete`);
     setSessionError('');
     try {
@@ -215,10 +214,11 @@ export function ProjectsTab() {
       if (selectedProjectId === project.id) setSelectedProjectId(null);
     } catch (error) {
       setSessionError(error.message || t("Failed to delete project."));
+      throw error;
     } finally {
       setBusyId('');
     }
-  };
+  } });
 
   const startSession = async (project) => {
     if (!sessionTarget.trim()) {
@@ -264,18 +264,18 @@ export function ProjectsTab() {
     }
   };
 
-  const removeSession = async (session) => {
-    if (!window.confirm(t("Delete this project session?"))) return;
+  const removeSession = session => confirmation.ask({ title: 'Delete session?', message: 'Delete this project session?', label: 'Delete session', action: async () => {
     setBusyId(`session:${session.id}:delete`);
     setSessionError('');
     try {
       await deleteProjectSession(session.id);
     } catch (error) {
       setSessionError(error.message || t("Failed to delete session."));
+      throw error;
     } finally {
       setBusyId('');
     }
-  };
+  } });
 
   const addProgress = async (project) => {
     const delta = Number(String(progressInput).replace(',', '.'));
@@ -354,22 +354,23 @@ export function ProjectsTab() {
     }
   };
 
-  const removeMoneyEntry = async (entry) => {
-    if (!window.confirm(t("Delete this project money entry?"))) return;
+  const removeMoneyEntry = entry => confirmation.ask({ title: 'Delete entry?', message: 'Delete this project money entry?', label: 'Delete entry', action: async () => {
     setBusyId(`money:${entry.id}:delete`);
     setSessionError('');
     try {
       await deleteProjectMoneyEntry(entry.id);
     } catch (error) {
       setSessionError(error.message || t("Failed to delete money entry."));
+      throw error;
     } finally {
       setBusyId('');
     }
-  };
+  } });
 
   if (selectedProject) {
     return (
       <>
+        {confirmation.dialog}
         <ProjectDetail
           activeSession={activeSession}
           busyId={busyId}
@@ -428,6 +429,7 @@ export function ProjectsTab() {
 
   return (
     <div className="project-workspace grid min-w-0 gap-6 pb-[calc(env(safe-area-inset-bottom)+16px)]">
+      {confirmation.dialog}
       <Panel>
         <div className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">

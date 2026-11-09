@@ -5,6 +5,10 @@ import { ownerExerciseMappings } from '../../src/data/exerciseCatalogRevision.js
 
 export async function testCatalogRevision(db) {
   await db.exec('reset role');
+  const correction = fs.readFileSync('supabase/migrations/20261108121000_curl_catalog_identity.sql','utf8');
+  const historicalBefore = (await db.query('select to_jsonb(s) row from workout_sets s order by id')).rows;
+  await db.exec(correction);
+  assert.deepEqual((await db.query('select to_jsonb(s) row from workout_sets s order by id')).rows,historicalBefore);
   const expected={chest:20,back:15,shoulders:11,biceps:10,triceps:8,quadriceps:8,hamstrings:4,glutes:0,calves:1,core:1,full_body:1};
   assert.equal(exerciseCatalog.length,224);
   assert.equal(exerciseCatalog.filter(e=>!e.active).length,145);
@@ -19,6 +23,7 @@ export async function testCatalogRevision(db) {
   const straight=exerciseCatalog.find(e=>e.slug==='barbell_curl');
   const ez=exerciseCatalog.find(e=>e.slug==='ez_bar_curl');
   assert.equal(resolveExercise('Barbell Curl').id,ez.id);
+  assert.equal(resolveExercise('EZ-Bar Curl').id,ez.id);
   assert.equal(resolveExercise('Military Press').slug,'barbell_overhead_press');
   assert.equal(resolveExercise('Lateral Raises'),null);
   assert.equal(resolveExercise('Panca Piana'),null);
@@ -26,7 +31,7 @@ export async function testCatalogRevision(db) {
   assert.equal(exerciseIdentityKey({exercise:'Leg Press',exercise_id:null}),'legacy:leg press');
   assert.equal(resolveExercise('Incline Bench Press'),null);
   assert.equal(searchExercises('Barbell Curl').some(e=>e.id===straight.id),false);
-  assert.notEqual(exerciseIdentityKey({exercise:'Barbell Curl',exercise_id:straight.id}),exerciseIdentityKey({exercise:'Barbell Curl',exercise_id:ez.id}));
+  assert.equal(exerciseIdentityKey({exercise:'Barbell Curl',exercise_id:straight.id}),exerciseIdentityKey({exercise:'Barbell Curl',exercise_id:ez.id}));
   assert.equal(exerciseLabel({exercise:'Old authored label',exercise_id:straight.id},'en'),'Barbell Curl');
   assert.equal(exerciseCatalog.find(e=>e.slug==='boxing_bag').uses_external_load,false);
   assert.equal(exerciseCatalog.find(e=>e.slug==='calf_raises').equipment,'unspecified');
@@ -72,7 +77,8 @@ export async function testCatalogRevision(db) {
   await db.query("select set_config('lifeos.exercise_revision_owner',$1,true)",[owner]);
   await db.exec(fs.readFileSync(`supabase/migrations/${forward}`,'utf8'));
   await db.exec('commit');
-  assert.deepEqual((await db.query('select * from workout_sets where id=$1',[inactive.id])).rows[0],inactive);
+  await db.exec(correction);
+  assert.deepEqual((await db.query('select * from workout_sets where id=$1',[inactive.id])).rows[0],{...inactive,exercise_id:ez.id});
   const bad=(await db.query("insert into workout_sets(user_id,workout_id,exercise,exercise_id,set_number,weight,reps) values($1,$2,'Panca Piana',$3,77,12,8) returning id",[owner,fixtures[0].workout.id,straight.id])).rows[0].id;
   await assert.rejects(db.query('select public.apply_owner_exercise_revision_v2($1)',[owner]),/conflicts/);
   await db.query('delete from workout_sets where id=$1',[bad]);
@@ -81,5 +87,5 @@ export async function testCatalogRevision(db) {
   await db.query('delete from workout_sets where id=$1',[unknown]);
   assert.equal((await db.query("select count(*)::int n from pg_trigger where tgname='revision_timestamp' and tgenabled='O'")).rows[0].n,3);
   assert.equal((await db.query("select has_function_privilege('authenticated','public.apply_owner_exercise_revision_v2(uuid)','EXECUTE') allowed")).rows[0].allowed,false);
-  console.log('PASS 224/79/145 catalog, all original IDs, SQL/JS alias parity, 29 owner mappings, timestamp/snapshot preservation, isolation, inactive identity, idempotency and fail-closed conflicts');
+  console.log('PASS 224/79/145 catalog, confirmed EZ curl reconciliation, source preservation, all original catalog IDs, SQL/JS alias parity, 29 owner mappings, timestamp/snapshot preservation, isolation, idempotency and fail-closed conflicts');
 }

@@ -1,5 +1,37 @@
 # LifeOS Workout QA
 
+## Local modernization acceptance (2026-11-08, not deployed)
+
+Current branch review supersedes older UI expectations below. Verify:
+
+- Barbell Curl uses only the existing EZ UUID in the picker. Owner-confirmed retired
+  UUID/text records reconcile without changing performance fields; Last Time combines
+  the confirmed history. Other curls remain separate. See release readiness report.
+- Warmup is outside More options. Failed saves retain it; successful saves reset it
+  OFF and prepare working numbering/targets. RPE/notes clear only on success.
+- Completion uses saved appearance, a back arrow before Back to training, compact
+  overview, read-only summary and explicit Save as template. No View history action.
+  Duplicate taps are locked, failures retry the same partial template, and Back
+  acknowledgement survives reload for the same user/workout.
+- History All/Week/Template filters query bounded server pages, including older
+  workouts beyond the first 25. Monday-based weeks preserve multiple sessions per
+  date. Opening/editing a filtered older session must update its details immediately
+  without changing the active Live session or its draft.
+- PWA rest timer and notifications default OFF independently. Validate 15–300 seconds,
+  deadline restoration, normal/amber/red thresholds, save-only start, replacement,
+  cancellation and completed-workout isolation. No WhatsApp alert may be enqueued.
+- Settings preference changes autosave; profile username saves explicitly; photo
+  saves immediately. Test account changes, failed writes and keyboard restoration.
+- Shared LifeOS confirmation dialogs cover deletion/discard. No native confirm/alert
+  remains in application JSX. Normal browser unload protection remains permitted.
+- Resume dock must not cover an available PWA update prompt. Actual A→B worker
+  activation stays blocked during active Training and preserves storage/other tabs.
+
+See `docs/audits/LIFEOS_UI_UX_MODERNIZATION.md` for exact commands, results and
+screenshots. Tests use isolated fixtures, never production workout records.
+Web Push deployment and physical iPhone acceptance remain pending; see
+`docs/WORKOUT_WEB_PUSH.md`. No broad schema rerun or production migration occurred.
+
 ## History design review - approved for release
 
 The local mockup-driven UI defaults to three compact collapsed exercise cards in

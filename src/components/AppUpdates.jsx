@@ -21,10 +21,10 @@ export function ApplicationUpdates() {
     <UpdateMessage state={state} />
   </section>;
 }
-export function AppUpdateNotice() {
+export function AppUpdateNotice({ hasResume = false }) {
   const state = useAppUpdate();
   if (!state.available || state.dismissedUntil > Date.now()) return null;
-  return <aside aria-label={t('LifeOS update available')} className="app-update-notice">
+  return <aside aria-label={t('LifeOS update available')} className="app-update-notice" data-has-resume={hasResume}>
     <strong className="text-sm">{t('LifeOS update available')}</strong><UpdateMessage state={state} />
     <div className="flex gap-2"><UpdateNow state={state} /><button type="button" className="min-h-11 px-3 text-sm text-zinc-400" onClick={appUpdate.dismiss}>{t('Later')}</button></div>
   </aside>;

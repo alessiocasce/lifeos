@@ -1,22 +1,23 @@
-import { Dumbbell } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { ProfileAvatar } from './ProfileAvatar';
 import { t, formatDate } from '../i18n';
 import { exerciseIdentityKey, exerciseLabel } from '../utils/exerciseCatalog';
 
 export function MemberIdentity({ profile, onOpen }) {
   if (!profile?.username) return null;
-  const content = <><ProfileAvatar profile={profile} className="h-10 w-10 shrink-0" /><strong className="min-w-0 break-all text-left text-sm text-zinc-100">@{profile.username.replace(/^@+/, '')}</strong></>;
-  return onOpen ? <button type="button" aria-label={`@${profile.username.replace(/^@+/, '')}`} className="flex min-h-11 min-w-0 items-center gap-3" onClick={onOpen}>{content}</button> : <div className="flex min-w-0 items-center gap-3">{content}</div>;
+  const username = profile.username.replace(/^@+/, '');
+  const content = <><ProfileAvatar profile={profile} className="h-11 w-11 shrink-0" /><span className="community-identity-copy"><strong>{profile.display_name || `@${username}`}</strong>{profile.display_name ? <small>@{username}</small> : null}</span></>;
+  return onOpen ? <button type="button" aria-label={`@${username}`} className="community-identity" onClick={onOpen}>{content}</button> : <div className="community-identity">{content}</div>;
 }
 
 export function SharedWorkoutCard({ share, onOpen, onMember }) {
-  return <article className="min-w-0 rounded-md border border-white/10 bg-[#111316] p-4">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><MemberIdentity profile={share.author} onOpen={onMember} /><time className="text-xs text-zinc-400" dateTime={share.performed_on}>{formatDate(share.performed_on)}</time></div>
-    <button type="button" onClick={onOpen} className="block w-full text-left">
-      <h2 className="break-words text-lg font-semibold text-zinc-100">{share.title}</h2>
-      <p className="mt-1 text-xs text-zinc-400">{share.exercise_count}{t(' exercises · ')}{share.set_count}{t(' sets')}</p>
-      <p className="mt-3 break-words text-sm leading-relaxed text-zinc-300">{(share.exercise_preview || []).map(e => exerciseLabel(e)).join(' · ')}</p>
-      <span className="mt-4 flex min-h-11 items-center gap-2 text-sm text-zinc-100"><Dumbbell size={16} />{t('View workout')}</span>
+  return <article className="community-card">
+    <div className="community-card-header"><MemberIdentity profile={share.author} onOpen={onMember} /><time dateTime={share.performed_on}>{formatDate(share.performed_on)}</time></div>
+    <button type="button" onClick={onOpen} className="community-card-open">
+      <h2>{share.title}</h2>
+      <p className="community-card-counts"><span>{share.exercise_count} {t(share.exercise_count === 1 ? 'exercise' : 'exercises')}</span><span>{share.set_count} {t(share.set_count === 1 ? 'set' : 'sets')}</span></p>
+      <p className="community-card-preview">{(share.exercise_preview || []).map(e => exerciseLabel(e)).join(' · ')}</p>
+      <span className="community-card-action">{t('View workout')}<ArrowUpRight size={18} aria-hidden="true" /></span>
     </button>
   </article>;
 }
@@ -34,9 +35,9 @@ export function SharedWorkoutSets({ share }) {
       <h3 className="mb-3 break-words text-sm font-semibold">{exerciseLabel(sets[0])}</h3>
       <div className="grid gap-3">{sets.map((set, i) => <div key={i} className={`grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-2 text-sm ${set.is_warmup || set.set_number >= 1000 ? 'text-zinc-400' : 'text-zinc-100'}`}>
         <span className="data-text">{set.is_warmup || set.set_number >= 1000 ? 'W' : set.set_number}</span>
-        <span className="data-text">{Number(set.weight)}{t(' kg × ')}{set.reps}</span>
+        <span className="data-text">{set.weight != null ? `${Number(set.weight)}${t(' kg × ')}` : ''}{set.reps}</span>
         <span className="data-text text-xs text-zinc-400">{set.rpe != null ? `RPE ${Number(set.rpe)}` : ''}</span>
-        {set.notes ? <p className="col-span-2 col-start-2 whitespace-pre-wrap break-words text-xs text-zinc-400">{set.notes}</p> : null}
+        {set.notes ? <p className="community-set-note">{set.notes}</p> : null}
       </div>)}</div>
     </section>)}
   </div>;

@@ -10,6 +10,10 @@ for(const migration of applied) {
 const revisions=fs.readdirSync('supabase/migrations').filter(name=>/^\d+_exercise_catalog_revision.sql$/.test(name)).sort();
 const pending=revisions.filter(name=>!applied.some(m=>m.file===name));
 if(pending.length>1)throw new Error('Multiple pending catalog revisions: select an explicit rollout');
+if (!pending.length) {
+  console.log('Applied catalog migration seals verified. Use a forward migration for subsequent metadata corrections.');
+  process.exit(0);
+}
 const filename=pending[0] || revisions.at(-1);
 if(!filename)throw new Error('Create the forward migration with Supabase CLI first');
 const quote=value=>`'${String(value).replaceAll("'","''")}'`;

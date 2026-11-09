@@ -403,6 +403,7 @@ export function AIAssistantTab() {
           ref={messagesContainerRef}
           className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain p-2 md:p-3"
           aria-label={t("Brain conversation messages")}
+          role="log"
           data-testid="brain-message-list"
         >
           {aiChatMessagesStatus === 'loading' && !messages.length ? (
@@ -424,10 +425,10 @@ export function AIAssistantTab() {
 
           {aiStatus === 'loading' ? (
             <div
-              className="mr-auto inline-flex items-center gap-2 rounded-md border border-cyan-400/15 bg-cyan-400/[0.06] px-3 py-2 text-xs text-cyan-200"
+              className="companion-thinking mr-auto inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
               data-testid="brain-loading-indicator"
             >
-              <Loader2 size={13} className="animate-spin" />{t("Brain is thinking...")}</div>
+              <Loader2 size={13} className="animate-spin" />{t('Companion is thinking...')}</div>
           ) : null}
 
           {aiError ? <AssistantError error={aiError} onRetry={lastFailedMessage ? retryLastFailedMessage : null} /> : null}
@@ -462,7 +463,7 @@ export function AIAssistantTab() {
             <button
               type="submit"
               disabled={aiStatus === 'loading' || !aiInput.trim()}
-              className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-cyan-400/30 bg-cyan-400/10 text-cyan-200 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-zinc-600"
+              className="companion-send grid h-12 w-12 shrink-0 place-items-center rounded-md border disabled:cursor-not-allowed"
               aria-label={t("Send Brain message")}
               title={aiStatus === 'loading' ? t("Brain is thinking") : t("Send message")}
               aria-busy={aiStatus === 'loading'}

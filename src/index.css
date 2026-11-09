@@ -2,8 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-.app-update-notice { position: fixed; z-index: 35; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); display: grid; gap: 8px; width: min(340px,calc(100% - 32px)); padding: 16px; border: 1px solid #424852; border-radius: 8px; background: #11151a; box-shadow: 0 8px 30px #0008; }
-@media(min-width:768px) { .app-update-notice { bottom: 20px; } }
+.workspace-recovery { max-width: 560px; padding: 28px 0; }
+.workspace-recovery h2 { font-size: 22px; line-height: 1.35; font-weight: 600; }
+.workspace-recovery p { margin: 12px 0 22px; color: var(--muted); line-height: 1.6; }
+.workspace-recovery > div { display: flex; flex-wrap: wrap; gap: 12px; }
+.workspace-recovery button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; }
+
+/* Records keep their existing workflows; shared surfaces improve legibility. */
+.lifeos-shell:is([data-workspace='health'],[data-workspace='calendar'],[data-workspace='memos'],[data-workspace='finances']) .workspace-content .text-zinc-500 { color: #a1aab7; }
+.lifeos-shell:is([data-workspace='health'],[data-workspace='calendar'],[data-workspace='memos'],[data-workspace='finances']) .workspace-content h2 { line-height: 1.3; text-wrap: balance; }
+.lifeos-shell:is([data-workspace='health'],[data-workspace='calendar'],[data-workspace='memos'],[data-workspace='finances']) .workspace-content form :is(input,select,textarea):not([type='checkbox']):not([type='radio']):not([type='range']) { background-color: var(--surface); border-color: #39414a; border-radius: 6px; }
+.lifeos-shell:is([data-workspace='health'],[data-workspace='calendar'],[data-workspace='memos'],[data-workspace='finances']) .workspace-content :is(input,select,textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lifeos-shell:is([data-workspace='health'],[data-workspace='calendar'],[data-workspace='memos'],[data-workspace='finances']) .workspace-content .primary-button { border-radius: 6px; }
+.health-workspace .health-field { border-radius: 6px; }
+.health-workspace .health-field:focus-within { border-color: var(--accent); }
+.command-surface .command-active { border-top-color: var(--accent); border-left: 3px solid var(--accent); background: var(--surface); }
+.command-surface .command-active-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.command-surface .command-quiet { color: var(--muted); }
+.companion-workspace .companion-send { border-color: var(--accent); background: var(--accent); color: var(--accent-contrast,#0b0d10); }
+.companion-workspace .companion-send:disabled { border-color: var(--line); background: var(--surface); color: #8e98a6; }
+.companion-workspace .companion-thinking { border-color: var(--line); color: var(--muted); background: var(--surface); }
+.companion-workspace textarea:focus-visible { border-color: var(--accent); outline: 1px solid var(--accent); outline-offset: 0; }
+.companion-workspace button:focus-visible,.project-workspace button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.project-workspace .text-zinc-500 { color: #a1aab7; }
+.project-workspace .text-\[10px\] { font-size: 12px; line-height: 1.5; }
+.project-workspace :is(input,select,textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.app-update-notice { position: fixed; z-index: 50; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); display: grid; gap: 8px; width: min(340px,calc(100% - 32px)); padding: 16px; border: 1px solid #424852; border-radius: 8px; background: #11151a; box-shadow: 0 8px 30px #0008; }
+.app-update-notice[data-has-resume='true'] { bottom: calc(160px + env(safe-area-inset-bottom)); }
+@media(min-width:768px) { .app-update-notice { bottom: 20px; } .app-update-notice[data-has-resume='true'] { bottom: 104px; } }
 
 .health-band { border-top: 1px solid rgb(255 255 255 / 0.1); padding-top: 20px; }
 .health-field { display: block; min-width: 0; padding: 8px 12px; border: 1px solid rgb(255 255 255 / 0.12); border-radius: 4px; background: #141517; }
