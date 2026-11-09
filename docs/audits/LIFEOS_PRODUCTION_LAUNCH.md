@@ -1,5 +1,107 @@
 # LifeOS Production Launch
 
+## Oracle Push Completion (2026-11-09 22:22 Europe/Rome)
+
+**SERVER-SIDE OPERATIONAL - IPHONE ACCEPTANCE PENDING.** This supersedes the
+earlier background-delivery blocker; physical iPhone and real-email acceptance
+are not retrospectively claimed.
+
+- PR3 merged64bba3670c488f8c8af0e24d6313d8faecb69a4d; PR4 corrected PM2's ESM
+  entrypoint and merged222aacd3b36e109e4ab6f066a987f3569d259290.
+  https://github.com/alessiocasce/lifeos/pull/3
+  https://github.com/alessiocasce/lifeos/pull/4
+- Current Git main/production SHA222aacd3b36e109e4ab6f066a987f3569d259290,
+  deployment `dpl_BvsEUEV3UvBoiea8AS4FNL8eY2a1` READY, Git integration.
+  https://lifeos-4tv8wkz92-lifeos2.vercel.app and the existing production alias
+  serve the matching build-version. No manual duplicate deployment or new project.
+- Final hosted run https://github.com/alessiocasce/lifeos/actions/runs/42700909100
+  SUCCESS:13 helpers,45 Chromium,3 WebKit plus push/SQL/RLS/backend/PWA/build/function
+  checks. Local push harnesses, worker regression, syntax/build/diff passed. The
+  production app/API/service-worker logic was reused, not redesigned.
+- Existing Oracle Ubuntu22.04 ARM64 VM:2OCPUs/12GB RAM,45GB root,29GB free; about
+ 53MB dedicated supervisor/worker cgroup at idle. This shape fits current published
+  Always Free A1 limits; billing/other tenancy resources cannot be proved through
+  SSH alone. No VM/resource/paid plan was created or resized.
+- Independent `lifeos-push` system user, Node24.22.2 official ARM64 SHA256-verified
+  runtime, PM2 process `lifeos-workout-push`, private PM2_HOME. Existing system Node20
+  and WhatsApp PM2 service were unchanged; bridge PID357263/restarts0 throughout.
+- Reboot startup enabled via `pm2-lifeos-push.service`; saved PM2 process list,
+  crash restart,5second restart delay,128MB worker/256MB cgroup caps. Resurrect and
+  dedicated service restart tested; no VM reboot/interruption of the bridge.
+- `/etc/lifeos-workout-push/worker.env` root:lifeos-push0640, parent0750, contains
+  only origin and dispatch secret. VAPID private key and service-role access are
+  not installed on Oracle. Vercel production has all five required variables,
+  private/dispatch material stored as sensitive values, flagtrue. Keys validated
+  cryptographically; encrypted operator recovery copy outside Git. No values logged.
+- No new firewall/inbound port was opened. Verified SSH host key and HTTPS/TLS
+  were retained. Supabase Cron dispatch remains inactive, private controlfalse,
+  request IDnull; transport guard unchanged. No migrations reapplied or altered.
+- Ten-second non-overlapping polling (plus response time). Atomic redacted health
+  heartbeat shows HTTP200/failures0. Per-minute systemd health timer passed. Sparse
+  idle logs, bounded failure logs and1MB/daily logrotate with5 compressed rotations.
+  Local journal failures are actionable; no external paging recipient is configured.
+
+### Actual Delivery Evidence
+
+Using temporary authenticated QA accounts with workout sharing/notes OFF, real
+ordinary-user API calls and an isolated non-incognito installed Google Chrome
+profile, without mocking push events or transport:
+
+1. Real push-service subscription registered; VAPID keypair validated.
+2. Saving a real private test set created the durable deadline. Oracle claimed it,
+   Vercel's web-push encrypted/signed delivery was accepted, and Chrome's active
+   notification registration exposed **LifeOS - Rest complete / You can start your
+   next set.** after ALL app pages were closed, observed through the real
+   `registration.getNotifications()` API, not a human-observed OS banner.
+   This is actual client receipt,
+   not merely HTTP200/provider acceptance. It is not physical iPhone evidence.
+3. A second pending set superseded the old one. Restarting only the notification
+   service preserved the pending timer; only the replacement arrived. Prior sent
+   records intentionally become cancelled when superseded, revoking delayed tokens.
+4. Notifications OFF revoked delivery; timer OFF cancelled/prevented scheduling;
+   End Workout cancelled pending delivery. No notification after those deadlines.
+5. Unregister and browser unsubscribe succeeded. Reusing that now-revoked endpoint
+   produced one failed delivery and automatic404/410 subscription removal; no retry
+   loop. That expected QA provider rejection is not a worker transport outage.
+6. A fresh real receipt was repeated AFTER final production222aacd was READY.
+   Worker log21:21:45UTC:claimed1/accepted1/failed0. Health was HTTP200/failures0.
+7. Unauthenticated dispatch returned401. Existing isolated A/B/anon RLS, token
+   revocation, fail-open logging and bounded claim regressions passed. No account
+   privileges, Community privacy rules or historical workout fields were changed.
+
+All QA accounts and dependent workouts/sets/timers/subscriptions were removed after
+successful and failed test attempts. Real member activity continued during this
+run, so the old54/564 launch counts are not immutable expectations. Final snapshot
+observed56 workouts/601 sets,6 real auth users,0 subscriptions and0 pending timers.
+Only explicitly created QA user IDs were deleted; no real member data was cleaned.
+No production error/fatal log entries in the inspected final-deployment window.
+
+Initial QA issues were distinguished from implementation defects: transient local
+DNS failure; off-the-record Chrome rejects push registration (fixed by isolated
+persistent profile); the real PM2 wrapper/main-guard bug (fixed and regression
+covered); and an incorrect test expecting2 rows still marked sent after supersession
+(correct token-revocation behavior leaves1). No failing test was concealed.
+
+### Usage, Safety and Remaining Acceptance
+
+259200 calls/30days zero-latency ceiling; real serial request latency lowers that
+count. About0.55-0.65second idle wall time; actual active CPU/monthly team consumption
+not available from these checks. At2GB and0.65seconds, conservative memory estimate
+93.6GB-hours/month before considering lower serial rate. Hobby includes1million
+invocations/4CPU-hours, shared with existing services. No zero-cost/headroom guarantee
+is inferred and no paid upgrade made. Monitor account usage before scaling.
+
+Immediate kill: stop only `pm2-lifeos-push.service`; optionally set the Vercel worker
+flagfalse and deploy it. Never start pg_net transport. Foreground countdown is
+independent. Node/runtime and worker/config installed hashes match reviewed source.
+
+Physical iPhone Home Screen PWA permission/background/closed/locked/replacement/
+cancellation acceptance remains pending. Exact procedure is in WORKOUT_WEB_PUSH.md.
+OS/network/power delays, delayed display races and ambiguous-send/no-retry behavior
+remain documented limitations. No exactly-once OS or exact-time promise is made.
+The actual VM reboot and external alert delivery were intentionally not tested.
+No schema rerun required. Earlier sections below are dated launch history.
+
 ## Final Outcome (2026-11-09 03:52 UTC)
 
 **LIFEOS - PRODUCTION DEPLOYED, ACCEPTANCE PENDING.**

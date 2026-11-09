@@ -1,5 +1,63 @@
 # Training Rest Timer
 
+## Operational Status (2026-11-09 22:22 Europe/Rome)
+
+**SERVER-SIDE OPERATIONAL - IPHONE ACCEPTANCE PENDING.** Production222aacd serves
+the configured API. Oracle `lifeos-workout-push` is online under its separate
+systemd/PM2 account,10second polling,0 current transport failures. Real Google
+Chrome received/displayed encrypted Web Push after all app pages were closed.
+Replacement, dedicated-service restart, notifications OFF, timer OFF, workout end,
+unregistration and automatic expired-endpoint removal passed against controlled
+production accounts. All QA accounts/rows were cleaned up. No migration was run.
+
+The PM2 startup correction in PR4 supervises Node as an executable (`interpreter:
+none`), not through PM2's JS wrapper: the wrapper bypassed the worker's CLI entry
+guard while incorrectly appearing online. Heartbeat monitoring, not process state
+alone, is the operational check. Node/PM2 and source hashes match reviewed files.
+PR3/4: https://github.com/alessiocasce/lifeos/pull/3 and
+https://github.com/alessiocasce/lifeos/pull/4 . VAPID and dispatch secrets are scoped
+to Vercel production; Oracle receives only origin/dispatch secret. Nothing uses
+the disabled Supabase transport. Timer/notification preferences remain opt-in OFF.
+
+### Physical iPhone Acceptance
+
+1. On supported iOS16.4+, open production in Safari, Add to Home Screen, then launch
+   that installed LifeOS app. Accept a waiting update only when no unsaved work is
+   at risk; never clear storage/drafts to force it.
+2. Start/continue a workout. Open **Timer recupero**, enable **Timer di recupero
+   automatico**, select30seconds and tap **Notifiche in background**. Grant the
+   iOS permission from that tap. Check iOS notification/Focus settings if needed.
+3. Save a genuine set, background the PWA and lock the phone. Expect the generic
+   rest notification after the server deadline plus polling/network/OS delay.
+4. Repeat with the PWA closed. Record whether the alert physically arrives; this
+   desktop Chrome test does not establish iPhone/force-close behavior.
+5. Before expiry save another set: only the replacement alert should arrive.
+   Separately test notifications OFF (countdown may continue), timer OFF and End
+   Workout: no pending alert should arrive. Already displayed alerts cannot be unsent.
+6. Report the observed result/time and app state for each case. Physical acceptance
+   remains pending until the owner confirms; OS delivery is not an exact-time SLA.
+
+### Operations
+
+`sudo systemctl status pm2-lifeos-push.service` checks the dedicated supervisor;
+`sudo systemctl start lifeos-push-health.service` runs the freshness check and
+`sudo journalctl -u lifeos-push-health.service` shows actionable failures. The
+heartbeat contains only timestamps/counts, never credentials. A systemd-service
+restart and saved-list resurrection passed; the VM was NOT rebooted because that
+would interrupt the unrelated bridge. No external paging destination is configured.
+
+Idle calls measured about0.55-0.65seconds wall time, with occasional longer network
+responses; a real push took about3seconds. At10seconds plus request time, the
+worst zero-latency ceiling is259200 invocations/30days (25.92% of Hobby's1million).
+For a0.65second average and2GB provisioned memory, a conservative upper estimate
+is93.6GB-hours/month; active CPU is different and was NOT measured by this check.
+Do not infer remaining monthly account quota from these estimates. Existing app
+and bridge traffic share the quota; inspect usage as adoption grows. No paid
+resources or upgrades were enabled. Current Oracle2OCPU/12GB matches the published
+Always Free A1 envelope, but aggregate tenancy eligibility requires account access.
+
+Earlier disabled-state/Cron sections below are historical, superseded by this status.
+
 ## Oracle Activation (2026-11-09)
 
 The owner selected the existing Oracle VM, superseding the Cron proposal below.

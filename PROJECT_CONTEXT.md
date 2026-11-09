@@ -1,5 +1,18 @@
 # LifeOS Project Context
 
+## Oracle Background Push Operational (2026-11-09)
+
+Production222aacd3b36e109e4ab6f066a987f3569d259290 (PR3/4) is READY. The existing
+Web Push backend now uses the owner's Oracle VM, dedicated `lifeos-push` account,
+Node24/PM2/systemd service and10second polling. Real controlled Chrome receipt
+after all app pages closed, replacement/restart/OFF/end and expired-subscription
+cleanup passed. Physical iPhone acceptance is pending. User notification/timer
+preferences remain opt-in OFF. Vercel-only VAPID/private service credentials;
+Oracle has only origin/dispatch secret. Supabase pg_net transport stays disabled
+with its guard unchanged. No migrations/schema rerun required, no historical
+data rewrite and no WhatsApp bridge restart. See WORKOUT_WEB_PUSH.md and the
+latest LIFEOS_PRODUCTION_LAUNCH.md section; older blocked-state notes are history.
+
 ## Production modernization (2026-11-09)
 
 Merged PR2, production SHA87acd1ead077ce73ad4e35af96030bc826787242, Vercel READY.
