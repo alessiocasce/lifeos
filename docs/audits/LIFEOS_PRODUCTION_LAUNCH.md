@@ -1,5 +1,114 @@
 # LifeOS Production Launch
 
+## Final Outcome (2026-11-09 03:52 UTC)
+
+**LIFEOS - PRODUCTION DEPLOYED, ACCEPTANCE PENDING.**
+
+- PR https://github.com/alessiocasce/lifeos/pull/2 merged at03:48:29UTC.
+- Reviewed head `0e6e971466982eedf36b6a683002e5d10d093634`; final hosted run
+  https://github.com/alessiocasce/lifeos/actions/runs/42558036614 SUCCESS.
+  Exact reported totals:13 helper tests,45 Chromium cases,3 WebKit cases.
+  Deterministic PostgreSQL/RLS/Community/Brain/schema, production build, seven-route
+  function gate, guarded Workbox A->B and diff checks also passed.
+- Production/main SHA `87acd1ead077ce73ad4e35af96030bc826787242`.
+  Git-triggered deployment `dpl_3MSHRNAuFHLZf8amsTAHhQwPciUx` READY at03:48:53UTC
+  (04:48:53Europe/Rome). No duplicate manual deployment.
+  https://lifeos-mo9mard0x-lifeos2.vercel.app is the deployment URL;
+  https://lifeos-ruby-gamma.vercel.app is assigned to it and serves that exact SHA.
+- Served entry `/assets/index-B5KyVusV.js`; checked fixture markers absent.
+  Manifest/service-worker HTTP200; build includes38 precache entries.
+- All five applied migration versions are listed below, exactly matching checked-in
+  filenames. No historical migration gaps replayed and no schema rerun required.
+- Final source baseline remains54 workouts/564 sets/7 templates/31 template exercises,
+  53 Community shares/564 projected sets,6 auth users and6 profiles/preferences.
+  All four protected digests still match before release. Zero retired curl source
+  references;18 canonical sets and5 canonical snapshot entries. No user data lost.
+
+### Real Production Acceptance Performed
+
+Two temporary, genuinely authenticated accounts were created through Admin Auth,
+then exercised through ordinary signed-in clients and the actual public URL. Both
+were opted out of workout sharing before synthetic QA workouts; no fake public post
+or real member workout was created/edited. All QA accounts and dependent rows were
+removed after each attempt; final aggregate baseline restored. Passwords/tokens
+remained in memory, never source/logs. Ordinary authenticated requests proved:
+
+- Italian/sharing-ON/notes-OFF initialization; explicit English choice retained.
+- A cannot read/write B preferences/workouts/sets; catalog mutation denied;
+  subscription capability URLs and timer tokens inaccessible to client reads.
+- Authenticated notification config reports configured=false; missing authentication
+  rejects config and dispatch with401.
+- UI login/logout/account switching: English A and Italian B show only their own
+  Settings identity/preferences. No stale previous-user profile.
+- Start empty workout name-only dialog; canonical curl selection; warmup save and
+  automatic warmup reset; real Supabase set persistence; reload continuity.
+- Foreground timer enabled through UI,60second preference persisted; saved set
+  created one server deadline, reload retained it, End Workout cancelled it.
+  Background notification preference remained OFF throughout.
+- Completion and real summary, one saved template, Back to training and persisted
+  dismissal; History correction without reopening; custom delete confirmation
+  cancelled without deleting the workout; Community loads.
+- No horizontal overflow at375/390/430px. Production screenshots in ignored
+  `test-results/production-{training,completion,history,rest}-390.png`; Italian
+  Settings screenshot has430px width despite its historical390 filename.
+- Zero Playwright page errors. Fresh production agent-browser login audit:
+  axe4.12.1 WCAG2A/AA0 violations/0 incomplete; no console page errors.
+  This is login-only accessibility evidence, not a full authenticated WCAG audit.
+- Vercel runtime error/fatal grouped query returned no entries for this deployment
+  in the inspected10minute window. Not a long-term monitoring guarantee.
+
+One extended smoke initially failed because Playwright check() expected immediate
+optimistic state on a server-saved switch. Replacing that assertion with one click
+and an awaited saved checked state passed; no application fix or hidden retry was
+needed. QA cleanup succeeded on the failed attempt too.
+
+### Infrastructure and Remaining Gates
+
+Foreground countdown is operational. Background Web Push is **not operational**:
+Supabase queue permissions cannot meet the credential-isolation gate; dispatch
+Cron and private control remain OFF, worker environment flagfalse, no VAPID/dispatch
+secret or subscription provisioned. The forward guard was physically executed and
+returned unsafe_transport_permissions,0 queued requests,0 timers. Owner declined
+Oracle access for now. No Oracle/WhatsApp bridge restart occurred. No OS delivery
+or real subscribed-client transport acceptance is claimed.
+
+Hourly bounded maintenance is scheduled; dispatch has0 executions/requests and
+therefore0 added dispatch HTTP/function invocations. The proposed enabled10second
+cadence would mean259200 DB checks per30days, not the current actual load. Database
+observed23.0MB/13 connections,0 failed Cron runs. Vercel billing endpoint returned
+404 costs_not_found for the Hobby team; a monthly usage/headroom claim is unavailable.
+No paid resources, uncontrolled worker loop, external alert destination or billing
+upgrade was enabled. Original6 low/moderate build-chain advisories remain documented;
+entry-size warning remains visible, not suppressed.
+
+Security advisors: intentional service-only subscription table adds one no-policy
+RLS INFO. Existing mutable-search-path/password-protection warnings remain, plus
+the intended authenticated cancellation RPC with auth.uid ownership and fixed
+search path. No new ERROR entry. Performance notices include legacy unindexed FKs,
+RLS initplan and duplicate Vault index; new unused-index INFO is expected at0 timers.
+No unrelated policies or legacy functions were changed to silence advisors.
+
+Still requires human/external acceptance:
+1. Real iPhone Safari and installed-PWA cold launch/dock/keyboard/background/update.
+2. Real controlled inbox password-reset delivery, redirect, password change and reuse.
+3. Secure background transport setup, then actual subscribed-client Web Push and
+   physical locked/backgrounded/killed iPhone receipt/replacement/OFF/end checks.
+4. Photo upload/edit against a real chosen image was validated locally, not changed
+   on a real production member profile in this smoke.
+
+Immediate notification kill remains workerflagfalse + scheduler controlfalse +
+inactive dispatchjob. For severe frontend regression, previous production deployment
+`dpl_EUX39ge3cUeaR8R3EuoyyhhhMjyE`/23a4b62 is the rollback candidate: move traffic
+back through Vercel, retain forward-compatible database changes, re-run read-only
+digests. Never reverse historical exercise identities speculatively. Encrypted
+backup/scoped restore evidence below remains the recovery anchor; protect DPAPI
+profile and arrange operator off-machine escrow. The stopped private local recovery
+cluster cleanup was tool-policy blocked and remains an explicit owner action.
+
+Rankings/plans, private reference images, screenshots, environment files and backup
+material remain outside the release commit. Earlier sections below are the dated
+execution log and must not be interpreted as current release state.
+
 ## Latest Verified State (2026-11-09 03:39 UTC)
 
 Backup/recovery and hosted CI gates PASSED. Four targeted migrations applied via

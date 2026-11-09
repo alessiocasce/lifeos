@@ -6,7 +6,7 @@ module.exports = { apps: [{
   cwd: path.resolve(__dirname, '../..'),
   script: 'scripts/workout-push-worker.js',
   interpreter: 'node',
-  node_args: '--env-file=/etc/lifeos/workout-push.env',
+  node_args: '--env-file=/etc/lifeos-workout-push/worker.env',
   instances: 1,
   exec_mode: 'fork',
   autorestart: true,
@@ -14,5 +14,5 @@ module.exports = { apps: [{
   kill_timeout: 50000,
   max_memory_restart: '128M',
   time: true,
-  env: { NODE_ENV: 'production' },
+  env: { NODE_ENV: 'production', LIFEOS_PUSH_POLL_MS: '10000', LIFEOS_PUSH_HEALTH_FILE: '/var/lib/lifeos-push/health.json' },
 }] };

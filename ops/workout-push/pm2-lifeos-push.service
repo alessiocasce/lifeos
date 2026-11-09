@@ -1,0 +1,29 @@
+[Unit]
+Description=LifeOS isolated notification worker supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=lifeos-push
+Group=lifeos-push
+WorkingDirectory=/opt/lifeos-workout-push/app
+Environment=PM2_HOME=/var/lib/lifeos-push/.pm2
+Environment=PATH=/opt/lifeos-workout-push/node/bin:/usr/bin:/bin
+PIDFile=/var/lib/lifeos-push/.pm2/pm2.pid
+ExecStart=/opt/lifeos-workout-push/node/bin/node /usr/lib/node_modules/pm2/bin/pm2 resurrect
+ExecReload=/opt/lifeos-workout-push/node/bin/node /usr/lib/node_modules/pm2/bin/pm2 reload lifeos-workout-push
+ExecStop=/opt/lifeos-workout-push/node/bin/node /usr/lib/node_modules/pm2/bin/pm2 kill
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/lifeos-push
+MemoryMax=256M
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

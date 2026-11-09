@@ -1,5 +1,42 @@
 # Training Rest Timer
 
+## Oracle Activation (2026-11-09)
+
+The owner selected the existing Oracle VM, superseding the Cron proposal below.
+The dedicated `lifeos-push` user, `/opt/lifeos-workout-push` runtime/app and private
+PM2 home `/var/lib/lifeos-push/.pm2` do not share the WhatsApp bridge supervisor.
+Node24.22.2 ARM64 archive is SHA256-verified. Worker name `lifeos-workout-push`;
+systemd unit `pm2-lifeos-push.service` resurrects its saved process list on reboot.
+Always run operator PM2 commands from the app directory, never ubuntu's private
+home, with the dedicated PM2_HOME/PATH and user. Never run default `pm2 kill/restart all`.
+
+Only origin/dispatch secret live in `/etc/lifeos-workout-push/worker.env` (root:
+lifeos-push0640, directory0750). VAPID private key and Supabase service-role key
+remain Vercel-only. Production key material has an encrypted CurrentUser-DPAPI
+operator recovery copy outside Git. No credential is added to Supabase Vault/pg_net.
+
+Ten-second non-overlapping polling is bounded at259200 calls per30days before
+request latency. Hobby includes1million invocations/4 active CPU hours; existing
+application/bridge use shares those allowances. These are ceilings, not a zero-cost
+or measured monthly-headroom guarantee. Inspect actual usage before growth; no
+paid resources were created. Current VM2 A1 OCPUs/12GB/45GB root fits the per-VM
+Always Free envelope, but aggregate tenancy billing needs Oracle account access.
+
+The worker writes a redacted atomic heartbeat, logs idle success every10minutes
+and failures at bounded frequency. `lifeos-push-health.timer` checks freshness and
+consecutive errors each minute; failures appear in the systemd journal with the
+action to inspect the worker/Vercel configuration. No external alert recipient is
+configured. Logrotate retains5 compressed rotations,1MB threshold/daily inspection.
+PM2 restarts crashes and caps worker memory128MB; its systemd group is capped256MB.
+
+Supabase dispatch Cron/private control stay OFF and its transport guard is intact.
+Do not enable it alongside Oracle. Immediate kill: `sudo systemctl stop
+pm2-lifeos-push.service`, then set Vercel WORKER_ENABLEDfalse and deploy that config
+if broader revocation is needed. Foreground deadlines remain independent.
+
+Activation and controlled delivery results are recorded in
+`docs/audits/LIFEOS_PRODUCTION_LAUNCH.md`; older disabled-state notes below are history.
+
 ## Production Transport Gate (2026-11-09)
 
 The four reviewed migrations are applied, with repository versions reconciled to

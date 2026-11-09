@@ -1,0 +1,12 @@
+[Unit]
+Description=Check LifeOS notification dispatch heartbeat
+After=pm2-lifeos-push.service
+
+[Service]
+Type=oneshot
+User=lifeos-push
+Group=lifeos-push
+ExecStart=/opt/lifeos-workout-push/node/bin/node /opt/lifeos-workout-push/app/ops/workout-push/healthcheck.mjs
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
