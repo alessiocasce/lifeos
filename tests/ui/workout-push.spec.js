@@ -12,6 +12,10 @@ test('reopening detects missing subscription and offers explicit reconnect witho
   await sheet.getByRole('button',{name:'Reconnect notifications',exact:true}).click();
   await expect(sheet.getByRole('switch',{name:'Background notifications',exact:true})).toBeChecked();
   await expect(sheet.getByRole('status')).toContainText('registered');
+  await page.evaluate(()=>{localStorage.setItem('qa-rest-read-fail','1');window.dispatchEvent(new Event('focus'));});
+  await expect(sheet.getByRole('switch',{name:'Background notifications',exact:true})).not.toBeChecked();
+  await expect(sheet.getByRole('status')).toContainText('could not be verified');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-rest:qa-user-a')).preference.notifications)).toBe(true);
 });
 
 test.beforeEach(async ({ page }) => {

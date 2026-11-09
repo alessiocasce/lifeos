@@ -21,7 +21,7 @@ export function WorkoutRestTimer({ session }) {
     const request = ++generation.current;
     if (!userId || !sessionId) return;
     try { const next = await workoutRestApi.read(sessionId); if (request === generation.current) { setData(next); setError(''); } }
-    catch (e) { if (request === generation.current) setError(e.message); }
+    catch (e) { if (request === generation.current) {setError(e.message);setData(previous=>previous?{...previous,device:previous.preference.notifications?{status:'unverified'}:previous.device}:previous);} }
   }, [userId, sessionId]);
   useEffect(() => {
     setData(null); setError(''); setOpen(false); setBusy(false); saving.current = false; refresh();
@@ -48,7 +48,7 @@ export function WorkoutRestTimer({ session }) {
       if (request === scope.current) { setData(previous => ({ ...previous, preference,
         device:patch.notifications===true?{status:'ready'}:patch.notifications===false?{status:'off'}:previous.device,
         timer: preference.enabled ? previous.timer : null })); }
-    } catch (e) { if (request === scope.current) setError(e.message); }
+    } catch (e) { if (request === scope.current) {setError(e.message);if(patch.notifications===true)setData(previous=>previous?{...previous,device:{status:'unverified'}}:previous);} }
     finally { if (request === scope.current) { saving.current = false; setBusy(false); } }
   };
   if (!session || session.ended_at) return null;
