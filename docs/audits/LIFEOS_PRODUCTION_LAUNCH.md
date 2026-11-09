@@ -11,6 +11,7 @@ the connected Supabase migration tool, without replaying historical gaps:
 | curl_catalog_identity | 20261109033551 |
 | settings_identity_defaults | 20261109033558 |
 | workout_push_cron | 20261109033605 |
+| workout_push_transport_guard | 20261109034356 |
 
 Source counts remain54 workouts,564 sets,7 templates,31 template exercises.
 All four protected digests match preflight. Curl references:18 canonical/0 retired
@@ -24,13 +25,18 @@ Private scheduler functions have fixed empty search paths and postgres-only gran
 supabase_admin-owned PUBLIC grants. Verified effective authenticated SELECT remains
 true. No dispatch/VAPID secret has been created or exposed. Production worker flag
 is explicitly false, dispatch Cron inactive, scheduler control disabled. A tested
-forward guard is being reviewed to prevent Vault access under unsafe permissions.
+forward guard is now applied and verified: calling the scheduler records
+`unsafe_transport_permissions`, keeps it disabled and enqueues zero HTTP requests.
 Oracle fallback access is unavailable (no configured host/key). Background Web Push
 must not be called operational until this is resolved. Foreground countdown is
 independent. No paid services or plan changes were made.
 
-Hosted run42556831193 onf59a732 succeeded. Production still serves the previous
-main commit pending final migration-ledger reconciliation and security-guard CI.
+Hosted run42557692854 ond23c899 succeeded, including the new regression that
+reproduced and then prevented credential use through a PUBLIC-readable queue.
+Production still serves the previous main commit pending final ledger sealing.
+Transaction-scoped production timer smoke passed OFF/scheduling/expiry/idempotency,
+replacement/disable/end/historical-no-arm checks. All temporary rows rolled back.
+No actual transport delivery is claimed; HTTP and OS delivery remain untested.
 Earlier attempt sections below are historical evidence, not current gate status.
 
 ## Current Attempt: 2026-11-09
