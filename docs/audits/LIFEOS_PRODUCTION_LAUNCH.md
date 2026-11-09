@@ -44,6 +44,22 @@ No merge or production promotion is permitted while the backup gate is unresolve
 Private reference images, local screenshots, environment files, backups, temporary
 test results and existing Rankings plans are excluded from the release commit.
 
+- Implementation commit: `b8302fc88bf7bc061fb43299fff96b8efe48122f`, pushed to
+  the feature branch. Draft PR: https://github.com/alessiocasce/lifeos/pull/2 .
+- Initial hosted run42553569740 passed deterministic DB/contracts and existing
+  backend safety gates, then failed because ubuntu-latest moved to26.04, unsupported
+  by pinned Playwright1.58.2. Runner is corrected to supported ubuntu-24.04; no
+  dependency major upgrade or skipped browser checks.
+- Automatic **preview only** deployment `dpl_EihL4DTxRLfw7uVqCRS4gHDwFZs5` is READY
+  for b8302fc: https://lifeos-3iwtxoh62-lifeos2.vercel.app . It is not production.
+- Production remains READY on `23a4b6256c9b86b8f8cf64bc458fc3f0429623ac`, deployment
+  `dpl_EUX39ge3cUeaR8R3EuoyyhhhMjyE`; the existing production alias is unchanged.
+- Fresh read-only preflight still reports54 workouts/564 sets/7 templates/31 template
+  exercises,9 retired curl sets and3 snapshots,0 username collisions. Protected
+  digests match the prior review. No new migrations are recorded or push tables present.
+- Vercel environment inventory contains no LIFEOS_PUSH_* keys. No secret values
+  were read/printed. No production notification capability is enabled.
+
 ## Evidence and Acceptance
 
 Local release baseline:40 Chromium /8 WebKit /13 helper cases plus database,

@@ -25,7 +25,8 @@ concurrency:
 
 jobs:
   targeted-quality:
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports Ubuntu 24.04, not ubuntu-latest's new 26.04 image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
