@@ -18,7 +18,7 @@
     "test:bridge": "node scripts/test-whatsapp-bridge-contract.js",
     "test:workout": "node scripts/test-workout-render.js && node scripts/test-workout-continuity.js",
     "test:workout:rest": "node scripts/test-workout-rest.js",
-    "test:workout:push": "node scripts/test-workout-push.js && node scripts/test-workout-push-db.js && node scripts/test-workout-push-api.js && node scripts/test-workout-push-sw.js && node scripts/test-workout-push-worker.js",
+    "test:workout:push": "node scripts/test-workout-push.js && node scripts/test-workout-push-db.js && node scripts/test-workout-push-api.js && node scripts/test-workout-push-sw.js && node scripts/test-workout-push-worker.js && node scripts/test-workout-push-lifecycle.js",
     "worker:workout-push": "node scripts/workout-push-worker.js",
     "test:social-training": "node scripts/test-social-training.js",
     "test:community": "node scripts/test-second-training-cohort.js && node scripts/test-community.js",

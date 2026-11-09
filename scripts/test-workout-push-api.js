@@ -59,11 +59,21 @@ assert.equal((await verifyWorkoutPush(token, client)).current, false);
 tables.workouts[0].ended_at = null;
 Object.assign(process.env, { LIFEOS_PUSH_PUBLIC_KEY: 'fixture', LIFEOS_PUSH_PRIVATE_KEY: 'fixture', LIFEOS_PUSH_SUBJECT: 'mailto:qa@example.test', LIFEOS_PUSH_WORKER_ENABLED: 'true' });
 let sent = 0;
-assert.deepEqual(await dispatchWorkoutPush({ client, send: async () => { sent++; } }), { claimed: 1, accepted: 1, failed: 0 });
+assert.deepEqual(await dispatchWorkoutPush({ client, send: async (_subscription,payload,options) => {
+  const message=JSON.parse(payload);assert.equal(message.web_push,8030);assert.equal(message.notification.mutable,false);
+  assert.equal(message.notification.navigate,'https://lifeos-ruby-gamma.vercel.app/workout');
+  assert.ok(options.TTL<=60);assert.equal(options.topic,'lifeos-workout-rest');sent++;return{statusCode:201};
+} }), { claimed: 1, accepted: 1, failed: 0 });
 assert.equal(sent, 1); assert.equal(tables.workout_rest_timers[0].state, 'sent');
 tables.workout_rest_timers[0].state = 'cancelled';
 await dispatchWorkoutPush({ client, send: async () => { sent++; } });
 assert.equal(sent, 1);
+tables.workout_rest_timers[0].state='claimed';
+const originalFrom=client.from;
+client.from=name=>{if(name==='user_preferences')tables.workout_rest_timers[0].state='cancelled';return originalFrom(name);};
+assert.deepEqual(await dispatchWorkoutPush({client,send:async()=>{sent++;}}),{claimed:1,accepted:0,failed:0});
+assert.equal(sent,1,'replacement/cancellation after claim but before per-device send must prevent dispatch');
+client.from=originalFrom;
 const vapid = generateVAPIDKeys(), receiver = createECDH('prime256v1'); receiver.generateKeys();
 const encrypted = generateRequestDetails({ endpoint: 'https://fcm.googleapis.com/fixture', keys: {
   p256dh: receiver.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url'),
@@ -86,6 +96,8 @@ const valid={endpoint:'https://fcm.googleapis.com/qa',keys:{auth:'A'.repeat(22),
 await manageWorkoutPush({userId:'A',body:{operation:'subscribe',subscription:valid,userId:'B'},client:registry});
 await manageWorkoutPush({userId:'A',body:{operation:'subscribe',subscription:valid},client:registry});
 assert.equal(ledger.length,1);assert.equal(ledger[0].user_id,'A');
+assert.equal((await manageWorkoutPush({userId:'A',body:{operation:'device_status',endpoint:valid.endpoint},client:registry})).registered,true);
+assert.equal((await manageWorkoutPush({userId:'B',body:{operation:'device_status',endpoint:valid.endpoint},client:registry})).registered,false,'device status must not expose another account registration');
 await assert.rejects(manageWorkoutPush({userId:'B',body:{operation:'subscribe',subscription:valid},client:registry}),/previous account/);
 await assert.rejects(manageWorkoutPush({userId:'A',body:{operation:'subscribe',subscription:{...valid,endpoint:'https://evil.test/'}},client:registry}),/subscription/i);
 await manageWorkoutPush({userId:'B',body:{operation:'unsubscribe',endpoint:valid.endpoint},client:registry});assert.equal(ledger.length,1);

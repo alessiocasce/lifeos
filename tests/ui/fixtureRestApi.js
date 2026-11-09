@@ -3,13 +3,13 @@ const key = () => `qa-rest:${account().id}`;
 const read = () => JSON.parse(localStorage.getItem(key()) || '{"preference":{"enabled":false,"seconds":120,"notifications":false},"timer":null}');
 const write = value => localStorage.setItem(key(), JSON.stringify(value));
 export const workoutRestApi = {
-  async read(workoutId) { const value = read(); return { ...value, timer: value.timer?.workout_id === workoutId ? value.timer : null }; },
+  async read(workoutId) { if(localStorage.getItem('qa-rest-read-fail'))throw new Error('Training timer is unavailable. Your workout is still saved.');const value = read(); return { ...value, device:{status:value.preference.notifications?(localStorage.getItem('qa-push-device')||'ready'):'off'}, timer: value.timer?.workout_id === workoutId ? value.timer : null }; },
   async save(preference) {
     if (localStorage.getItem('qa-rest-fail')) throw new Error('Training timer is unavailable. Your workout is still saved.');
     const value = read(); value.preference = preference; if (!preference.enabled) value.timer = null; write(value); return preference;
   },
   async cancel() { const value = read(); value.timer = null; write(value); },
-  async enableNotifications() { if (localStorage.getItem('qa-push-fail')) throw new Error('Notification permission was not granted.'); },
+  async enableNotifications() { if (localStorage.getItem('qa-push-fail')) throw new Error('Notification permission was not granted.'); localStorage.setItem('qa-push-device','ready'); },
   async detachDevice() {},
   async detachLocalDevice() {},
 };

@@ -1,4 +1,12 @@
 {
+  "This device is registered for notifications.": "Questo dispositivo è registrato per le notifiche.",
+  "Checking this device...": "Verifica del dispositivo...",
+  "Notifications need reconnecting on this device.": "Ricollega le notifiche su questo dispositivo.",
+  "Notifications are blocked. Allow LifeOS notifications in device settings, then reconnect.": "Le notifiche sono bloccate. Consenti le notifiche di LifeOS nelle impostazioni del dispositivo, poi ricollegale.",
+  "Device connection could not be verified. Reconnect when online.": "Impossibile verificare il dispositivo. Ricollega le notifiche quando sei online.",
+  "Reconnect notifications": "Ricollega notifiche",
+  "Turn off notifications": "Disattiva notifiche",
+  "Device subscription could not be renewed. Reopen LifeOS and retry.": "Impossibile rinnovare le notifiche del dispositivo. Riapri LifeOS e riprova.",
   "Companion is thinking...": "Companion sta pensando...",
   "Delete event?": "Eliminare evento?",
   "Delete event": "Elimina evento",

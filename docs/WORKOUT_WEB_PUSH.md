@@ -1,5 +1,66 @@
 # Training Rest Timer
 
+## iPhone Reliability Correction (2026-11-09)
+
+The former service worker fetched `training_push_verify` before displaying each
+push and silently returned on network failure, false/late verification or malformed
+data. That violates WebKit's userVisibleOnly contract and can revoke subscriptions.
+The owner reported two receipts then loss after swiping the PWA away. Oracle remained
+healthy and provider acceptance continued; APNs revocation of that particular device
+is plausible, not proven by available server evidence.
+
+The sender now uses WebKit's shipped Declarative Web Push envelope: web_push8030,
+immutable notification, localized generic text and same-origin navigate URL.
+Supported iOS18.4+/Safari18.5+ can display it without worker JavaScript. Older
+browsers use the installed worker fallback, which ALWAYS displays a visible generic
+notification without fetching or waiting for verification. Legacy payload fields
+remain during the guarded PWA update transition; old clients must apply the update
+normally, never by clearing drafts/storage or forcing activation during a workout.
+
+Cancellation/replacement/permission/expiry are checked on the server immediately
+before each provider send. The DB still serializes pending timers and cancels them
+on new saves/OFF/end. A provider-accepted in-flight push cannot be reliably recalled.
+Do not promise cancellation after dispatch: native/legacy receivers must display it
+to fulfil userVisibleOnly. Provider TTL is capped60seconds and one stable Topic/tag
+collapses pending replacements where supported. Late legacy arrivals show neutral
+Open Training copy instead of being silently dropped. No exactly-once OS guarantee.
+
+On Training mount, foreground/resume/online and subscription-change events, the
+device permission, actual subscription, expiry/key and owner-scoped server registration
+are checked. A missing/blocked/revoked/unverified device no longer shows a connected
+ON switch merely because the global preference is ON. Reconnect is an explicit user
+gesture that removes the old local registration and obtains/registers a fresh one.
+It is also available for an apparently registered device after a missed alert.
+Offline inspection never silently disables another device's global opt-in. A separate
+Turn off notifications action remains available when this device needs reconnecting.
+
+Provider outcomes are logged only as aggregate HTTP status counts, accepted/failed/
+skipped totals. Never log endpoint URLs, delivery tokens or raw provider responses.
+`sent` is provider acceptance, NOT proof of device display; cancelled rows may have
+previously been sent and later revoked by a subsequent set. Oracle is unchanged;
+Supabase pg_net stays disabled. No migrations/schema rerun required.
+
+References: [WebKit visible-push revocation and declarative format](https://webkit.org/blog/16535/meet-declarative-web-push/),
+[Apple platform availability](https://developer.apple.com/videos/play/wwdc2025/235/).
+
+### Owner Acceptance After This Update
+
+Save/finish outstanding work, apply the offered LifeOS update, reopen the installed
+Home Screen app, then use Timer recupero > Ricollega notifiche. If iOS permission is
+blocked, enable LifeOS in device notification settings first. Use60second timers,
+allow the10second worker interval plus network/OS latency, and do not log another
+set until each expected alert has been checked:
+1. Receive three consecutive alerts (foreground/background/locked).
+2. Save another genuine set, swipe the PWA away, lock and check receipt.
+3. After a miss, reopen; check device status and explicitly reconnect, then retest.
+4. Save a replacement before the original deadline; expect only the latest pending
+   timer. Separately cancel/turn OFF/end at least20seconds before the due time.
+An alert already handed to the provider may still arrive; report timestamps/app
+state rather than interpreting provider200/201 as iPhone receipt.
+
+Physical iPhone acceptance is pending owner confirmation. These rules supersede
+the earlier verify-before-display behavior described in historical launch notes.
+
 ## Oracle Activation (2026-11-09)
 
 The owner selected the existing Oracle VM, superseding the Cron proposal below.
@@ -141,7 +202,7 @@ supervision and monitor failures before calling delivery operational.
 - A successful live set INSERT schedules from server statement time. Working and
   warmup sets behave identically. Failed saves and historical edits never arm it.
 - A new saved set replaces pending reminders. OFF/end/delete/cancel invalidates
-  old delivery tokens, even if a push was accepted but not yet displayed.
+  queued delivery and old tokens; a provider-accepted in-flight push may still display.
 - Notification OFF revokes pending delivery, not the visual deadline. Re-enabling
   notifications applies to future sets, not an old revoked reminder.
 - Notification enablement requires a direct permission gesture. A platform permission
@@ -153,9 +214,9 @@ supervision and monitor failures before calling delivery operational.
   A five-minute grace period prevents very stale reminders. Ambiguous network sends
   are not retried automatically; this favors avoiding duplicate alerts over guaranteed
   delivery. Provider acceptance is not proof of OS display or physical receipt.
-- The service worker checks expiry and server cancellation before showing a generic,
-  localized alert with no workout details. Invalid/unverifiable notifications fail
-  closed. Network/power policies and the small verify-to-display race remain limits.
+- Server revalidation precedes send. Declarative/native or legacy worker display is
+  visible and network-independent, with no workout details. Provider TTL60seconds
+  and stable Topic/tag limit, but cannot eliminate, post-dispatch cancellation races.
 - Clicking the notification opens Training, never an external URL. Existing PWA update
   deferral remains in force; imported push handling does not force worker activation.
 
