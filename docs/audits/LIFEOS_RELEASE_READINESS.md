@@ -1,5 +1,15 @@
 # LifeOS Release Readiness
 
+## Production Update (2026-11-09)
+
+Encrypted backup/scoped isolated restore passed; hosted CI onf59a732 passed.
+Four targeted migrations applied and protected source digests/counts preserved.
+Checked-in migration versions now match production-assigned ledger entries.
+Background notifications remain gated OFF: hosted pg_net queue privileges cannot
+be restricted by postgres. A forward fail-closed transport guard is required;
+no dispatch or VAPID secret was provisioned. This is an operational limitation,
+not a successful background-delivery test. See LIFEOS_PRODUCTION_LAUNCH.md.
+
 ## Verdict
 
 ### Authorized launch attempt (2026-11-09)
@@ -17,7 +27,7 @@ Feature branch and PR2 now exist. Hosted CI passed on3503f30 (45 Chromium,
 **BLOCKED** solely at the mandatory unverified backup/restore gate; main has not
 been merged, no migrations applied and background notifications remain gated.
 The selected scheduler is now Supabase Cron, with a fourth disabled-by-default
-forward migration `20261109024936_workout_push_cron.sql`. Oracle is fallback only.
+forward migration `20261109033605_workout_push_cron.sql`. Oracle is fallback only.
 No scheduler or production migration may be enabled before backup verification.
 
 **READY FOR RELEASE APPROVAL** for the reviewed local implementation. This is NOT
@@ -102,9 +112,9 @@ These are actual local results, not an assertion of a production post-migration 
 
 ## Exact Pending Migration Sequence
 
-1. `20261108120000_workout_web_push.sql`
-2. `20261108121000_curl_catalog_identity.sql`
-3. `20261108220000_settings_identity_defaults.sql`
+1. `20261109033543_workout_web_push.sql`
+2. `20261109033551_curl_catalog_identity.sql`
+3. `20261109033558_settings_identity_defaults.sql`
 
 The exact sequence was rehearsed on a production-compatible isolated schema,
 including all applied identity/media/history prerequisites. It preserves existing

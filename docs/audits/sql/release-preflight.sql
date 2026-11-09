@@ -31,7 +31,7 @@ projection_counts as (
     count(distinct source_workout_id) filter(where e->>'exercise_id'='860c2371-8592-5ad9-aa43-805984020e52' or (e->>'exercise_id' is null and public.normalize_exercise_alias(e->>'exercise') in(select value from curl_names))) affected_shares from projections)
 select jsonb_build_object(
   'database',current_database(),'server_version',current_setting('server_version'),
-  'pending_migrations_already_recorded',(select coalesce(jsonb_agg(version),'[]') from supabase_migrations.schema_migrations where version in('20261108120000','20261108121000','20261108220000')),
+  'pending_migrations_already_recorded',(select coalesce(jsonb_agg(version),'[]') from supabase_migrations.schema_migrations where version in('20261109033543','20261109033551','20261109033558')),
   'latest_migration',(select max(version) from supabase_migrations.schema_migrations),
   'sets',(select to_jsonb(s) from set_counts s),'template_exercises',(select to_jsonb(t) from template_counts t),
   'snapshots',(select to_jsonb(s) from snapshot_counts s),'community',(select to_jsonb(p) from projection_counts p),

@@ -1,11 +1,31 @@
-# Training Rest Timer (Local Implementation)
+# Training Rest Timer
+
+## Production Transport Gate (2026-11-09)
+
+The four reviewed migrations are applied, with repository versions reconciled to
+the production ledger: 20261109033543, 20261109033551, 20261109033558 and
+20261109033605. Foreground deadlines are available independently of Web Push.
+Background delivery is NOT operational: production has
+`LIFEOS_PUSH_WORKER_ENABLED=false`; no VAPID or dispatch credential was provisioned.
+
+Hosted pg_net grants PUBLIC access to its queue, owned by supabase_admin.
+The attempted postgres REVOKE does not remove that grant. The new forward
+`workout_push_transport_guard` migration fails closed before accessing Vault if
+client roles can read the queue. Cron stays inactive and the private control OFF.
+Do not bypass this gate or provision a bearer secret into the unsafe transport.
+See [Supabase's managed-grant limitation](https://supabase.com/kb/troubleshooting/revoking-access-to-pg_net-objects-has-no-effect-0bbc16).
+No Oracle login key/host configuration is available in this workspace. Secure
+transport or a verified accessible Oracle fallback is required before enabling.
+
+The following selection/review notes describe the earlier proposal, not an
+assertion that managed queue privileges were successfully restricted.
 
 ## Launch selection update (2026-11-09)
 
 The owner selected Supabase Cron instead of the Oracle polling default below.
 Production is Free / PG17.6; pg_cron1.6.4 and pg_net0.20.0 are available but not
 installed, and Vault0.3.1 is already installed. Prepare/apply only after the backup
-and hosted CI gates: `20261109024936_workout_push_cron.sql`, after the other three
+and hosted CI gates: `20261109033605_workout_push_cron.sql`, after the other three
 release migrations. It starts with the dispatch job and private enabled control
 both OFF. No Oracle worker should run alongside Cron.
 
@@ -19,9 +39,10 @@ This is an estimate, not measured production usage. No paid plan change is made.
 
 Store only the existing dispatch secret in Vault under
 `lifeos_workout_push_dispatch`; VAPID private material remains Vercel server-only.
-The job command includes no secret; the postgres-only function reads Vault when
-due work exists. Client roles cannot read pg_net request/response tables or the
-private control. Only the fixed production endpoint is used.
+The job command includes no secret. The private control is inaccessible to client
+roles, but the hosted pg_net queue is NOT similarly restricted. The transport
+guard therefore prevents Vault access and dispatch on this production project.
+Only the fixed production endpoint is supported.
 
 After secure credential provisioning and endpoint deployment, an operator enables
 the private control and Cron job together. Confirm current successful job runs,
@@ -47,12 +68,12 @@ Nothing in this document has been enabled in production by this task.
 
 Three unapplied forward migrations accompany the modernization:
 
-1. `20261108120000_workout_web_push.sql`: user-scoped preferences, subscriptions,
+1. `20261109033543_workout_web_push.sql`: user-scoped preferences, subscriptions,
    server deadlines, fail-open set trigger, cancellation and worker claims.
-2. `20261108121000_curl_catalog_identity.sql`: owner-confirmed curl reconciliation
+2. `20261109033551_curl_catalog_identity.sql`: owner-confirmed curl reconciliation
    to the existing EZ UUID, including saved sources/snapshots and sanitized Community
    projections. The old picker identity remains inactive, not deleted.
-3. `20261108220000_settings_identity_defaults.sql`: lowercase username normalization,
+3. `20261109033558_settings_identity_defaults.sql`: lowercase username normalization,
    collision abort and Italian preference defaults while preserving explicit choices.
 
 Approval and targeted migration application are required before deployment. Do not

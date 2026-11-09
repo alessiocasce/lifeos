@@ -23,7 +23,7 @@ try {
     }
   }
   const shares=(await db.query('select id,source_workout_id from community_workout_shares order by id')).rows;
-  const migration=fs.readFileSync('supabase/migrations/20261108121000_curl_catalog_identity.sql','utf8');
+  const migration=fs.readFileSync('supabase/migrations/20261109033551_curl_catalog_identity.sql','utf8');
   await db.exec(`begin;${migration}commit;`);
   for(const [table,rows] of Object.entries(sources)) for(const before of rows) {
     const after=(await db.query(`select * from ${table} where id=$1`,[before.id])).rows[0];

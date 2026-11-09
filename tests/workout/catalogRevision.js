@@ -5,7 +5,7 @@ import { ownerExerciseMappings } from '../../src/data/exerciseCatalogRevision.js
 
 export async function testCatalogRevision(db) {
   await db.exec('reset role');
-  const correction = fs.readFileSync('supabase/migrations/20261108121000_curl_catalog_identity.sql','utf8');
+  const correction = fs.readFileSync('supabase/migrations/20261109033551_curl_catalog_identity.sql','utf8');
   const historicalBefore = (await db.query('select to_jsonb(s) row from workout_sets s order by id')).rows;
   await db.exec(correction);
   assert.deepEqual((await db.query('select to_jsonb(s) row from workout_sets s order by id')).rows,historicalBefore);

@@ -44,6 +44,15 @@ try {
   const health=(await db.query('select enabled,consecutive_failures,last_error from lifeos_private.workout_push_scheduler')).rows[0];
   assert.equal(health.enabled,false);assert.equal(health.consecutive_failures,3);
   assert.equal((await db.query("select command from cron.job where jobname='lifeos-workout-push'")).rows[0].command.includes('qqqq'),false);
+  const guardFile=fs.readdirSync('supabase/migrations').find(n=>n.endsWith('_workout_push_transport_guard.sql'));
+  await db.exec(fs.readFileSync('supabase/migrations/'+guardFile,'utf8'));
+  await db.exec('grant select on net.http_request_queue to public;update lifeos_private.workout_push_scheduler set enabled=true,pending_request_id=null;');
+  const callsBefore=(await db.query('select count(*)::int n from net.calls')).rows[0].n;
+  await db.exec('select lifeos_private.dispatch_due_workout_push()');
+  const unsafe=(await db.query('select enabled,last_error from lifeos_private.workout_push_scheduler')).rows[0];
+  assert.equal(unsafe.enabled,false,'managed queue permissions must fail closed before reading Vault');
+  assert.equal(unsafe.last_error,'unsafe_transport_permissions');
+  assert.equal((await db.query('select count(*)::int n from net.calls')).rows[0].n,callsBefore,'unsafe transport never receives a credential');
   await db.exec('set role authenticated');
   await assert.rejects(db.query('select * from lifeos_private.workout_push_scheduler'),/permission denied/);
   await assert.rejects(db.query('select lifeos_private.dispatch_due_workout_push()'),/permission denied/);

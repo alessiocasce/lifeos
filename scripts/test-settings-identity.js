@@ -8,7 +8,7 @@ const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const C = '33333333-3333-4333-8333-333333333333';
 const D = '44444444-4444-4444-8444-444444444444';
-const migration = 'supabase/migrations/20261108220000_settings_identity_defaults.sql';
+const migration = 'supabase/migrations/20261109033558_settings_identity_defaults.sql';
 const db = await createProfileUpgradeDatabase();
 try {
   for (const suffix of ['training_profile_upgrade', 'username_only_cleanup', 'training_active_identity_media']) await applyCommunityMigration(db, suffix);

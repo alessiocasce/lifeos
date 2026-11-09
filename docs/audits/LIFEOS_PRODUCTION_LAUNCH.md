@@ -1,5 +1,38 @@
 # LifeOS Production Launch
 
+## Latest Verified State (2026-11-09 03:39 UTC)
+
+Backup/recovery and hosted CI gates PASSED. Four targeted migrations applied via
+the connected Supabase migration tool, without replaying historical gaps:
+
+| Migration | Production-assigned version |
+| --- | --- |
+| workout_web_push | 20261109033543 |
+| curl_catalog_identity | 20261109033551 |
+| settings_identity_defaults | 20261109033558 |
+| workout_push_cron | 20261109033605 |
+
+Source counts remain54 workouts,564 sets,7 templates,31 template exercises.
+All four protected digests match preflight. Curl references:18 canonical/0 retired
+sets,5 canonical/0 retired snapshots,18 canonical/0 retired Community sets.
+Username normalization completed with0 collisions; existing3 English/3 Italian
+preferences and all notes-private settings are unchanged. New push tables have
+RLS, zero historical timers; service-only subscription reads have no client policy.
+Private scheduler functions have fixed empty search paths and postgres-only grants.
+
+**Notification security gate:** managed pg_net ignores postgres REVOKE of
+supabase_admin-owned PUBLIC grants. Verified effective authenticated SELECT remains
+true. No dispatch/VAPID secret has been created or exposed. Production worker flag
+is explicitly false, dispatch Cron inactive, scheduler control disabled. A tested
+forward guard is being reviewed to prevent Vault access under unsafe permissions.
+Oracle fallback access is unavailable (no configured host/key). Background Web Push
+must not be called operational until this is resolved. Foreground countdown is
+independent. No paid services or plan changes were made.
+
+Hosted run42556831193 onf59a732 succeeded. Production still serves the previous
+main commit pending final migration-ledger reconciliation and security-guard CI.
+Earlier attempt sections below are historical evidence, not current gate status.
+
 ## Current Attempt: 2026-11-09
 
 **LIFEOS - LAUNCH BLOCKED: production backup/isolated restore not verified.**
@@ -34,7 +67,7 @@ Owner-authorized execution on `codex/lifeos-ui-modernization`, production branch
 
 Preferred and prepared: Supabase Cron,10second due-only check, pg_net POST to the
 existing authenticated dispatch endpoint, Vault-held dispatch credential. Fourth
-forward migration `20261109024936_workout_push_cron.sql` is local/unapplied.
+forward migration `20261109033605_workout_push_cron.sql` is local/unapplied.
 Job and private control start disabled. No Oracle process was started.
 
 Estimated259200 DB checks/month, zero idle HTTP/function calls, plus actual due
