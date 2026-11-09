@@ -1,8 +1,18 @@
 # LifeOS Project Context
 
-## Local modernization review (2026-11-08, not deployed)
+## Production modernization (2026-11-09)
 
-The uncommitted `codex/lifeos-ui-modernization` branch adds Settings/profile polish,
+Merged PR2, production SHA87acd1ead077ce73ad4e35af96030bc826787242, Vercel READY.
+Five targeted forward migrations applied with verified backup/isolated restore;
+54 workouts/564 sets and protected data preserved. Foreground timer works; background
+Web Push is gated OFF because hosted pg_net queue permissions cannot isolate a
+dispatch credential. Guard fails closed, no VAPID/dispatch secret provisioned.
+Owner deferred Oracle access. Physical iPhone/PWA/email acceptance remains pending.
+See `docs/audits/LIFEOS_PRODUCTION_LAUNCH.md` for exact ledger and live QA evidence.
+
+### Original modernization scope
+
+The merged `codex/lifeos-ui-modernization` branch adds Settings/profile polish,
 Italian defaults with explicit English retained, lowercase username normalization,
 independent autosaved preferences, and password recovery. Training has direct warmup
 control (OFF after successful save), convention-aware load labels, completion
@@ -10,14 +20,14 @@ acknowledgment/template creation, and server-filtered All/Week/Template History.
 Filtered older sessions are retained in the mutation cache without changing the
 active workout. The owner's confirmed Barbell Curl history uses the existing EZ
 UUID exclusively; the retired picker UUID stays as an inactive catalog definition.
-The pending reconciliation preserves performance text/fields (224 total, 79 active).
+The reconciliation preserves performance text/fields (224 total, 79 active).
 
 The new PWA-only rest timer uses server deadlines, private subscriptions and a
-separate Web Push worker. It does not revive WhatsApp/outbox timers. Three forward
-migrations are prepared but **not applied**; VAPID/worker configuration and physical
-device delivery acceptance are pending. Do not deploy the branch before explicit
-approval and targeted database review. No schema rerun required; never broad-replay
-migrations. See `docs/WORKOUT_WEB_PUSH.md` for exact pending files and requirements.
+separate Web Push worker. It does not revive WhatsApp/outbox timers. The three
+feature migrations plus disabled Cron/transport guard are applied; VAPID/worker
+configuration and physical delivery acceptance remain blocked/pending as above.
+No schema rerun required; never broad-replay migrations. See
+`docs/WORKOUT_WEB_PUSH.md` for the secure transport gate and requirements.
 
 More/Community navigation uses account-scoped memory caching, preserving search,
 pages and scroll while revalidating privacy. Shared confirmations, lazy-workspace
@@ -25,8 +35,8 @@ recovery and the existing PWA guarded activation are retained/improved. Dead dem
 state, mock finance actions, unused decorative chart helpers and `recharts` are
 removed; `tabRoutes` owns route identities directly. Rankings plans remain untouched.
 
-This local section supersedes older rest-timer-absence/catalog-count/UI descriptions
-below, which document past releases rather than the uncommitted branch. Evidence:
+This production section supersedes older rest-timer-absence/catalog-count/UI descriptions
+below, which document past releases rather than this modernization. Evidence:
 `docs/audits/LIFEOS_UI_UX_MODERNIZATION.md`.
 
 ## Unified Training editing and completion - approved release (2026-11-03)
