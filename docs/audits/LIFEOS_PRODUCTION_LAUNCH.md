@@ -3,6 +3,9 @@
 ## Current Attempt: 2026-11-09
 
 **LIFEOS - LAUNCH BLOCKED: production backup/isolated restore not verified.**
+Superseded at2026-11-09 03:28UTC: the owner supplied the connection and native
+encrypted backup/scoped restore verification PASSED. Release execution resumes;
+the earlier blocked status below is retained as history, not the current gate.
 Status recorded at2026-11-09 03:02UTC (04:02Europe/Rome). No new production
 deployment occurred; there is no release/deployment timestamp for the new version.
 
@@ -127,6 +130,32 @@ recovery, production UI acceptance and a live deployment timestamp are pending.
 There is no new production deployment date/time to report at this stage.
 
 ## Recovery Requirement
+
+### Verified recovery evidence (2026-11-09)
+
+- Full PostgreSQL custom archive obtained with pg_dump18 from PG17.6 using an
+  exported repeatable-read read-only snapshot. Source verification uses that same
+  snapshot; no production data write is involved.
+- Stored archive:1,219,059 encrypted bytes, AES-256-GCM. Key protected with Windows
+  CurrentUser DPAPI; directory ACL restricts access to the current account. Archive,
+  key and evidence are outside Git in the owner's `.codex/private` recovery folder.
+- Recovery used the stored encrypted file and stored protected key, not the original
+  memory buffers. Decrypted archive checksum matched before native pg_restore.
+- Isolated native PostgreSQL18 restore passed with exit-on-error for the10 affected/
+  auth tables, their native definitions, primary/foreign constraints and indexes.
+  All full-row ordered digests and counts matched: auth users6, workouts54, sets564,
+  templates7, template exercises31, profiles6, preferences6, catalog224, aliases488,
+  Community shares53. Orphan set/template/share ownership-reference counts are0.
+- The isolated server is stopped. The archive temporary plaintext file was removed.
+  Automatic removal of the stopped private test cluster was rejected by the tool's
+  filesystem policy; that ACL-protected cluster remains for owner cleanup. No
+  workaround or deletion of other PostgreSQL data was attempted.
+- Scope limitation: this verifies affected application/auth data restoration,
+  not a complete local Supabase extension stack or Storage-blob restoration.
+  The archive itself is a full logical database dump. Keep Windows DPAPI recovery
+  material/profile available; portable/offsite key escrow remains an operator task.
+- Operator source utilities contain no credentials or backup rows. Password stays
+  in the native child environment; it is not passed on the command line or printed.
 
 Use the supported Supabase dump/restore or PostgreSQL tooling with a consistent
 snapshot, encrypt the recovery copy outside Git, and restore it to an isolated

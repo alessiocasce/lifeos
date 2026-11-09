@@ -4,6 +4,10 @@
 
 ### Authorized launch attempt (2026-11-09)
 
+Backup gate subsequently PASSED: encrypted full pg_dump archive and native isolated
+restore of10 affected/auth tables have matching full-row digests/counts and zero
+orphan ownership references. See the launch report's scoped recovery evidence.
+
 The owner has now authorized release execution, conditional on backup/restore,
 hosted CI and integrity gates. The prior local-review restrictions below describe
 the earlier review, not the new authorization. Current evidence and blockers are
