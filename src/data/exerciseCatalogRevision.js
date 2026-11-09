@@ -19,7 +19,7 @@ export const exerciseOverrides = {
   lat_pulldown: { name_en: 'Lat Machine', name_it: 'Lat Machine' },
   barbell_overhead_press: { name_en: 'Military Press', name_it: 'Military Press' },
   seated_dumbbell_press: { name_en: 'Dumbbell Military Press', name_it: 'Military Press con manubri' },
-  ez_bar_curl: { name_en: 'Barbell Curl', name_it: 'Curl con bilanciere' },
+  ez_bar_curl: { name_en: 'Barbell Curl', name_it: 'Curl con bilanciere EZ' },
   ez_preacher_curl: { name_en: 'Preacher Curl', name_it: 'Curl panca Scott' },
   ez_skull_crusher: { name_en: 'Barbell Skull Crusher' },
   one_arm_dumbbell_overhead_extension: { name_en: 'Single Dumbbell Overhead Triceps' },

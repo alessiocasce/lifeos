@@ -2,6 +2,36 @@ const VERSION = 1;
 const MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const PREFIX = 'lifeos:training:v1:';
 
+export function acknowledgeWorkoutCompletion(userId, sessionId, { storage } = {}) {
+  if (!userId || !sessionId) return false;
+  try {
+    const target = storageOrNull(storage);
+    if (!target) return false;
+    target.setItem(keyFor(userId, `completed:${encodeURIComponent(sessionId)}`), '1');
+    return true;
+  } catch { return false; }
+}
+
+export function isWorkoutCompletionAcknowledged(userId, sessionId, { storage } = {}) {
+  if (!userId || !sessionId) return false;
+  try { return storageOrNull(storage)?.getItem(keyFor(userId, `completed:${encodeURIComponent(sessionId)}`)) === '1'; }
+  catch { return false; }
+}
+
+export function readCompletionTemplate(userId, sessionId, { storage } = {}) {
+  if (!userId || !sessionId) return null;
+  try {
+    const value = JSON.parse(storageOrNull(storage)?.getItem(keyFor(userId, `template:${encodeURIComponent(sessionId)}`)) || 'null');
+    return value?.version === 1 && typeof value.id === 'string' && Array.isArray(value.saved) ? value : null;
+  } catch { return null; }
+}
+
+export function writeCompletionTemplate(userId, sessionId, value, { storage } = {}) {
+  if (!userId || !sessionId) return;
+  try { storageOrNull(storage)?.setItem(keyFor(userId, `template:${encodeURIComponent(sessionId)}`), JSON.stringify({ ...value, version: 1 })); }
+  catch { /* In-memory submission lock still protects the current screen. */ }
+}
+
 export const emptySetDraft = () => ({
   exercise: '', exercise_id: null, set_number: 1, weight: '', reps: '', rpe: '', is_warmup: false, notes: '',
 });

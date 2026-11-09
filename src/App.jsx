@@ -1,11 +1,12 @@
 import { t } from './i18n';
 import { Suspense, lazy } from 'react';
 import { LifeOSProvider, useLifeOS } from './context/LifeOSContext';
-import { AuthConfigScreen, AuthLoadingScreen, AuthScreen } from './components/AuthScreen';
+import { AuthConfigScreen, AuthLoadingScreen, AuthScreen, PasswordRecoveryScreen } from './components/AuthScreen';
 import { Shell } from './components/Shell';
 import { HomeTab } from './tabs/HomeTab';
 import { useLanguage } from './i18n';
 import { ProfileCompletion } from './components/ProfileCompletion';
+import { WorkspaceErrorBoundary } from './components/WorkspaceErrorBoundary';
 
 const CalendarTab = lazy(() => import('./tabs/CalendarTab').then((module) => ({ default: module.CalendarTab })));
 const MemosTab = lazy(() => import('./tabs/MemosTab').then((module) => ({ default: module.MemosTab })));
@@ -31,7 +32,7 @@ const tabViews = {
 };
 
 function LifeOSApp() {
-  const { activeTab, authStatus, authUser, isSupabaseConfigured, userSettings } = useLifeOS();
+  const { activeTab, authStatus, authUser, isSupabaseConfigured, userSettings, setActiveTab, passwordRecovery, finishPasswordRecovery } = useLifeOS();
 
   if (!isSupabaseConfigured) {
     return <AuthConfigScreen />;
@@ -44,15 +45,18 @@ function LifeOSApp() {
   if (!authUser) {
     return <AuthScreen />;
   }
+  if (passwordRecovery) return <PasswordRecoveryScreen key={authUser.id} onDone={finishPasswordRecovery} />;
   if (userSettings.status === 'loading') return <AuthLoadingScreen />;
   if (!userSettings.profile?.username && (userSettings.status === 'ready' || activeTab === 'community')) return <ProfileCompletion key={authUser.id} />;
 
   const ActiveView = tabViews[activeTab] ?? HomeTab;
   return (
     <Shell>
-      <Suspense fallback={<TabLoadingFallback />}>
-        <ActiveView />
-      </Suspense>
+      <WorkspaceErrorBoundary key={`${authUser.id}:${activeTab}`} onBack={() => setActiveTab('home')}>
+        <Suspense fallback={<TabLoadingFallback />}>
+          <ActiveView />
+        </Suspense>
+      </WorkspaceErrorBoundary>
     </Shell>
   );
 }

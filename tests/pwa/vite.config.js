@@ -7,9 +7,13 @@ export default {
   plugins:[{
     name:'isolated-pwa-qa',enforce:'pre',
     resolveId(source) {
+      if (/services\/workoutRestApi(?:\.js)?$/.test(source)) return path.resolve('tests/ui/fixtureRestApi.js');
       if (/services\/lifeosApi(?:\.js)?$/.test(source) || /services\/aiApi(?:\.js)?$/.test(source)) return path.resolve('tests/ui/fixtureApi.js');
       if (/lib\/supabaseClient(?:\.js)?$/.test(source)) return '\0pwa-qa-supabase';
     },
     load(id) { if(id==='\0pwa-qa-supabase') return 'export const isSupabaseConfigured=true;export const supabase=null;'; },
+    transform(code,id) {
+      if (id.replaceAll('\\','/').endsWith('/src/utils/pwaUpdate.js')) return code + '\nwindow.__qaAppUpdate = appUpdate;';
+    },
   },...config.plugins],
 };

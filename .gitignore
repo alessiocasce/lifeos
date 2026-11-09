@@ -22,3 +22,8 @@ dev-server*.log
 
 .DS_Store
 Thumbs.db
+
+# Private, user-supplied design inputs stay local; QA fixture screenshots may be reviewed.
+/docs/audits/lifeos-ui/references/
+/docs/audits/lifeos-ui/screenshots/
+/supabase/.temp/

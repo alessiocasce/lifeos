@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import { createProfileUpgradeDatabase } from '../tests/workout/profileUpgradeDatabase.js';
+import { applyCommunityMigration } from '../tests/workout/communityDatabase.js';
+const db=await createProfileUpgradeDatabase();
+const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
+try {
+  await db.exec('alter table auth.users add email_confirmed_at timestamptz,add raw_user_meta_data jsonb;');
+  for(const suffix of ['training_profile_upgrade','username_only_cleanup','training_active_identity_media','workout_history_atomic_delete']) await applyCommunityMigration(db,suffix);
+  await db.query('insert into auth.users(id,email_confirmed_at,raw_user_meta_data) values($1,now(),$3),($2,now(),$3)',[A,B,'{}']);
+  await db.query("insert into user_profiles(user_id,username) values($1,'UPPER_MEMBER'),($2,'other_member')",[A,B]);
+  await db.query("update user_preferences set language='en',workout_sharing=false where user_id=$1",[A]);
+  const old='860c2371-8592-5ad9-aa43-805984020e52',target='a2bc1c95-14c7-558d-a56b-0973cc4793dd';
+  const workout=(await db.query("insert into workouts(user_id,name,ended_at) values($1,'Historic',now()) returning *",[A])).rows[0];
+  await db.query("insert into workout_sets(user_id,workout_id,exercise,exercise_id,set_number,weight,reps) values($1,$2,'Barbell Curl',$3,1,20,8)",[A,workout.id,old]);
+  for(const suffix of ['workout_web_push','curl_catalog_identity','settings_identity_defaults']) await db.transaction(tx=>applyCommunityMigration(tx,suffix));
+  assert.deepEqual((await db.query('select language,workout_sharing,share_workout_notes from user_preferences where user_id=$1',[A])).rows[0],{language:'en',workout_sharing:false,share_workout_notes:false});
+  assert.equal((await db.query('select username from user_profiles where user_id=$1',[A])).rows[0].username,'upper_member');
+  assert.equal((await db.query('select ended_at from workouts where id=$1',[workout.id])).rows[0].ended_at.getTime(),workout.ended_at.getTime());
+  assert.equal((await db.query('select exercise_id from workout_sets where workout_id=$1',[workout.id])).rows[0].exercise_id,target);
+  assert.equal((await db.query('select count(*)::int n from workout_rest_timers')).rows[0].n,0);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[B]);await db.exec('set role authenticated');
+  await db.exec('insert into workout_web_rest_preferences(enabled,seconds) values(true,15)');
+  const live=(await db.query("insert into workouts(name) values('Live') returning id")).rows[0].id;
+  const saved=(await db.query("insert into workout_sets(workout_id,exercise,exercise_id,set_number,weight,reps) values($1,'Barbell Curl',$2,1,25,8) returning exercise_id",[live,old])).rows[0];
+  assert.equal(saved.exercise_id,target);
+  assert.equal((await db.query('select id from workout_rest_timers')).rows.length,1);
+  assert.equal((await db.query('select id from workout_sets where workout_id=$1',[workout.id])).rows.length,0);
+  await db.query('update workouts set ended_at=now() where id=$1',[live]);
+  assert.equal((await db.query('select state from workout_rest_timers')).rows[0].state,'cancelled');
+  const feed=(await db.query('select public.community_feed_v2() item')).rows;
+  assert.ok(feed.some(row=>row.item.set_count===1),'normal member feed exposes the sanitized completed workout');
+  await db.exec('reset role');
+  assert.equal((await db.query('select set_count from community_workout_shares where source_workout_id=$1',[live])).rows[0].set_count,1);
+  await db.exec('reset role;set role anon');await assert.rejects(db.query('select * from workout_rest_timers'),/permission/);
+  console.log('PASS exact three-migration sequence on production-compatible schema: English/opt-out preserved, lowercase profile, historic completion/EZ identity, no historical timers, authenticated stale-client normalization, live scheduling/end cancellation, Community and A/B/anon isolation.');
+} finally {await db.close();}

@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { addDays } from '../utils/date';
 import { calculateSleepHoursFromTimes } from '../utils/health';
-import { resolveExercise } from '../utils/exerciseCatalog';
+import { resolveExercise, canonicalExerciseId } from '../utils/exerciseCatalog';
 import { captureSettingsIdentity } from '../utils/userSettingsIdentity';
 import { createClient } from '@supabase/supabase-js';
 import { getSignupEmailRedirectTo } from '../lib/authRedirect';
@@ -263,7 +263,8 @@ export const authApi = {
     return throwIfError(await requireSupabase().auth.signInWithPassword({ email, password }));
   },
 
-  async signUp({ email, password, username, language = 'en' }) {
+  async signUp({ email, password, username, language = 'it' }) {
+    username = username?.trim().toLowerCase();
     if (!/^[a-z][a-z0-9_]{2,23}$/i.test(username || '')) throw new Error('Use a 3–24 character username starting with a letter.');
     if (!await identityApi.available(username)) throw new Error('Username is already taken.');
     return throwIfError(await requireSupabase().auth.signUp({ email, password, options: { emailRedirectTo: getSignupEmailRedirectTo(), data: { requested_username: username.trim(), requested_language: language === 'it' ? 'it' : 'en' } } }));
@@ -271,6 +272,15 @@ export const authApi = {
 
   async signOut() {
     return throwIfError(await requireSupabase().auth.signOut());
+  },
+
+  async requestPasswordReset(email) {
+    return throwIfError(await requireSupabase().auth.resetPasswordForEmail(email.trim(), { redirectTo: getSignupEmailRedirectTo() }));
+  },
+
+  async updatePassword(password) {
+    if (password.length < 8) throw new Error('Use at least 8 characters.');
+    return throwIfError(await requireSupabase().auth.updateUser({ password }));
   },
 
   onAuthStateChange(callback) {
@@ -311,30 +321,50 @@ export const userSettingsApi = {
       authorize(client.from('user_profiles').select(profileFields).eq('user_id', userId).maybeSingle()),
       authorize(client.from('user_preferences').select('language,workout_sharing,share_workout_notes').eq('user_id', userId).maybeSingle()),
     ]);
-    return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'en', workout_sharing: true, share_workout_notes: false } };
+    return { profile: throwIfError(profile), preferences: throwIfError(preferences) || { language: 'it', workout_sharing: true, share_workout_notes: false } };
   },
   async save(profile, preferences, expectedUserId) {
     const client = requireSupabase();
     const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
     if (!/^[a-z][a-z0-9_]{2,23}$/i.test(profile.username || '')) throw new Error('Use a 3–24 character username starting with a letter.');
-    throwIfError(await authorize(client.rpc('save_user_settings', { p_username: profile.username.trim(),
+    throwIfError(await authorize(client.rpc('save_user_settings', { p_username: profile.username.trim().toLowerCase(),
       p_language: preferences.language, p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true })));
     return this.read(userId);
   },
   async savePreferences(preferences, expectedUserId) {
     const client = requireSupabase();
-    const { authorize } = await captureSettingsIdentity(client, expectedUserId);
-    return throwIfError(await authorize(client.rpc('set_user_preferences', { p_language: preferences.language,
-      p_workout_sharing: preferences.workout_sharing === true, p_share_notes: preferences.share_workout_notes === true })));
+    const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
+    const patch = {};
+    if (Object.hasOwn(preferences, 'language')) {
+      if (!['it', 'en'].includes(preferences.language)) throw new Error('Invalid preferences.');
+      patch.language = preferences.language;
+    }
+    for (const field of ['workout_sharing', 'share_workout_notes']) {
+      if (Object.hasOwn(preferences, field)) {
+        if (typeof preferences[field] !== 'boolean') throw new Error('Invalid preferences.');
+        patch[field] = preferences[field];
+      }
+    }
+    if (!Object.keys(patch).length) throw new Error('Invalid preferences.');
+    // PostgREST updates only supplied columns on conflict: another device's
+    // language or privacy choice is not overwritten by a stale local snapshot.
+    return throwIfError(await authorize(client.from('user_preferences').upsert({ user_id: userId, ...patch }, { onConflict: 'user_id' }).select('language,workout_sharing,share_workout_notes').single()));
+  },
+  async saveProfile(profile, expectedUserId) {
+    const client = requireSupabase();
+    const { userId, authorize } = await captureSettingsIdentity(client, expectedUserId);
+    const username = profile.username?.trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_]{2,23}$/.test(username || '')) throw new Error('Use a 3–24 character username starting with a letter.');
+    return throwIfError(await authorize(client.from('user_profiles').upsert({ user_id: userId, username }, { onConflict: 'user_id' }).select(profileFields).single()));
   },
 };
 
 export const identityApi = {
-  async available(username) { return throwIfError(await requireSupabase().rpc('username_available', { p_username: username })); },
+  async available(username) { return throwIfError(await requireSupabase().rpc('username_available', { p_username: username?.trim().toLowerCase() })); },
   async complete(username, expectedUserId) {
     const client = requireSupabase();
     const { authorize } = await captureSettingsIdentity(client, expectedUserId);
-    return throwIfError(await authorize(client.rpc('complete_user_profile', { p_username: username || null })));
+    return throwIfError(await authorize(client.rpc('complete_user_profile', { p_username: username?.trim().toLowerCase() || null })));
   },
 };
 
@@ -402,12 +432,27 @@ function throwWorkoutMutationError(result, options = {}) {
 }
 
 export const workoutApi = {
-  async page(cursor = null, size = 25) {
+  async page(cursor = null, size = 25, filter = {}) {
     const limit = Math.max(1, Math.min(25, Math.floor(Number(size) || 25)));
     let query = requireSupabase().from('workouts').select(workoutSelect)
       .order('performed_on', { ascending: false })
       .order('started_at', { ascending: false, nullsFirst: false })
       .order('id', { ascending: false }).limit(limit + 1);
+    if (filter.from) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(filter.from)) throw new Error('Invalid history date.');
+      query = query.gte('performed_on', filter.from);
+    }
+    if (filter.to) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(filter.to)) throw new Error('Invalid history date.');
+      query = query.lte('performed_on', filter.to);
+    }
+    if (filter.templateId !== undefined) {
+      if (filter.templateId === null) query = query.is('template_id', null);
+      else {
+        if (!/^[a-f0-9-]{36}$/i.test(filter.templateId)) throw new Error('Invalid workout template.');
+        query = query.eq('template_id', filter.templateId);
+      }
+    }
     if (cursor) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cursor.date) || !/^[a-f0-9-]{36}$/i.test(cursor.id)
         || (cursor.started !== null && !/^[\dT:.+Z-]+$/.test(cursor.started))) throw new Error('Invalid workout history cursor.');
@@ -489,7 +534,7 @@ export const workoutSetApi = {
         .insert({
           workout_id: payload.workout_id,
           exercise: payload.exercise,
-          exercise_id: payload.exercise_id === undefined ? resolveExercise(payload.exercise)?.id || null : payload.exercise_id,
+          exercise_id: payload.exercise_id === undefined ? resolveExercise(payload.exercise)?.id || null : canonicalExerciseId(payload.exercise_id),
           set_number: Number(payload.set_number),
           is_warmup: Boolean(payload.is_warmup),
           weight: Number(payload.weight),
@@ -538,9 +583,11 @@ export const workoutTemplateApi = {
     return normalizeWorkoutTemplates(rows);
   },
 
-  async create(payload) {
+  async create(payload, expectedUserId) {
+    const client = requireSupabase();
+    const { authorize } = await captureSettingsIdentity(client, expectedUserId);
     const row = throwIfError(
-      await requireSupabase()
+      await authorize(client
         .from('workout_templates')
         .insert({
           name: payload.name,
@@ -549,7 +596,7 @@ export const workoutTemplateApi = {
           icon_key: payload.icon_key || 'dumbbell',
         })
         .select(workoutTemplateSelect)
-        .single(),
+        .single()),
     );
 
     return normalizeWorkoutTemplate(row);
@@ -573,19 +620,21 @@ export const workoutTemplateApi = {
 };
 
 export const workoutTemplateExerciseApi = {
-  async create(payload) {
+  async create(payload, expectedUserId) {
+    const client = requireSupabase();
+    const { authorize } = await captureSettingsIdentity(client, expectedUserId);
     return throwIfError(
-      await requireSupabase()
+      await authorize(client
         .from('workout_template_exercises')
         .insert({
           template_id: payload.template_id,
           exercise: payload.exercise,
-          exercise_id: payload.exercise_id === undefined ? resolveExercise(payload.exercise)?.id || null : payload.exercise_id,
+          exercise_id: payload.exercise_id === undefined ? resolveExercise(payload.exercise)?.id || null : canonicalExerciseId(payload.exercise_id),
           exercise_order: Number(payload.exercise_order),
           notes: payload.notes || null,
         })
         .select(workoutTemplateExerciseSelect)
-        .single(),
+        .single()),
     );
   },
 
@@ -1347,6 +1396,7 @@ function prepareWorkoutSetPayload(payload) {
     Object.entries({
       ...payload,
       ...(payload.exercise !== undefined && payload.exercise_id === undefined ? { exercise_id: resolveExercise(payload.exercise)?.id || null } : {}),
+      ...(payload.exercise_id ? { exercise_id: canonicalExerciseId(payload.exercise_id) } : {}),
       is_warmup: payload.is_warmup === undefined ? undefined : Boolean(payload.is_warmup),
       rpe: payload.rpe === undefined ? undefined : normalizeNullableNumber(payload.rpe),
     }).filter(([, value]) => value !== undefined),
@@ -1380,6 +1430,7 @@ function prepareWorkoutTemplateExercisePayload(payload) {
     Object.entries({
       ...payload,
       ...(payload.exercise !== undefined && payload.exercise_id === undefined ? { exercise_id: resolveExercise(payload.exercise)?.id || null } : {}),
+      ...(payload.exercise_id ? { exercise_id: canonicalExerciseId(payload.exercise_id) } : {}),
       exercise: payload.exercise === undefined ? undefined : payload.exercise?.trim(),
       exercise_order: payload.exercise_order === undefined ? undefined : Number(payload.exercise_order),
       notes: payload.notes === undefined ? undefined : payload.notes?.trim() || null,

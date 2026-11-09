@@ -9,6 +9,7 @@ const server = await createServer({
   plugins: [{
     name: 'lifeos-ui-qa-services', enforce: 'pre',
     resolveId(source) {
+      if (/services\/workoutRestApi(?:\.js)?$/.test(source)) return path.resolve('tests/ui/fixtureRestApi.js');
       if (/services\/lifeosApi(?:\.js)?$/.test(source)) return path.resolve('tests/ui/fixtureApi.js');
       if (/services\/aiApi(?:\.js)?$/.test(source)) return path.resolve('tests/ui/fixtureApi.js');
       if (/lib\/supabaseClient(?:\.js)?$/.test(source)) return '\0qa-supabase';

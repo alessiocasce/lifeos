@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Search, Dumbbell, Repeat2, Plus } from 'lucide-react';
 import { TrainingSheet } from './TrainingSheet';
 import { getLanguage, t } from '../i18n';
-import { exerciseCatalog, exerciseLabel, resolveExercise, searchExercises } from '../utils/exerciseCatalog';
+import { exerciseCatalog, resolveExercise, searchExercises } from '../utils/exerciseCatalog';
+import { trainingExerciseLabel as exerciseLabel } from '../utils/workoutCompletion';
 
 const equipmentLabels = { barbell:'Barbell',dumbbell:'Dumbbell',smith:'Smith machine',machine:'Machine',cable:'Cable',
   bodyweight:'Bodyweight',assisted_machine:'Assisted machine',ez_bar:'EZ bar',landmine:'Landmine',plate:'Plate',

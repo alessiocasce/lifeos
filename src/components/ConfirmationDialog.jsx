@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { t } from '../i18n';
+import '../styles/confirmation.css';
 
 export function ConfirmationDialog({ title, message, confirmLabel, cancelLabel = t('Cancel'), busy, error, onConfirm, onCancel }) {
   const dialog = useRef(null);

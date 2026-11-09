@@ -129,7 +129,7 @@ const server = await createServer({
       enforce: 'pre',
       resolveId(source, importer) {
         const normalizedImporter = importer?.replaceAll('\\', '/');
-        if (source === '../context/LifeOSContext' && normalizedImporter?.endsWith('/src/tabs/WorkoutTab.jsx')) {
+        if (source === '../context/LifeOSContext' && normalizedImporter?.includes('/src/')) {
           return CONTEXT_MODULE_ID;
         }
         return null;
@@ -144,6 +144,8 @@ const server = await createServer({
 
 try {
   const { WorkoutTab } = await server.ssrLoadModule('/src/tabs/WorkoutTab.jsx');
+  const { setLanguage } = await server.ssrLoadModule('/src/i18n/index.js');
+  setLanguage('en');
   for (const testCase of cases) {
     globalThis.__lifeosWorkoutTestContext = { ...baseContext, ...testCase.context };
     const html = renderToStaticMarkup(React.createElement(WorkoutTab));

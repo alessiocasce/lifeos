@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { selectExercise } from './exercisePicker.js';
 
 const exercise = (page) => page.getByRole('button', { name: 'Exercise', exact: true });
-const weight = (page) => page.getByRole('textbox', { name: /Weight/ });
+const weight = (page) => page.getByRole('textbox', { name: /Weight|Total load/ });
 const reps = (page) => page.getByRole('textbox', { name: 'Reps', exact: true });
 
 test.beforeEach(async ({ page }) => {
@@ -24,6 +24,8 @@ test('unsaved full draft and exercise switch survive reload', async ({ page }, t
   await page.getByRole('button', { name: 'RPE 8', exact: true }).click();
   await page.getByRole('textbox', { name: 'Set notes' }).fill('Controlled eccentric');
   await page.screenshot({ path: testInfo.outputPath('training-mobile.png'), fullPage: true });
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('checkbox', { name: 'Warmup set' }).check();
   await page.reload();
   await expect(exercise(page)).toContainText('Barbell Curl');

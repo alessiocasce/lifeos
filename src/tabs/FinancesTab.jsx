@@ -1,5 +1,6 @@
 import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
+import { useDestructiveConfirmation } from '../hooks/useDestructiveConfirmation';
 import { Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -10,6 +11,7 @@ const defaultCategories = ['Food', 'Training', 'Transport', 'Rent', 'Software', 
 const emptyForm = () => ({ vendor: '', category: 'Food', amount: '', spent_on: '', notes: '' });
 
 export function FinancesTab() {
+  const confirmation = useDestructiveConfirmation();
   const {
     createExpense, deleteExpense, expenses, expensesError, expensesStatus,
     loadExpenseMonth, monthlyExpenses, monthlyExpensesError, monthlyExpensesStatus,
@@ -68,12 +70,14 @@ export function FinancesTab() {
     } catch (error) { setEditError(error.message || t("Failed to update expense.")); }
     finally { setSavingEdit(false); }
   };
-  const remove = async (row) => {
-    if (deletingId || savingEdit || !window.confirm(t("Delete expense \"") + row.vendor + t("\" permanently?"))) return;
+  const remove = row => {
+    if (deletingId || savingEdit) return;
+    confirmation.ask({ title: 'Delete expense?', message: t('Delete expense "') + row.vendor + t('" permanently?'), label: 'Delete expense', action: async () => {
     setDeletingId(row.id); setDeleteError('');
     try { await deleteExpense(row.id); await refresh(); }
-    catch (error) { setDeleteError(error.message || t("Failed to delete expense.")); }
+    catch (error) { setDeleteError(error.message || t("Failed to delete expense.")); throw error; }
     finally { setDeletingId(null); }
+    } });
   };
   const renderRow = (row) => editingId === row.id ? (
     <form key={row.id} aria-label={t("Edit expense ") + row.vendor} onSubmit={saveEdit} className="grid gap-3 border-y border-white/15 py-4">
@@ -103,6 +107,7 @@ export function FinancesTab() {
 
   return (
     <div className="grid min-w-0 gap-6 pb-6">
+      {confirmation.dialog}
       <header className="grid min-w-0 grid-cols-[minmax(0,1fr)_144px] items-start gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
         <div className="min-w-0">
           <p className="text-xs text-zinc-500">{formatMonthLabel(selectedMonth)}</p>

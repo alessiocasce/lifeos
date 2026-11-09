@@ -1,4 +1,33 @@
 import { resolveExercise } from './exerciseCatalog.js';
+import { exerciseIdentityKey, exerciseLabel } from './exerciseCatalog.js';
+import { getLanguage } from '../i18n/index.js';
+
+export function workoutWeightLabel(value) {
+  const exercise = resolveExercise(value);
+  if (exercise?.load_type === 'per_implement') return exercise.equipment === 'dumbbell' ? 'Weight per dumbbell (kg)' : 'Weight per implement (kg)';
+  if (exercise?.load_type === 'machine_display') return 'Machine load (kg)';
+  if (exercise?.load_type === 'assistance') return 'Assistance (kg)';
+  if (exercise?.load_type === 'bodyweight') return 'Additional load (kg)';
+  if (exercise?.load_type === 'none') return 'Weight optional';
+  if (exercise?.load_type === 'total_external') return 'Total load (kg)';
+  return 'Weight (kg)';
+}
+
+// Keep historical/custom identity behavior centralized across Training surfaces.
+export function trainingExerciseLabel(value, language = getLanguage()) {
+  return exerciseLabel(value, language);
+}
+
+export function completedTemplateExercises(session) {
+  const seen = new Set();
+  return (session.workout_sets || []).slice().sort((a, b) =>
+    String(a.performed_at || '').localeCompare(String(b.performed_at || ''))).flatMap(set => {
+    const key = exerciseIdentityKey(set);
+    if (!set.exercise?.trim() || seen.has(key)) return [];
+    seen.add(key);
+    return [{ exercise: set.exercise, exercise_id: set.exercise_id || null, exercise_order: seen.size }];
+  });
+}
 
 export function workoutCompletionMetrics(session) {
   const sets = session.workout_sets || [];

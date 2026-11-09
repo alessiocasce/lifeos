@@ -66,8 +66,8 @@ test('memo editor preserves create/edit/delete, optional date and focus', async 
   await editor.getByRole('button', { name: 'Clear Time', exact: true }).click();
   await editor.getByRole('button', { name: 'Update Memo', exact: true }).click();
   await expect(memo).toContainText('No date');
-  page.once('dialog', (dialog) => dialog.accept());
   await memo.getByRole('button', { name: 'Delete memo' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete memo', exact: true }).click();
   await expect(memo).toHaveCount(0);
 });
 

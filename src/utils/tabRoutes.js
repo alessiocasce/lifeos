@@ -1,7 +1,3 @@
-import { tabs } from '../data/lifeosData';
-
-const validTabIds = new Set(tabs.map((tab) => tab.id));
-
 const canonicalPaths = {
   community: '/community',
   settings: '/settings',
@@ -14,6 +10,7 @@ const canonicalPaths = {
   finances: '/finances',
   assistant: '/assistant',
 };
+const validTabIds = new Set(Object.keys(canonicalPaths));
 
 const pathAliases = {
   '/community': 'community',

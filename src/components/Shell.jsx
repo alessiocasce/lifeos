@@ -1,4 +1,4 @@
-import { getLocale, formatDate } from '../i18n';
+import { getLocale } from '../i18n';
 import { t } from '../i18n';
 import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -10,6 +10,8 @@ import { LifeOSLogo } from './LifeOSLogo';
 import { PullToRefresh } from './PullToRefresh';
 import { AppUpdateNotice } from './AppUpdates';
 import { appUpdate } from '../utils/pwaUpdate';
+import { clearCommunitySession, invalidateCommunity } from '../utils/communityCache';
+import '../styles/navigation.css';
 
 const destinations = {
   community: { label: 'Community', icon: Users },
@@ -39,11 +41,13 @@ export function Shell({ children }) {
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const sheetRef = useRef(null);
+  const moreTrigger = useRef(null);
   const today = useLocalDay();
   const destination = destinations[activeTab] || destinations.home;
   const liveSession = activeWorkoutSession && !activeWorkoutSession.ended_at
     ? activeWorkoutSession : workoutSessions.find((session) => !session.ended_at);
   const currentDraft = liveSession ? readWorkoutDraft(authUser?.id, liveSession.id) : null;
+  useEffect(() => { setMoreOpen(false); }, [activeTab]);
 
   useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
@@ -68,8 +72,34 @@ export function Shell({ children }) {
   }, []);
 
   useEffect(() => {
-    if (moreOpen) sheetRef.current?.showModal();
-    else sheetRef.current?.close();
+    window.addEventListener('lifeos:profile-updated', invalidateCommunity);
+    window.addEventListener('lifeos:community-updated', invalidateCommunity);
+    return () => {
+      window.removeEventListener('lifeos:profile-updated', invalidateCommunity);
+      window.removeEventListener('lifeos:community-updated', invalidateCommunity);
+      clearCommunitySession();
+    };
+  }, [authUser?.id]);
+  useEffect(() => {
+    const dialog = sheetRef.current;
+    if (!dialog) return;
+    if (moreOpen) {
+      if (!dialog.open) {
+        dialog.showModal();
+        dialog.querySelector('button')?.focus({ preventScroll: true });
+      }
+      const overflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = overflow; };
+    }
+    if (!dialog.open) return;
+    // Keep the native modal and its focus trap alive until the exit finishes.
+    const close = () => dialog.close();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) close();
+    else {
+      const fallback = setTimeout(close, 250);
+      return () => clearTimeout(fallback);
+    }
   }, [moreOpen]);
 
   const navigate = (tab) => {
@@ -104,7 +134,7 @@ export function Shell({ children }) {
         </div>
       </aside>
       <main className="workspace">
-        <AppUpdateNotice />
+      <AppUpdateNotice hasResume={Boolean(liveSession && activeTab !== 'workout')} />
         <header className="workspace-header">
           <div className="flex min-w-0 items-center gap-3">
             <span className="mobile-brand">{activeTab === 'workout' ? <span className="training-brand"><Hexagon size={26} strokeWidth={1.3} /><Dumbbell size={15} strokeWidth={1.8} /></span> : <LifeOSLogo size={23} />}</span>
@@ -137,13 +167,17 @@ export function Shell({ children }) {
           const item = destinations[id] || { label: 'More', icon: MoreHorizontal };
           const Icon = item.icon;
           const active = id === 'more' ? moreDestinations.includes(activeTab) : activeTab === id;
-          return <button key={id} className={'mobile-destination ' + (id === 'workout' ? 'training-destination' : '')} aria-current={active ? 'page' : undefined} onClick={() => id === 'more' ? setMoreOpen(true) : navigate(id)}>
+          return <button key={id} className={'mobile-destination ' + (id === 'workout' ? 'training-destination' : '')} aria-current={active ? 'page' : undefined} onClick={event => { if (id === 'more') { moreTrigger.current = event.currentTarget; setMoreOpen(true); } else navigate(id); }}>
             <span className="mobile-destination-icon"><Icon size={21} strokeWidth={active ? 2 : 1.65} /></span><span>{t(item.label)}</span>
           </button>;
         })}
       </nav>
       </div>, document.body)}
-      <dialog ref={sheetRef} className="utility-sheet" aria-labelledby="utility-title" onClose={() => setMoreOpen(false)} onClick={(event) => { if (event.target === sheetRef.current) setMoreOpen(false); }}>
+      <dialog ref={sheetRef} className="utility-sheet" data-closing={!moreOpen} aria-labelledby="utility-title"
+        onCancel={event => { event.preventDefault(); setMoreOpen(false); }}
+        onAnimationEnd={event => { if (event.target === sheetRef.current && event.animationName === 'utility-exit' && !moreOpen) sheetRef.current?.close(); }}
+        onClose={() => { setMoreOpen(false); if (moreTrigger.current?.isConnected) moreTrigger.current.focus({ preventScroll: true }); }}
+        onClick={event => { if (event.target !== sheetRef.current) return; const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setMoreOpen(false); }}>
         <div className="utility-sheet-content">
           <div className="flex items-center justify-between pb-4"><h2 id="utility-title" className="text-lg font-semibold">{t("Your system")}</h2><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label={t("Close utilities")}><X size={20} /></button></div>
           <nav aria-label={t("Utilities")}>{moreDestinations.map((id) => {

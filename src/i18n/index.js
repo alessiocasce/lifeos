@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import italian from './it.json' with { type: 'json' };
 
-let language = 'en';
+let language = 'it';
 const listeners = new Set();
 const folded = new Map(Object.entries(italian).map(([key,value])=>[key.trim().toLowerCase(),value]));
 const english = { 'muscle.chest':'Chest','muscle.back':'Back','muscle.shoulders':'Shoulders','muscle.biceps':'Biceps','muscle.triceps':'Triceps','muscle.quadriceps':'Quadriceps','muscle.hamstrings':'Hamstrings','muscle.glutes':'Glutes','muscle.calves':'Calves','muscle.core':'Core','muscle.full_body':'Full body' };
@@ -9,13 +9,13 @@ export const getLanguage = () => language;
 export const getLocale = () => language === 'it' ? 'it-IT' : 'en-GB';
 export function setLanguage(next) {
   const safe = next === 'it' ? 'it' : 'en';
+  if (typeof document !== 'undefined') document.documentElement.lang = safe;
   if (safe === language) return;
   language = safe;
-  if (typeof document !== 'undefined') document.documentElement.lang = safe;
   listeners.forEach(listener => listener());
 }
 export function useLanguage() {
-  return useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, getLanguage, () => 'en');
+  return useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, getLanguage, () => 'it');
 }
 export function t(key, values = {}) {
   if (typeof key !== 'string') return key;

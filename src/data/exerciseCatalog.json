@@ -1314,7 +1314,7 @@
     "id": "a2bc1c95-14c7-558d-a56b-0973cc4793dd",
     "slug": "ez_bar_curl",
     "name_en": "Barbell Curl",
-    "name_it": "Curl con bilanciere",
+    "name_it": "Curl con bilanciere EZ",
     "category": "biceps",
     "primary_muscle_group": "biceps",
     "equipment": "ez_bar",
@@ -1325,7 +1325,8 @@
     "active": true,
     "aliases": [
       "EZ-Bar Curl",
-      "Curl con bilanciere EZ"
+      "EZ Bar Curl",
+      "Curl con bilanciere"
     ]
   },
   {

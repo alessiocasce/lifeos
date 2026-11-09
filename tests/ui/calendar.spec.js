@@ -51,8 +51,8 @@ test('Calendar native editor preserves create/edit/delete and focus', async ({ p
   await editor.getByRole('button', { name: 'Update Event', exact: true }).click();
   await expect(page.getByText('Dental check', { exact: true })).toBeVisible();
   await page.reload();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.locator('article').filter({ hasText: 'Dental check' }).getByRole('button', { name: 'Delete event permanently' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete event', exact: true }).click();
   await expect(page.getByText('Dental check', { exact: true })).toHaveCount(0);
 });
 

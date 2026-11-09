@@ -1,4 +1,8 @@
 // Only targets are copied. RPE and notes are outcomes of the completed set.
+export function nextWorkoutDraft(draft, historicalSets, savedSet, workingSetNumber) {
+  return prefillWorkoutTargets({ ...draft, is_warmup: false, set_number: workingSetNumber }, historicalSets, { afterSave: true, savedSet });
+}
+
 export function prefillWorkoutTargets(draft, historicalSets = [], { afterSave = false, savedSet = null } = {}) {
   const warmup = Boolean(draft.is_warmup);
   const number = Number(draft.set_number);
