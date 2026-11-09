@@ -2,6 +2,10 @@
 
 ## Current Attempt: 2026-11-09
 
+**LIFEOS - LAUNCH BLOCKED: production backup/isolated restore not verified.**
+Status recorded at2026-11-09 03:02UTC (04:02Europe/Rome). No new production
+deployment occurred; there is no release/deployment timestamp for the new version.
+
 Owner-authorized execution on `codex/lifeos-ui-modernization`, production branch
 `main`, baseline `23a4b6256c9b86b8f8cf64bc458fc3f0429623ac`.
 
@@ -50,6 +54,13 @@ test results and existing Rankings plans are excluded from the release commit.
   backend safety gates, then failed because ubuntu-latest moved to26.04, unsupported
   by pinned Playwright1.58.2. Runner is corrected to supported ubuntu-24.04; no
   dependency major upgrade or skipped browser checks.
+- Corrective commit `3503f30971aef83d0df60d6b89aa2af712609948` was pushed.
+  Hosted run https://github.com/alessiocasce/lifeos/actions/runs/42553786154
+  **SUCCEEDED**:13 helper cases,45 Chromium cases,3 selected WebKit cases,
+  deterministic SQL/RLS/migration/scheduler tests, Brain/Community/schema gates,
+  production build, real local Workbox A->B test and diff checks. Function count7.
+  The8 broader WebKit cases passed locally in the preceding review; hosted3 must
+  not be misreported as those same8.
 - Automatic **preview only** deployment `dpl_EihL4DTxRLfw7uVqCRS4gHDwFZs5` is READY
   for b8302fc: https://lifeos-3iwtxoh62-lifeos2.vercel.app . It is not production.
 - Production remains READY on `23a4b6256c9b86b8f8cf64bc458fc3f0429623ac`, deployment
@@ -59,6 +70,45 @@ test results and existing Rankings plans are excluded from the release commit.
   digests match the prior review. No new migrations are recorded or push tables present.
 - Vercel environment inventory contains no LIFEOS_PUSH_* keys. No secret values
   were read/printed. No production notification capability is enabled.
+
+## Production Baseline Inspection (Not New-release Acceptance)
+
+- The public URL loads the existing sign-in screen. Actual agent-browser snapshot
+  and390px screenshot captured; screenshot remains ignored in test-results.
+  Axe WCAG2A/AA scan:0 violations,0 incomplete. No credentials were entered and no
+  authentication/workout mutation smoke was attempted before backup verification.
+- `/build-version.json` returns old production SHA23a4b62. This confirms main traffic
+  was not switched to either feature commit or the preview deployment.
+- Read-only DB observation:22,416,531bytes,9 connections,0 recorded deadlocks;
+  Cron/net remain absent and Vault present. These are snapshots, not load tests.
+- Security advisors show no ERROR entries. Existing warnings:3 mutable-search-path
+  legacy functions, intentionally exposed profile/availability/status SECURITY
+  DEFINER APIs, and leaked-password protection disabled. Seven no-policy RLS tables
+  are INFO/service-only or retired. No unrelated policy/function change was made.
+  Review [search-path guidance](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
+  and [password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+  The scheduler/new-migration security state cannot be verified in production until
+  authorized backup-gated installation. The six dependency advisories remain the
+  documented low/moderate build-tool risks, not silently accepted as zero risk.
+- Browser automation reported an older Chrome binary; it was used only for the
+  unauthenticated baseline. No claim of physical iPhone or new-release acceptance.
+
+## Exact Remaining Gate
+
+Provide a production PostgreSQL/session-pooler connection through ignored
+`.env.local` as `LIFEOS_BACKUP_DATABASE_URL` (never paste credentials into chat),
+or a supported securely supplied consistent recovery export. Obtain/encrypt the
+backup outside Git and demonstrate its isolated restore. Then recheck fresh
+preflight, install the four targeted migrations, provision VAPID/Vault/dispatch,
+verify scheduler and controlled transport, merge only after green CI, verify the
+production SHA and perform the listed acceptance flows. Do not buy PITR/branches
+or enable notifications globally to bypass this gate.
+
+PR2 deliberately remains draft/unmerged; main and production remain unchanged.
+No migrations, extension installation, Vault write, production environment change,
+worker activation or real user record mutation was performed. Physical notification
+delivery and real email recovery remain unverified. There is no safe basis to
+declare the new release live.
 
 ## Evidence and Acceptance
 

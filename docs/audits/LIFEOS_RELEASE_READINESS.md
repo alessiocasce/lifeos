@@ -8,6 +8,10 @@ The owner has now authorized release execution, conditional on backup/restore,
 hosted CI and integrity gates. The prior local-review restrictions below describe
 the earlier review, not the new authorization. Current evidence and blockers are
 tracked in [LIFEOS_PRODUCTION_LAUNCH.md](LIFEOS_PRODUCTION_LAUNCH.md).
+Feature branch and PR2 now exist. Hosted CI passed on3503f30 (45 Chromium,
+3 WebKit,13 helpers plus database/backend/build/PWA gates). Production launch is
+**BLOCKED** solely at the mandatory unverified backup/restore gate; main has not
+been merged, no migrations applied and background notifications remain gated.
 The selected scheduler is now Supabase Cron, with a fourth disabled-by-default
 forward migration `20261109024936_workout_push_cron.sql`. Oracle is fallback only.
 No scheduler or production migration may be enabled before backup verification.
