@@ -1,5 +1,18 @@
 # LifeOS Project Context
 
+## iPhone Push Reliability Correction (2026-11-09)
+
+The correction removes network verification from the display path and
+sends immutable Declarative Web Push with a visible legacy fallback. WebKit can
+revoke subscriptions after silent pushes; the old handler demonstrably dropped
+accepted pushes on background-network failure. Actual device revocation is not
+proven by provider-acceptance logs. Server cancellation remains before dispatch;
+in-flight accepted pushes cannot be unsent, so TTL60/stable replacement Topic/tag
+limit that race. Device status is reconciled on Training resume/online; explicit
+Reconnect handles missing/revoked registration without altering other-device consent.
+No migrations or Oracle/WhatsApp service changes. Physical iPhone reacceptance
+requires the guarded update, reconnect and60second tests. See WORKOUT_WEB_PUSH.md.
+
 ## Production modernization (2026-11-09)
 
 Merged PR2, production SHA87acd1ead077ce73ad4e35af96030bc826787242, Vercel READY.

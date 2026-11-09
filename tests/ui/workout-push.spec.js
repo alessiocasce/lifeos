@@ -1,6 +1,19 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs/promises';
 
+test('reopening detects missing subscription and offers explicit reconnect without changing global opt-in',async({page})=>{
+  await page.addInitScript(()=>{localStorage.setItem('qa-rest:qa-user-a',JSON.stringify({preference:{enabled:true,seconds:60,notifications:true},timer:null}));localStorage.setItem('qa-push-device','reconnect');});
+  await page.goto('/workout');
+  await page.getByRole('button',{name:'Rest timer',exact:true}).click();
+  const sheet=page.getByRole('dialog',{name:'Rest timer',exact:true});
+  await expect(sheet.getByRole('switch',{name:'Background notifications',exact:true})).not.toBeChecked();
+  await expect(sheet.getByRole('status')).toContainText('reconnecting');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-rest:qa-user-a')).preference.notifications)).toBe(true);
+  await sheet.getByRole('button',{name:'Reconnect notifications',exact:true}).click();
+  await expect(sheet.getByRole('switch',{name:'Background notifications',exact:true})).toBeChecked();
+  await expect(sheet.getByRole('status')).toContainText('registered');
+});
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await page.addInitScript(() => {
