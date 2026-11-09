@@ -1,5 +1,23 @@
 # LifeOS Release Readiness
 
+## Released With Background Delivery Gated (2026-11-09)
+
+PR2 merged; production87acd1ead077ce73ad4e35af96030bc826787242 is READY, served
+by the existing domain. Hosted CI42558036614 passed13 helper/45 Chromium/3 WebKit
+cases plus DB/RLS/backend/build/PWA/function gates. Encrypted native backup and
+scoped isolated restore passed before five targeted forward migrations. All
+protected data digests/counts preserved. Controlled real production two-user
+authentication/Settings/Training/History/template/completion/foreground-timer
+checks passed,0 page errors; all QA rows removed. See LIFEOS_PRODUCTION_LAUNCH.md.
+
+Background Web Push remains explicitly unavailable, not merely physically
+unconfirmed: managed pg_net PUBLIC queue privileges failed the credential gate.
+Forward guard blocks Vault/HTTP, Cron/control/worker flagOFF, no credentials
+provisioned. Owner deferred Oracle access. Physical iPhone/PWA, real email inbox
+recovery and future secure notification transport/device acceptance remain.
+No schema rerun required; never replay the migration tree. Earlier verdicts below
+are retained as historical review notes, superseded by this release outcome.
+
 ## Production Update (2026-11-09)
 
 Encrypted backup/scoped isolated restore passed; hosted CI onf59a732 passed.
