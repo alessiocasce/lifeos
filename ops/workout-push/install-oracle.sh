@@ -12,7 +12,7 @@ if ! test -x "$base/node/bin/node"; then
   archive=$(mktemp /var/tmp/lifeos-node.XXXXXX)
   curl --fail --silent --show-error --proto '=https' --tlsv1.2 https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-arm64.tar.xz -o "$archive"
   printf '%s  %s\n' eb187837a2230d4047161ac0be008584e16b46f726e9c9490ee35dc6b17d9ba8 "$archive" | sha256sum -c -
-  tar -xJf "$archive" -C "$base/node" --strip-components=1
+  tar -xJf "$archive" -C "$base/node" --strip-components=1 --no-same-owner
 fi
 "$base/node/bin/node" --version
 install -m 644 scripts/workout-push-worker.js "$base/app/scripts/"

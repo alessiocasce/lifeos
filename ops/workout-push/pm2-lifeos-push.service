@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=forking
 User=lifeos-push
 Group=lifeos-push
+WorkingDirectory=/opt/lifeos-workout-push/app
 Environment=PM2_HOME=/var/lib/lifeos-push/.pm2
 Environment=PATH=/opt/lifeos-workout-push/node/bin:/usr/bin:/bin
 PIDFile=/var/lib/lifeos-push/.pm2/pm2.pid
