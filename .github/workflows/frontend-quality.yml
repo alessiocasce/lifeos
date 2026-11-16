@@ -42,14 +42,14 @@ jobs:
           node --test tests/settings/*.test.js tests/workout/modernTraining.test.js tests/workout/modernWorkoutApi.test.js tests/workout/exerciseSelectorLabels.test.js
           npm run test:workout
           npm run test:workout:push
-          node scripts/test-settings-identity.js
-          node scripts/test-workout-history-db.js
-          node scripts/test-workout-mutation-guards.js
-          node scripts/test-curl-reconciliation.js
-          node scripts/test-release-migrations.js
-          node scripts/test-workout-push-cron.js
-          node scripts/generate-exercise-catalog.js --check
-          node scripts/generate-catalog-migration.js --check
+          node scripts/tests/test-settings-identity.js
+          node scripts/tests/test-workout-history-db.js
+          node scripts/tests/test-workout-mutation-guards.js
+          node scripts/tests/test-curl-reconciliation.js
+          node scripts/tests/test-release-migrations.js
+          node scripts/tests/test-workout-push-cron.js
+          node scripts/tools/generate-exercise-catalog.js --check
+          node scripts/tools/generate-catalog-migration.js --check
       - name: Existing backend safety gates
         run: |
           npm run test:brain

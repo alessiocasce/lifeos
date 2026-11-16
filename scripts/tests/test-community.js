@@ -1,0 +1,72 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { createCommunityDatabase, applyCommunityMigration } from '../../tests/workout/communityDatabase.js';
+const db = await createCommunityDatabase();
+const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
+try {
+  // Pre-existing explicit OFF must survive migration. Missing rows get the new default.
+  await db.exec(`insert into auth.users values('${A}'),('${B}');insert into user_preferences(user_id,workout_sharing) values('${A}',false);`);
+  await applyCommunityMigration(db,'community_automatic_sharing');
+  await applyCommunityMigration(db,'degra_public_identity');
+  assert.equal((await db.query('select workout_sharing from user_preferences where user_id=$1',[A])).rows[0].workout_sharing,false);
+  assert.equal((await db.query('select workout_sharing from user_preferences where user_id=$1',[B])).rows[0].workout_sharing,true);
+  // Historical migration contract; current production SQL is tested by test-training-profile.
+  console.log((await db.exec(fs.readFileSync('tests/workout/verify_community_legacy.sql','utf8'))).at(-1).rows[0].result);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[A]);await db.exec('set role authenticated');
+  await db.exec("select save_user_settings('casce','casce','en',true,false)");
+  await assert.rejects(db.query('select configure_degra_member($1)',[B]),/permission denied/);
+  await db.exec('reset role');
+  const casce=(await db.query('select to_jsonb(p) row from user_profiles p where user_id=$1',[A])).rows[0].row;
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[B]);await db.exec('set role authenticated');
+  await db.exec("select set_user_preferences('it',false,false)");
+  for(let i=0;i<2;i++) {
+    const w=(await db.query("insert into workouts(name,ended_at) values('Historical',now()) returning id")).rows[0].id;
+    for(let n=1;n<=8;n++)await db.query("insert into workout_sets(workout_id,exercise,set_number,weight,reps) values($1,'Custom', $2,30,8)",[w,n]);
+  }
+  await db.exec('reset role');
+  const source=(await db.query('select to_jsonb(s) row from workout_sets s order by id')).rows;
+  await db.query('select configure_degra_member($1)',[B]);await db.query('select configure_degra_member($1)',[B]);
+  assert.deepEqual((await db.query('select username,display_name from user_profiles where user_id=$1',[B])).rows[0],{username:'degra',display_name:'degra'});
+  assert.equal((await db.query('select language from user_preferences where user_id=$1',[B])).rows[0].language,'it');
+  assert.deepEqual((await db.query('select to_jsonb(p) row from user_profiles p where user_id=$1',[A])).rows[0].row,casce);
+  assert.deepEqual((await db.query('select to_jsonb(s) row from workout_sets s order by id')).rows,source);
+  assert.equal((await db.query('select count(*)::integer n from community_workout_shares where author_id=$1',[B])).rows[0].n,2);
+  console.log('PASS authorized degra identity: original account/data, language and casce unchanged, two automatic shares, idempotent, admin-only');
+  const w=(await db.query("insert into workouts(user_id,name,ended_at) values($1,'Fault fixture',now()) returning id",[A])).rows[0].id;
+  await db.query("insert into workout_sets(user_id,workout_id,exercise,set_number,weight,reps) values($1,$2,'Custom',1,20,8)",[A,w]);
+  await db.exec(`create function public.qa_projection_fault() returns trigger language plpgsql as $$begin raise exception 'injected' using errcode='23502';end$$;
+    create trigger qa_projection_fault before insert or update on community_workout_shares for each row execute function public.qa_projection_fault();`);
+  await db.query('update workout_sets set reps=9 where workout_id=$1',[w]);
+  assert.equal((await db.query('select reps from workout_sets where workout_id=$1',[w])).rows[0].reps,9);
+  assert.equal((await db.query('select count(*)::integer n from community_workout_shares where source_workout_id=$1',[w])).rows[0].n,0);
+  await db.exec('drop trigger qa_projection_fault on community_workout_shares;drop function public.qa_projection_fault()');
+  await db.query('update workout_sets set reps=10 where workout_id=$1',[w]);
+  assert.equal((await db.query('select set_count from community_workout_shares where source_workout_id=$1',[w])).rows[0].set_count,1);
+  await db.query("select control_workout_rest_timer($1,'configure','qa@lid',null,true,120)",[A]);
+  const live=(await db.query("insert into workouts(user_id,name) values($1,'Live timer fixture') returning id",[A])).rows[0].id;
+  await db.query("insert into workout_sets(user_id,workout_id,exercise,set_number,weight,reps) values($1,$2,'Custom',1,20,8)",[A,live]);
+  assert.equal((await db.query("select count(*)::integer n from brain_outbox_messages where source_type='workout_rest_timer' and status='queued'")).rows[0].n,1);
+  await db.query('update workouts set ended_at=now() where id=$1',[live]);
+  assert.equal((await db.query("select count(*)::integer n from brain_outbox_messages where source_type='workout_rest_timer' and status='queued'")).rows[0].n,0);
+  assert.equal((await db.query('select set_count from community_workout_shares where source_workout_id=$1',[live])).rows[0].set_count,1);
+  assert.equal((await db.query("select count(*)::integer n from pg_trigger where tgname='community_writer_gate' and not tgisinternal and (tgtype & 1)=0 and (tgtype & 2)=2")).rows[0].n,4);
+  console.log('PASS projection fault fails closed without losing source set; automatic completion coexists with durable timer/end cancellation; BEFORE STATEMENT writer gates installed');
+  const stale=(await db.query('select to_jsonb(s) row from community_workout_shares s where source_workout_id=$1',[w])).rows[0].row;
+  await db.query('update user_preferences set workout_sharing=false where user_id=$1',[A]);
+  await db.query('insert into community_workout_shares select * from jsonb_populate_record(null::community_workout_shares,$1::jsonb)',[JSON.stringify(stale)]);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[B]);await db.exec('set role authenticated');
+  assert.equal((await db.query('select id from community_workout_shares where id=$1',[stale.id])).rows.length,0);
+  await db.exec('reset role');await db.query('update user_preferences set workout_sharing=true where user_id=$1',[A]);
+  await db.query("update community_workout_shares set notes='STALE PRIVATE NOTE',notes_consent=true where id=$1",[stale.id]);
+  await db.exec('set role authenticated');
+  assert.equal((await db.query('select id from community_workout_shares where id=$1',[stale.id])).rows.length,0);
+  await db.exec('reset role');await db.query('select lifeos_private.sync_community_member($1)',[A]);
+  await db.query('update user_preferences set workout_sharing=false where user_id=$1',[A]);
+  const large=(await db.query("insert into workouts(user_id,name,ended_at) values($1,'Limit fixture',now()) returning id",[A])).rows[0].id;
+  await db.query("insert into workout_sets(user_id,workout_id,exercise,set_number,weight,reps) select $1,$2,'Custom',n,20,8 from generate_series(1,501) n",[A,large]);
+  await db.query('update user_preferences set workout_sharing=true where user_id=$1',[A]);
+  assert.equal((await db.query('select count(*)::integer n from community_workout_shares where source_workout_id=$1',[large])).rows[0].n,0);
+  await db.query('delete from workout_sets where workout_id=$1 and set_number=501',[large]);
+  assert.equal((await db.query('select set_count from community_workout_shares where source_workout_id=$1',[large])).rows[0].set_count,500);
+  console.log('PASS read-time RLS hides deliberately stale master/notes projections; 501-set source remains saved/private and becomes eligible at 500');
+} finally {await db.close();}
