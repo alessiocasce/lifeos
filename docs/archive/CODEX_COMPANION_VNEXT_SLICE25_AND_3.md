@@ -17,8 +17,8 @@ Before changing code, inspect current main and read:
 
 - PROJECT_CONTEXT.md
 - docs/LIFEOS_COMPANION_VNEXT.md
-- docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md
-- docs/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md
+- docs/archive/CODEX_COMPANION_VNEXT_SECOND_SLICE.md
+- docs/archive/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md
 - docs/BRAIN_ARCHITECTURE.md
 - docs/MCP.md
 - docs/RELIABILITY_RELEASE.md
@@ -492,7 +492,7 @@ Use @GitHub, @Supabase and @LifeOS where useful.
 # Interruption protocol
 
 Maintain:
-docs/CODEX_COMPANION_VNEXT_SLICE3_PROGRESS.md
+docs/archive/CODEX_COMPANION_VNEXT_SLICE3_PROGRESS.md
 
 It must separately track Slice 2.5 and Slice 3.
 

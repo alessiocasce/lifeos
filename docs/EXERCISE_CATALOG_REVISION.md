@@ -45,7 +45,7 @@ The live baseline distinguishes 426 configured-owner sets from 16 sets belonging
 to another account (442 total). Only the owner's 426 are authorized for correction.
 Do not claim 442 owner records or broaden the scope to inflate coverage.
 
-`scripts/prepare-exercise-revision-rollout.js` requires explicit backup opt-in,
+`scripts/tools/prepare-exercise-revision-rollout.js` requires explicit backup opt-in,
 verifies the configured owner/project, captures a user-restricted logical backup
 outside Git, verifies its checksum and replays actual owner rows in isolated
 PGlite twice. Managed Supabase PITR status is not exposed by connected tooling;

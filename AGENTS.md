@@ -4,7 +4,7 @@
 
 LifeOS is a Vite + React 18 app with Supabase data, Vercel serverless APIs, Brain AI workflows, WhatsApp integration, Vault retrieval, and PWA behavior.
 
-Before changing code, read `PROJECT_CONTEXT.md`. Treat it as the source of truth for architecture, constraints, recent decisions, and known risks.
+Before changing code, read `PROJECT_CONTEXT.md`. Treat it as the source of truth for architecture, constraints, recent decisions, and known risks. Release history (newest first) lives in `docs/HISTORY.md`.
 
 ## Project Structure
 

@@ -95,8 +95,8 @@ Prefer a forward code fix or code rollback; never destructively reverse history.
 
 ## Verification commands
 
-Run test:workout, scripts/test-workout-history-db.js,
-scripts/test-workout-mutation-guards.js, test:community, test:social-training,
+Run test:workout, scripts/tests/test-workout-history-db.js,
+scripts/tests/test-workout-mutation-guards.js, test:community, test:social-training,
 test:schema, test:pwa, check:functions, build, syntax and diff checks.
 
 The focused browser command is:

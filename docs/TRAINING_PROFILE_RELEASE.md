@@ -49,7 +49,7 @@ before cleanup; prefer forward fixes over destructive rollback.
 
 ## Focused QA
 
-`node scripts/test-training-profile.js`, `node scripts/test-auth-redirect.js`,
+`node scripts/tests/test-training-profile.js`, `node scripts/tests/test-auth-redirect.js`,
 `npm run test:workout`, `npm run test:workout:rest`, `npm run test:community`,
 `npm run test:social-training`, `npm run test:schema`, `npm run check:functions`,
 the targeted Training/Profile/Community/Auth Playwright specs, build/diff checks.

@@ -70,7 +70,7 @@ messages cannot be unsent. Activate PWA updates only after protecting workout dr
 
 ## QA and Handoff
 
-- `node scripts/test-training-active.js`: real PGlite A/B/anonymous grants, confirmed
+- `node scripts/tests/test-training-active.js`: real PGlite A/B/anonymous grants, confirmed
   username/duplicate/metadata behavior, JPEG scope, frozen appearance, set persistence
   without timers; pure cache expiry/deduplication and exercise-bank isolation.
 - Targeted browser specs: training-active, training-prefill-rest (retirement),

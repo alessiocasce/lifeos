@@ -33,7 +33,7 @@ No deployment, push or production UI acceptance is claimed. No schema rerun requ
 - [x] Authenticated typed project Watch and permission controls through a consolidated route.
 - [x] Full automated gates, seven-function check, all required viewport QA, final documentation.
 
-Existing local edits to `scripts/smoke-mcp-oauth.js` and `docs/QA_DEPLOYMENT.md`
+Existing local edits to `scripts/smoke/smoke-mcp-oauth.js` and `docs/QA_DEPLOYMENT.md`
 belong to the authorized production permission smoke. Keep them out of UI commits.
 
 ## Current feature inventory to preserve

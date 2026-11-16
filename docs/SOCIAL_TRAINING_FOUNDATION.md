@@ -57,7 +57,7 @@ authored exercise text, loads, reps or notes. Review `exercise_legacy_mapping_re
 before/after rollout; ambiguous rows need explicit user/curator confirmation.
 
 `npm run test:social-training` executes actual two-user RLS/username tests on PGlite.
-`node scripts/sync-social-schema.js --check` checks migration/fresh-schema parity.
+`node scripts/tools/sync-social-schema.js --check` checks migration/fresh-schema parity.
 Apply only approved targeted migrations in timestamp order before deploying code.
 Never run a broad production `db push`; the historical ledger has gaps.
 Forward fixes should preserve authored names and private workout policies.
@@ -82,7 +82,7 @@ Result revisions separately fence stale UI responses. Language changes do not
 remount Training or replace the existing persisted draft/active-session contract.
 
 Translation source: `src/i18n/italian-source.js`; regenerate with
-`node scripts/generate-italian.js`, verify with `--check`. Catalog generation and
+`node scripts/tools/generate-italian.js`, verify with `--check`. Catalog generation and
 translation updates require review: no automatic translation of private records.
 
 ## Focused QA / Rollout
@@ -118,7 +118,7 @@ no new-member WhatsApp recipient provisioning and no physical-device verificatio
 
 ## Final Mapping Audit
 
-`scripts/audit-legacy-exercise-mapping.js <aggregated-inventory.json>` groups
+`scripts/tools/audit-legacy-exercise-mapping.js <aggregated-inventory.json>` groups
 distinct names by descending set/template/snapshot usage and compares the original
 catalog against current aliases. Outputs under ignored `test-results/` contain
 the private inventory; no raw workout history is committed. The script checks all

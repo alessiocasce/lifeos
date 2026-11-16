@@ -85,7 +85,7 @@ signup returns no session. Failed/expired links must never be treated as success
 
 ## Validation
 
-Run `node scripts/test-auth-redirect.js`, `npx playwright test tests/ui/auth.spec.js`,
+Run `node scripts/tests/test-auth-redirect.js`, `npx playwright test tests/ui/auth.spec.js`,
 `npm run test:brain`, `npm run build`, and `git diff --check`.
 The isolated SDK tests use mocked Auth responses, not real verification evidence.
 Local results on 2026-10-31: 28 redirect-policy cases and 7 installed-SDK
@@ -96,7 +96,7 @@ Controlled production GoTrue smoke passed: password sign-in was rejected before
 confirmation, a genuine one-use verification URL confirmed the disposable account,
 HTTP 303 redirected to the production origin with a session fragment, confirmed
 state was checked, then password sign-in/logout succeeded. The account was deleted.
-`LIFEOS_RUN_AUTH_CONFIRMATION_SMOKE=true node --env-file=.env.local scripts/smoke-auth-confirmation.js`
+`LIFEOS_RUN_AUTH_CONFIRMATION_SMOKE=true node --env-file=.env.local scripts/smoke/smoke-auth-confirmation.js`
 is explicitly armed and never prints credentials/tokens or sends signup emails.
 This proves GoTrue verification, not email delivery or a real mailbox click;
 the actual emailed signup journey remains owner QA until recorded.

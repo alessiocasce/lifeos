@@ -58,8 +58,8 @@ revalidated. No new API/function, permission or database setting.
 ## Focused QA
 
 ```sh
-node scripts/test-app-update.js
-node scripts/test-pwa-upgrade.js
+node scripts/tests/test-app-update.js
+node scripts/tests/test-pwa-upgrade.js
 npm run test:ui -- tests/ui/training-corrections.spec.js tests/ui/training-active.spec.js tests/ui/workout-continuity.spec.js tests/ui/shell-continuity.spec.js tests/ui/training-prefill-rest.spec.js
 # Optional engine selection in PowerShell:
 $env:LIFEOS_QA_BROWSER='webkit'

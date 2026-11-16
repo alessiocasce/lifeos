@@ -58,10 +58,10 @@ The existing BrainTurn, interaction ownership, provider delivery mapping, outbox
 - `supabase/schema.sql`
 - `supabase/migrations/20260919120000_companion_beliefs.sql`
 - `tests/brain/reliabilityDatabase.js`
-- `scripts/test-companion-beliefs.js`
-- `scripts/test-schema-contracts.js`
+- `scripts/tests/test-companion-beliefs.js`
+- `scripts/tests/test-schema-contracts.js`
 - `package.json`
-- `docs/CODEX_COMPANION_VNEXT_PROGRESS.md`
+- `docs/archive/CODEX_COMPANION_VNEXT_PROGRESS.md`
 - `PROJECT_CONTEXT.md`
 - `docs/BRAIN_ARCHITECTURE.md`
 - `docs/WHATSAPP_PROACTIVE_ARCHITECTURE.md`

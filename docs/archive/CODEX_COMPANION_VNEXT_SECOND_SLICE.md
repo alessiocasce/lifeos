@@ -43,8 +43,8 @@ Before changing code, inspect the current repository and read these in full:
 
 1. `PROJECT_CONTEXT.md`
 2. `docs/LIFEOS_COMPANION_VNEXT.md`
-3. `docs/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`
-4. `docs/CODEX_COMPANION_VNEXT_PROGRESS.md`
+3. `docs/archive/CODEX_COMPANION_VNEXT_FIRST_SLICE.md`
+4. `docs/archive/CODEX_COMPANION_VNEXT_PROGRESS.md`
 5. `docs/BRAIN_ARCHITECTURE.md`
 6. `docs/MCP.md`
 7. `docs/RELIABILITY_RELEASE.md`
@@ -851,7 +851,7 @@ Work in coherent checkpoints.
 Maintain:
 
 ```text
-docs/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md
+docs/archive/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md
 ```
 
 It must record:

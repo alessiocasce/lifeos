@@ -84,7 +84,7 @@ current automatic behavior under authenticated A/B/anon roles in a rollback-only
 transaction. It creates no permanent production fixtures.
 
 Capture restricted recovery data with the opt-in backup script. Rehearse the actual
-capture using `LIFEOS_COMMUNITY_REHEARSAL_FILE=<restricted path> node scripts/rehearse-automatic-community.js`.
+capture using `LIFEOS_COMMUNITY_REHEARSAL_FILE=<restricted path> node scripts/tools/rehearse-automatic-community.js`.
 This proves restoration/data preservation but does not verify managed PITR status.
 Apply only the two new forward migrations, reconcile assigned filenames and seal
 hashes; never broad db push or rewrite applied SQL. Verify projection counts,

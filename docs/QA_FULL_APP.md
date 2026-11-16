@@ -15,7 +15,7 @@ buttons/summaries at least 44px high, checks text-zinc-500/600 against composed
 solid ancestor backgrounds at least 4.5:1, checks horizontal fit and records
 runtime exceptions. This intentionally bounded contrast test is not a complete
 accessibility audit; dialogs, failures and populated journeys have separate
-feature tests. See UI_RECONSTRUCTION_AUDIT.md for exact evidence boundaries.
+feature tests. See archive/UI_RECONSTRUCTION_AUDIT.md for exact evidence boundaries.
 
 1. Run `npm run test:brain`.
 2. Confirm the Brain regression harness passes without live Gemini, WhatsApp, browser automation, or Supabase writes.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation and local validation complete. Production migration, Vercel deployment, connector re-link, and physical ChatGPT write QA remain manual. The execution brief is `docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.
+Implementation and local validation complete. Production migration, Vercel deployment, connector re-link, and physical ChatGPT write QA remain manual. The execution brief is `docs/archive/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.
 
 ## Architecture
 
@@ -35,10 +35,10 @@ Keep MCP reads on `lifeos.read`. A separately configured static write token or a
 - `supabase/schema.sql`
 - `supabase/migrations/20260926172636_companion_external_sync.sql` (renamed to the later applied production version)
 - `tests/brain/reliabilityDatabase.js`
-- `scripts/test-schema-contracts.js`
-- `scripts/test-mcp-write.js`
+- `scripts/tests/test-schema-contracts.js`
+- `scripts/tests/test-mcp-write.js`
 - `package.json`
-- `scripts/test-mcp.js`
+- `scripts/tests/test-mcp.js`
 - `PROJECT_CONTEXT.md`
 - `docs/MCP.md`
 - `docs/LIFEOS_COMPANION_VNEXT.md`

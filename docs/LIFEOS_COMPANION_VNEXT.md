@@ -4,7 +4,7 @@
 > **Started:** 2026-09-18  
 > **Purpose:** preserve and continuously refine the next major LifeOS direction. This file is intentionally broader than an implementation ticket. Update it as the product vision becomes clearer.
 
-**Implemented boundary (2026-09-25):** Slice 2 provides explicit, scoped MCP `sync_context` for tracked routine state, allowlisted preferences, and grounded existing-project context. It writes only the current-belief world model plus a bounded audit. It does not provide ambient ChatGPT sync, general external action execution, or operational record writes. See [MCP.md](MCP.md) and [the Slice 2 progress checkpoint](CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md) for the exact contract and deployment state.
+**Implemented boundary (2026-09-25):** Slice 2 provides explicit, scoped MCP `sync_context` for tracked routine state, allowlisted preferences, and grounded existing-project context. It writes only the current-belief world model plus a bounded audit. It does not provide ambient ChatGPT sync, general external action execution, or operational record writes. See [MCP.md](MCP.md) and [the Slice 2 progress checkpoint](archive/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md) for the exact contract and deployment state.
 
 ---
 
@@ -1371,7 +1371,7 @@ Scope for this slice:
 11. remain provider-agnostic: `chatgpt` is provenance, not a backend dependency;
 12. explicit sync only; ambient/background ChatGPT synchronization remains future work.
 
-Execution brief: `docs/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.
+Execution brief: `docs/archive/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.
 
 **Success test:** after the user explicitly asks ChatGPT to sync a few important changes, LifeOS safely receives the supported semantic updates, records exactly where they came from, rejects unsupported/ambiguous writes, and can immediately return the new current state while existing read-only clients remain read-only.
 
@@ -1394,7 +1394,7 @@ Slice 3 adds temporal/provenance-aware memory kinds, project-grounded memory, cu
 
 Historical memory must never override newer current belief state. Memory remains context only and cannot authorize operational actions.
 
-Execution brief for both Slice 2.5 and Slice 3: `docs/CODEX_COMPANION_VNEXT_SLICE25_AND_3.md`.
+Execution brief for both Slice 2.5 and Slice 3: `docs/archive/CODEX_COMPANION_VNEXT_SLICE25_AND_3.md`.
 
 **Success test:** the same Brain across app/WhatsApp/MCP can retain and retrieve meaningful life history without memory spam, duplicate facts, stale-current-state errors, or operational side effects.
 

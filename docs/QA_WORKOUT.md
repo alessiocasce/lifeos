@@ -236,8 +236,8 @@ History detail scroll is independent: each detail opens at top; Back restores th
 list's previous offset. Manage exercise rows keep their number, name and options
 button on one compact row.
 
-Focused checks: `npm run test:workout`, `node scripts/test-workout-history-db.js`,
-`node scripts/test-workout-mutation-guards.js`, and Playwright specs
+Focused checks: `npm run test:workout`, `node scripts/tests/test-workout-history-db.js`,
+`node scripts/tests/test-workout-mutation-guards.js`, and Playwright specs
 `training-history.spec.js`, `workout-continuity.spec.js`, and
 `dock-long-scroll.spec.js`. Run with Chromium and WebKit when installed. Browser
 emulation does not prove iPhone Safari toolbar behavior or standalone cold launch.
