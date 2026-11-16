@@ -11,6 +11,9 @@ playwright-report/
 whatsapp-bridge/.env
 whatsapp-bridge/.wwebjs_auth/
 whatsapp-bridge/.wwebjs_cache/
+bridge/whatsapp/.env
+bridge/whatsapp/.wwebjs_auth/
+bridge/whatsapp/.wwebjs_cache/
 .wwebjs_auth/
 .wwebjs_cache/
 
