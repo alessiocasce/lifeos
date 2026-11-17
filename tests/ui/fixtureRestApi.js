@@ -15,7 +15,9 @@ export const workoutRestApi = {
   async save(preference, expectedUserId, guard) {
     check(expectedUserId, guard);
     if (localStorage.getItem('qa-rest-fail')) throw new Error('Training timer is unavailable. Your workout is still saved.');
-    const value = read(); value.preference = preference; if (!preference.enabled) value.timer = null; write(value); return preference;
+    const value = read(); value.preference = preference; if (!preference.enabled) value.timer = null; write(value);
+    if (localStorage.getItem('qa-rest-response-lost')) throw new Error('Preference response was lost.');
+    return preference;
   },
   async cancel(workoutId = null, expectedUserId, guard) { check(expectedUserId, guard); const value = read(); if (!workoutId || value.timer?.workout_id === workoutId) value.timer = null; write(value); },
   async enableNotifications(expectedUserId, guard) { check(expectedUserId, guard); if (localStorage.getItem('qa-push-fail')) throw new Error('Notification permission was not granted.'); localStorage.setItem('qa-push-device','ready'); },

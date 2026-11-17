@@ -550,4 +550,10 @@ Rollback: deploy the previous backend before removing either additive migration.
 # Rest-timer adapter regression gate
 
 - Before releasing owner/lifetime changes, run `npm run test:workout:rest-adapter` and the focused `workout-push` and `workout-rest-lifetime` Playwright specs. Verify settings, reconnect, cancel, saved-set countdown and ended-workout removal. These checks use isolated transports/fixtures and do not establish deployed RLS behavior or physical notification delivery. No schema rerun required.
-- Include `npm run test:workout:rest-coordinator` and `npx playwright test tests/ui/workout-rest-coordination.spec.js` for coordinator changes. Confirm StrictMode attachment, unknown initial state, coalesced event readback and mutation exclusion through reconciliation. Do not infer device delivery from these checks; partial notification setup reconciliation remains ticket #8.
+- Include `npm run test:workout:rest-coordinator` and `npx playwright test tests/ui/workout-rest-coordination.spec.js` for coordinator changes. Confirm StrictMode attachment, unknown initial state, coalesced event readback and mutation exclusion through reconciliation. Do not infer device delivery from these checks; partial notification setup reconciliation is covered by the acceptance evidence below.
+
+### Rest notification partial-success acceptance
+
+- Before release, rerun coordinator, real-adapter, push transport/display/lifecycle and focused browser checks in [rest coordination acceptance](qa/workout-rest-coordination.md).
+- In a controlled deployed session, verify setup-success/save-failure and lost-response readback leave registration intact, preserve the save error, show separate readback errors, and require explicit retry. No schema rerun required. Local harnesses do not establish hosted RLS or physical-device display.
+- Obtain physical iPhone notification display confirmation separately; do not treat registration, provider acceptance or local Chromium as delivery acceptance.

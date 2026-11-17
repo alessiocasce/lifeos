@@ -66,3 +66,69 @@ test('saved-set and resume events during a preference change share one readback 
   await expect(duration).toHaveValue('90');
   expect(await page.evaluate(() => window.__qaReads)).toBe(1);
 });
+
+for (const mode of ['fail', 'lost', 'readback-fail']) {
+  test(`notification ${mode} retains failure and registration until explicit retry`, async ({ page }) => {
+    await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+    await page.addInitScript(() => {
+      localStorage.setItem('qa-user', JSON.stringify({ id: 'qa-user-a' }));
+      localStorage.setItem('qa-settings:qa-user-a', JSON.stringify({ profile: { user_id: 'qa-user-a', username: 'alpha' }, preferences: { language: 'en' } }));
+      localStorage.setItem('qa-rest:qa-user-a', JSON.stringify({ preference: { enabled: true, seconds: 120, notifications: false }, timer: { id: 'timer-a', workout_id: 'qa-session-a', scheduled_for: new Date(Date.now() + 120000).toISOString() } }));
+    });
+    await page.goto('/workout');
+    await page.getByRole('button', { name: 'Rest timer', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'Rest timer', exact: true });
+    const toggle = sheet.getByRole('switch', { name: 'Background notifications' });
+    await expect(toggle).toBeEnabled();
+    await page.evaluate(async mode => {
+      const { workoutRestApi: adapter } = await import('/tests/ui/fixtureRestApi.js');
+      window.__qaRestCalls = { read: 0, save: 0, enableNotifications: 0 };
+      for (const method of Object.keys(window.__qaRestCalls)) {
+        const original = adapter[method];
+        adapter[method] = (...args) => { window.__qaRestCalls[method]++; return original(...args); };
+      }
+      localStorage.setItem(mode === 'lost' ? 'qa-rest-response-lost' : 'qa-rest-fail', 'yes');
+      if (mode === 'readback-fail') localStorage.setItem('qa-rest-read-fail', 'yes');
+    }, mode);
+    await toggle.click();
+    await expect(sheet.getByRole('alert').filter({ hasText: 'Notification settings could not be saved.' })).toBeVisible();
+    await expect(toggle).toBeEnabled();
+    await expect(toggle).toBeChecked({ checked: mode === 'lost' });
+    expect(await page.evaluate(() => window.__qaRestCalls)).toEqual({ read: 1, save: 1, enableNotifications: 1 });
+    expect(await page.evaluate(() => localStorage.getItem('qa-push-device'))).toBe('ready');
+    await expect(sheet.getByRole('timer')).toBeVisible();
+    if (mode === 'readback-fail') {
+      await expect(sheet.getByRole('alert')).toHaveCount(2);
+      for (const width of [360, 390, 430, 768, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 844 });
+        await expect(sheet.getByRole('alert').first()).toBeVisible();
+        await expect(sheet.getByRole('alert').last()).toBeVisible();
+        const bounds = await sheet.boundingBox();
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width + 1);
+        expect(await sheet.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+        if (width === 360) await page.screenshot({ path: test.info().outputPath('rest-dual-errors-360.png') });
+        await toggle.scrollIntoViewIfNeeded();
+        await expect(toggle).toBeInViewport();
+        await expect(toggle).toBeEnabled();
+      }
+    }
+    await page.evaluate(() => {
+      localStorage.removeItem('qa-rest-fail'); localStorage.removeItem('qa-rest-response-lost'); localStorage.removeItem('qa-rest-read-fail');
+      window.dispatchEvent(new Event('focus'));
+    });
+    await expect.poll(() => page.evaluate(() => window.__qaRestCalls.read)).toBe(2);
+    await expect(sheet.getByRole('alert')).toHaveCount(1);
+    if (mode === 'lost') await sheet.getByRole('button', { name: 'Reconnect notifications' }).click();
+    else await toggle.click();
+    await expect(sheet.getByRole('alert')).toHaveCount(0);
+    await expect(toggle).toBeChecked();
+    expect(await page.evaluate(() => window.__qaRestCalls)).toEqual({ read: 2, save: 2, enableNotifications: 2 });
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await expect(sheet.getByRole('switch', { name: 'Automatic rest timer' })).toBeChecked();
+    await expect(sheet.getByRole('timer')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('qa-push-device'))).toBe('ready');
+    expect(await page.evaluate(() => window.__qaRestCalls)).toEqual({ read: 2, save: 3, enableNotifications: 2 });
+  });
+}

@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
+import { createWorkoutRestCoordinator } from '../../src/utils/workoutRestCoordinator.js';
 
 // Exercise the production adapter; substitute only auth, database and browser transports.
 let user = 'A', current = true, pause = null;
+let recovery = null;
 const requests = [];
 const preference = { enabled: true, seconds: 60, notifications: false };
 globalThis.__restClient = {
@@ -21,6 +23,18 @@ function query(table, args) {
     async then(resolve, reject) {
       requests.push(request);
       if (pause) { const action = pause; pause = null; await action(); }
+      if (recovery && table === 'workout_web_rest_preferences') {
+        if (request.value) {
+          recovery.saves++;
+          if (recovery.mode === 'lost') recovery.preference = request.value;
+          if (recovery.mode !== 'ok') return Promise.resolve({ error: { message: 'private database detail' } }).then(resolve, reject);
+          recovery.preference = request.value;
+        } else {
+          recovery.reads++;
+          if (recovery.readFails) return Promise.resolve({ error: { message: 'private read detail' } }).then(resolve, reject);
+        }
+        return Promise.resolve({ data: recovery.preference }).then(resolve, reject);
+      }
       return Promise.resolve({ data: table === 'workout_web_rest_preferences' ? preference : [] }).then(resolve, reject);
     },
   };
@@ -78,7 +92,7 @@ globalThis.window = { Notification: {}, pushManager: manager, addEventListener()
 globalThis.Notification = { requestPermission() { stage('permission'); return Promise.resolve('granted'); } };
 globalThis.fetch = async (_url, options) => {
   stage(JSON.parse(options.body).operation);
-  return { ok: true, json: async () => ({ ok: true, data: { configured: true, publicKey: 'AQID' } }) };
+  return { ok: true, json: async () => ({ ok: true, data: { configured: true, publicKey: 'AQID', registered: true } }) };
 };
 for (const boundary of ['permission', 'config', 'getSubscription', 'subscribe-device', 'unsubscribe', 'unsubscribe-device']) {
   current = true; stopAt = boundary; subscription = null; effects.length = 0;
@@ -121,3 +135,86 @@ current = true;
 await fixture.cancel();
 assert.equal((await fixture.read('workout-b', 'A', guard)).timer, null);
 console.log('PASS fixture expected-owner, workout filtering, lifetime and logout contract');
+
+
+// Same public coordinator + real adapter and browser-fixture contract under lost/failed saves.
+async function partialContract(adapter, configure, inspect) {
+  for (const mode of ['fail', 'lost', 'readback-fail']) {
+    await configure('initial');
+    const coordinator = createWorkoutRestCoordinator({ userId: 'A', workoutId: 'workout-a', adapter });
+    assert.equal((await coordinator.refresh()).status, 'success');
+    await configure(mode);
+    const attempt = await coordinator.reconnectNotifications();
+    assert.equal(attempt.status, 'failure');
+    const facts = inspect();
+    assert.equal(facts.registered, true, 'partial recovery retains the actual device registration');
+    assert.equal(facts.saves, 1, 'reconciliation never repeats the write');
+    assert.equal(facts.reads, 2, 'exactly one forced read follows the initial read');
+    if (adapter === api) {
+      assert.equal(effects.filter(effect => effect === 'permission').length, 1, 'readback never prompts');
+      assert.equal(effects.includes('unsubscribe'), false, 'recovery never unregisters');
+    }
+    assert.equal(coordinator.getSnapshot().preference.notifications, mode === 'lost');
+    assert.equal(coordinator.getSnapshot().mutationError.code, 'notification_preference_save_failed');
+    assert.equal(Boolean(coordinator.getSnapshot().refreshError), mode === 'readback-fail');
+    assert.doesNotMatch(JSON.stringify(coordinator.getSnapshot()), /private|fixture|endpoint/);
+    await configure('ok');
+    assert.equal((await coordinator.reconnectNotifications()).status, 'success', 'retry is explicit');
+    assert.equal(coordinator.getSnapshot().mutationError, null);
+    assert.equal(coordinator.getSnapshot().preference.notifications, true);
+    const registered = inspect().registered;
+    const beforeEffects = effects.length;
+    assert.equal((await coordinator.setNotifications(false)).status, 'success');
+    assert.equal(coordinator.getSnapshot().preference.enabled, true);
+    assert.equal(inspect().registered, registered, 'opt-out leaves registration alone');
+    assert.equal(effects.length, beforeEffects, 'opt-out does not contact push transport');
+    coordinator.dispose();
+  }
+}
+window.Notification.permission = 'granted';
+await partialContract(api, async mode => {
+  if (mode === 'initial') {
+    user = 'A'; current = true; stopAt = null; switchAt = null; subscription = null; effects.length = 0;
+    recovery = { preference: { ...preference }, mode: 'ok', saves: 0, reads: 0 };
+  } else { recovery.mode = mode === 'readback-fail' ? 'fail' : mode; recovery.readFails = mode === 'readback-fail'; }
+}, () => ({ ...recovery, registered: Boolean(subscription) }));
+console.log('PASS real adapter partial save, lost response, dual failure, retained registration and explicit retry');
+recovery = null;
+
+let fixtureReads = 0, fixtureSaves = 0;
+const fixtureAdapter = {
+  ...fixture,
+  read(...args) { fixtureReads++; return fixture.read(...args); },
+  save(...args) { fixtureSaves++; return fixture.save(...args); },
+};
+await partialContract(fixtureAdapter, async mode => {
+  if (mode === 'initial') {
+    storage.clear(); fixtureReads = 0; fixtureSaves = 0;
+    localStorage.setItem('qa-user', JSON.stringify({ id: 'A' }));
+    localStorage.setItem('qa-rest:A', JSON.stringify({ preference, timer: null }));
+  }
+  localStorage.setItem('qa-rest-fail', ['fail', 'readback-fail'].includes(mode) ? 'yes' : '');
+  localStorage.setItem('qa-rest-response-lost', mode === 'lost' ? 'yes' : '');
+  localStorage.setItem('qa-rest-read-fail', mode === 'readback-fail' ? 'yes' : '');
+}, () => ({ registered: localStorage.getItem('qa-push-device') === 'ready', reads: fixtureReads, saves: fixtureSaves }));
+console.log('PASS browser fixture equivalent partial failure and explicit retry contract');
+
+
+// Real adapter transport completion after disposal cannot advance save -> reconciliation or publish readback.
+for (const boundary of ['save', 'readback']) {
+  user = 'A'; current = true; subscription = null; effects.length = 0;
+  recovery = { preference: { ...preference }, mode: 'ok', saves: 0, reads: 0 };
+  const coordinator = createWorkoutRestCoordinator({ userId: 'A', workoutId: 'workout-a', adapter: api });
+  await coordinator.refresh();
+  recovery.mode = 'fail';
+  pause = boundary === 'save' ? async () => coordinator.dispose() : async () => { pause = async () => coordinator.dispose(); };
+  assert.equal((await coordinator.reconnectNotifications()).status, 'obsolete');
+  // Finish already-sent transport promises before inspecting their effect log.
+  for (let i = 0; i < 30; i++) await Promise.resolve();
+  assert.ok(subscription, 'disposal leaves completed registration in place');
+  assert.equal(recovery.saves, 1);
+  assert.equal(recovery.reads, boundary === 'save' ? 1 : 2);
+  assert.equal(coordinator.getSnapshot().preference.notifications, false);
+}
+recovery = null;
+console.log('PASS real adapter partial-success disposal before and during reconciliation');

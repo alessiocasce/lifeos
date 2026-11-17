@@ -508,3 +508,9 @@ production Supabase emails/authentication, password managers or physical iOS.
 
 - Check `docs/QA_WORKOUT.md` owner/lifetime scenarios when changing Training or account routing: stale reads and cancellation must use the initiating account; pending notification setup must stop after account/workout changes, including A → B → A. Logout retains cancel-all/device-detachment ownership.
 - Run the coordinator harness and `workout-rest-coordination` browser spec. Unknown initial preferences must stay neutral; saved-set and resume events during a mutation must appear after one readback, with no dropped countdown and no competing mutation until reconciliation settles. Read and mutation failures remain separate.
+
+### Rest notification recovery
+
+- Setup-success/save-failure performs one readback and retains a visible safe save error; a lost response can confirm persisted consent without hiding the failure. Readback failure appears separately. Explicit retry replaces the previous mutation failure.
+- Recovery is read-only: no prompt, automatic retry, rollback or unregister. Notification opt-out retains enabled foreground timer and device registrations. Replaced/ended-workout lifetimes never advance another effect or update the new instance.
+- Deterministic, real-adapter and browser-fixture evidence and limits: [rest coordination acceptance](qa/workout-rest-coordination.md). Physical iPhone delivery acceptance remains separate.

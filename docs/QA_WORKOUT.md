@@ -474,4 +474,12 @@ remain physical acceptance; synthetic viewport changes are not device proof.
 
 - Run `npm run test:workout:rest-coordinator` for initial failure/retry, immutable confirmed snapshots, strict preference validation, old-read invalidation, coalesced refreshes during save/cancel, busy mutations through readback, failed readback after acknowledged writes, disposal and A -> B -> A. Refresh errors retain confirmed facts; successful refresh does not erase a mutation failure.
 - Run `npx playwright test tests/ui/workout-rest-coordination.spec.js` for neutral unknown preferences and saved-set/focus/online events during a held duration save. Exactly one fresh read follows; controls stay disabled until readback, then the saved-set countdown appears. Initial read and attachment must still work under React StrictMode effect replay.
-- Notification permission stays in the direct control-handler path. No automatic write retry or reconnect is introduced. Complete setup-success/save-failure reconciliation is tracked separately in ticket #8.
+- Notification permission stays in the direct control-handler path. No automatic write retry or reconnect is introduced. Setup-success/save-failure reconciliation is implemented; follow the notification partial-save recovery checklist and acceptance evidence below.
+
+## Notification partial-save recovery
+
+- Enable or reconnect notifications with setup succeeding but preference persistence failing. Keep the prior confirmed preference until one forced readback completes; show the notification-save failure throughout. Controls stay busy through readback.
+- Lose the save response after persistence: readback may show notifications enabled while the save failure stays visible. A focus/online refresh clears only a read failure. Retry by explicitly enabling/reconnecting.
+- Fail readback too: show separate save and read alerts, retain confirmed preferences/countdown, and leave the device registered. Confirm no permission prompt, rollback, reconnect or write retry occurs during recovery.
+- Turn notifications off: foreground timer and current/other device registrations remain intact. Switch account/workout or end the workout during setup/save/readback: old lifetime cannot publish or start the next stage.
+- Check both alerts and accessible retry controls at 360, 390, 430, 768, 1024 and 1440px; scroll within the sheet when necessary. See [acceptance evidence](qa/workout-rest-coordination.md).

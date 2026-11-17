@@ -1,5 +1,6 @@
 // Interface-owned messages only. Never run user-authored record text through t().
 export default {
+  'Notification settings could not be saved. Check the current setting and retry.': 'Impossibile salvare le impostazioni delle notifiche. Verifica le impostazioni attuali e riprova.',
   'This device is registered for notifications.': 'Questo dispositivo è registrato per le notifiche.',
   'Checking this device...': 'Verifica del dispositivo...',
   'Notifications need reconnecting on this device.': 'Ricollega le notifiche su questo dispositivo.',

@@ -235,4 +235,142 @@ const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve();
   assert.equal(f.coordinator.getSnapshot().refreshError.code, 'refresh_failed');
 }
 
+
+
+// Registration success plus failed preference save forces one read without an event or write retry.
+{
+  const f = await loaded();
+  const attempt = f.coordinator.setNotifications(true);
+  f.calls[1].resolve();
+  await flush();
+  f.calls[2].reject(new Error('private subscription credential'));
+  await flush();
+  assert.equal(f.calls.length, 4, 'partial setup must force a reconciliation read');
+  assert.equal(f.calls[3].method, 'read');
+  assert.equal(f.coordinator.getSnapshot().preference.notifications, false);
+  assert.equal(f.coordinator.getSnapshot().device.status, 'unverified');
+  assert.equal(f.coordinator.getSnapshot().mutationError.operation, 'setNotifications');
+  const queued = [f.coordinator.refresh(), f.coordinator.refresh()];
+  assert.equal((await f.coordinator.reconnectNotifications()).status, 'busy');
+  f.calls[3].resolve(data());
+  assert.equal((await attempt).status, 'failure');
+  assert.deepEqual((await Promise.all(queued)).map(result => result.status), ['success', 'success']);
+  assert.equal(f.coordinator.getSnapshot().mutationError.code, 'notification_preference_save_failed');
+  assert.doesNotMatch(JSON.stringify(f.coordinator.getSnapshot()), /private subscription/);
+  assert.equal(f.calls.length, 4);
+}
+
+// Reconnect lost-response readback confirms persisted consent but keeps the failed attempt visible.
+{
+  const f = await loaded();
+  const attempt = f.coordinator.reconnectNotifications();
+  f.calls[1].resolve();
+  await flush();
+  const queued = f.coordinator.refresh();
+  f.calls[2].reject(new Error('response lost'));
+  await flush();
+  assert.equal(f.calls.length, 4);
+  f.calls[3].resolve(data({ preference: { ...preference, notifications: true }, device: { status: 'ready' } }));
+  assert.equal((await attempt).status, 'failure');
+  assert.equal((await queued).status, 'success');
+  assert.equal(f.coordinator.getSnapshot().preference.notifications, true);
+  assert.equal(f.coordinator.getSnapshot().mutationError.operation, 'reconnectNotifications');
+  const read = f.coordinator.refresh();
+  f.calls[4].resolve(data({ preference: { ...preference, notifications: true }, device: { status: 'ready' } }));
+  await read;
+  assert.ok(f.coordinator.getSnapshot().mutationError);
+  assert.equal(f.calls.filter(call => call.method === 'save').length, 1);
+  const retry = f.coordinator.reconnectNotifications();
+  assert.equal(f.coordinator.getSnapshot().mutationError, null, 'explicit attempt replaces the failure');
+  f.calls[5].resolve();
+  await flush();
+  f.calls[6].resolve({ ...preference, notifications: true });
+  assert.equal((await retry).status, 'success');
+  assert.equal(f.calls.length, 7, 'acknowledged retry does not force an extra read');
+}
+
+// Failed readback preserves confirmed consent/timer, separate safe failures, and registration is never rolled back.
+{
+  const f = await loaded();
+  const attempt = f.coordinator.setNotifications(true);
+  f.calls[1].resolve();
+  await flush();
+  f.calls[2].reject(new Error('provider secret'));
+  await flush();
+  const waiting = f.coordinator.refresh();
+  f.calls[3].reject(new Error('subscription endpoint credential'));
+  assert.equal((await attempt).status, 'failure');
+  assert.equal((await waiting).status, 'failure');
+  const snapshot = f.coordinator.getSnapshot();
+  assert.deepEqual(snapshot.preference, preference);
+  assert.deepEqual(snapshot.timer, timer);
+  assert.equal(snapshot.device.status, 'unverified');
+  assert.equal(snapshot.refreshError.operation, 'refresh');
+  assert.equal(snapshot.mutationError.operation, 'setNotifications');
+  assert.doesNotMatch(JSON.stringify(snapshot), /provider secret|endpoint credential/);
+  assert.deepEqual(f.calls.map(call => call.method), ['read', 'enableNotifications', 'save', 'read']);
+}
+
+// Setup failure does not force reconciliation; later explicit read remains permission/write free.
+{
+  const f = await loaded();
+  const attempt = f.coordinator.setNotifications(true);
+  f.calls[1].reject(new Error('Notification permission was not granted.'));
+  assert.equal((await attempt).error.code, 'permission_denied');
+  assert.equal(f.calls.length, 2);
+  const read = f.coordinator.refresh();
+  f.calls[2].resolve(data());
+  await read;
+  assert.equal(f.coordinator.getSnapshot().mutationError.code, 'permission_denied');
+  assert.deepEqual(f.calls.map(call => call.method), ['read', 'enableNotifications', 'read']);
+}
+
+// Disposal during the failed save starts no read, while disposal during readback settles all callers obsolete.
+for (const boundary of ['save', 'readback']) {
+  const f = await loaded();
+  const attempt = f.coordinator.reconnectNotifications();
+  f.calls[1].resolve();
+  await flush();
+  const waiting = f.coordinator.refresh();
+  if (boundary === 'readback') {
+    f.calls[2].reject(new Error('lost response'));
+    await flush();
+  }
+  const before = f.coordinator.getSnapshot();
+  f.coordinator.dispose();
+  assert.equal((await attempt).status, 'obsolete');
+  assert.equal((await waiting).status, 'obsolete');
+  if (boundary === 'save') f.calls[2].reject(new Error('late failed save'));
+  else f.calls[3].resolve(data({ preference: { ...preference, notifications: true } }));
+  await flush();
+  assert.equal(f.calls.length, boundary === 'save' ? 3 : 4);
+  assert.equal(f.coordinator.getSnapshot(), before);
+  const replacement = await loaded();
+  assert.equal(replacement.coordinator.getSnapshot().mutationError, null);
+}
+
+// A subscriber can dispose at readback admission; no new transport begins after that lifetime ends.
+{
+  const f = await loaded();
+  f.coordinator.subscribe(() => {
+    const snapshot = f.coordinator.getSnapshot();
+    if (snapshot.loading && snapshot.mutation) f.coordinator.dispose();
+  });
+  const attempt = f.coordinator.reconnectNotifications();
+  f.calls[1].resolve();
+  await flush();
+  f.calls[2].reject(new Error('lost response'));
+  assert.equal((await attempt).status, 'obsolete');
+  await flush();
+  assert.equal(f.calls.length, 3, 'disposed readback admission cannot invoke adapter.read');
+}
+
+// Disposal by a mutation-admission subscriber prevents a new permission/setup effect entirely.
+{
+  const f = await loaded();
+  f.coordinator.subscribe(() => { if (f.coordinator.getSnapshot().mutation) f.coordinator.dispose(); });
+  assert.equal((await f.coordinator.setNotifications(true)).status, 'obsolete');
+  assert.equal(f.calls.length, 1, 'disposed mutation admission cannot prompt');
+}
+
 console.log('Workout rest coordinator: PASS');

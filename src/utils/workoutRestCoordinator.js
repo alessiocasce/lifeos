@@ -42,6 +42,7 @@ export function createWorkoutRestCoordinator({ userId, workoutId, adapter }) {
     (async () => {
       let outcome;
       try {
+        if (!valid()) return task.resolve(obsolete);
         const next = await adapter.read(workoutId, userId, { isCurrent: valid });
         if (!valid()) return task.resolve(obsolete);
         publish({ preference: next.preference, timer: next.timer, device: next.device, loading: false, refreshError: null });
@@ -72,7 +73,7 @@ export function createWorkoutRestCoordinator({ userId, workoutId, adapter }) {
     }
     return read?.promise || performRead();
   }
-  function mutate(operation, effect, valid = true) {
+  function mutate(operation, effect, valid = true, reconcileFailure = () => false) {
     if (disposed) return Promise.resolve(obsolete);
     if (mutation) return Promise.resolve(busy);
     if (!snapshot.preference) {
@@ -92,6 +93,7 @@ export function createWorkoutRestCoordinator({ userId, workoutId, adapter }) {
     (async () => {
       let outcome;
       try {
+        if (!isCurrent()) return task.resolve(obsolete);
         const patch = await effect();
         if (!isCurrent()) return task.resolve(obsolete);
         publish({ ...patch, mutationError: null });
@@ -101,16 +103,20 @@ export function createWorkoutRestCoordinator({ userId, workoutId, adapter }) {
         if (error?.code === 'obsolete') outcome = obsolete;
         else {
           const code = notificationFailures.get(error?.message);
-          outcome = failure(operation, code || 'mutation_failed', code ? error.message : 'Training timer is unavailable. Your workout is still saved.');
+          outcome = reconcileFailure()
+            ? failure(operation, 'notification_preference_save_failed', 'Notification settings could not be saved. Check the current setting and retry.')
+            : failure(operation, code || 'mutation_failed', code ? error.message : 'Training timer is unavailable. Your workout is still saved.');
           publish({ mutationError: outcome.error,
             ...(['setNotifications', 'reconnectNotifications'].includes(operation) ? { device: { status: 'unverified' } } : {}) });
         }
       }
-      if (isCurrent() && pendingRefresh) {
+      // Completed registration needs authoritative readback even when no refresh event arrived.
+      if (isCurrent() && (pendingRefresh || (outcome?.status === 'failure' && reconcileFailure()))) {
         const waiting = pendingRefresh;
         pendingRefresh = null;
         task.reconciliation = performRead();
-        waiting.resolve(await task.reconciliation);
+        const reconciled = await task.reconciliation;
+        waiting?.resolve(reconciled);
       }
       if (isCurrent()) { mutation = null; publish({ mutation: null }); }
       task.resolve(isCurrent() ? outcome : obsolete);
@@ -128,13 +134,17 @@ export function createWorkoutRestCoordinator({ userId, workoutId, adapter }) {
     }, valid);
   }
   function notifications(enabled, operation) {
+    let registered = false;
     return mutate(operation, async () => {
       // This call stays before the first await so permission belongs to the control's gesture.
-      if (enabled) await adapter.enableNotifications(userId, { reconnect: true, isCurrent });
+      if (enabled) {
+        await adapter.enableNotifications(userId, { reconnect: true, isCurrent });
+        registered = true;
+      }
       if (!isCurrent()) throw Object.assign(new Error('Obsolete rest view.'), { code: 'obsolete' });
       const preference = await adapter.save({ ...snapshot.preference, notifications: enabled }, userId, { isCurrent });
       return { preference, device: { status: enabled ? 'ready' : 'off' } };
-    }, typeof enabled === 'boolean');
+    }, typeof enabled === 'boolean', () => registered);
   }
   return {
     getSnapshot: () => snapshot,
