@@ -463,3 +463,9 @@ Run `training-navigation.spec.js` for first-shell/tab dock measurements at
 and name-only empty workout creation (Rome midnight, failure/cancel/double-submit).
 See TRAINING_NAVIGATION_QA.md. Safari toolbar collapse and standalone cold launch
 remain physical acceptance; synthetic viewport changes are not device proof.
+# Rest-timer owner and lifetime guards
+
+- Run `npm run test:workout:rest-adapter` for production and fixture expected-owner reads, captured bearer credentials, workout-specific cancellation, logout cancel-all compatibility, and notification effect-stage guards.
+- Run `npx playwright test tests/ui/workout-push.spec.js tests/ui/workout-rest-lifetime.spec.js` for existing timer settings/countdown/reconnect and an account A → B → A notification action held across the switch. The old action must neither register nor persist consent after returning to A; the new view must remain free of old errors.
+- Repeat with workout changes during permission/configuration/subscription waits. An already sent request can finish; the next effect stage must not start. Switching views alone does not cancel a persisted timer.
+- Keep logout responsible for cancel-all and device detachment. Foreground timers, saved notification consent, absolute server deadlines and network-independent push display remain unchanged. Browser checks do not establish physical iPhone delivery. No schema rerun required.

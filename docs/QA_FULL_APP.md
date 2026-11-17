@@ -504,3 +504,6 @@ captures under `test-results/auth-private-entry-fits-*/private-entry.png` cover
 375x812, 390x844, 393x852, 430x932, 1280x800, 1440x900 and 1920x1080. Tests use
 the isolated fixture service and abort external requests. They do not verify
 production Supabase emails/authentication, password managers or physical iOS.
+# Training rest-timer isolation
+
+- Check `docs/QA_WORKOUT.md` owner/lifetime scenarios when changing Training or account routing: stale reads and cancellation must use the initiating account; pending notification setup must stop after account/workout changes, including A → B → A. Logout retains cancel-all/device-detachment ownership.

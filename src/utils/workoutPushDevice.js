@@ -5,15 +5,18 @@ export async function pushManagerFor(scope) {
   return registration?.active?registration.pushManager:null;
 }
 
-export async function inspectPushDevice({scope=globalThis,lookup,now=Date.now()}) {
+export async function inspectPushDevice({scope=globalThis,lookup,now=Date.now(),check=()=>{}}) {
   if(!scope.Notification)return {status:'unsupported'};
   if(scope.Notification.permission==='denied')return {status:'blocked'};
   if(scope.Notification.permission!=='granted')return {status:'reconnect'};
   try {
+    await check();
     const manager=await pushManagerFor(scope);
     if(!manager)return {status:'reconnect'};
+    await check();
     const subscription=await manager.getSubscription();
     if(!subscription||(subscription.expirationTime&&subscription.expirationTime<=now))return {status:'reconnect'};
+    await check();
     const server=await lookup(subscription.endpoint);
     if(!server.configured||!server.publicKey)return {status:'unavailable'};
     if(!server.registered)return {status:'reconnect'};

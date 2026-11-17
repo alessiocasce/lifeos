@@ -547,3 +547,6 @@ OAuth update: the owner refreshed the local link credential; the deployed smoke 
 Deployed app Slice 3.1 QA: the communication-preference recall answered from stored memory without creating a new `ai_memories` row; an explicit app restatement of the existing clear-technical-explanations preference acknowledged it without increasing the row count (17 before and after). The live MCP smoke includes bounded `search_memory`. This does not verify the WhatsApp channel, dated-event classification in production, or the blocked OAuth write flow.
 
 Rollback: deploy the previous backend before removing either additive migration. Do not drop redemption or memory history during an ordinary rollback. If OAuth redemption storage fails, code exchange fails closed; use `LIFEOS_MCP_OAUTH_ENABLED=false` only as a temporary OAuth rollback, not as replay protection.
+# Rest-timer adapter regression gate
+
+- Before releasing owner/lifetime changes, run `npm run test:workout:rest-adapter` and the focused `workout-push` and `workout-rest-lifetime` Playwright specs. Verify settings, reconnect, cancel, saved-set countdown and ended-workout removal. These checks use isolated transports/fixtures and do not establish deployed RLS behavior or physical notification delivery. No schema rerun required.
