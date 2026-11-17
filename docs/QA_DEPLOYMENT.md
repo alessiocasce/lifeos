@@ -550,3 +550,4 @@ Rollback: deploy the previous backend before removing either additive migration.
 # Rest-timer adapter regression gate
 
 - Before releasing owner/lifetime changes, run `npm run test:workout:rest-adapter` and the focused `workout-push` and `workout-rest-lifetime` Playwright specs. Verify settings, reconnect, cancel, saved-set countdown and ended-workout removal. These checks use isolated transports/fixtures and do not establish deployed RLS behavior or physical notification delivery. No schema rerun required.
+- Include `npm run test:workout:rest-coordinator` and `npx playwright test tests/ui/workout-rest-coordination.spec.js` for coordinator changes. Confirm StrictMode attachment, unknown initial state, coalesced event readback and mutation exclusion through reconciliation. Do not infer device delivery from these checks; partial notification setup reconciliation remains ticket #8.

@@ -57,6 +57,7 @@ npm.cmd run dev -- --host 0.0.0.0
   - Header/sidebar metrics use persisted health, workout, and expense state where available instead of mock finance/training values.
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
+- `src/utils/workoutRestCoordinator.js` owns fixed account/workout rest-timer state, immutable confirmed snapshots, mutation exclusion and coalesced refresh readback. `src/hooks/useWorkoutRestCoordinator.js` attaches a fresh coordinator per React effect setup, initial read and browser events; `WorkoutRestTimer.jsx` retains sheet/display/countdown behavior. Unknown preferences display a neutral placeholder until readback confirms them. Logout cancellation/device detachment remain in `LifeOSContext.jsx`.
 - `api/_utils/date.js` is the shared backend source for Europe/Rome local date/time defaults. Backend code must not use UTC ISO slicing for user-facing "today" behavior.
 - `api/_utils/health.js` owns persisted sleep-hour recalculation from the previous day's `sleep_start` and the current day's `wake_time`.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
@@ -892,7 +893,7 @@ Current behavior:
 - The Exercise field suggests names from the current template snapshot, all templates, and prior logged sets.
 - Current active-session sets are shown immediately under the logger, grouped by exercise.
 - Active session logs keep exercises ordered by first logged, with sets displayed as warmups first, then Set 1, Set 2, Set 3.
-- Active workout UI does not show the rest timer, PR flags, volume/count summaries, dates, or Other Sessions.
+- Active workout UI keeps rest settings/countdown in the session header; it does not show legacy Start/Pause/Reset timer controls, PR flags, volume/count summaries, dates, or Other Sessions.
 - Previous performance is reduced to compact Heaviest and estimated 1RM values.
 - Deeper workout analysis is intentionally deferred to a separate analysis surface later.
 - Workout displays persisted/template data only; the previous mock workout archive was removed from the tab.

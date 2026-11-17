@@ -188,7 +188,7 @@ Run the focused checklists after the full flow:
 4. Confirm the active command header does not overlap Exercise Plan or Set Logger when opening or scrolling.
 5. End the workout and confirm the ENDED/Reopen header does not overlap Logged Sets.
 6. Confirm End Workout or Reopen is immediately visible when the Workout tab opens.
-7. Confirm the rest timer, PR flags, active volume/count summaries, Date field, Other Sessions, and exercise history are absent.
+7. Confirm PR flags, active volume/count summaries, Date field, Other Sessions, and exercise history are absent; rest settings/countdown remain in the session header.
 8. Leave RPE blank, save a set, and confirm it displays `RPE --`.
 9. Type in Exercise and confirm suggestions appear from snapshots, templates, and prior sets.
 10. Tap a suggestion and confirm it fills the field and recalculates the next set.
@@ -507,3 +507,4 @@ production Supabase emails/authentication, password managers or physical iOS.
 # Training rest-timer isolation
 
 - Check `docs/QA_WORKOUT.md` owner/lifetime scenarios when changing Training or account routing: stale reads and cancellation must use the initiating account; pending notification setup must stop after account/workout changes, including A → B → A. Logout retains cancel-all/device-detachment ownership.
+- Run the coordinator harness and `workout-rest-coordination` browser spec. Unknown initial preferences must stay neutral; saved-set and resume events during a mutation must appear after one readback, with no dropped countdown and no competing mutation until reconciliation settles. Read and mutation failures remain separate.

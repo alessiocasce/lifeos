@@ -383,7 +383,7 @@ Run this after applying `supabase/schema.sql` and signing in with a Supabase-bac
 
 ## Active Workout Noise
 
-1. Confirm the rest timer and Start/Pause/Reset timer controls are gone.
+1. Confirm legacy Start/Pause/Reset timer controls are gone; current rest settings/countdown remain in the session header.
 2. Confirm PR flags such as `SET VOLUME`, `SESSION VOLUME`, `WEIGHT`, and `REPS` do not appear near active sets.
 3. Confirm active workout set/volume summaries are absent.
 4. Confirm exercise group subtitles such as `3 working / 1 warmup / 810 volume` are absent.
@@ -469,3 +469,9 @@ remain physical acceptance; synthetic viewport changes are not device proof.
 - Run `npx playwright test tests/ui/workout-push.spec.js tests/ui/workout-rest-lifetime.spec.js` for existing timer settings/countdown/reconnect and an account A → B → A notification action held across the switch. The old action must neither register nor persist consent after returning to A; the new view must remain free of old errors.
 - Repeat with workout changes during permission/configuration/subscription waits. An already sent request can finish; the next effect stage must not start. Switching views alone does not cancel a persisted timer.
 - Keep logout responsible for cancel-all and device detachment. Foreground timers, saved notification consent, absolute server deadlines and network-independent push display remain unchanged. Browser checks do not establish physical iPhone delivery. No schema rerun required.
+
+## Rest-timer coordination
+
+- Run `npm run test:workout:rest-coordinator` for initial failure/retry, immutable confirmed snapshots, strict preference validation, old-read invalidation, coalesced refreshes during save/cancel, busy mutations through readback, failed readback after acknowledged writes, disposal and A -> B -> A. Refresh errors retain confirmed facts; successful refresh does not erase a mutation failure.
+- Run `npx playwright test tests/ui/workout-rest-coordination.spec.js` for neutral unknown preferences and saved-set/focus/online events during a held duration save. Exactly one fresh read follows; controls stay disabled until readback, then the saved-set countdown appears. Initial read and attachment must still work under React StrictMode effect replay.
+- Notification permission stays in the direct control-handler path. No automatic write retry or reconnect is introduced. Complete setup-success/save-failure reconciliation is tracked separately in ticket #8.
