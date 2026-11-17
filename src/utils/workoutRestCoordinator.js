@@ -8,11 +8,11 @@ function deferred() {
 }
 const failure = (operation, code, message) => ({ status: 'failure', error: { operation, code, message } });
 const notificationFailures = new Map([
-  ['Notification permission was not granted.', 'permission_denied'],
-  ['Install LifeOS on your Home Screen to enable supported notifications.', 'unsupported'],
-  ['Background notifications need server configuration. The countdown still works.', 'unavailable'],
-  ['The LifeOS service worker is not ready. Reopen the installed app.', 'device_unavailable'],
-  ['Device subscription could not be renewed. Reopen LifeOS and retry.', 'renewal_failed'],
+  ['permission_denied', 'Notification permission was not granted.'],
+  ['unsupported', 'Install LifeOS on your Home Screen to enable supported notifications.'],
+  ['unavailable', 'Background notifications need server configuration. The countdown still works.'],
+  ['device_unavailable', 'The LifeOS service worker is not ready. Reopen the installed app.'],
+  ['renewal_failed', 'Device subscription could not be renewed. Reopen LifeOS and retry.'],
 ]);
 function immutable(value) {
   if (!value || typeof value !== 'object') return value;
@@ -102,10 +102,10 @@ export function createWorkoutRestCoordinator({ userId, workoutId, adapter }) {
         if (!isCurrent()) return task.resolve(obsolete);
         if (error?.code === 'obsolete') outcome = obsolete;
         else {
-          const code = notificationFailures.get(error?.message);
+          const message = notificationFailures.get(error?.code);
           outcome = reconcileFailure()
             ? failure(operation, 'notification_preference_save_failed', 'Notification settings could not be saved. Check the current setting and retry.')
-            : failure(operation, code || 'mutation_failed', code ? error.message : 'Training timer is unavailable. Your workout is still saved.');
+            : failure(operation, message ? error.code : 'mutation_failed', message || 'Training timer is unavailable. Your workout is still saved.');
           publish({ mutationError: outcome.error,
             ...(['setNotifications', 'reconnectNotifications'].includes(operation) ? { device: { status: 'unverified' } } : {}) });
         }

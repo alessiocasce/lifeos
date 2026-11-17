@@ -20,7 +20,7 @@ export const workoutRestApi = {
     return preference;
   },
   async cancel(workoutId = null, expectedUserId, guard) { check(expectedUserId, guard); const value = read(); if (!workoutId || value.timer?.workout_id === workoutId) value.timer = null; write(value); },
-  async enableNotifications(expectedUserId, guard) { check(expectedUserId, guard); if (localStorage.getItem('qa-push-fail')) throw new Error('Notification permission was not granted.'); localStorage.setItem('qa-push-device','ready'); },
+  async enableNotifications(expectedUserId, guard) { check(expectedUserId, guard); if (localStorage.getItem('qa-push-fail')) throw Object.assign(new Error('Notification permission was not granted.'), { code: 'permission_denied' }); localStorage.setItem('qa-push-device','ready'); },
   async detachDevice() {},
   async detachLocalDevice() {},
 };

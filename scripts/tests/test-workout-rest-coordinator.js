@@ -315,8 +315,8 @@ const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve();
 {
   const f = await loaded();
   const attempt = f.coordinator.setNotifications(true);
-  f.calls[1].reject(new Error('Notification permission was not granted.'));
-  assert.equal((await attempt).error.code, 'permission_denied');
+  f.calls[1].reject(Object.assign(new Error('Permission declined: private provider detail; wording changed.'), { code: 'permission_denied' }));
+  assert.deepEqual((await attempt).error, { operation: 'setNotifications', code: 'permission_denied', message: 'Notification permission was not granted.' });
   assert.equal(f.calls.length, 2);
   const read = f.coordinator.refresh();
   f.calls[2].resolve(data());
@@ -371,6 +371,24 @@ for (const boundary of ['save', 'readback']) {
   f.coordinator.subscribe(() => { if (f.coordinator.getSnapshot().mutation) f.coordinator.dispose(); });
   assert.equal((await f.coordinator.setNotifications(true)).status, 'obsolete');
   assert.equal(f.calls.length, 1, 'disposed mutation admission cannot prompt');
+}
+
+
+// Recognized codes retain actionable owned copy despite changed/private adapter wording.
+for (const [code, message] of [
+  ['permission_denied', 'Notification permission was not granted.'],
+  ['unsupported', 'Install LifeOS on your Home Screen to enable supported notifications.'],
+  ['unavailable', 'Background notifications need server configuration. The countdown still works.'],
+  ['device_unavailable', 'The LifeOS service worker is not ready. Reopen the installed app.'],
+  ['renewal_failed', 'Device subscription could not be renewed. Reopen LifeOS and retry.'],
+  ['provider_private_code', 'Training timer is unavailable. Your workout is still saved.'],
+]) {
+  const f = await loaded();
+  const attempt = f.coordinator.reconnectNotifications();
+  f.calls[1].reject(Object.assign(new Error('Changed wording with private provider detail.'), { code }));
+  assert.deepEqual((await attempt).error, { operation: 'reconnectNotifications',
+    code: code === 'provider_private_code' ? 'mutation_failed' : code, message });
+  assert.equal(f.coordinator.getSnapshot().mutationError.message, message);
 }
 
 console.log('Workout rest coordinator: PASS');

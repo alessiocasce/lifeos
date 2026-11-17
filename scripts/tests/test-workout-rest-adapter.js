@@ -137,6 +137,31 @@ assert.equal((await fixture.read('workout-b', 'A', guard)).timer, null);
 console.log('PASS fixture expected-owner, workout filtering, lifetime and logout contract');
 
 
+// Notification failure codes are adapter-owned, with parity for the fixture's permission failure.
+const requestPermission = Notification.requestPermission;
+Notification.requestPermission = async () => 'denied';
+localStorage.setItem('qa-push-fail', 'yes');
+for (const adapter of [api, fixture]) {
+  await assert.rejects(adapter.enableNotifications('A', guard), error => error.code === 'permission_denied');
+}
+localStorage.setItem('qa-push-fail', '');
+Notification.requestPermission = requestPermission;
+
+// Exercise every other recognized production notification failure at browser/network boundaries.
+const fetchNotifications = globalThis.fetch;
+for (const code of ['unsupported', 'unavailable', 'device_unavailable', 'renewal_failed']) {
+  const savedWindow = window;
+  if (code === 'unsupported') globalThis.window = {};
+  if (code === 'unavailable') globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, data: { configured: false } }) });
+  if (code === 'device_unavailable') globalThis.window = { Notification: {}, PushManager: {} };
+  if (code === 'renewal_failed') subscription = { endpoint: 'fixture', async unsubscribe() {} };
+  await assert.rejects(api.enableNotifications('A', { ...guard, reconnect: true }), error => error.code === code);
+  globalThis.window = savedWindow;
+  globalThis.fetch = fetchNotifications;
+  subscription = null;
+}
+console.log('PASS stable notification error codes and production/fixture permission parity');
+
 // Same public coordinator + real adapter and browser-fixture contract under lost/failed saves.
 async function partialContract(adapter, configure, inspect) {
   for (const mode of ['fail', 'lost', 'readback-fail']) {

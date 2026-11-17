@@ -50,16 +50,16 @@ export const workoutRestApi = {
   async enableNotifications(expectedUserId,{reconnect=false,isCurrent}={}) {
     const guard = { isCurrent };
     assertCurrent(guard);
-    if (!('Notification' in window) || (!('PushManager' in window)&&!window.pushManager)) throw new Error('Install LifeOS on your Home Screen to enable supported notifications.');
+    if (!('Notification' in window) || (!('PushManager' in window)&&!window.pushManager)) throw Object.assign(new Error('Install LifeOS on your Home Screen to enable supported notifications.'), { code: 'unsupported' });
     // Request permission directly from this user gesture, before any awaited network request.
     const permission = await Notification.requestPermission();
     await identity(expectedUserId, guard);
-    if (permission !== 'granted') throw new Error('Notification permission was not granted.');
+    if (permission !== 'granted') throw Object.assign(new Error('Notification permission was not granted.'), { code: 'permission_denied' });
     const config = await control({ operation: 'config' }, expectedUserId, guard);
-    if (!config.configured || !config.publicKey) throw new Error('Background notifications need server configuration. The countdown still works.');
+    if (!config.configured || !config.publicKey) throw Object.assign(new Error('Background notifications need server configuration. The countdown still works.'), { code: 'unavailable' });
     await identity(expectedUserId, guard);
     const manager=await pushManagerFor(window);
-    if (!manager) throw new Error('The LifeOS service worker is not ready. Reopen the installed app.');
+    if (!manager) throw Object.assign(new Error('The LifeOS service worker is not ready. Reopen the installed app.'), { code: 'device_unavailable' });
     const key = Uint8Array.from(atob(config.publicKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
     await identity(expectedUserId, guard);
     let subscription=await manager.getSubscription();
@@ -69,7 +69,7 @@ export const workoutRestApi = {
       await identity(expectedUserId, guard);
       await subscription.unsubscribe();
       await identity(expectedUserId, guard);
-      if(await manager.getSubscription())throw new Error('Device subscription could not be renewed. Reopen LifeOS and retry.');
+      if(await manager.getSubscription())throw Object.assign(new Error('Device subscription could not be renewed. Reopen LifeOS and retry.'), { code: 'renewal_failed' });
       subscription=null;
     }
     await identity(expectedUserId, guard);
