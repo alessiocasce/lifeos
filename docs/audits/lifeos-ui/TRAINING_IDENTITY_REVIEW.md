@@ -1,8 +1,8 @@
 # Training curl identity review
 
 > Archived preliminary review. Superseded by the owner's explicit EZ-bar
-> confirmation and `../LIFEOS_RELEASE_READINESS.md`. The pending reconciliation
-> now unifies the confirmed history; the unresolved-equipment discussion below
+> confirmation and `../LIFEOS_RELEASE_READINESS.md`. The later completed reconciliation
+> unified the confirmed history; the unresolved-equipment discussion below
 > is historical context, not a current implementation instruction.
 
 ## Confirmed local catalog facts

@@ -396,6 +396,7 @@ export function LifeOSProvider({ children }) {
       if (lastAuthUserId.current !== authUser.id) return;
       setWorkoutTemplates(sortWorkoutTemplates(rows ?? []));
       setWorkoutTemplatesStatus('ready');
+      return rows ?? [];
     } catch (error) {
       setWorkoutTemplatesError(error.message || 'Failed to load workout templates.');
       setWorkoutTemplatesStatus('error');
@@ -1132,6 +1133,19 @@ export function LifeOSProvider({ children }) {
           ? { ...session, workout_sets: session.workout_sets.filter(set => !removed.has(set.id)) } : session));
       },
       reloadWorkoutTemplates: loadWorkoutTemplates,
+      saveWorkoutTemplateDraft: async (id, draft) => {
+        if (!authUser) throw new Error('Sign in before updating a workout template.');
+        try {
+          const saved = await workoutTemplateApi.saveDraft(id, { ...draft, details: normalizeWorkoutTemplatePayload(draft.details) }, authUser.id);
+          if (lastAuthUserId.current !== authUser.id) throw new Error('Account changed. Reopen Training before saving a template.');
+          setWorkoutTemplates(previous => sortWorkoutTemplates(previous.map(row => row.id === id ? saved : row)));
+          setWorkoutTemplatesStatus('ready');
+          return saved;
+        } catch (error) {
+          if (lastAuthUserId.current === authUser.id) await loadWorkoutTemplates();
+          throw error;
+        }
+      },
       createWorkoutTemplate: async (payload) => {
         if (!authUser) {
           throw new Error('Sign in before creating a workout template.');

@@ -28,7 +28,7 @@ test('exercise suggestions support keyboard selection, dismissal and durable exe
   await page.goto('/workout');
   const exercise = page.getByRole('button', { name: 'Exercise', exact: true });
   await searchExercise(page,'Curl');
-  await page.getByRole('dialog').getByRole('textbox',{name:'Exercise',exact:true}).press('ArrowDown');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Search exercises...',exact:true}).press('ArrowDown');
   const suggestions = page.getByRole('group', { name: 'Exercise suggestions' });
   await expect(suggestions.getByRole('button', { name: 'Barbell Curl', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowDown');
@@ -40,13 +40,13 @@ test('exercise suggestions support keyboard selection, dismissal and durable exe
   await page.reload();
   await expect(exercise).toContainText('Dumbbell Curl');
   await searchExercise(page,'Curl');
-  await page.getByRole('dialog').getByRole('textbox',{name:'Exercise',exact:true}).press('ArrowDown');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Search exercises...',exact:true}).press('ArrowDown');
   await page.keyboard.press('Escape');
   await expect(exercise).toBeFocused();
   await expect(exercise).toContainText('Dumbbell Curl');
   await expect(suggestions).toHaveCount(0);
   await searchExercise(page,'C');
-  await page.getByRole('dialog').getByRole('textbox',{name:'Exercise',exact:true}).fill('Curl');
+  await page.getByRole('dialog').getByRole('textbox',{name:'Search exercises...',exact:true}).fill('Curl');
   const button = suggestions.getByRole('button', { name: 'Barbell Curl', exact: true });
   expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: info.outputPath('exercise-suggestions.png'), fullPage: true });
@@ -110,9 +110,10 @@ test('completed workout can be corrected in History without changing its complet
   await page.getByRole('button', { name: 'Edit workout', exact: true }).click();
   await page.getByRole('button', { name: 'Edit Barbell Curl', exact: true }).click();
   await page.getByRole('button', { name: 'Add set', exact: true }).click();
-  await editor.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('30');
+  await editor.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('30');
   await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('7');
   await editor.getByRole('button', { name: 'Save set', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).find(row => row.id === 'qa-prior').workout_sets.length)).toBe(5);
   const afterAdd = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-workouts')).find(row => row.id === 'qa-prior'));
   expect(afterAdd.ended_at).toBe(before);
   expect(afterAdd.workout_sets).toHaveLength(5);
@@ -160,7 +161,7 @@ test('History is read-only and returning Live preserves session and complete dra
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/workout');
   await selectExercise(page,'Barbell Curl');
-  await page.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('80');
+  await page.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('80');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
   await page.getByRole('button', { name: 'RPE 9', exact: true }).click();
@@ -179,7 +180,7 @@ test('History is read-only and returning Live preserves session and complete dra
   await page.getByRole('button', { name: /qa-future/ }).click();
   await page.getByRole('button', { name: 'Live', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Barbell Curl');
-  await expect(page.getByRole('textbox', { name: 'Weight (kg)', exact: true })).toHaveValue('80');
+  await expect(page.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true })).toHaveValue('80');
   await expect(page.getByRole('textbox', { name: 'Reps', exact: true })).toHaveValue('8');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
   await expect(page.getByRole('button', { name: 'RPE 9', exact: true })).toHaveAttribute('aria-pressed','true');
@@ -363,7 +364,7 @@ test('catalog addition is tentative, requires set resolution, and saves only the
   expect(confirms).toBe(0);
   expect((await savedHistory(page)).workout_sets).toHaveLength(4);
   await selectExercise(page, 'Dumbbell Bench Press', { label: 'Add exercise' });
-  await editor.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('30');
+  await editor.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('30');
   await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('10');
   await editor.scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath('history-add-exercise.png') });
@@ -426,7 +427,7 @@ test('historical warmup addition uses separate numbering and custom additions st
   await page.getByRole('button', { name: 'Edit Barbell Curl', exact: true }).click();
   await page.getByRole('button', { name: 'Add set', exact: true }).click();
   const editor = page.getByRole('form', { name: 'Historical set editor' });
-  await editor.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('10');
+  await editor.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('10');
   await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('10');
   await editor.getByRole('checkbox', { name: 'Warmup', exact: true }).check();
   await editor.getByRole('button', { name: 'Save set', exact: true }).click();
@@ -434,13 +435,13 @@ test('historical warmup addition uses separate numbering and custom additions st
   const warmup = (await savedHistory(page)).workout_sets.at(-1);
   expect(warmup).toMatchObject({ set_number: 1002, is_warmup: true, workout_id: before.id });
   await page.getByRole('button', { name: 'Add set', exact: true }).click();
-  await editor.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('25');
+  await editor.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('25');
   await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('7');
   await editor.getByRole('button', { name: 'Save set', exact: true }).click();
   await expect(editor).toHaveCount(0);
   expect((await savedHistory(page)).workout_sets.at(-1)).toMatchObject({ set_number: 3, is_warmup: false });
   await selectExercise(page, 'My custom historical lift', { label: 'Add exercise' });
-  await editor.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('15');
+  await editor.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('15');
   await editor.getByRole('textbox', { name: 'Reps', exact: true }).fill('5');
   await editor.getByRole('button', { name: 'Save set', exact: true }).click();
   await expect(editor).toHaveCount(0);
@@ -467,7 +468,7 @@ test('History workout deletion retains failures and returns to the list only aft
 test('an active workout older than the first page still restores its session and unsaved draft', async ({ page }) => {
   await page.goto('/workout');
   await selectExercise(page, 'Dumbbell Bench Press');
-  await page.getByRole('textbox', { name: 'Weight (kg)', exact: true }).fill('33');
+  await page.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true }).fill('33');
   await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('9');
   await page.evaluate(() => {
     const active = JSON.parse(localStorage.getItem('qa-workouts')).find(row => row.id === 'qa-active');
@@ -479,7 +480,7 @@ test('an active workout older than the first page still restores its session and
   await page.reload();
   await expect(page.getByRole('heading', { name: 'qa-active', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Dumbbell Bench Press');
-  await expect(page.getByRole('textbox', { name: 'Weight (kg)', exact: true })).toHaveValue('33');
+  await expect(page.getByRole('textbox', { name: /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/, exact: true })).toHaveValue('33');
   await expect(page.getByRole('textbox', { name: 'Reps', exact: true })).toHaveValue('9');
 });
 

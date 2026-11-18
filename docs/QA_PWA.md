@@ -45,8 +45,16 @@ Run this against the deployed HTTPS URL after a production build has been deploy
 9. Confirm Calendar save/cancel controls are not covered by the iPhone bottom area.
 10. Confirm the Gemini assistant and Action API features still require their server env vars and do not work from cached API responses.
 
+## Guarded updates
+
+1. Check for the offered update without clearing auth, drafts or caches. Discovery must not force activation.
+2. Block activation while workouts load, any unfinished workout exists, or meaningful unsaved work remains, including when viewing another tab. Saving a set alone does not clear an active-workout guard.
+3. Finish the workout and intentionally save/discard remaining drafts, then apply the offered update. Confirm `/build-version.json` and the running build change through the guarded path.
+4. Keep cross-tab automatic reload disabled. Run `npm run test:pwa` and the two-build checks in [PWA_TRAINING_CORRECTIONS.md](PWA_TRAINING_CORRECTIONS.md).
+5. Web Push uses visible network-independent display; see [WORKOUT_WEB_PUSH.md](WORKOUT_WEB_PUSH.md). Provider acceptance is not physical iPhone display.
+
 ## Deployment Notes
 
 1. Redeploy after changing PWA metadata, icons, or service worker config.
-2. If an old service worker appears stale, close all LifeOS tabs and reopen from the Home Screen after the redeploy.
+2. For a stale installed worker, use the offered guarded update after finishing active work. Do not force activation or clear storage; reopening alone does not prove the new worker is active.
 3. Full offline database functionality is intentionally not implemented.

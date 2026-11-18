@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 test.beforeEach(async({page})=>{await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());});
 test('signup requires available username, retains it for confirmation, never signs in an unverified account',async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('qa-user','null'));
-  await page.goto('/');await page.getByRole('button',{name:'Create account',exact:true}).click();
+  await page.goto('/');await page.getByLabel('Lingua',{exact:true}).selectOption('en');await page.getByRole('button',{name:'Create account',exact:true}).click();
   await page.getByLabel('Email',{exact:true}).fill('new@example.test');await page.getByLabel('Password',{exact:true}).fill('fixture-password');
   await page.getByLabel('Username',{exact:true}).fill('taken');await page.getByLabel('Email',{exact:true}).focus();
   await expect(page.getByRole('status')).toContainText('already taken');

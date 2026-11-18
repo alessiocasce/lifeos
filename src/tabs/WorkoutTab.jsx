@@ -33,7 +33,7 @@ import { exerciseIdentityKey, resolveExercise } from '../utils/exerciseCatalog';
 import { WorkoutRestTimer } from '../components/WorkoutRestTimer';
 import { useWorkoutHistoryFilter } from '../hooks/useWorkoutHistoryFilter';
 import { ExerciseSelector } from '../components/ExerciseSelector';
-import { TrainingQuickStart, TemplateAppearanceEditor, TrainingTemplateIcon } from '../components/TrainingTemplates';
+import { TrainingQuickStart, TemplateAppearanceEditor, TemplateExerciseDrafts, TrainingTemplateIcon } from '../components/TrainingTemplates';
 import { TEMPLATE_COLORS, normalizeTemplateAppearance } from '../utils/templateAppearance';
 import { emptySetDraft, readExerciseDraft, writeWorkoutDraft, withDraftBaseline, hasWorkoutDraftEdits, draftHasEdits, acknowledgeWorkoutCompletion, isWorkoutCompletionAcknowledged, readCompletionTemplate, writeCompletionTemplate } from '../utils/workoutContinuity';
 import { useLifeOS } from '../context/LifeOSContext';
@@ -53,6 +53,7 @@ export function WorkoutTab() {
     activeWorkoutSession,
     createWorkoutTemplate,
     createWorkoutTemplateExercise,
+    saveWorkoutTemplateDraft,
     createWorkoutSession,
     createWorkoutSet,
     deleteWorkoutTemplate,
@@ -73,6 +74,7 @@ export function WorkoutTab() {
     workoutHistory,
     loadMoreWorkoutSessions,
     reloadWorkoutSessions,
+    reloadWorkoutTemplates,
     workoutTemplates,
     workoutTemplatesError,
     workoutTemplatesStatus,
@@ -102,13 +104,14 @@ export function WorkoutTab() {
   const [historyFilters, setHistoryFilters] = useState({ mode: 'all', week: today, day: null, templateId: '', open: false });
   const historyListScroll = useRef(0);
   const historyLeave = useRef(action => { action?.(); return true; });
+  const templateLeave = useRef(action => { action?.(); return true; });
   const [templateSetup, setTemplateSetup] = useState(null);
   const [templateBusy, setTemplateBusy] = useState(false);
   const [dismissedCompletion, setDismissedCompletion] = useState(null);
   const completionDismissed = activeWorkoutSession?.ended_at && (dismissedCompletion === `${authUser?.id}:${activeWorkoutSession.id}`
     || isWorkoutCompletionAcknowledged(authUser?.id, activeWorkoutSession.id));
   const openTemplateSetup = (template) => {
-    setTemplateSetup({ ...template, ...normalizeTemplateAppearance(template), notes: template.notes || '' });
+    setTemplateSetup({ ...template, ...normalizeTemplateAppearance(template.id ? template : { color_key: 'blue', icon_key: 'dumbbell', ...template }), notes: template.notes || '' });
     setTrainingView('manage');
   };
   const appearance = normalizeTemplateAppearance(activeWorkoutSession?.template_appearance || workoutTemplates.find(row => row.id === activeWorkoutSession?.template_id));
@@ -419,20 +422,17 @@ export function WorkoutTab() {
       {liveConfirmation.dialog}
       <div role="group" aria-label={t("Training view")} className="training-views col-span-12 flex gap-1 border-b border-white/10">
         {['live', 'history', 'manage'].map((view) => (
-          <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => { if (view !== trainingView) historyLeave.current(() => setTrainingView(view)); }} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
+          <button key={view} type="button" aria-pressed={trainingView === view} disabled={templateBusy} onClick={() => { if (view !== trainingView) historyLeave.current(() => templateLeave.current(() => setTrainingView(view))); }} className={`min-h-11 px-5 text-sm font-medium ${trainingView === view ? 'border-b-2 border-zinc-200 text-zinc-100' : 'text-zinc-400'}`}>
             {view === 'live' ? t("Live") : view === 'history' ? t("History") : t("Manage")}
           </button>
         ))}
       </div>
       {draftStorageUnavailable ? <p role="status" className="col-span-12 text-sm text-amber-300">{t("Device storage is unavailable. Keep this screen open until your set is saved.")}</p> : null}
       <div className={`col-span-12 min-w-0 ${trainingView === 'manage' ? '' : 'hidden'}`}>
-        <h2 className="mb-4 text-base font-semibold text-zinc-100">{t('Manage templates')}</h2>
         {workoutTemplatesError ? <p role="alert" className="mb-3 text-sm text-red-300">{t(workoutTemplatesError)}</p> : null}
-        <TemplateManager key={authUser?.id || 'guest'} onBusyChange={setTemplateBusy} setup={templateSetup}
+        <TemplateManager key={authUser?.id || 'guest'} onBusyChange={setTemplateBusy} setup={templateSetup} leaveRef={templateLeave} reloadWorkoutTemplates={reloadWorkoutTemplates} saveWorkoutTemplateDraft={saveWorkoutTemplateDraft}
           createWorkoutTemplate={createWorkoutTemplate} createWorkoutTemplateExercise={createWorkoutTemplateExercise}
-          deleteWorkoutTemplate={deleteWorkoutTemplate} deleteWorkoutTemplateExercise={deleteWorkoutTemplateExercise}
-          reorderWorkoutTemplateExercise={reorderWorkoutTemplateExercise} updateWorkoutTemplate={updateWorkoutTemplate}
-          updateWorkoutTemplateExercise={updateWorkoutTemplateExercise} workoutTemplates={workoutTemplates}
+          deleteWorkoutTemplate={deleteWorkoutTemplate} workoutTemplates={workoutTemplates}
           workoutTemplatesStatus={workoutTemplatesStatus} />
       </div>
       {trainingView === 'manage' ? null : trainingView === 'history' ? (
@@ -560,13 +560,17 @@ export function WorkoutTab() {
           </div>
         </>
       )}
-      {showCustomSession ? <TrainingSheet title="New workout" requestCloseRef={closeNewWorkout} busy={savingSession} onClose={() => { setShowCustomSession(false); setSessionForm({name:'',notes:''}); setFormError(''); creatingSession.current = false; setSavingSession(false); }}>
-        <form aria-label={t('New workout')} className="grid gap-4" onSubmit={startWorkout}>
-          <fieldset disabled={savingSession} className="grid gap-4">
-            <CompactField label={t('Workout name')} value={sessionForm.name} onChange={name => setSessionForm(v => ({...v,name}))} />
-            {formError ? <p role="alert" className="text-sm text-red-300">{formError}</p> : null}
-            <button type="submit" className="primary-button min-h-12" disabled={savingSession}>{savingSession ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}{t(savingSession ? 'Starting' : 'Start workout')}</button>
-            <button type="button" className="min-h-11 text-sm text-zinc-400" disabled={savingSession} onClick={() => closeNewWorkout.current?.()}>{t('Cancel')}</button>
+      {showCustomSession ? <TrainingSheet title="New workout" className="training-new-workout" requestCloseRef={closeNewWorkout} busy={savingSession} onClose={() => { setShowCustomSession(false); setSessionForm({name:'',notes:''}); setFormError(''); creatingSession.current = false; setSavingSession(false); }}>
+        <form aria-label={t('New workout')} className="training-new-workout-form" onSubmit={startWorkout}>
+          <fieldset disabled={savingSession} className="training-new-workout-fields">
+            <label className="training-new-workout-name">
+              <span>{t('Workout name')}</span>
+              <input name="workout-name" type="text" autoComplete="off" value={sessionForm.name} aria-invalid={Boolean(formError && !sessionForm.name.trim())} aria-describedby={formError ? 'new-workout-error' : undefined} onChange={event => setSessionForm(v => ({ ...v, name: event.target.value }))} />
+            </label>
+            {formError ? <p id="new-workout-error" role="alert" className="training-new-workout-error">{formError}</p> : null}
+            <div className="training-new-workout-actions">
+              <button type="submit" className="training-new-workout-start" disabled={savingSession}>{savingSession ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}{t(savingSession ? 'Starting' : 'Start workout')}</button>
+            </div>
           </fieldset>
         </form>
       </TrainingSheet> : null}
@@ -672,9 +676,8 @@ function WorkoutSessionControl({
             <header className="training-intro">
               <div className="training-intro-top">
                 <span className="training-intro-icon"><Dumbbell size={30} strokeWidth={2.6} /></span>
-                <span className="training-live-badge"><span aria-hidden="true" />{t('LIVE')}</span>
+                <h2>{t('Start your workout')}</h2>
               </div>
-              <h2>{t('Start your workout')}</h2>
               <p>{t('Choose a template below or start from scratch.')}</p>
             </header>
             {workoutSessions.filter((session) => !session.ended_at).map((session) => (
@@ -764,251 +767,173 @@ function formatTemplateManagerError(error, fallback) {
   return message || fallback;
 }
 
-function TemplateManager({
-  onBusyChange,
-  setup,
-  createWorkoutTemplate,
-  createWorkoutTemplateExercise,
-  deleteWorkoutTemplate,
-  deleteWorkoutTemplateExercise,
-  reorderWorkoutTemplateExercise,
-  updateWorkoutTemplate,
-  updateWorkoutTemplateExercise,
-  workoutTemplates,
-  workoutTemplatesStatus,
-}) {
+function TemplateManager({ onBusyChange, leaveRef, reloadWorkoutTemplates, saveWorkoutTemplateDraft, setup,
+  createWorkoutTemplate, createWorkoutTemplateExercise, deleteWorkoutTemplate, workoutTemplates, workoutTemplatesStatus }) {
   const deletion = useDestructiveConfirmation();
-  const [templateForm, setTemplateForm] = useState({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' });
-  const [templateLoading, setTemplateLoading] = useState('');
-  const [templateError, setTemplateError] = useState('');
-  const [editingTemplateId, setEditingTemplateId] = useState(null);
-  const [templateEditForm, setTemplateEditForm] = useState({ name: '', notes: '' });
-  const [exerciseDrafts, setExerciseDrafts] = useState({});
-  const [editingExerciseId, setEditingExerciseId] = useState(null);
-  const [exerciseEditForm, setExerciseEditForm] = useState({ exercise: '', notes: '' });
-  const setupTarget = useRef(null);
+  const { setUnsavedWork } = useLifeOS();
+  const mutationLock = useRef(false), allowNavigation = useRef(false), baseline = useRef(null);
+  const creationProgress = useRef(null), setupTarget = useRef(null);
   const [editorId, setEditorId] = useState(null);
-  const [exerciseControls, setExerciseControls] = useState(null);
+  const [templateForm, setTemplateForm] = useState({ name: '', notes: '', color_key: 'blue', icon_key: 'dumbbell' });
+  const [newExercises, setNewExercises] = useState([]);
+  const [editForm, setEditForm] = useState({ name: '', notes: '' });
+  const [editExercises, setEditExercises] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [creationRecovery, setCreationRecovery] = useState(false);
+  const [editRecovery, setEditRecovery] = useState(false);
+  const isNew = editorId === 'new';
+  const selected = workoutTemplates.find(row => row.id === editorId);
+  const detailsOf = row => ({ name: row.name, notes: row.notes || '', ...normalizeTemplateAppearance(row) });
+  const exerciseKey = rows => JSON.stringify(rows.map(row => ({ id: row.id || row.draft_id,
+    exercise: row.exercise, exercise_id: row.exercise_id ?? null, notes: row.notes || '' })));
+  const editDirty = Boolean(baseline.current && (JSON.stringify(detailsOf(baseline.current)) !== JSON.stringify(detailsOf(editForm))
+    || exerciseKey(sortTemplateExercises(baseline.current.workout_template_exercises || [])) !== exerciseKey(editExercises)));
+  const dirty = isNew ? Boolean(templateForm.name.trim() || newExercises.length || creationRecovery) : Boolean(editorId && (editDirty || editRecovery));
+  const partial = creationRecovery || editRecovery;
+  const clearFeedback = () => { setError(''); setNotice(''); };
+  const openExisting = row => {
+    baseline.current = { ...row, workout_template_exercises: (row.workout_template_exercises || []).map(exercise => ({ ...exercise })) };
+    setEditorId(row.id); setEditForm(detailsOf(row));
+    setEditExercises(sortTemplateExercises(row.workout_template_exercises || []).map(exercise => ({ ...exercise, draft_id: exercise.id })));
+    setEditRecovery(false); clearFeedback();
+  };
+  const openNew = (initial = {}) => {
+    setTemplateForm({ name: '', notes: '', color_key: 'blue', icon_key: 'dumbbell', ...initial });
+    setNewExercises([]); creationProgress.current = null; setCreationRecovery(false);
+    setEditRecovery(false); baseline.current = null; setEditorId('new'); clearFeedback();
+  };
+  const resetDraft = () => {
+    if (isNew) openNew();
+    else if (selected || baseline.current) openExisting(selected || baseline.current);
+  };
+  const requestLeave = (action, navigation = false) => {
+    if (mutationLock.current || busy) return false;
+    if (dirty) {
+      deletion.ask({ title: partial ? 'Leave without finishing?' : 'Discard changes?',
+        message: creationRecovery ? 'Your template exists, but some exercises are still unsaved. Leave anyway?'
+          : editRecovery ? 'Some template changes may already be saved. Leave without finishing?'
+            : 'You have unsaved template changes. Leave without saving them?',
+        label: partial ? 'Leave' : 'Discard changes', action: () => { resetDraft(); allowNavigation.current = navigation; action?.(); } });
+      return false;
+    }
+    action?.(); return true;
+  };
+  useEffect(() => {
+    leaveRef.current = requestLeave;
+    setUnsavedWork('training-template-edit', dirty || busy, 'Save template changes first.');
+    const leaving = event => {
+      if (allowNavigation.current) { allowNavigation.current = false; return; }
+      if (dirty || mutationLock.current) { event.preventDefault(); requestLeave(event.detail?.proceed, true); }
+    };
+    const unload = event => { if (dirty || mutationLock.current) { event.preventDefault(); event.returnValue = ''; } };
+    document.addEventListener('lifeos:before-navigate', leaving); window.addEventListener('beforeunload', unload);
+    return () => {
+      document.removeEventListener('lifeos:before-navigate', leaving); window.removeEventListener('beforeunload', unload);
+      setUnsavedWork('training-template-edit', false); leaveRef.current = action => { action?.(); return true; };
+    };
+  }, [dirty, busy, editorId, selected, templateForm, newExercises, editForm, editExercises, creationRecovery, editRecovery, leaveRef, setUnsavedWork]);
   useEffect(() => {
     if (!setup) return;
-    setEditorId(setup.id || 'new');
-    if (setup.id) {
-      setEditingTemplateId(setup.id);
-      setTemplateEditForm({ name: setup.name, notes: setup.notes, ...normalizeTemplateAppearance(setup) });
-    } else {
-      setTemplateForm(setup);
-    }
-    const frame = requestAnimationFrame(() => {
-      setupTarget.current?.scrollIntoView({ block: 'start' });
-      setupTarget.current?.querySelector('input')?.focus({ preventScroll: true });
-    });
+    if (setup.id) openExisting(setup); else openNew(setup);
+    const frame = requestAnimationFrame(() => { setupTarget.current?.scrollIntoView({ block: 'start' }); setupTarget.current?.querySelector('input')?.focus({ preventScroll: true }); });
     return () => cancelAnimationFrame(frame);
   }, [setup]);
-  useEffect(() => {
-    onBusyChange(Boolean(templateLoading));
-    return () => onBusyChange(false);
-  }, [onBusyChange, templateLoading]);
+  useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
 
-  const createTemplate = async (event) => {
-    event.preventDefault();
-    setTemplateError('');
-    if (!templateForm.name.trim()) {
-      setTemplateError(t("Template name is required."));
-      return;
-    }
-    setTemplateLoading('template-create');
-    try {
+  const create = async () => {
+    if (!creationProgress.current) {
       const created = await createWorkoutTemplate(templateForm);
-      setEditorId(created.id);
-      setTemplateForm({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' });
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to create template.'));
-    } finally {
-      setTemplateLoading('');
+      creationProgress.current = { template: created, exercises: [...newExercises], saved: 0 };
     }
+    const progress = creationProgress.current;
+    let confirmed = [];
+    if (creationRecovery) {
+      const rows = await reloadWorkoutTemplates();
+      const saved = rows?.find(row => row.id === progress.template.id);
+      if (!saved) throw new Error('Template is unavailable. Reopen Manage before retrying.');
+      confirmed = saved.workout_template_exercises || []; progress.saved = 0;
+    }
+    while (progress.saved < progress.exercises.length) {
+      const exercise = progress.exercises[progress.saved];
+      const existing = confirmed.find(row => Number(row.exercise_order) === progress.saved + 1);
+      if (existing) {
+        if (exerciseIdentityKey(existing) !== exerciseIdentityKey(exercise) || (existing.notes || '') !== (exercise.notes || '')) throw new Error('Template exercises changed. Reopen Manage before retrying.');
+      } else {
+        const saved = await createWorkoutTemplateExercise({ template_id: progress.template.id, exercise: exercise.exercise,
+          exercise_id: exercise.exercise_id ?? null, notes: exercise.notes || '', exercise_order: progress.saved + 1 });
+        confirmed.push(saved);
+      }
+      progress.saved++;
+    }
+    // Read back the full template before entering the shared edit form.
+    const rows = await reloadWorkoutTemplates();
+    const saved = rows?.find(row => row.id === progress.template.id);
+    if (!saved) throw new Error('Template is unavailable. Reopen Manage before retrying.');
+    openExisting(saved);
+    setNewExercises([]); creationProgress.current = null; setCreationRecovery(false);
   };
-
-  const saveTemplate = async (templateId) => {
-    setTemplateError('');
-    if (!templateEditForm.name.trim()) {
-      setTemplateError(t("Template name is required."));
-      return;
-    }
-    setTemplateLoading(`template-${templateId}`);
+  const submit = async event => {
+    event.preventDefault();
+    if (mutationLock.current) return;
+    clearFeedback();
+    const details = isNew ? templateForm : editForm;
+    if (!details.name.trim()) { setError(t('Template name is required.')); return; }
+    mutationLock.current = true; setBusy(true);
     try {
-      await updateWorkoutTemplate(templateId, templateEditForm);
-      setEditingTemplateId(null);
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to update template.'));
-    } finally {
-      setTemplateLoading('');
-    }
+      if (isNew) await create();
+      else {
+        const saved = await saveWorkoutTemplateDraft(editorId, { details: editForm, exercises: editExercises, baseline: baseline.current });
+        openExisting(saved); setNotice('Template saved.');
+      }
+    } catch (failure) {
+      if (isNew && creationProgress.current) {
+        setCreationRecovery(true);
+        setError(t(failure.message?.includes('Reopen Manage') ? failure.message : 'Your template was created, but some exercises could not be saved. Retry to finish.'));
+      } else if (!isNew) {
+        setEditRecovery(true);
+        setError(t(failure.message?.includes('Reopen Manage') ? failure.message : 'Some changes may already be saved. Retry to finish.'));
+      } else setError(formatTemplateManagerError(failure, 'Failed to create template.'));
+    } finally { mutationLock.current = false; setBusy(false); }
   };
-
-  const addExercise = async (template) => {
-    const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
-    setTemplateError('');
-    if (!draft.exercise.trim()) {
-      setTemplateError(t("Exercise name is required."));
-      return;
-    }
-    const nextOrder = Math.max(0, ...(template.workout_template_exercises ?? []).map((exercise) => Number(exercise.exercise_order) || 0)) + 1;
-    setTemplateLoading(`exercise-create-${template.id}`);
-    try {
-      await createWorkoutTemplateExercise({
-        template_id: template.id,
-        exercise: draft.exercise,
-        exercise_id: draft.exercise_id,
-        exercise_order: nextOrder,
-        notes: draft.notes,
-      });
-      setExerciseDrafts((prev) => ({ ...prev, [template.id]: { exercise: '', notes: '' } }));
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to add exercise.'));
-    } finally {
-      setTemplateLoading('');
-    }
-  };
-
-  const saveExercise = async (exerciseId) => {
-    setTemplateError('');
-    if (!exerciseEditForm.exercise.trim()) {
-      setTemplateError(t("Exercise name is required."));
-      return;
-    }
-    setTemplateLoading(`exercise-${exerciseId}`);
-    try {
-      await updateWorkoutTemplateExercise(exerciseId, exerciseEditForm);
-      setEditingExerciseId(null);
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to update exercise.'));
-    } finally {
-      setTemplateLoading('');
-    }
-  };
-
-  const removeTemplate = templateId => deletion.ask({ title: 'Delete template?', message: 'Delete this template and its exercises? Existing workout snapshots are kept.', label: 'Delete template', action: async () => {
-    setTemplateError('');
-    setTemplateLoading(`template-delete-${templateId}`);
-    try {
-      await deleteWorkoutTemplate(templateId);
-      setEditorId(null);
-    } finally {
-      setTemplateLoading('');
-    }
+  const remove = () => deletion.ask({ title: 'Delete template?', message: 'Delete this template and its exercises? Existing workout snapshots are kept.', label: 'Delete template', action: async () => {
+    if (mutationLock.current) return;
+    mutationLock.current = true; setBusy(true);
+    try { await deleteWorkoutTemplate(editorId); baseline.current = null; setEditorId(null); setEditRecovery(false); clearFeedback(); }
+    finally { mutationLock.current = false; setBusy(false); }
   } });
-
-  const removeExercise = exerciseId => deletion.ask({ title: 'Delete exercise?', message: 'Remove this exercise from the template? Existing workout snapshots are kept.', label: 'Delete exercise', action: async () => {
-    setTemplateError('');
-    setTemplateLoading(`exercise-delete-${exerciseId}`);
-    try {
-      await deleteWorkoutTemplateExercise(exerciseId);
-    } finally {
-      setTemplateLoading('');
-    }
-  } });
-
-  const moveExercise = async (templateId, exerciseId, direction) => {
-    setTemplateError('');
-    setTemplateLoading(`exercise-move-${exerciseId}`);
-    try {
-      await reorderWorkoutTemplateExercise(templateId, exerciseId, direction);
-    } catch (error) {
-      setTemplateError(formatTemplateManagerError(error, 'Failed to reorder exercise.'));
-    } finally {
-      setTemplateLoading('');
-    }
-  };
-
-  if (!editorId) return <section className="grid gap-3" aria-label={t('Your templates')}>
-    <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t('Your templates')}</h3><button type="button" className="training-row" onClick={() => { setTemplateForm({ name: '', notes: '', color_key: 'slate', icon_key: 'dumbbell' }); setEditorId('new'); }}><Plus size={18} />{t('Create template')}</button></div>
-    {!workoutTemplates.length ? <p className="text-sm text-zinc-400">{t('No templates yet.')}</p> : null}
-    {workoutTemplates.map(template => { const look = normalizeTemplateAppearance(template); return <button type="button" key={template.id} className="training-template-card" style={{ '--template-accent': TEMPLATE_COLORS[look.color_key] }} onClick={() => setEditorId(template.id)}><span className="training-template-icon"><TrainingTemplateIcon iconKey={look.icon_key} size={32} /></span><span className="training-template-copy"><span className="training-template-name">{template.name}</span><span className="training-template-detail">{template.workout_template_exercises?.length || 0}{t(' exercises')}</span></span><ChevronRight size={20} /></button>; })}
+  if (!editorId) return <section className="training-template-manager grid gap-3" aria-label={t('Your templates')}>
+    <h2 className="training-manager-title">{t('Manage templates')}</h2>
+    {!workoutTemplates.length && workoutTemplatesStatus === 'loading' ? <LoadingCard label={t('Loading templates')} /> : null}
+    {!workoutTemplates.length && workoutTemplatesStatus === 'ready' ? <div className="training-templates-empty">
+      <div className="training-templates-empty-mark" aria-hidden="true"><ClipboardList size={36} strokeWidth={1.4} /><span><Plus size={17} /></span></div>
+      <div className="training-templates-empty-copy"><h3>{t('Create your first template')}</h3><p>{t('Save a routine to reuse in your next workout.')}</p></div>
+      <button type="button" className="training-template-create is-primary" onClick={() => openNew()}><Plus size={18} />{t('Create template')}</button>
+    </div> : null}
+    {workoutTemplates.map(template => { const look = normalizeTemplateAppearance(template); return <button type="button" key={template.id} className="training-template-card" style={{ '--template-accent': TEMPLATE_COLORS[look.color_key] }} onClick={() => openExisting(template)}><span className="training-template-icon"><TrainingTemplateIcon iconKey={look.icon_key} size={32} /></span><span className="training-template-copy"><span className="training-template-name">{template.name}</span><span className="training-template-detail">{template.workout_template_exercises?.length || 0}{t(' exercises')}</span></span><ChevronRight size={20} /></button>; })}
+    {workoutTemplates.length > 0 ? <button type="button" className="training-template-create training-template-create-row" onClick={() => openNew()}><Plus size={18} />{t('Create template')}</button> : null}
   </section>;
-  return (
-    <fieldset disabled={Boolean(templateLoading)} aria-label={t("Workout template management")} className="grid min-w-0 gap-5">
-      {deletion.dialog}
-      <button type="button" className="training-row justify-start" onClick={() => { setEditorId(null); setEditingTemplateId(null); }}><ArrowLeft size={18} />{t('Your templates')}</button>
-      {templateError ? <p role="alert" className="text-sm text-red-300">{t(templateError)}</p> : null}
-      {editorId === 'new' ? <form ref={setup?.id ? null : setupTarget} aria-label={t("Create workout template")} onSubmit={createTemplate} className="grid min-w-0 gap-3">
-        <CompactField label={t("Template name")} value={templateForm.name} onChange={(value) => setTemplateForm((prev) => ({ ...prev, name: value }))} />
-        <TemplateAppearanceEditor value={templateForm} onChange={setTemplateForm} />
-        <button type="submit" disabled={Boolean(templateLoading)} className="primary-button flex min-h-11 items-center justify-center gap-2 text-sm font-medium disabled:opacity-50">
-          {templateLoading === 'template-create' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{t("Create template")}</button>
-      </form> : null}
-      {workoutTemplatesStatus === 'loading' && !workoutTemplates.length ? <LoadingCard label={t("Loading templates")} /> : null}
-      <div className="grid min-w-0 divide-y divide-white/10">
-        {workoutTemplates.filter(template => template.id === editorId).map((template) => {
-          const exercises = sortTemplateExercises(template.workout_template_exercises ?? []);
-          const draft = exerciseDrafts[template.id] ?? { exercise: '', notes: '' };
-          return (
-            <article ref={setup?.id === template.id ? setupTarget : null} key={template.id} aria-label={t("Template ") + template.name} className="grid min-w-0 gap-4 py-5">
-              {editingTemplateId === template.id ? (
-                <div role="group" aria-label={t("Edit template")} className="grid gap-3">
-                  <CompactField label={t("Template name")} value={templateEditForm.name} onChange={(value) => setTemplateEditForm((prev) => ({ ...prev, name: value }))} />
-                  <details><summary className="min-h-11 cursor-pointer py-3 text-sm">{t('Edit appearance')}</summary><TemplateAppearanceEditor value={templateEditForm} onChange={setTemplateEditForm} /></details>
-                  <div className="flex gap-2">
-                    <IconButton icon={Check} loading={templateLoading === 'template-' + template.id} onClick={() => saveTemplate(template.id)} title={t("Save template")} tone="zinc" />
-                    <IconButton icon={X} onClick={() => setEditingTemplateId(null)} title={t("Cancel template edit")} tone="zinc" />
-                  </div>
-                </div>
-              ) : (
-                <header className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <span className="mb-2 block" style={{ color: TEMPLATE_COLORS[normalizeTemplateAppearance(template).color_key] }}><TrainingTemplateIcon iconKey={normalizeTemplateAppearance(template).icon_key} /></span>
-                    <h3 className="break-words text-sm font-semibold text-zinc-100">{template.name}</h3>
-                    <p className="mt-1 text-xs text-zinc-500">{exercises.length}{t(" exercises")}</p>
-                    {template.notes ? <p className="mt-2 break-words text-sm text-zinc-400">{template.notes}</p> : null}
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <IconButton icon={Pencil} onClick={() => { setEditingTemplateId(template.id); setTemplateEditForm({ name: template.name, notes: template.notes ?? '', ...normalizeTemplateAppearance(template) }); }} title={t("Edit template")} />
-                    <IconButton icon={Trash2} loading={templateLoading === 'template-delete-' + template.id} onClick={() => removeTemplate(template.id)} title={t("Delete template")} tone="red" />
-                  </div>
-                </header>
-              )}
-              <div className="grid divide-y divide-white/10">
-                {exercises.map((exercise, index) => (
-                  <div key={exercise.id} role="group" aria-label={t("Template exercise ") + exercise.exercise} className="min-w-0 py-1">
-                    {editingExerciseId === exercise.id ? (
-                      <div className="grid gap-3">
-                        <ExerciseSelector exerciseId={exerciseEditForm.exercise_id} value={exerciseEditForm.exercise} onChange={(value) => setExerciseEditForm(prev=>({...prev,exercise:value,exercise_id:null}))} onCommit={(value)=>setExerciseEditForm(prev=>({...prev,...value}))} />
-                        <div className="flex gap-2">
-                          <IconButton icon={Check} loading={templateLoading === 'exercise-' + exercise.id} onClick={() => saveExercise(exercise.id)} title={t("Save exercise")} />
-                          <IconButton icon={X} onClick={() => setEditingExerciseId(null)} title={t("Cancel exercise edit")} />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="grid min-w-0">
-                        <div className="flex min-h-12 min-w-0 items-center gap-3">
-                          <span className="training-exercise-number">{String(index + 1).padStart(2,'0')}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="break-words text-sm text-zinc-200">{exerciseLabel(exercise)}</p>
-                            {exercise.notes ? <p className="mt-1 break-words text-xs text-zinc-500">{exercise.notes}</p> : null}
-                          </div>
-                        <button type="button" className="icon-button ml-auto" aria-label={t('Exercise options') + ' ' + exerciseLabel(exercise)} onClick={() => setExerciseControls(exerciseControls === exercise.id ? null : exercise.id)}><MoreHorizontal size={20} /></button>
-                        </div>
-                        {exerciseControls === exercise.id ? <div className="flex flex-wrap gap-2">
-                          <IconButton disabled={index === 0} icon={ChevronDown} className="rotate-180" loading={templateLoading === 'exercise-move-' + exercise.id} onClick={() => moveExercise(template.id, exercise.id, 'up')} title={t("Move up")} />
-                          <IconButton disabled={index === exercises.length - 1} icon={ChevronDown} loading={templateLoading === 'exercise-move-' + exercise.id} onClick={() => moveExercise(template.id, exercise.id, 'down')} title={t("Move down")} />
-                          <IconButton icon={Pencil} onClick={() => { setEditingExerciseId(exercise.id); setExerciseEditForm({ exercise: exercise.exercise, exercise_id: exercise.exercise_id || null, notes: exercise.notes ?? '' }); }} title={t("Edit exercise")} />
-                          <IconButton icon={Trash2} loading={templateLoading === 'exercise-delete-' + exercise.id} onClick={() => removeExercise(exercise.id)} title={t("Delete exercise")} tone="red" />
-                        </div> : null}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div role="group" aria-label={t("Add template exercise")} className="grid min-w-0 gap-3 border-t border-white/10 pt-4">
-                <ExerciseSelector inputLabel={t('Add exercise')} exerciseId={draft.exercise_id} value={draft.exercise} onChange={(value)=>setExerciseDrafts(prev=>({...prev,[template.id]:{...draft,exercise:value,exercise_id:null}}))} onCommit={(value)=>setExerciseDrafts(prev=>({...prev,[template.id]:{...draft,...value}}))} />
-                <button type="button" onClick={() => addExercise(template)} disabled={Boolean(templateLoading)} className="flex min-h-11 items-center justify-center gap-2 rounded border border-white/15 text-sm text-zinc-200 disabled:opacity-50">
-                  {templateLoading === 'exercise-create-' + template.id ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}{t("Add exercise")}</button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
+  return <fieldset key={editorId} disabled={busy} aria-label={t('Workout template management')} className="training-template-manager grid min-w-0 gap-5">
+    {deletion.dialog}
+    <header className="training-manager-heading">
+      <button type="button" className="training-manager-back" onClick={() => requestLeave(() => { setEditorId(null); clearFeedback(); })}><ChevronRight size={20} className="rotate-180" />{t('Your templates')}</button>
+      <h2 className="training-manager-title">{t(isNew ? 'Create a new template' : 'Edit template')}</h2>
+    </header>
+    {error ? <p role="alert" className="text-sm text-red-300">{t(error)}</p> : null}
+    {notice ? <p role="status" className="training-template-feedback">{t(notice)}</p> : null}
+    {!isNew && !selected && workoutTemplatesStatus === 'ready' ? <p role="status" className="training-template-notes">{t('This template is unavailable.')}</p> : null}
+    {(isNew || selected) && <form ref={setupTarget} aria-label={t(isNew ? 'Create workout template' : 'Edit template')} onSubmit={submit} className="training-template-create-form">
+      <fieldset disabled={partial || busy} className="training-template-create-fields">
+        <TemplateAppearanceEditor value={isNew ? templateForm : editForm} onChange={value => { if (isNew) setTemplateForm(value); else setEditForm(value); clearFeedback(); }} />
+        <TemplateExerciseDrafts exercises={isNew ? newExercises : editExercises} onChange={rows => { if (isNew) setNewExercises(rows); else setEditExercises(rows); clearFeedback(); }} />
+      </fieldset>
+      <button type="submit" disabled={busy || (!isNew && !dirty)} className="training-template-create is-primary is-create">
+        {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}{t(busy ? 'Saving' : partial ? 'Retry' : isNew ? 'Create template' : 'Save template')}
+      </button>
+    </form>}
+    {!isNew && selected && <button type="button" className="training-template-create is-primary is-delete" onClick={remove}><Trash2 size={16} />{t('Delete template')}</button>}
+  </fieldset>;
 }
 
 
@@ -1111,9 +1036,7 @@ function WorkoutCompleted({ session, onBack }) {
         let name = session.name.trim();
         let suffix = 2;
         while (names.has(name.toLocaleLowerCase())) name = `${session.name.trim()} (${suffix++})`;
-        const palette = Object.keys(TEMPLATE_COLORS);
-        const color_key = palette[Math.floor(Math.random() * palette.length)];
-        template = await createWorkoutTemplate({ name, color_key, icon_key: 'dumbbell' });
+        template = await createWorkoutTemplate({ name, color_key: 'blue', icon_key: 'dumbbell' });
         pendingTemplate.current = { id: template.id, saved: [] };
         rememberTemplate(false);
       }

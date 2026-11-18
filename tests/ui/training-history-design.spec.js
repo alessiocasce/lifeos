@@ -123,7 +123,7 @@ test('long historical detail clears the opaque dock and preserves destructive gu
   const bounds = await dock.boundingBox();
   const last = await history(page).locator('.history-set').last().boundingBox();
   expect(last.y + last.height).toBeLessThan(bounds.y);
-  expect(await dock.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(8, 15, 19)');
+  expect(await dock.evaluate(el => {const context=document.createElement('canvas').getContext('2d');context.fillStyle=getComputedStyle(el).backgroundColor;context.fillRect(0,0,1,1);return context.getImageData(0,0,1,1).data[3]/255;})).toBeGreaterThanOrEqual(.9);
   await page.screenshot({ path: info.outputPath('06-long-workout-bottom.png') });
   await page.getByRole('button', { name: 'Edit workout', exact: true }).click();
   await page.getByRole('button', { name: 'Edit ' + names[0], exact: true }).click();

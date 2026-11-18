@@ -149,6 +149,17 @@ const templateMutation = async () => {
   if (localStorage.getItem('qa-template-fail')) throw new Error('Template changes were not saved.');
 };
 export const workoutTemplateApi = {
+  saveDraft: async (id, { details, exercises }) => {
+    await templateMutation();
+    const rows = templateRows();
+    const current = rows.find(row => row.id === id && row.user_id === user()?.id);
+    if (!current) throw new Error('This template is unavailable.');
+    const saved = { ...current, ...details, workout_template_exercises: exercises.map((row, index) => ({
+      ...row, id: row.id || row.draft_id, template_id: id, user_id: user().id, exercise_order: index + 1,
+    })) };
+    saveTemplates(rows.map(row => row.id === id ? saved : row));
+    return saved;
+  },
   list: async () => templateRows().filter((row) => row.user_id === user()?.id),
   create: async (payload) => {
     await templateMutation(); const row = { ...payload, id: crypto.randomUUID(), user_id: user().id, workout_template_exercises: [] };
@@ -325,6 +336,8 @@ export const aiChatThreadApi = {
 export async function sendLifeOSAiMessage(message, threadId, { clientRequestId }) {
   const requests = JSON.parse(localStorage.getItem('qa-brain-requests') || '[]');
   localStorage.setItem('qa-brain-requests', JSON.stringify([...requests, { message, threadId, clientRequestId }]));
+  const delay = Number(localStorage.getItem('qa-brain-delay') || 0);
+  if (delay) await new Promise(resolve => setTimeout(resolve, delay));
   if (localStorage.getItem('qa-brain-fail')) throw new Error('Test Brain unavailable.');
   const rows = JSON.parse(localStorage.getItem('qa-chat-messages') || '[]');
   const answer = 'Recorded in this test conversation.';
@@ -410,7 +423,7 @@ export const communityApi = {
 export const userSettingsApi = {
   read: async () => fixtureSettings(user().id),
   async save(profile, preferences) { const next = { profile, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return next; },
-  async savePreferences(preferences) { const next = { ...await this.read(), preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return preferences; },
+  async savePreferences(patch) { const previous = await this.read(); const preferences = { ...previous.preferences, ...patch }; const next = { ...previous, preferences }; localStorage.setItem(`qa-settings:${user().id}`, JSON.stringify(next)); reconcileCommunityUser(user().id); return preferences; },
 };
 export const identityApi = {
   available: async username => !['taken','qa_user'].includes(username.toLowerCase()),

@@ -10,8 +10,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+async function openAuth(page, path = '/') {
+  await page.goto(path);
+  await page.getByRole('combobox', { name: /Language|Lingua/ }).selectOption('en');
+}
+
 test('sign-in failure preserves credentials, locks the request and retries once', async ({ page }) => {
-  await page.goto('/workout');
+  await openAuth(page, '/workout');
   await page.getByLabel('Email', { exact: true }).fill('qa@example.test');
   await page.getByLabel('Password', { exact: true }).fill('fixture-password');
   await page.evaluate(() => {
@@ -34,7 +39,7 @@ test('sign-in failure preserves credentials, locks the request and retries once'
 });
 
 test('account confirmation is announced without storing a logged-in session', async ({ page }) => {
-  await page.goto('/');
+  await openAuth(page);
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
   await expect(page.getByText('Completed workouts are shared with signed-in members once your public profile is set up. You can turn this off in Settings. Notes stay private unless enabled.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('autocomplete', 'new-password');
@@ -50,7 +55,7 @@ test('account confirmation is announced without storing a logged-in session', as
 });
 
 test('validation is announced and keyboard access reaches account switching', async ({ page }) => {
-  await page.goto('/');
+  await openAuth(page);
   await page.getByRole('button', { name: 'Enter LifeOS' }).click();
   await expect(page.getByRole('alert')).toHaveText('Email is required.');
   await page.getByLabel('Email', { exact: true }).fill('qa@example.test');
@@ -70,7 +75,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.setViewportSize({ width, height });
-    await page.goto('/');
+    await openAuth(page);
     await expect(page.getByRole('heading', { name: 'LifeOS', exact: true })).toBeVisible();
     for (const label of ['Email', 'Password']) {
       const field = page.getByLabel(label, { exact: true });

@@ -1,5 +1,7 @@
 # Dock cold-load and long-scroll QA
 
+Current local visual follow-up: [Apple-style bottom bar](qa/apple-bottom-bar.md). The floating dock has 12px side/bottom insets plus safe area and measured height, superseding the original edge-to-edge geometry below. The portal/containing-block protection remains. This new redesign is uncommitted and not deployed.
+
 Dock positioning needs no schema change. The recovery release separately adds
 the targeted atomic exercise-deletion RPC/index migration documented in
 TRAINING_CORRECTIVE_RECOVERY.md. Do not rerun the full schema.
@@ -7,8 +9,7 @@ TRAINING_CORRECTIVE_RECOVERY.md. Do not rerun the full schema.
 ## Scope and cause
 
 `Shell.jsx` portals the mobile navigation and active-training resume dock into a
-body-level `.shell-docks[data-workspace]` wrapper. Training-only appearance rules
-in `trainingStart.css` follow that wrapper; shared dock geometry is unchanged.
+body-level `.shell-docks[data-workspace]` wrapper. The current shared floating geometry lives in `navigation.css`; old Training-only dock overrides have been removed to keep cold and lazy-loaded appearance consistent.
 The shared context tab setter dispatches cancelable `lifeos:before-navigate` on
 `document` before changing tabs. Shell closes utilities/resets scroll only after
 approval, and Community only updates its hash after approval. History owns its
@@ -64,3 +65,8 @@ visualViewport bottom and height before assigning a browser-specific root cause.
 No physical iPhone acceptance is claimed. The automated geometry checks validate
 the rendered viewport behavior in browser engines and do not establish how iOS
 Safari or a standalone PWA handles its native browser chrome.
+
+
+## Floating dock follow-up checks
+
+Run `npx playwright test tests/ui/mobile-dock.spec.js tests/ui/dock-long-scroll.spec.js tests/ui/shell-continuity.spec.js tests/ui/companion.spec.js tests/ui/training-navigation.spec.js`. Verify 12px insets (plus real bottom safe area), five equal targets, a single spring-driven selected pill, stable cold/lazy geometry, clear focus/pressed states, and successful drag-away cancellation. Check both languages at 200% text, content/composer clearance, PWA update notices above the bar stack, native keyboard hiding and More-dialog navigation cancellation. Reduced motion must snap selection and reduced transparency must remove blur. Desktop rail behavior remains separate. No schema rerun required.

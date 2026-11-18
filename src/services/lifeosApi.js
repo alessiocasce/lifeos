@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { addDays } from '../utils/date';
 import { calculateSleepHoursFromTimes } from '../utils/health';
-import { resolveExercise, canonicalExerciseId } from '../utils/exerciseCatalog';
+import { resolveExercise, canonicalExerciseId, exerciseIdentityKey } from '../utils/exerciseCatalog';
 import { captureSettingsIdentity } from '../utils/userSettingsIdentity';
 import { createClient } from '@supabase/supabase-js';
 import { getSignupEmailRedirectTo } from '../lib/authRedirect';
@@ -299,9 +299,28 @@ async function communityRequest(userId, build) {
   return throwIfError(await authorize(build(client)));
 }
 export const communityApi = {
-  feed: (userId, { cursor = null, author = null } = {}) => communityRequest(userId, client => client.rpc('community_feed_v2', {
-    p_before_date: cursor?.performed_on ?? null, p_before_id: cursor?.id ?? null, p_author: author, p_limit: 10,
-  })),
+  async feed(userId, { cursor = null, author = null } = {}) {
+    // Read the same RLS-protected projection in one page, including every
+    // exercise. Retain only names/counts in the summary cache, not set details.
+    const rows = await communityRequest(userId, client => {
+      let query = client.from('community_workout_shares')
+        .select(`id,author_id,title,performed_on,sets,exercise_count,set_count,published_at,author:user_profiles(${profileFields})`)
+        .order('performed_on', { ascending: false }).order('id', { ascending: false }).limit(10);
+      if (author) query = query.eq('author_id', author);
+      if (cursor) query = query.or(`performed_on.lt.${cursor.performed_on},and(performed_on.eq.${cursor.performed_on},id.lt.${cursor.id})`);
+      return query;
+    });
+    return rows.map(({ sets, ...share }) => {
+      const exercises = new Map();
+      for (const set of sets || []) {
+        const key = exerciseIdentityKey(set);
+        const entry = exercises.get(key) || { exercise: set.exercise, exercise_id: set.exercise_id, set_count: 0 };
+        entry.set_count++;
+        exercises.set(key, entry);
+      }
+      return { ...share, exercise_summary: [...exercises.values()] };
+    });
+  },
   detail: (userId, id) => communityRequest(userId, client => client.from('community_workout_shares').select(shareFields).eq('id', id).maybeSingle()),
   members: (userId, { search = '', offset = 0 } = {}) => communityRequest(userId, client => {
     const term = search.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60);
@@ -570,7 +589,69 @@ export const workoutSetApi = {
   },
 };
 
+// A draft baseline survives retries in the editor. Remember only the exact
+// order states this draft attempted, so recovery cannot excuse another tab's
+// unrelated reorder. Weak keys release the history when the editor closes.
+const templateDraftOrders = new WeakMap();
+const templateOrderKey = rows => JSON.stringify(rows.map(row => [row.id, Number(row.exercise_order)]).sort((a, b) => a[0].localeCompare(b[0])));
+
 export const workoutTemplateApi = {
+  async saveDraft(id, { details, exercises, baseline }, expectedUserId) {
+    const client = requireSupabase();
+    const run = async query => {
+      const { authorize } = await captureSettingsIdentity(client, expectedUserId);
+      return throwIfError(await authorize(query));
+    };
+    const read = () => run(client.from('workout_templates').select(workoutTemplateSelect).eq('id', id).maybeSingle());
+    const current = await read();
+    if (!current) throw new Error('This template is unavailable.');
+    const before = baseline.workout_template_exercises || [];
+    const desiredIds = new Set(exercises.map(row => row.id || row.draft_id));
+    const knownIds = new Set([...before.map(row => row.id), ...desiredIds]);
+    const currentRows = current.workout_template_exercises || [];
+    const attemptedOrders = templateDraftOrders.get(baseline) || new Set([templateOrderKey(before)]);
+    if (!attemptedOrders.has(templateOrderKey(currentRows))) {
+      throw new Error('Template exercises changed. Reopen Manage before retrying.');
+    }
+    templateDraftOrders.set(baseline, attemptedOrders);
+    if (currentRows.some(row => !knownIds.has(row.id))
+      || before.some(row => desiredIds.has(row.id) && !currentRows.some(saved => saved.id === row.id))) {
+      throw new Error('Template exercises changed. Reopen Manage before retrying.');
+    }
+    for (const row of currentRows) {
+      const original = before.find(saved => saved.id === row.id) || exercises.find(draft => (draft.id || draft.draft_id) === row.id);
+      if (original && (exerciseIdentityKey(original) !== exerciseIdentityKey(row) || (original.notes || '') !== (row.notes || ''))) {
+        throw new Error('Template exercises changed. Reopen Manage before retrying.');
+      }
+    }
+    const metadata = row => JSON.stringify({ name: row.name, notes: row.notes || '', color_key: row.color_key || 'slate', icon_key: row.icon_key || 'dumbbell' });
+    if (metadata(current) !== metadata(baseline) && metadata(current) !== metadata(details)) {
+      throw new Error('Template details changed. Reopen Manage before retrying.');
+    }
+    // Stage above every current order before assigning final positions. Stable
+    // draft IDs make a repeated save safe after a response is lost.
+    const start = Math.max(0, ...currentRows.map(row => Number(row.exercise_order) || 0)) + exercises.length + 100;
+    const rows = exercises.map((row, index) => ({ id: row.id || row.draft_id, template_id: id,
+      exercise: row.exercise, exercise_id: row.exercise_id ?? null, notes: row.notes || null, exercise_order: start + index }));
+    const listChanged = rows.length !== currentRows.length || rows.some((row, index) => !currentRows.some(saved => saved.id === row.id && Number(saved.exercise_order) === index + 1
+      && exerciseIdentityKey(saved) === exerciseIdentityKey(row) && (saved.notes || '') === (row.notes || '')));
+    if (listChanged) {
+      const staged = new Map(currentRows.map(row => [row.id, row]));
+      for (const row of rows) staged.set(row.id, row);
+      attemptedOrders.add(templateOrderKey([...staged.values()]));
+      if (rows.length) await run(client.from('workout_template_exercises').upsert(rows, { onConflict: 'id' }).select(workoutTemplateExerciseSelect));
+      const removed = before.filter(row => !desiredIds.has(row.id)).map(row => row.id);
+      for (const rowId of removed) staged.delete(rowId);
+      attemptedOrders.add(templateOrderKey([...staged.values()]));
+      if (removed.length) await run(client.from('workout_template_exercises').delete().eq('template_id', id).in('id', removed));
+      attemptedOrders.add(templateOrderKey(rows.map((row, index) => ({ ...row, exercise_order: index + 1 }))));
+      if (rows.length) await run(client.from('workout_template_exercises').upsert(rows.map((row, index) => ({ ...row, exercise_order: index + 1 })), { onConflict: 'id' }).select(workoutTemplateExerciseSelect));
+    }
+    if (metadata(current) !== metadata(details)) await run(client.from('workout_templates').update(prepareWorkoutTemplatePayload(details)).eq('id', id).select('id').single());
+    const saved = await read();
+    if (!saved) throw new Error('This template is unavailable.');
+    return normalizeWorkoutTemplate(saved);
+  },
   async list(limit = 50) {
     const rows = throwIfError(
       await requireSupabase()

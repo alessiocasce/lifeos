@@ -1,5 +1,11 @@
 # Training Rest Timer
 
+## Current handoff (2026-11-17)
+
+The guarded coordinator/adapter refactor is merged in `main` at `fe8b99c` and the public production build is verified for that SHA. It preserves server deadlines, consent, explicit reconnect and network-independent display. See [acceptance evidence](qa/workout-rest-coordination.md).
+
+The Oracle Activation section records the configured worker transport. Supabase `pg_net` dispatch remains disabled; the Production Transport Gate and initial provisioning steps farther below describe the earlier pre-Oracle proposal. They do not instruct an operator to create a second worker/keypair. Use the actual `/etc/lifeos-workout-push/worker.env` and dedicated service identity from Oracle Activation. Current Oracle health/secret state was not rechecked on November 17. Physical iPhone display still requires owner confirmation.
+
 ## iPhone Reliability Correction (2026-11-09)
 
 The former service worker fetched `training_push_verify` before displaying each
@@ -98,12 +104,12 @@ if broader revocation is needed. Foreground deadlines remain independent.
 Activation and controlled delivery results are recorded in
 `docs/audits/LIFEOS_PRODUCTION_LAUNCH.md`; older disabled-state notes below are history.
 
-## Production Transport Gate (2026-11-09)
+## Historical pre-Oracle transport gate (2026-11-09)
 
 The four reviewed migrations are applied, with repository versions reconciled to
 the production ledger: 20261109033543, 20261109033551, 20261109033558 and
 20261109033605. Foreground deadlines are available independently of Web Push.
-Background delivery is NOT operational: production has
+At this pre-Oracle checkpoint, background delivery was not operational: production had
 `LIFEOS_PUSH_WORKER_ENABLED=false`; no VAPID or dispatch credential was provisioned.
 
 Hosted pg_net grants PUBLIC access to its queue, owned by supabase_admin.

@@ -22,14 +22,16 @@ for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]) {
     const dialog=page.getByRole('dialog',{name:'Choose exercise',exact:true});
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('combobox')).not.toContainText('Glutes');
-    // The inactive straight-bar identity must not masquerade as the new EZ identity in Recent.
+    // The retired curl ID resolves to the confirmed canonical EZ identity.
     const recent=await dialog.getByRole('button',{name:'Barbell Curl',exact:true}).count();
     expect(recent).toBe(1);
-    await expect(dialog.getByRole('group',{name:'Recent',exact:true}).getByRole('button',{name:'Barbell Curl',exact:true})).toHaveCount(0);
-    await dialog.getByRole('combobox').selectOption('calves');
+    await expect(dialog.getByRole('group',{name:'Recent',exact:true}).getByRole('button',{name:'Barbell Curl',exact:true})).toHaveCount(1);
+    await dialog.getByRole('combobox').click();
+    await dialog.getByRole('option',{name:'Calves',exact:true}).click();
     await expect(dialog.getByRole('button',{name:'Calf Raises',exact:true})).toBeVisible();
     await expect(dialog.getByRole('button',{name:'Standing Machine Calf Raise',exact:true})).toHaveCount(0);
-    await dialog.getByRole('combobox').selectOption('');
+    await dialog.getByRole('combobox').click();
+    await dialog.getByRole('option',{name:'All muscle groups',exact:true}).click();
     await dialog.getByRole('textbox').fill('Military Press');
     await dialog.getByRole('textbox').press('ArrowDown');
     await expect(dialog.getByRole('button',{name:'Military Press',exact:true})).toBeFocused();
@@ -56,7 +58,8 @@ test('boxing requires no external load and removed recent identities remain read
   expect(saved.weight).toBe(0);expect(saved.exercise_id).toBe(exerciseCatalog.find(e=>e.slug==='boxing_bag').id);
   await page.getByRole('button',{name:'History',exact:true}).click();
   await page.getByRole('button',{name:/Original history/}).click();
-  await expect(page.getByRole('heading',{name:'Barbell Curl',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Barbell Curl/})).toBeVisible();
+  await page.getByRole('button',{name:/Barbell Curl/}).click();
   await expect(page.getByText('Keep authored note',{exact:true})).toBeVisible();
   expect(errors).toEqual([]);
 });

@@ -1,4 +1,6 @@
 # Codex Execution Prompt — LifeOS Companion vNext, Slice 2
+
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
 ## Explicit Semantic MCP Sync: ChatGPT → LifeOS
 
 You are working in the existing repository `alessiocasce/lifeos`.

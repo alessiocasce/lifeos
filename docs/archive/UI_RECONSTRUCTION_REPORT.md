@@ -1,5 +1,7 @@
 # LifeOS Frontend Reconstruction Report
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 Reconstruction baseline: `4358a76`. Review date: 2026-10-02.
 This report describes local implementation and verification, not a production
 deployment or physical iPhone acceptance test. Refer to

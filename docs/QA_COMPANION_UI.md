@@ -1,5 +1,34 @@
 # Companion app controls
 
+## Local Apple-style redesign (2026-11-17)
+
+Chat refinement: populated messages now keep text separate from metadata. User
+bubbles omit the redundant author header; assistant Copy/Save and timestamps
+sit in compact footers. Copy must report clipboard denial without false success
+and allow retry. It copies the original answer text, including Markdown.
+Reading older messages must survive an incoming answer/error. Latest messages
+returns to the end and focuses the transcript without opening the keyboard.
+Sending your own message and switching threads still navigate to the latest
+content. `tests/ui/companion-chat.spec.js` covers these paths and populated
+six-width/200% text layouts; Vault save/focus coverage remains in
+`tests/ui/companion-reports.spec.js`.
+
+The local conversation now has an open reading surface, restrained blue user
+bubbles, an expanding rounded composer and a grouped, reversible context sheet.
+Saved conversations appear first in context. Initial suggestions only fill a
+draft and focus the composer; they do not send or invoke Brain. Enter sends,
+Shift+Enter adds a line and composition Enter does not submit. New Chat focuses
+the composer. Corrections remain drafts; retry identities, memory/permission
+guards and Vault flows retain their existing contracts.
+
+Run `tests/ui/companion.spec.js` and `tests/ui/companion-apple.spec.js`, plus dock
+and shell continuity checks. Check 360/390/430/768/1024/1440px in English and
+Italian at normal and 200% root text; the entire composer must clear both the
+navigation and active-workout resume bar. Test Escape/focus return, interruption
+of context dismissal, backdrop dismissal and reduced-motion/solid materials.
+See [redesign evidence](qa/companion-apple-design.md). Local and uncommitted;
+physical-device and screen-reader acceptance remain pending. No schema rerun required.
+
 ## Conversation and current understanding
 
 Companion stays a full-height conversation on mobile and desktop. Returning from
@@ -22,7 +51,7 @@ human fields; no raw provenance, monitor conditions, database identifiers or
 private cross-user rows are returned. Responses use no-store. No schema rerun
 required; backend/frontend deploy together. No Oracle restart is needed.
 
-Local QA: ten Companion Chromium checks cover selected-thread navigation,
+Local QA: Companion Chromium checks cover selected-thread navigation,
 corrections remaining unsent, independent permission controls, failed memory
 edit recovery, chat retry request identity, Escape/focus restoration and seven
 required viewport sizes. Tests use isolated services; they do not call Gemini or

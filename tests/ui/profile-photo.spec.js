@@ -7,7 +7,7 @@ test('real JPEG, PNG and WebP bytes decode despite missing or misleading MIME; J
     await page.getByLabel('Choose profile photo',{exact:true}).setInputFiles({name:'misreported.bin',mimeType:'application/octet-stream',buffer:Buffer.from(bytes)});
     await expect(page.getByRole('img',{name:'Square crop preview'})).toBeVisible();
     if(type==='image/webp') await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob;HTMLCanvasElement.prototype.toBlob=function(callback,type,...rest){if(type==='image/webp')callback(null);else original.call(this,callback,type,...rest);};});
-    await page.getByRole('button',{name:'Save photo',exact:true}).click();
+    await page.getByRole('button',{name:'Use photo',exact:true}).click();
     await expect(page.getByText('Photo saved.',{exact:true})).toBeVisible();
     expect(await page.evaluate(()=>window.__photoUpload.type)).toBe(type==='image/webp'?'image/jpeg':'image/webp');
   }
@@ -32,6 +32,18 @@ test('signed avatar URL is reused across Members navigation without another requ
 });
 
 const photoFixture = `
+userSettingsApi.savePreferences = async (patch, id) => {
+  const previous = fixtureSettings(id);
+  const preferences = { ...previous.preferences, ...patch };
+  localStorage.setItem('qa-settings:' + id, JSON.stringify({ ...previous, preferences }));
+  return preferences;
+};
+userSettingsApi.saveProfile = async (profile, id) => {
+  const previous = fixtureSettings(id);
+  const next = { ...previous.profile, ...profile };
+  localStorage.setItem('qa-settings:' + id, JSON.stringify({ ...previous, profile: next }));
+  return next;
+};
 Object.assign(profilePhotoApi, {
   async signedUrl(profile, id) {
     window.__avatarSignCalls = (window.__avatarSignCalls || 0) + 1;
@@ -56,7 +68,12 @@ Object.assign(profilePhotoApi, {
 });`;
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+  await page.route('**/*', route => {
+    const url = new URL(route.request().url());
+    // WebKit routes local object URLs too; cropping decodes the selected file
+    // through one. Keep blocking external requests without blocking local files.
+    return url.hostname === '127.0.0.1' || (url.protocol === 'blob:' && url.origin === 'http://127.0.0.1:4178') ? route.continue() : route.abort();
+  });
   await page.route('**/tests/ui/fixtureApi.js*', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()) + photoFixture });
@@ -66,7 +83,7 @@ test.beforeEach(async ({ page }) => {
     window.addEventListener('lifeos:profile-updated', () => window.__profileEvents++);
   });
   await page.goto('/settings');
-  await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit username', exact: true })).toBeVisible();
 });
 
 async function choosePhoto(page) {
@@ -84,12 +101,14 @@ async function choosePhoto(page) {
 }
 
 test('username-only save and privacy edits survive photo upload/removal', async ({ page }) => {
+  test.setTimeout(60000); // Image encoding plus upload/removal and browser-context cleanup.
   await expect(page.getByRole('textbox', { name: 'Display name', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Edit username', exact: true }).click();
   await page.getByRole('textbox', { name: 'Username', exact: true }).fill('new_username');
   await page.getByLabel('Share completed workouts', { exact: true }).uncheck();
   await choosePhoto(page);
   await page.getByRole('slider', { name: 'Zoom', exact: true }).fill('2');
-  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByText('Photo saved.', { exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toHaveValue('new_username');
   await expect(page.getByLabel('Share completed workouts', { exact: true })).not.toBeChecked();
@@ -98,27 +117,30 @@ test('username-only save and privacy edits survive photo upload/removal', async 
   await page.getByRole('button', { name: 'Remove photo', exact: true }).click();
   await page.getByRole('button', { name: 'Remove photo', exact: true }).last().click();
   await expect(page.getByText('Photo removed.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Save username', exact: true }).click();
+  await expect(page.getByText('@new_username', { exact: true })).toBeVisible();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-settings:qa-user-a')));
-  expect(stored.profile).toEqual({ username: 'new_username' });
+  expect(stored.profile).toMatchObject({ username: 'new_username', avatar_path: null, avatar_url: null });
   expect(stored.preferences.workout_sharing).toBe(false);
   expect(stored.preferences.share_workout_notes).toBe(false);
-  expect(await page.evaluate(() => window.__profileEvents)).toBe(3);
+  // Preference, photo upload, removal and username each notify subscribers.
+  expect(await page.evaluate(() => window.__profileEvents)).toBe(4);
 });
 
 test('replacement uses a fresh stable path and cancelling keeps the saved photo', async ({ page }) => {
   await choosePhoto(page);
-  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByText('Photo saved.', { exact: true })).toBeVisible();
   const savedPath = await page.evaluate(() => JSON.parse(localStorage.getItem('qa-settings:qa-user-a')).profile.avatar_path);
-  await expect(page.getByRole('button', { name: 'Replace photo', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit profile photo', exact: true })).toBeVisible();
   await choosePhoto(page);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('img', { name: 'Square crop preview' })).toHaveCount(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-settings:qa-user-a')).profile.avatar_path)).toBe(savedPath);
   await choosePhoto(page);
   await page.getByRole('slider', { name: 'Horizontal position', exact: true }).fill('100');
-  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByText('Photo saved.', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-settings:qa-user-a')).profile.avatar_path)).not.toBe(savedPath);
   expect(await page.evaluate(() => window.__profileEvents)).toBe(2);
@@ -134,25 +156,25 @@ test('invalid sources and failed upload retain a retryable crop', async ({ page 
   await expect(page.getByRole('alert')).toContainText('Unsupported photo format.');
   await choosePhoto(page);
   await page.evaluate(() => localStorage.setItem('photo-fail', 'yes'));
-  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Upload failed. Try again.');
   await expect(page.getByRole('img', { name: 'Square crop preview' })).toBeVisible();
   await page.evaluate(() => localStorage.removeItem('photo-fail'));
-  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByText('Photo saved.', { exact: true })).toBeVisible();
 });
 
 test('in-flight upload is scoped to the captured account', async ({ page }) => {
   await choosePhoto(page);
   await page.evaluate(() => localStorage.setItem('photo-delay', '800'));
-  await page.getByRole('button', { name: 'Save photo', exact: true }).click();
+  await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByRole('progressbar')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save settings', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Edit username', exact: true })).toBeDisabled();
   await page.evaluate(() => window.__qaSignIn('qa-user-b'));
-  await expect(page.getByRole('button', { name: 'Add photo', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View profile photo', exact: true })).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page.getByText('Photo saved.', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Add photo', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View profile photo', exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('qa-settings:qa-user-b'))).toBeNull();
 });
 

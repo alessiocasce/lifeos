@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, Pencil, RefreshCw, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Search, UsersRound, X, Dumbbell } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 import { communityApi } from '../services/lifeosApi';
-import { t, formatDate } from '../i18n';
-import { MemberIdentity, SharedWorkoutCard, SharedWorkoutSets } from '../components/SharedWorkout';
+import { t } from '../i18n';
+import { ProfileAvatar } from '../components/ProfileAvatar';
+import { SettingsDialog } from '../components/SettingsDialog';
+import { AuthorButton, SharedWorkoutExercises, SharedWorkoutPost, longDate, usernameOf } from '../components/SharedWorkout';
 import { COMMUNITY_FRESH_MS, communityKey, communityRevision, invalidateCommunity, readCommunityList, readCommunityView, rememberCommunityView, writeCommunityList } from '../utils/communityCache';
 import '../styles/community.css';
+import '../styles/settings.css';
 
 const route = (hash) => {
   const params = new URLSearchParams(hash.slice(1));
   return { share: params.get('share'), member: params.get('member'), members: params.has('members') };
 };
+const isTopLevel = hash => hash === '' || hash === '#members';
 const navigationKey = 'lifeosCommunity';
 
 // Each browser entry carries its origin stack; refresh retains it, copied URLs do not.
@@ -24,6 +28,21 @@ function writeNavigation(value, method = 'replaceState') {
   window.history[method]({ ...window.history.state, [navigationKey]: value }, '', `${window.location.pathname}${window.location.search}${value.current.hash}`);
 }
 
+// Push/pop slide along the same horizontal path; Feed/Members switches cross-fade.
+function transitionBetween(from, to) {
+  if (!from) return 'none';
+  if (isTopLevel(from.current.hash) && isTopLevel(to.current.hash)) return 'switch';
+  return to.origins.length < from.origins.length ? 'pop' : 'push';
+}
+
+function backLabel(origins) {
+  const hash = origins.at(-1)?.hash ?? '';
+  if (hash.startsWith('#share=')) return 'Back to workout';
+  if (hash.startsWith('#member=')) return 'Back to profile';
+  if (hash === '#members') return 'Back to Members';
+  return 'Back to Feed';
+}
+
 // Account-keyed mounting plus request generations prevent stale reads after auth/navigation.
 export function CommunityTab() {
   const { authUser } = useLifeOS();
@@ -31,8 +50,14 @@ export function CommunityTab() {
 }
 
 function CommunityWorkspace({ userId }) {
-  const { setActiveTab } = useLifeOS();
-  const [navigation, setNavigation] = useState(() => readNavigation(userId));
+  const [navigation, setNavigationState] = useState(() => readNavigation(userId));
+  const [transition, setTransition] = useState('none');
+  const navigationRef = useRef(navigation);
+  const setNavigation = useCallback(next => {
+    setTransition(transitionBetween(navigationRef.current, next));
+    navigationRef.current = next;
+    setNavigationState(next);
+  }, []);
   const location = route(navigation.current.hash);
   const pendingScroll = useRef(navigation.current.key);
   const restoreScroll = useCallback((more = false) => {
@@ -40,6 +65,9 @@ function CommunityWorkspace({ userId }) {
     if (more && navigation.current.scrollY > document.documentElement.scrollHeight - window.innerHeight) return false;
     window.scrollTo({ top: navigation.current.scrollY, behavior: 'instant' });
     pendingScroll.current = null;
+    // Returning puts focus back on the control that opened the page we left.
+    const focusKey = navigation.current.focusKey;
+    if (focusKey) document.querySelector(`.community [data-focus-key="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
     return true;
   }, [navigation]);
   useLayoutEffect(() => {
@@ -66,10 +94,10 @@ function CommunityWorkspace({ userId }) {
     window.addEventListener('scroll', rememberScroll, { passive: true });
     return () => { window.history.scrollRestoration = previousRestoration; window.removeEventListener('hashchange', update); window.removeEventListener('popstate', update); window.removeEventListener('scroll', rememberScroll); };
   }, [userId]);
-  const navigate = (key, id) => {
+  const navigate = (key, id, focusKey) => {
     const hash = key ? `#${key}${id ? `=${encodeURIComponent(id)}` : ''}` : '';
     if (hash === navigation.current.hash) return;
-    const current = { ...navigation.current, scrollY: window.scrollY };
+    const current = { ...navigation.current, scrollY: window.scrollY, focusKey };
     rememberCommunityView(userId, current.hash, current);
     writeNavigation({ ...navigation, current });
     const saved = readCommunityView(userId, hash);
@@ -87,25 +115,50 @@ function CommunityWorkspace({ userId }) {
     const next = { ...navigation, current: { ...navigation.current, search } };
     rememberCommunityView(userId, next.current.hash, next.current);
     writeNavigation(next);
-    setNavigation(next);
+    navigationRef.current = next;
+    setNavigationState(next);
   };
-  if (location.share) return <ShareDetail key={location.share} userId={userId} id={location.share} navigate={navigate} back={back} restoreScroll={restoreScroll} />;
-  if (location.member) return <MemberProfile key={location.member} userId={userId} id={location.member} navigate={navigate} back={back} restoreScroll={restoreScroll} onEdit={() => setActiveTab('settings')} />;
-  return <div className="community-workspace max-w-3xl min-w-0">
-    <p className="community-intro">{t('Completed workouts from members with Workout Sharing enabled.')}</p>
-    <div role="tablist" aria-label={t('Community views')} className="community-tabs">
-      {['Feed', 'Members'].map(label => <button type="button" role="tab" key={label} id={`community-tab-${label}`} aria-controls="community-panel" tabIndex={((label === 'Members') === location.members) ? 0 : -1} aria-selected={(label === 'Members') === location.members} className={`min-h-11 border-b-2 px-1 text-sm ${((label === 'Members') === location.members) ? 'border-zinc-100 text-zinc-100' : 'border-transparent text-zinc-400'}`}
+  const backBar = <BackBar label={backLabel(navigation.origins)} onBack={back} />;
+  let page;
+  if (location.share) page = <ShareDetail userId={userId} id={location.share} navigate={navigate} backBar={backBar} restoreScroll={restoreScroll} />;
+  else if (location.member) page = <MemberProfile userId={userId} id={location.member} navigate={navigate} backBar={backBar} restoreScroll={restoreScroll} />;
+  else page = <div role="tabpanel" id="community-panel" aria-labelledby={`community-tab-${location.members ? 'members' : 'feed'}`}>
+    {location.members ? <MemberDirectory userId={userId} input={navigation.current.search} setInput={setSearch} navigate={navigate} restoreScroll={restoreScroll} /> : <Feed userId={userId} navigate={navigate} restoreScroll={restoreScroll} />}
+  </div>;
+  return <div className="community">
+    {isTopLevel(navigation.current.hash) ? <Segments members={location.members} onSelect={members => navigate(members ? 'members' : '')} /> : null}
+    <div key={navigation.current.key} className="community-page" data-transition={transition}>{page}</div>
+  </div>;
+}
+
+function Segments({ members, onSelect }) {
+  const options = [['feed', 'Feed'], ['members', 'Members']];
+  const index = members ? 1 : 0;
+  return <div className="community-toolbar">
+    <div role="tablist" aria-label={t('Community views')} className="community-segments" style={{ '--segment-index': index }}>
+      <span className="community-segment-thumb" aria-hidden="true" />
+      {options.map(([id, label], position) => <button type="button" role="tab" key={id} id={`community-tab-${id}`} aria-controls="community-panel"
+        aria-selected={position === index} tabIndex={position === index ? 0 : -1} className="community-segment"
         onKeyDown={event => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
-          const buttons = event.currentTarget.parentElement.querySelectorAll('[role="tab"]');
-          const index = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : label === 'Feed' ? 1 : 0;
-          buttons[index].focus({ preventScroll: true }); buttons[index].click();
-        }} onClick={() => navigate(label === 'Members' ? 'members' : '')}>{t(label)}</button>)}
+          const target = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - position;
+          event.currentTarget.parentElement.querySelectorAll('[role="tab"]')[target].focus({ preventScroll: true });
+          onSelect(target === 1);
+        }}
+        onClick={() => onSelect(position === 1)}>{t(label)}</button>)}
     </div>
-    <div role="tabpanel" id="community-panel" aria-labelledby={`community-tab-${location.members ? 'Members' : 'Feed'}`}>
-      {location.members ? <MemberDirectory userId={userId} input={navigation.current.search} setInput={setSearch} navigate={navigate} restoreScroll={restoreScroll} /> : <Feed userId={userId} navigate={navigate} restoreScroll={restoreScroll} />}
-    </div>
+  </div>;
+}
+
+// Visible text is the previous page's title, as in a navigation bar.
+const backTitles = { 'Back to Feed': 'Feed', 'Back to Members': 'Members', 'Back to profile': 'Profile', 'Back to workout': 'Workout' };
+
+function BackBar({ label, onBack }) {
+  return <div className="community-backbar">
+    <button type="button" className="community-back" aria-label={t(label)} onClick={onBack}>
+      <ChevronLeft size={22} strokeWidth={2.25} aria-hidden="true" /><span aria-hidden="true">{t(backTitles[label])}</span>
+    </button>
   </div>;
 }
 
@@ -165,11 +218,32 @@ function useCommunityList(userId, kind, author, search = '') {
   return { ...state, load };
 }
 
-function ListFooter({ data, empty }) {
+function Skeleton({ rows = 3, variant = 'post' }) {
+  return <div className={`community-group community-skeleton community-skeleton-${variant}`} aria-hidden="true">
+    {Array.from({ length: rows }, (_, i) => <div key={i} className="community-skeleton-row"><span /><span /><span /></div>)}
+  </div>;
+}
+
+function EmptyState({ icon: Icon, title, children }) {
+  return <div className="community-state">
+    <span className="community-state-icon"><Icon size={26} aria-hidden="true" /></span>
+    <p className="community-state-title">{title}</p>
+    {children}
+  </div>;
+}
+
+function ErrorState({ retry }) {
+  return <div role="alert" className="community-state">
+    <p className="community-state-title">{t('Community is unavailable. Try again.')}</p>
+    <button type="button" className="community-pill-button" onClick={retry}><RefreshCw size={16} aria-hidden="true" />{t('Retry')}</button>
+  </div>;
+}
+
+function ListStatus({ data, skeleton, empty }) {
   return <>
-    {data.loading ? <p role="status" className="py-5 text-sm text-zinc-400">{t('Loading Community...')}</p> : null}
-    {data.error ? <div role="alert" className="py-4 text-sm text-amber-200">{t('Community is unavailable. Try again.')}<button type="button" className="ml-3 inline-flex min-h-11 items-center gap-2" onClick={() => data.load(Boolean(data.rows.length))}><RefreshCw size={16} />{t('Retry')}</button></div> : null}
-    {!data.loading && !data.error && !data.rows.length ? <p className="community-empty">{t(empty)}</p> : null}
+    {data.loading ? <><p role="status" className="sr-only">{t('Loading Community...')}</p>{skeleton}</> : null}
+    {data.error ? <ErrorState retry={() => data.load(Boolean(data.rows.length))} /> : null}
+    {!data.loading && !data.error && !data.rows.length ? empty : null}
     {data.more && !data.loading && !data.error ? <button type="button" disabled={data.refreshing} className="community-load-more" onClick={() => data.load(true)}>{t('Load more')}</button> : null}
   </>;
 }
@@ -177,21 +251,44 @@ function ListFooter({ data, empty }) {
 function Feed({ userId, author = null, navigate, restoreScroll }) {
   const data = useCommunityList(userId, 'feed', author);
   useEffect(() => { if (!data.loading && !data.error && !restoreScroll(data.more)) void data.load(true); }, [data.loading, data.error, data.more, data.load, restoreScroll]);
-  return <section aria-label={t('Shared workouts')} aria-busy={data.loading || data.refreshing} className="min-w-0">
-    <div className="grid gap-4">{data.rows.map(share => <SharedWorkoutCard key={share.id} share={share} onOpen={() => navigate('share', share.id)} onMember={() => navigate('member', share.author_id)} />)}</div>
-    <ListFooter data={data} empty={author === userId ? 'Completed workouts appear here when Workout Sharing is on and your public profile is complete.' : 'No shared workouts yet.'} />
+  const own = author === userId;
+  return <section aria-label={t('Shared workouts')} aria-busy={data.loading || data.refreshing} className="community-feed">
+    {data.rows.length ? <div className="community-cards">
+      {data.rows.map(share => <SharedWorkoutPost key={share.id} share={share}
+        onOpen={() => navigate('share', share.id, `share:${share.id}`)} onMember={() => navigate('member', share.author_id, `author:${share.id}`)} />)}
+    </div> : null}
+    <ListStatus data={data} skeleton={<Skeleton />} empty={<EmptyState icon={Dumbbell} title={t(own ? 'Completed workouts appear here when Workout Sharing is on and your public profile is complete.' : 'No shared workouts yet.')} />} />
   </section>;
 }
 
 function MemberDirectory({ userId, input, setInput, navigate, restoreScroll }) {
   const [search, setSearch] = useState(input);
+  const field = useRef(null);
   useEffect(() => { const timer = setTimeout(() => setSearch(input), 250); return () => clearTimeout(timer); }, [input]);
   const data = useCommunityList(userId, 'members', null, search);
   useEffect(() => { if (!data.loading && !data.error && !restoreScroll(data.more)) void data.load(true); }, [data.loading, data.error, data.more, data.load, restoreScroll]);
-  return <section>
-    <label className="community-search"><Search size={18} aria-hidden="true" /><input type="text" inputMode="search" enterKeyHint="search" name="member-search" autoComplete="off" spellCheck={false} value={input} onChange={e => setInput(e.target.value)} aria-label={t('Find members')} placeholder={t('Search usernames')} maxLength={60} /></label>
-    <div className="community-members">{data.rows.map(profile => <div className="community-member-row" key={profile.user_id}><MemberIdentity profile={profile} onOpen={() => navigate('member', profile.user_id)} /></div>)}</div>
-    <ListFooter data={data} empty="No matching members." />
+  const clear = () => { setInput(''); field.current?.focus(); };
+  return <section className="community-directory">
+    <div className="community-search">
+      <Search size={17} aria-hidden="true" />
+      <input ref={field} type="text" inputMode="search" enterKeyHint="search" name="member-search" autoComplete="off" spellCheck={false} value={input}
+        onChange={event => setInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && input) { event.preventDefault(); clear(); } }}
+        aria-label={t('Find members')} placeholder={t('Search usernames')} maxLength={60} />
+      {input ? <button type="button" className="community-search-clear" aria-label={t('Clear search')} onClick={clear}><X size={14} strokeWidth={3} aria-hidden="true" /></button> : null}
+    </div>
+    {data.rows.length ? <ul className="community-group" aria-label={t('Members')}>
+        {data.rows.map(profile => <li key={profile.user_id} className="community-member">
+          <button type="button" aria-label={`@${usernameOf(profile)}`} data-focus-key={`member:${profile.user_id}`} className="community-member-open" onClick={() => navigate('member', profile.user_id, `member:${profile.user_id}`)}>
+            <ProfileAvatar profile={profile} className="community-member-avatar" />
+            <span className="community-member-name">{usernameOf(profile)}</span>
+            {profile.user_id === userId ? <span className="community-you">{t('You')}</span> : null}
+            <ChevronRight className="community-chevron-inline" size={18} aria-hidden="true" />
+          </button>
+        </li>)}
+      </ul> : null}
+    <ListStatus data={data} skeleton={<Skeleton rows={5} variant="member" />} empty={search
+      ? <EmptyState icon={Search} title={t('No matching members.')}><button type="button" className="community-pill-button" onClick={clear}>{t('Clear search')}</button></EmptyState>
+      : <EmptyState icon={UsersRound} title={t('No members available.')} />} />
   </section>;
 }
 
@@ -227,32 +324,54 @@ function useCommunityRecord(userId, id, kind) {
   return { ...state, retry: () => retry.current?.() };
 }
 
-function RecordError({ retry }) {
-  return <div role="alert" className="py-4 text-sm text-amber-200">{t('Community is unavailable. Try again.')}<button type="button" className="ml-3 inline-flex min-h-11 items-center gap-2" onClick={retry}><RefreshCw size={16} aria-hidden="true" />{t('Retry')}</button></div>;
+function RecordStatus({ data, unavailable }) {
+  if (data.loading) return <><p role="status" className="sr-only">{t('Loading Community...')}</p><Skeleton rows={2} /></>;
+  if (data.error) return <ErrorState retry={data.retry} />;
+  return <EmptyState icon={UsersRound} title={t(unavailable)} />;
 }
 
-function BackToCommunity({ onBack }) {
-  return <button type="button" className="mb-5 flex min-h-11 items-center gap-2 text-sm text-zinc-300" onClick={onBack}><ArrowLeft size={16} aria-hidden="true" />{t('Back')}</button>;
-}
-
-function ShareDetail({ userId, id, navigate, back, restoreScroll }) {
+function ShareDetail({ userId, id, navigate, backBar, restoreScroll }) {
   const data = useCommunityRecord(userId, id, 'detail');
   useEffect(() => { if (!data.loading) restoreScroll(); }, [data.loading, restoreScroll]);
-  return <section className="community-detail max-w-2xl min-w-0"><BackToCommunity onBack={back} />
-    {data.loading ? <p role="status">{t('Loading Community...')}</p> : data.error ? <RecordError retry={data.retry} /> : !data.value ? <p>{t('This workout is private or unavailable.')}</p> : <>
-      <MemberIdentity profile={data.value.author} onOpen={() => navigate('member', data.value.author_id)} />
-      <h2 className="mt-6 break-words text-2xl font-semibold">{data.value.title}</h2><time className="mt-2 block text-sm text-zinc-400" dateTime={data.value.performed_on}>{formatDate(data.value.performed_on)}</time>
-      <SharedWorkoutSets share={data.value} />
+  const share = data.value;
+  return <article className="community-detail" aria-busy={data.loading}>
+    {backBar}
+    {!share ? <RecordStatus data={data} unavailable="This workout is private or unavailable." /> : <>
+      <header className="community-detail-head">
+        <AuthorButton profile={share.author} focusKey="detail-author" onOpen={() => navigate('member', share.author_id, 'detail-author')} />
+        <div className="community-detail-line">
+          <h2 className="community-detail-title">{share.title}</h2>
+          <time className="community-detail-date" dateTime={share.performed_on}>{longDate(share.performed_on)}</time>
+        </div>
+      </header>
+      {share.notes ? <p className="community-notes">{share.notes}</p> : null}
+      <SharedWorkoutExercises share={share} />
     </>}
-  </section>;
+  </article>;
 }
 
-function MemberProfile({ userId, id, navigate, back, restoreScroll, onEdit }) {
+function MemberProfile({ userId, id, navigate, backBar, restoreScroll }) {
   const data = useCommunityRecord(userId, id, 'member');
+  const [viewedPhoto, setViewedPhoto] = useState(null);
+  const photoTrigger = useRef(null);
+  useEffect(() => {
+    if (viewedPhoto && data.value?.user_id !== viewedPhoto) setViewedPhoto(null);
+  }, [data.value, viewedPhoto]);
   useEffect(() => { if (!data.loading && (!data.value || data.error)) restoreScroll(); }, [data, restoreScroll]);
-  return <section className="community-profile max-w-3xl min-w-0"><BackToCommunity onBack={back} />
-    {data.loading ? <p role="status">{t('Loading Community...')}</p> : data.error ? <RecordError retry={data.retry} /> : !data.value ? <p>{t('Member unavailable.')}</p> : <>
-      <div className="flex flex-wrap items-center gap-3"><MemberIdentity profile={data.value} />{id === userId ? <button type="button" className="icon-button" title={t('Public profile')} aria-label={t('Public profile')} onClick={onEdit}><Pencil size={17} /></button> : null}</div><h2 className="mb-4 mt-8 text-sm font-semibold">{t('Shared workouts')}</h2><Feed userId={userId} author={id} navigate={navigate} restoreScroll={restoreScroll} />
+  const profile = data.value;
+  return <section className="community-profile" aria-busy={data.loading}>
+    {backBar}
+    {!profile ? <RecordStatus data={data} unavailable="Member unavailable." /> : <>
+      <header className="community-hero">
+        <button ref={photoTrigger} type="button" className="community-hero-photo" aria-label={t('View profile photo')} onClick={() => setViewedPhoto(profile.user_id)}>
+          <ProfileAvatar profile={profile} className="community-hero-avatar" />
+        </button>
+        <h2 className="community-hero-name">@{usernameOf(profile)}</h2>
+      </header>
+      <Feed userId={userId} author={id} navigate={navigate} restoreScroll={restoreScroll} />
+      {viewedPhoto === profile.user_id && <SettingsDialog title="Profile photo" showHeader={false} className="settings-photo-viewer" triggerRef={photoTrigger} onClose={() => setViewedPhoto(null)}>
+        <div className="settings-photo-circle"><ProfileAvatar profile={profile} /></div>
+      </SettingsDialog>}
     </>}
   </section>;
 }

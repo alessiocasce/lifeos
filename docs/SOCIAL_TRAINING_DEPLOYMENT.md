@@ -1,5 +1,7 @@
 # Social Training Foundation Deployment — 2026-10-29
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [the documentation index](README.md). Retain historical evidence; revalidate before operational use.
+
 ## Baseline / Scope
 
 Remote main and Vercel Production started at `8b46e43`. The three foundation commits

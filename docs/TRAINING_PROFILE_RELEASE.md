@@ -1,5 +1,7 @@
 # Training, Username Profiles and Navigation
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [the documentation index](README.md). Retain historical evidence; revalidate before operational use.
+
 The 3 November successor is TRAINING_ACTIVE_RELEASE.md. It retires rest timers,
 introduces a focused template editor, exercise draft banks, avatar URL caching,
 15MB content-aware source photos/JPEG fallback and confirmed username onboarding.

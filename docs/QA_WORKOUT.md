@@ -1,6 +1,11 @@
 # LifeOS Workout QA
 
-## Local modernization acceptance (2026-11-08, not deployed)
+Current local Manage editor revision and focused evidence:
+[existing-template editing](qa/training-manage-apple-design.md). This supersedes
+older Manage edit/save/control expectations below; the overall feedback-batch
+validation remains deferred at the user's request.
+
+## Modernization acceptance (local evidence 2026-11-08; released 2026-11-09)
 
 Current branch review supersedes older UI expectations below. Verify:
 
@@ -29,8 +34,7 @@ Current branch review supersedes older UI expectations below. Verify:
 
 See `docs/audits/LIFEOS_UI_UX_MODERNIZATION.md` for exact commands, results and
 screenshots. Tests use isolated fixtures, never production workout records.
-Web Push deployment and physical iPhone acceptance remain pending; see
-`docs/WORKOUT_WEB_PUSH.md`. No broad schema rerun or production migration occurred.
+The modernization and later rest coordinator are released; see [current source/deployment status](../PROJECT_CONTEXT.md). Oracle activation is recorded in [WORKOUT_WEB_PUSH.md](WORKOUT_WEB_PUSH.md); its current health was not rechecked here. Physical iPhone acceptance remains pending. No schema rerun required for the coordinator.
 
 ## History design review - approved for release
 
@@ -326,7 +330,7 @@ Keep Workout open across Europe/Rome midnight: today's filter and an untouched n
 
 Run `npm run test:workout` after changing Workout rendering or local-day propagation. It renders the real lazy-loaded tab against empty, loading, stale-selection, active, ended, template, and historical-data fixtures. The Rome-local day returned by `useLocalDay()` must be passed into child controls; file-level Workout helpers must not read a removed module-global `today` value.
 
-Run this after applying `supabase/schema.sql` and signing in with a Supabase-backed account.
+Run after verifying the required workout objects and signing in with a Supabase-backed account. Apply only an authorized missing forward migration; do not rerun baseline SQL on production.
 
 ## Session Flow
 
@@ -453,7 +457,7 @@ Untouched prefill is clean, manual edits survive per-exercise switches/reload,
 and End Workout never asks to discard or saves a phantom set. Confirm updates
 are blocked during a live workout, including on other app tabs; after ending,
 Settings update changes the running build ID and retains user storage.
-No rest timers, schema/data edits or fake production workouts. Physical iPhone
+That corrective slice did not change rest-timer behavior or production records; the separate PWA rest timer is now implemented. Physical iPhone
 Safari/installed PWA and installed desktop PWA still need device acceptance.
 
 ## Floating sheets and picker navigation

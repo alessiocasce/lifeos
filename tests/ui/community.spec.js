@@ -32,10 +32,10 @@ for (const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]) test(
   await page.screenshot({path:info.outputPath('automatic-feed.png'),fullPage:true});
   await page.getByRole('button',{name:/Historical workout/}).click();
   await expect(page.getByRole('heading',{name:'Dumbbell Bench Press',exact:true})).toBeVisible();
-  await expect(page.getByText('RPE 8',{exact:true})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'8',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Stop sharing',exact:true})).toHaveCount(0);
   await page.reload();await expect(page.getByRole('heading',{name:'Dumbbell Bench Press',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Back',exact:true}).click();
+  await page.getByRole('button',{name:/^Back to /,exact:false}).click();
   await page.getByRole('tab',{name:'Members',exact:true}).click();
   await page.getByRole('textbox',{name:'Find members',exact:true}).fill('degra');
   await page.getByRole('button',{name:'@degra',exact:true}).click();
@@ -45,39 +45,39 @@ for (const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]) test(
 });
 
 async function history(page) {
-  await page.goto('/workout');await page.getByRole('button',{name:'History',exact:true}).click();
-  await page.getByRole('button',{name:/Historical workout/}).click();
+  await page.goto('/community');
+  await page.getByRole('button', { name: /Historical workout/ }).click();
 }
+
 test('global OFF hides history and ON restores it without manual publication',async({page})=>{
   await history(page);
-  await expect(page.getByRole('button',{name:'View in Community',exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Share with Community',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'View in Community',exact:true}).click();
+  const oldLink=page.url();
+  await page.goto('/settings');
+  await page.getByRole('switch',{name:'Share completed workouts',exact:true}).uncheck();
+  await expect(page.getByRole('switch',{name:'Share completed workouts',exact:true})).toBeEnabled();
+  await page.goto(oldLink);
+  await expect(page.getByText('This workout is private or unavailable.',{exact:true})).toBeVisible();
+  await page.goto('/settings');
+  await page.getByRole('switch',{name:'Share completed workouts',exact:true}).check();
+  await expect(page.getByRole('switch',{name:'Share completed workouts',exact:true})).toBeEnabled();
+  await history(page);
   await expect(page.getByRole('heading',{name:'Historical workout',exact:true})).toBeVisible();
-  const oldLink=page.url();await page.goto('/settings');
-  await expect(page.getByText(/all completed workouts, including past workouts/)).toBeVisible();
-  await page.getByRole('checkbox',{name:'Share completed workouts',exact:true}).uncheck();
-  await page.getByRole('button',{name:'Save settings',exact:true}).click();
-  await expect(page.getByRole('status')).toHaveText('Settings saved.');
-  await page.goto(oldLink);await expect(page.getByText('This workout is private or unavailable.',{exact:true})).toBeVisible();
-  await history(page);await expect(page.getByRole('button',{name:'View in Community',exact:true})).toHaveCount(0);
-  await page.goto('/settings');await page.getByRole('checkbox',{name:'Share completed workouts',exact:true}).check();
-  await page.getByRole('button',{name:'Save settings',exact:true}).click();await expect(page.getByRole('status')).toHaveText('Settings saved.');
-  await history(page);await page.getByRole('button',{name:'View in Community',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Historical workout',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Stop sharing|Share with Community/})).toHaveCount(0);
 });
 
 test('notes are controlled only by global preference and remain private by default',async({page})=>{
-  await history(page);await page.getByRole('button',{name:'View in Community',exact:true}).click();
+  await history(page);
   await expect(page.getByText('Private set note',{exact:true})).toHaveCount(0);
-  await page.goto('/settings');await page.getByRole('checkbox',{name:'Share set notes',exact:true}).check();
-  await page.getByRole('button',{name:'Save settings',exact:true}).click();await expect(page.getByRole('status')).toHaveText('Settings saved.');
-  await history(page);await page.getByRole('button',{name:'View in Community',exact:true}).click();
+  await page.goto('/settings');
+  await page.getByRole('switch',{name:'Share set notes',exact:true}).check();
+  await expect(page.getByRole('switch',{name:'Share set notes',exact:true})).toBeEnabled();
+  await history(page);
   await expect(page.getByText('Private set note',{exact:true})).toBeVisible();
   await expect(page.getByText('Private session note',{exact:true})).toBeVisible();
-  await page.goto('/settings');await page.getByRole('checkbox',{name:'Share set notes',exact:true}).uncheck();
-  await page.getByRole('button',{name:'Save settings',exact:true}).click();await expect(page.getByRole('status')).toHaveText('Settings saved.');
-  await history(page);await page.getByRole('button',{name:'View in Community',exact:true}).click();
+  await page.goto('/settings');
+  await page.getByRole('switch',{name:'Share set notes',exact:true}).uncheck();
+  await expect(page.getByRole('switch',{name:'Share set notes',exact:true})).toBeEnabled();
+  await history(page);
   await expect(page.getByText('Private set note',{exact:true})).toHaveCount(0);
 });
 
@@ -89,7 +89,7 @@ test('Italian member and delayed old-account requests stay isolated',async({page
   await page.getByRole('button',{name:/Historical workout/}).click();
   await expect(page.getByRole('heading',{name:'Panca piana con manubri',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Interrompi condivisione',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Indietro',exact:true}).click();
+  await page.getByRole('button',{name:/^Torna /,exact:false}).click();
   await page.getByRole('tab',{name:'Membri',exact:true}).click();
   await page.getByRole('textbox',{name:'Cerca membri',exact:true}).fill('nobody');
   await expect(page.getByText('Nessun membro trovato.',{exact:true})).toBeVisible();
@@ -97,7 +97,7 @@ test('Italian member and delayed old-account requests stay isolated',async({page
 
 test('revoked detail and feed errors recover without obsolete publication controls',async({page})=>{
   await page.goto('/community#share=missing');await expect(page.getByText('This workout is private or unavailable.',{exact:true})).toBeVisible();
-  await page.evaluate(()=>localStorage.setItem('qa-community-fail','yes'));await page.getByRole('button',{name:'Back',exact:true}).click();
+  await page.evaluate(()=>localStorage.setItem('qa-community-fail','yes'));await page.getByRole('button',{name:/^Back to /,exact:false}).click();
   await expect(page.getByRole('alert')).toContainText('Community is unavailable. Try again.');
   await page.evaluate(()=>localStorage.removeItem('qa-community-fail'));await page.getByRole('button',{name:'Retry',exact:true}).press('Enter');
   await expect(page.getByRole('article')).toHaveCount(10);

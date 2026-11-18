@@ -1,5 +1,7 @@
 # LifeOS UI/UX Modernization
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and [the documentation index](../README.md). Retain historical evidence; revalidate before operational use.
+
 ## Scope and Safety
 
 Local implementation on `codex/lifeos-ui-modernization`, starting at `23a4b62`.

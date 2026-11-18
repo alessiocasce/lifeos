@@ -1,6 +1,6 @@
 # Rest coordination acceptance evidence
 
-Local acceptance for tickets 6-8, 2026-11-17. No schema rerun required. The real-adapter harness executes production source with substituted auth/database/browser transports; browser checks use the fixture adapter and do not exercise hosted Supabase.
+Implementation and acceptance for tickets 6-8, 2026-11-17. Merged/pushed to `main` at `fe8b99c`; tickets closed. Production deployment `dpl_7o4x396sDEX2mGhK6dcFvB43qPxs` is READY and the public build-version endpoint returned that SHA on 2026-11-17. The acceptance tests below remain local evidence. No schema rerun required. The real-adapter harness executes production source with substituted auth/database/browser transports; browser checks use the fixture adapter and do not exercise hosted Supabase.
 
 | Approved scenario | Passing local evidence | Limit |
 | --- | --- | --- |
@@ -25,4 +25,4 @@ Run `npm run test:workout:rest-coordinator`, `npm run test:workout:rest-adapter`
 
 Validation result: all listed Node checks passed; the final focused Playwright run passed 21/21 (push 5, rest coordination 5, lifetime 1, continuity 10). Production build passed with the existing >500 kB chunk warning. Italian dictionary and diff checks passed.
 
-Physical iPhone notification display and deployed RLS remain unresolved acceptance limits, outside this local refactor. Existing unrelated training-prefill-rest Weight locator failures are not changed. No push, deployment, schema migration or production write is included.
+Physical iPhone notification display and deployed RLS remain unresolved acceptance limits, outside this local refactor. Existing unrelated training-prefill-rest Weight locator failures are not changed. The refactor used no schema migration or production data write. Its reviewed commits were subsequently pushed/merged and deployed by Vercel Git integration; that release status does not add physical-device or hosted-RLS acceptance.

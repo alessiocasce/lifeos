@@ -30,3 +30,7 @@ Thumbs.db
 /docs/audits/lifeos-ui/references/
 /docs/audits/lifeos-ui/screenshots/
 /supabase/.temp/
+
+# Local generated architecture analysis and rest-implementation audit scratch.
+/graphify-out/
+/lifeos-rest-implementation-notes/

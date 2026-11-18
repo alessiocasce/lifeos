@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, Info, Pencil, RefreshCw, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Dumbbell, Info, Languages, NotebookPen, Pencil, RefreshCw } from 'lucide-react';
 import { t } from '../i18n';
 import { useLifeOS } from '../context/LifeOSContext';
 import { ProfilePhotoEditor } from '../components/ProfilePhotoEditor';
 import { SettingsDialog } from '../components/SettingsDialog';
+import { SettingsLanguagePicker } from '../components/SettingsLanguagePicker';
 import { normalizeUsername } from '../utils/userSettingsIdentity';
 import '../styles/settings.css';
 
@@ -21,59 +22,126 @@ function Information({ title, children }) {
 function SettingsForm({ authUser, settings }) {
   const [editing, setEditing] = useState(false);
   const [username, setUsername] = useState('');
+  const [touched, setTouched] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoProfile, setPhotoProfile] = useState(settings.profile);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
+  const [feedback, setFeedback] = useState({ target: '', pending: false, message: '', error: false });
+  const [retrying, setRetrying] = useState(false);
   const mounted = useRef(true);
   const lock = useRef(false);
+  const retryLock = useRef(false);
+  const usernameInput = useRef(null);
+  const editButton = useRef(null);
+  const returnFocus = useRef(false);
+  const profileCard = useRef(null);
+  const identity = useRef(null);
+  const previousHeight = useRef(null);
+  const profileMotion = useRef(null);
+  const identityMotion = useRef(null);
+  useLayoutEffect(() => {
+    const card = profileCard.current;
+    if (!card) return;
+    profileMotion.current?.cancel();
+    const height = card.getBoundingClientRect().height;
+    if (previousHeight.current !== null && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      profileMotion.current = card.animate([{ height: `${previousHeight.current}px` }, { height: `${height}px` }], { duration: 200, easing: 'cubic-bezier(.2,.75,.25,1)' });
+      identityMotion.current?.cancel();
+      identityMotion.current = identity.current?.animate([{ opacity: .25, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' });
+    }
+    previousHeight.current = height;
+
+  }, [editing]);
+  useEffect(() => () => { profileMotion.current?.cancel(); identityMotion.current?.cancel(); }, []);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => {
-    if (!notice) return;
-    const timeout = setTimeout(() => setNotice(''), 3500);
-    return () => clearTimeout(timeout);
-  }, [notice]);
   useEffect(() => { setPhotoProfile(settings.profile); }, [settings.profile]);
-  const disabled = settings.saving || photoBusy || settings.status !== 'ready';
-  const run = async (operation, success) => {
-    if (lock.current || disabled) return;
+  useEffect(() => {
+    if (editing) usernameInput.current?.focus();
+    else if (returnFocus.current) { editButton.current?.focus({ preventScroll: true }); returnFocus.current = false; }
+  }, [editing]);
+  useEffect(() => {
+    if (editing && feedback.target === 'username' && feedback.error && !settings.saving) usernameInput.current?.focus();
+  }, [editing, feedback, settings.saving]);
+  const ready = settings.status === 'ready';
+  const disabled = settings.saving || photoBusy || !ready || retrying;
+  const invalid = !/^[a-z][a-z0-9_]{2,23}$/.test(username);
+  const usernameError = touched && invalid ? 'Use 3-24 characters: start with a letter, then letters, numbers or underscores.' : '';
+  const run = async (target, operation, success) => {
+    if (lock.current || disabled) return false;
     lock.current = true;
-    setError(''); setNotice('');
+    setFeedback({ target, pending: true, message: 'Saving', error: false });
     try {
       await operation();
-      if (mounted.current) { setNotice(success); return true; }
+      if (mounted.current) { setFeedback({ target, pending: false, message: success, error: false }); return true; }
     } catch (failure) {
-      if (mounted.current) setError(failure.code === '23505' ? 'That username is already taken.' : failure.message || 'Changes could not be saved. Try again.');
+      if (mounted.current) setFeedback({ target, pending: false, message: failure.code === '23505' ? 'That username is already taken.' : failure.message || 'Changes could not be saved. Try again.', error: true });
     } finally { lock.current = false; }
     return false;
   };
+  const closeEditor = () => { previousHeight.current = profileCard.current?.getBoundingClientRect().height ?? null; returnFocus.current = true; setEditing(false); setTouched(false); };
   const saveProfile = async event => {
     event.preventDefault();
-    if (await run(() => settings.saveProfile({ username }), 'Profile saved.')) setEditing(false);
+    setTouched(true);
+    if (invalid) { usernameInput.current?.focus(); return; }
+    if (await run('username', () => settings.saveProfile({ username }), 'Username saved.')) closeEditor();
+    else if (mounted.current) usernameInput.current?.focus();
   };
-  const changePreference = patch => void run(() => settings.updatePreferences(patch), 'Preferences saved.');
-  return <div className="settings-page" aria-busy={settings.saving}>
-    <section className="settings-section" aria-labelledby="settings-profile-title">
-      <div className="settings-heading"><h2 id="settings-profile-title">{t('Public profile')}</h2><Information title="Public profile">{t('Your profile is visible to signed-in members. Your email and private records stay private.')}</Information></div>
-      <form onSubmit={saveProfile}>
-        <div className="settings-profile-row">
-          <ProfilePhotoEditor profile={photoProfile} userId={authUser?.id} editing={editing} disabled={disabled || !settings.profile} onBusyChange={setPhotoBusy} onChange={async next => { setPhotoProfile(next); await settings.reloadSettings(); }} />
-          <div className="settings-profile-identity">{editing ? <label>{t('Username')}<input name="username" aria-label={t('Username')} value={username} onChange={event => setUsername(normalizeUsername(event.target.value))} minLength={3} maxLength={24} pattern="[a-z][a-z0-9_]{2,23}" autoComplete="username" autoCapitalize="none" spellCheck={false} required disabled={disabled} /></label> : <p className="settings-username">{settings.profile?.username ? `@${settings.profile.username}` : t('Choose your username')}</p>}</div>
+  const retry = async () => {
+    if (retryLock.current) return;
+    retryLock.current = true; setRetrying(true);
+    try { await settings.reloadSettings(); }
+    finally { retryLock.current = false; if (mounted.current) setRetrying(false); }
+  };
+  const localFeedback = target => feedback.target === target ? <p role={feedback.error ? 'alert' : undefined} id={`settings-${target}-feedback`} className={feedback.error ? 'settings-error' : 'settings-status'}>{t(feedback.message)}</p> : null;
+  const unknown = <p className="settings-help">{t(retrying ? 'Loading settings...' : 'Saved values unavailable.')}</p>;
+  const changePreference = (target, patch) => void run(target, () => settings.updatePreferences(patch), 'Preference saved.');
+  const usernameActions = <div className="settings-profile-actions">
+    {editing ? <>
+      <button key="save-username" className="settings-primary" aria-label={t('Save username')} disabled={disabled} type="submit">{t(feedback.target === 'username' && feedback.pending ? 'Saving' : 'Save')}</button>
+      <button className="settings-secondary" aria-label={t('Cancel username changes')} type="button" disabled={settings.saving || photoBusy} onClick={() => { closeEditor(); if (feedback.target === 'username') setFeedback({ target: '', message: '' }); }}>{t('Cancel')}</button>
+    </> : <button ref={editButton} key="edit-username" aria-label={t('Edit username')} className="settings-edit-username" type="button" disabled={disabled} onClick={() => { previousHeight.current = profileCard.current?.getBoundingClientRect().height ?? null; setUsername(settings.profile?.username || ''); setEditing(true); setTouched(false); if (feedback.target === 'username') setFeedback({ target: '', message: '' }); }}><Pencil size={13} />{t('Edit')}</button>}
+  </div>;
+  return <div className="settings-page" aria-busy={settings.saving || photoBusy || retrying}>
+    {!ready ? <div className="settings-unavailable"><p role="alert">{t(settings.error || 'Loading settings...')}</p><button type="button" className="settings-secondary" disabled={retrying || settings.status === 'loading'} onClick={() => void retry()}><RefreshCw size={18} />{t(retrying ? 'Loading settings...' : 'Retry settings')}</button></div> : null}
+    <section className="settings-section settings-profile" aria-labelledby="settings-profile-title">
+      <div className="settings-heading"><h2 id="settings-profile-title">{t('Public profile')}</h2></div>
+      <div ref={profileCard} className="settings-profile-card">
+        {ready ? <form onSubmit={saveProfile} noValidate>
+          <div className="settings-profile-row">
+            <ProfilePhotoEditor profile={photoProfile} userId={authUser?.id} disabled={disabled || !settings.profile} onBusyChange={setPhotoBusy} onChange={async next => { if (mounted.current) setPhotoProfile(next); await settings.reloadSettings(); }} />
+            <div ref={identity} className="settings-profile-identity">
+              {editing ? <>
+                <label>{t('Username')}<input ref={usernameInput} name="username" aria-label={t('Username')} aria-describedby={`settings-username-help${usernameError ? ' settings-username-error' : ''}${feedback.target === 'username' ? ' settings-username-feedback' : ''}`} aria-invalid={Boolean(usernameError || (feedback.target === 'username' && feedback.error))} value={username} onChange={event => { setUsername(normalizeUsername(event.target.value)); if (feedback.target === 'username') setFeedback({ target: '', message: '' }); }} onBlur={() => setTouched(true)} minLength={3} maxLength={24} autoComplete="username" autoCapitalize="none" spellCheck={false} required disabled={disabled} /></label>
+                <p id="settings-username-help" className="settings-help">{t('Use 3-24 characters: start with a letter, then letters, numbers or underscores.')}</p>
+                {usernameError ? <p id="settings-username-error" className="settings-error">{t(usernameError)}</p> : null}
+              </> : <div className="settings-username-line"><p className="sr-only">{t('Username')}</p><p className="settings-username">{settings.profile?.username ? `@${settings.profile.username}` : t('Choose your username')}</p>{usernameActions}</div>}
+              {editing ? usernameActions : null}
+              {localFeedback('username')}
+            </div>
+          </div>
+        </form> : unknown}
+      </div>
+    </section>
+    <section className="settings-section settings-preferences" aria-labelledby="settings-preferences-title">
+      <div className="settings-heading"><h2 id="settings-preferences-title">{t('Preferences')}</h2></div>
+      <div className="settings-group">
+        {ready ? <><div className="settings-preference-row settings-language-row"><span className="settings-row-icon settings-language-icon" aria-hidden="true"><Languages size={20} /></span><span className="settings-row-title">{t('Language')}</span><SettingsLanguagePicker value={settings.preferences.language} disabled={disabled} onChange={language => changePreference('language', { language })} /></div>{localFeedback('language')}</> : unknown}
+      </div>
+    </section>
+    <section className="settings-section settings-privacy" aria-labelledby="settings-privacy-title">
+      <div className="settings-heading"><h2 id="settings-privacy-title">{t('Training privacy')}</h2></div>
+      <div className="settings-group">
+        <div className="settings-preference-row">
+          <span className="settings-row-icon settings-sharing-icon" aria-hidden="true"><Dumbbell size={20} /></span>
+          <div className="settings-control-copy"><div className="settings-control-label"><label htmlFor="settings-sharing">{t('Share completed workouts')}</label><Information title="Share completed workouts">{t('Completed workouts, including past workouts, are visible to signed-in LifeOS members while sharing is on. Turn it off to hide them all. Rankings enrollment is separate.')}</Information></div><p id="settings-sharing-help" className="settings-help">{t('While sharing is on, signed-in members can see your completed workouts, including past workouts. Rankings enrollment is separate.')}</p>{localFeedback('sharing')}</div>
+          {ready ? <input id="settings-sharing" type="checkbox" role="switch" aria-label={t('Share completed workouts')} aria-describedby="settings-sharing-help" disabled={disabled} checked={settings.preferences.workout_sharing} onChange={event => changePreference('sharing', { workout_sharing: event.target.checked })} /> : <span className="settings-unknown">{t('Unavailable')}</span>}
         </div>
-        <div className="settings-profile-actions">{editing ? <><button key="save-profile" className="settings-primary" disabled={disabled} type="submit"><Check size={17} />{t(settings.saving ? 'Saving' : 'Save profile')}</button><button className="settings-secondary" type="button" disabled={disabled} onClick={() => { setEditing(false); setError(''); }}><X size={17} />{t('Cancel')}</button></> : <button key="edit-profile" className="settings-secondary" type="button" disabled={disabled} onClick={event => { event.preventDefault(); setUsername(settings.profile?.username || ''); setEditing(true); setError(''); setNotice(''); }}><Pencil size={16} />{t('Edit profile')}</button>}</div>
-      </form>
+        <div className="settings-preference-row">
+          <span className="settings-row-icon settings-notes-icon" aria-hidden="true"><NotebookPen size={20} /></span>
+          <div className="settings-control-copy"><div className="settings-control-label"><label htmlFor="settings-notes">{t('Share set notes')}</label><Information title="Share set notes">{t('Notes stay private by default. Turning this on also shares past workout and set notes. Turning it off removes notes from Community immediately.')}</Information></div><p id="settings-notes-help" className="settings-help">{t('Includes past workout and set notes. Notes are visible only while workout sharing is on.')}</p>{ready && !settings.preferences.workout_sharing ? <p id="settings-notes-dependency" className="settings-help settings-dependency">{t(settings.preferences.share_workout_notes ? 'Notes are hidden now. Your saved notes choice will apply when you turn workout sharing back on.' : 'Notes are hidden. Turning workout sharing back on will keep notes private unless you enable this choice.')}</p> : null}{localFeedback('notes')}</div>
+          {ready ? <input id="settings-notes" type="checkbox" role="switch" aria-label={t('Share set notes')} aria-describedby={`settings-notes-help${!settings.preferences.workout_sharing ? ' settings-notes-dependency' : ''}`} disabled={disabled} checked={settings.preferences.share_workout_notes} onChange={event => changePreference('notes', { share_workout_notes: event.target.checked })} /> : <span className="settings-unknown">{t('Unavailable')}</span>}
+        </div>
+      </div>
     </section>
-    <section className="settings-section" aria-labelledby="settings-preferences-title">
-      <h2 id="settings-preferences-title">{t('Preferences')}</h2>
-      <label className="settings-preference-row"><span>{t('Language')}</span><select aria-label={t('Language')} disabled={disabled} value={settings.preferences.language} onChange={event => changePreference({ language: event.target.value })}><option value="it">Italiano</option><option value="en">English</option></select></label>
-    </section>
-    <section className="settings-section" aria-labelledby="settings-privacy-title">
-      <h2 id="settings-privacy-title">{t('Training privacy')}</h2>
-      <div className="settings-preference-row"><div className="settings-control-label"><label htmlFor="settings-sharing">{t('Share completed workouts')}</label><Information title="Share completed workouts">{t('Completed workouts, including past workouts, are visible to signed-in LifeOS members while sharing is on. Turn it off to hide them all. Rankings enrollment is separate.')}</Information></div><input id="settings-sharing" type="checkbox" role="switch" aria-label={t('Share completed workouts')} disabled={disabled} checked={settings.preferences.workout_sharing} onChange={event => changePreference({ workout_sharing: event.target.checked })} /></div>
-      <div className="settings-preference-row"><div className="settings-control-label"><label htmlFor="settings-notes">{t('Share set notes')}</label><Information title="Share set notes">{t('Notes stay private by default. Turning this on also shares past workout and set notes. Turning it off removes notes from Community immediately.')}</Information></div><input id="settings-notes" type="checkbox" role="switch" aria-label={t('Share set notes')} disabled={disabled} checked={settings.preferences.share_workout_notes} onChange={event => changePreference({ share_workout_notes: event.target.checked })} /></div>
-    </section>
-    {settings.error ? <div role="alert" className="settings-error">{t(settings.error)}<button className="icon-button" aria-label={t('Retry settings')} onClick={settings.reloadSettings}><RefreshCw size={18} /></button></div> : null}
-    {error ? <p role="alert" className="settings-error">{t(error)}</p> : null}
-    <p role="status" className="settings-status">{settings.saving ? t('Saving') : notice ? t(notice) : ''}</p>
+    <p role="status" className="sr-only">{t(feedback.error ? '' : feedback.message || '')}</p>
   </div>;
 }

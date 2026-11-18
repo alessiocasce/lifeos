@@ -4,7 +4,9 @@
 > **Started:** 2026-09-18  
 > **Purpose:** preserve and continuously refine the next major LifeOS direction. This file is intentionally broader than an implementation ticket. Update it as the product vision becomes clearer.
 
-**Implemented boundary (2026-09-25):** Slice 2 provides explicit, scoped MCP `sync_context` for tracked routine state, allowlisted preferences, and grounded existing-project context. It writes only the current-belief world model plus a bounded audit. It does not provide ambient ChatGPT sync, general external action execution, or operational record writes. See [MCP.md](MCP.md) and [the Slice 2 progress checkpoint](archive/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md) for the exact contract and deployment state.
+**Implementation boundary:** current source state lives in [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md), [BRAIN_ARCHITECTURE.md](BRAIN_ARCHITECTURE.md), [MCP.md](MCP.md) and [QA_COMPANION_UI.md](QA_COMPANION_UI.md). Current beliefs, scoped semantic sync, curated autobiographical memory and permission-gated project monitors exist; the full ambient companion roadmap below is not a claim that every proposal shipped.
+
+**Original Slice 2 boundary (2026-09-25):** Slice 2 provides explicit, scoped MCP `sync_context` for tracked routine state, allowlisted preferences, and grounded existing-project context. It writes only the current-belief world model plus a bounded audit. It does not provide ambient ChatGPT sync, general external action execution, or operational record writes. See [MCP.md](MCP.md) and [the Slice 2 progress checkpoint](archive/CODEX_COMPANION_VNEXT_SLICE2_PROGRESS.md) for the exact contract and deployment state.
 
 ---
 
@@ -902,7 +904,7 @@ A one-time import of exported ChatGPT conversations may be useful to bootstrap L
 
 LifeOS already has a deployed MCP v1 at `/api/mcp` with static-token auth for custom clients and OAuth authorization-code + PKCE support specifically for ChatGPT connectors.
 
-Current MCP implementation is intentionally **read-only**.
+The original MCP baseline was read-only. Current read tools remain read-only; separately authorized `sync_context` requires `lifeos.write` and only updates supported beliefs/memories, never operational records. See [MCP.md](MCP.md).
 
 Current repo tools:
 

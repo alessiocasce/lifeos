@@ -4,7 +4,9 @@
 
 LifeOS is a Vite + React 18 app with Supabase data, Vercel serverless APIs, Brain AI workflows, WhatsApp integration, Vault retrieval, and PWA behavior.
 
-Before changing code, read `PROJECT_CONTEXT.md`. Treat it as the source of truth for architecture, constraints, recent decisions, and known risks. Release history (newest first) lives in `docs/HISTORY.md`.
+Before changing code, read `PROJECT_CONTEXT.md`. Treat it as the source of truth for architecture, constraints, recent decisions, and known risks. Release history (newest first) lives in `docs/HISTORY.md`. For a new session or documentation work, read `docs/README.md` and `docs/audits/DOCUMENTATION_STATUS.md` to distinguish current guidance, completed specs, historical evidence, design-only plans and local-only files. Check `git status` before resuming; `/clear` preserves files but does not commit or back them up.
+
+For a resume after `/clear`, read [the current handoff](docs/agents/current-handoff.md) for local UI decisions, verification timing, preview startup and uncommitted-work boundaries.
 
 ## Project Structure
 
@@ -15,7 +17,7 @@ Before changing code, read `PROJECT_CONTEXT.md`. Treat it as the source of truth
 - `src/services/` contains frontend API wrappers.
 - `api/` contains Vercel serverless endpoints.
 - `api/_utils/` contains shared backend utilities for Brain, Supabase, actions, dates, Vault, tracing, and validation.
-- `supabase/schema.sql` is the database source of truth.
+- `supabase/schema.sql` and reviewed forward migrations define the database; see `supabase/README.md`. Newer feature objects may exist only in forward migrations.
 - `docs/` contains QA and deployment checklists.
 - `public/` contains PWA icons and static assets.
 
@@ -131,3 +133,17 @@ Final reports should include:
 - schema note
 - commit hash if committed
 - remaining risks
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked in GitHub Issues for `alessiocasce/lifeos`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.

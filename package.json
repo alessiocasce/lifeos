@@ -22,6 +22,7 @@
     "test:workout:rest-coordinator": "node scripts/tests/test-workout-rest-coordinator.js",
     "test:workout:push": "node scripts/tests/test-workout-push.js && node scripts/tests/test-workout-push-db.js && node scripts/tests/test-workout-push-api.js && node scripts/tests/test-workout-push-sw.js && node scripts/tests/test-workout-push-worker.js && node scripts/tests/test-workout-push-lifecycle.js",
     "worker:workout-push": "node scripts/workout-push-worker.js",
+    "test:template-draft": "node scripts/tests/test-template-draft.js",
     "test:social-training": "node scripts/tests/test-social-training.js",
     "test:community": "node scripts/tests/test-second-training-cohort.js && node scripts/tests/test-community.js",
     "test:ui": "playwright test",
@@ -30,7 +31,7 @@
     "test:attention": "node scripts/tests/test-companion-monitors.js && node scripts/tests/test-companion-app.js",
     "test:mcp-write": "node scripts/tests/test-mcp-write.js",
     "test:schema": "node scripts/tests/test-schema-contracts.js",
-    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-oauth && npm run test:mcp-write && npm run test:memory && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion && npm run test:attention",
+    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-oauth && npm run test:mcp-write && npm run test:memory && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion && npm run test:attention && npm run test:template-draft",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

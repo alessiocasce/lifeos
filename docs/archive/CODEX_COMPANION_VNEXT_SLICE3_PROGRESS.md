@@ -1,5 +1,7 @@
 # Companion vNext Slice 2.5 and 3 Progress
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 ## Security checkpoint: Slice 2.5
 
 - OAuth authorization codes now redeem through a durable, service-role-only PostgreSQL table with a unique SHA-256 hash of the signed code JTI. No raw code, verifier, or token is stored.

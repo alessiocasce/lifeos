@@ -1,5 +1,22 @@
 # LifeOS AI Assistant QA
 
+Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
+
+Community integration: changing workspace or following an own-profile Settings link must preserve the existing Companion draft/thread behavior and active-workout resume. The Community redesign changes no Brain or Vault contract; see [Community QA](qa/community-apple-design.md).
+
+## Local Companion visual redesign
+
+The subsequent chat refinement adds honest Copy feedback, quieter action/time
+footers and a Latest messages control that preserves the reader's scroll
+position during incoming replies. Run `companion-chat`, `companion-reports` and
+the existing Companion specs; these remain frontend-only changes.
+
+The Apple-style conversation/composer/context redesign is local and undeployed.
+Use [Companion QA](QA_COMPANION_UI.md) and [its evidence](qa/companion-apple-design.md)
+for draft-only starters, multiline/IME input, context motion/focus, large-text
+bar clearance and preserved retry/memory/permission flows. Brain protocol and
+backend are unchanged. No schema rerun required.
+
 ## Companion frontend reconstruction
 
 Retry and Memory title have 44px minimum targets. Memory input focus is neutral
@@ -69,7 +86,7 @@ Run this after deploying to Vercel with:
 
 The in-app Assistant sends the signed-in user's Supabase access token to `/api/ai/chat`. The backend verifies that user against `LIFEOS_ACTION_USER_ID`. The endpoint also accepts the action token for trusted server/tool callers.
 
-Run the latest `supabase/schema.sql` before this checklist so Brain thread, message, memory, insight, and Vault tables/functions exist.
+Verify the required Brain thread/message/memory/insight/Vault objects before this checklist; use only the authorized missing forward migration if needed, not a full schema replay.
 
 ## Brain Regression Harness
 
@@ -115,8 +132,8 @@ Expected:
 
 1. Send a message in Brain and wait for the assistant response.
 2. Refresh `/assistant` and confirm Brain opens a fresh `New Chat` draft by default.
-3. Confirm old-thread selection is not visible in the normal Brain UI for now.
-4. Confirm old threads/messages still persist in Supabase/backend context after sending messages, even though the default UI does not expose the selector.
+3. Open the Companion context sheet and confirm saved app conversations are selectable; keep them out of the main composer area.
+4. Confirm old threads/messages still persist in Supabase/backend context after sending messages, and can be selected from the Companion context sheet.
 5. Send a follow-up in the current chat and confirm Brain retains bounded conversation context.
 6. Confirm the persisted thread title changes from `New Chat` to a deterministic title based on the first message.
 7. Pull to refresh and confirm Brain data reloads without opening old threads in the default UI.
@@ -136,13 +153,13 @@ Expected:
 ## Brain UX Reset
 
 1. Navigate away from Brain, then return to Brain.
-2. Confirm a fresh empty chat is visible and no old thread auto-opens.
-3. Confirm old-thread selection is hidden from the normal Brain UI for now.
-4. Navigate away and return again; confirm Brain returns to a fresh chat draft.
-5. Confirm there is only one New Chat affordance/title and no duplicate `New Chat` labels.
-6. Confirm the empty-state text is minimal: `What do we solve?` and `Ask, log, analyze, plan.`
+2. On initial page load with no selected thread, confirm an empty conversation. Tab navigation must preserve a previously selected conversation.
+3. Confirm saved app conversations are selectable from the Companion context sheet, without replacing the main chat layout.
+4. Select a conversation, navigate away and return; confirm the selected conversation remains. Use New Chat explicitly to clear it.
+5. Confirm there is one explicit New Chat control and the current conversation title, without duplicate controls.
+6. Confirm the unselected empty state says `What's on your mind?` without canned write actions
 7. Confirm the default Brain UI does not show Vault or Memory panels as primary cards.
-8. If the diagnostics control is visible on desktop, open it and confirm Vault/Memory data is secondary and collapsed.
+8. Open the Companion context sheet on mobile and desktop; confirm current understanding, conversations, saved memory/reports and secondary diagnostics are reachable.
 9. Confirm memory commands such as `remember my name, Ale`, `what do you know about me?`, and forget requests still work.
 10. Ask a long workout, project, finance, health, life-review, or product analysis.
 11. Confirm the answer appears normally with no save modal and no required manual Save-to-Vault action.
@@ -150,7 +167,7 @@ Expected:
 13. Ask casual `yo` and confirm no Vault report is created.
 14. Confirm manual Save-to-Vault controls are not prominent in default assistant message bubbles.
 15. Confirm `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`, `si`, then `aggiungilo anche al calendario` still resolves through working context without asking for date/time again.
-16. Confirm Recent Actions shows at most 3 successful actions by default on desktop and old errors are hidden behind the Errors toggle.
+16. In the Companion context sheet, confirm Recent Actions shows at most 3 successes initially, with expansion and a separate Errors toggle.
 
 ## Brain Memory
 
@@ -418,7 +435,7 @@ curl -X POST "https://lifeos-ruby-gamma.vercel.app/api/integrations/whatsapp/inb
 1. Send valid body `come stai?` with valid secret and allowed `from`.
 2. Confirm status `200`, JSON contains `reply`, `thread_id`, and `source: whatsapp`, and the reply is concise.
 3. Confirm one dedicated backend Brain thread is created or reused with `metadata.source = whatsapp` and `metadata.whatsapp_sender`.
-4. Open the app Brain UI and confirm it still opens fresh `New Chat` by default and does not show old thread selection or the WhatsApp thread in normal UI.
+4. Open the app Brain UI and confirm it still opens an unselected conversation on initial page load and keeps explicit app conversation selection in the context sheet and does not automatically open WhatsApp continuity.
 5. Send WhatsApp body `oggi ho fatto un pisolino dalle 7.40 alle 10 di sera`.
 6. Confirm Brain asks confirmation in Italian with known `Pisolino 19:40-22:00` details and does not write yet unless the existing Brain rules choose a safe direct write.
 7. Send WhatsApp body `si` from the same sender.
@@ -442,7 +459,7 @@ Run `npm run test:brain` first. It covers pure memo/accountability candidate gen
 
 Manual deployed QA:
 
-1. Run the latest `supabase/schema.sql` and confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
+1. Confirm `brain_outbox_messages` and `brain_proactive_rules` exist with the required contracts. Apply only an authorized missing forward migration; do not replay the schema.
 2. Create an open memo with `memo_date = today` and `memo_time` two minutes in the future.
 3. After it is due, call `POST /api/integrations/whatsapp/outbox` with `action: "evaluate"`, valid secret, and allowed `recipient`.
 4. Confirm the response reports at least one queued message, or debug output explains duplicate/suppression.

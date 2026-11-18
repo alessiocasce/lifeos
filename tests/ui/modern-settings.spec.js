@@ -3,6 +3,14 @@ import fs from 'node:fs/promises';
 
 const evidence = 'docs/audits/lifeos-ui/screenshots';
 
+async function chooseLanguage(page, value) {
+  const picker = page.getByRole('combobox', { name: /^(Language|Lingua)$/ });
+  await picker.click();
+  await page.getByRole('option', { name: value === 'it' ? 'Italiano' : 'English', exact: true }).click();
+  await expect(picker).toBeEnabled();
+}
+
+
 test.beforeEach(async ({ page }) => {
   // WebKit routes same-origin blob: image decoding too; allow it, not external traffic.
   await page.route('**/*', route => new URL(route.request().url()).origin === 'http://127.0.0.1:4178' ? route.continue() : route.abort());
@@ -13,6 +21,7 @@ test.beforeEach(async ({ page }) => {
         const previous = fixtureSettings(id);
         window.__settingsProfileWrites = (window.__settingsProfileWrites || 0) + 1;
         await new Promise(resolve => setTimeout(resolve, Number(localStorage.getItem('settings-delay') || 0)));
+        if (localStorage.getItem('settings-duplicate')) throw Object.assign(new Error('Taken'), { code: '23505' });
         if (localStorage.getItem('settings-profile-fail')) throw new Error('Profile could not be saved.');
         const next = { ...previous, profile: { ...previous.profile, username: profile.username } };
         localStorage.setItem('qa-settings:' + id, JSON.stringify(next)); return next.profile;
@@ -20,6 +29,7 @@ test.beforeEach(async ({ page }) => {
       userSettingsApi.read = async id => {
         const next = fixtureSettings(id || user().id);
         await new Promise(resolve => setTimeout(resolve, Number(localStorage.getItem('settings-read-delay') || 0)));
+        if (localStorage.getItem('settings-read-fail')) throw new Error('Unavailable');
         return next;
       };
       userSettingsApi.savePreferences = async (preferences, id) => {
@@ -44,7 +54,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('failed preference save rolls back and retries without losing a profile draft', async ({ page }) => {
-  await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit username', exact: true }).click();
   await page.getByRole('textbox', { name: 'Username', exact: true }).fill('draft_name');
   await page.evaluate(() => localStorage.setItem('settings-preference-fail', '1'));
   await page.getByLabel('Share set notes', { exact: true }).click();
@@ -57,10 +67,10 @@ test('failed preference save rolls back and retries without losing a profile dra
 });
 
 test('profile failure retains lowercase input; repeated submit is locked', async ({ page }) => {
-  await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit username', exact: true }).click();
   await page.getByRole('textbox', { name: 'Username', exact: true }).fill('DRAFT_USER');
   await page.evaluate(() => { localStorage.setItem('settings-profile-fail', '1'); localStorage.setItem('settings-delay', '300'); });
-  await page.getByRole('button', { name: 'Save profile', exact: true }).dblclick();
+  await page.getByRole('button', { name: 'Save username', exact: true }).dblclick();
   await expect(page.getByRole('alert')).toHaveText('Profile could not be saved.');
   await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toHaveValue('draft_user');
   expect(await page.evaluate(() => window.__settingsProfileWrites)).toBe(1);
@@ -87,6 +97,11 @@ test('photo viewer is circular, closes with Escape and returns focus; informatio
   const bounds = await viewer.locator('.settings-photo-circle').boundingBox();
   expect(Math.abs(bounds.width - bounds.height)).toBeLessThan(1);
   await expect(viewer.getByRole('button', { name: 'Edit profile photo', exact: true })).toBeVisible();
+  await expect(viewer.getByRole('button', { name: 'Remove photo', exact: true })).toBeVisible();
+  await expect(viewer.locator(':scope > header')).toHaveCount(0);
+  await expect(viewer.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0);
+  await expect(viewer).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(viewer).toHaveCSS('padding', '0px');
   await page.keyboard.press('Escape');
   await expect(viewer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'View profile photo', exact: true })).toBeFocused();
@@ -96,9 +111,9 @@ test('photo viewer is circular, closes with Escape and returns focus; informatio
 });
 
 test('photo upload saves immediately; cancelling username edit never restores the old photo', async ({ page }) => {
-  await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit username', exact: true }).click();
   await page.getByRole('textbox', { name: 'Username', exact: true }).fill('unsaved_name');
-  await page.getByRole('button', { name: 'Edit profile photo', exact: true }).click();
+  await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
   const bytes = await page.evaluate(async () => {
     const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
     canvas.getContext('2d').fillRect(0, 0, 64, 64);
@@ -111,8 +126,8 @@ test('photo upload saves immediately; cancelling username edit never restores th
   await page.screenshot({ path: `${evidence}/settings-photo-crop-390.png` });
   await page.getByRole('button', { name: 'Use photo', exact: true }).click();
   await expect(page.getByText('Photo saved.', { exact: true })).toBeVisible();
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Cancel username changes', exact: true }).click();
   await expect(page.getByText('@qa_user', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('qa-settings:qa-user-a')).profile.avatar_path)).toBe('qa-user-a/saved.webp');
   await expect(page.getByRole('button', { name: 'View profile photo', exact: true }).locator('img')).toBeVisible();
@@ -140,7 +155,7 @@ test('Settings, profile editing and circular viewer fit mobile and desktop viewp
     preferences: { language: 'it', workout_sharing: true, share_workout_notes: false },
   })));
   await page.reload();
-  for (const [width, height] of [[375,812], [390,844], [430,932], [1024,900], [1440,900]]) {
+  for (const [width, height] of [[360,812], [768,900], [375,812], [390,844], [430,932], [1024,900], [1440,900]]) {
     await page.setViewportSize({ width, height });
     await expect(page.getByRole('heading', { name: 'Profilo pubblico', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -154,22 +169,22 @@ test('Settings, profile editing and circular viewer fit mobile and desktop viewp
     expect(box.y + box.height).toBeLessThanOrEqual(height);
     if (width === 390) await page.screenshot({ path: `${evidence}/settings-photo-viewer-390.png` });
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Modifica profilo', exact: true }).click();
+    await page.getByRole('button', { name: 'Modifica nome utente', exact: true }).click();
     await expect(page.getByLabel('Nome utente', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width === 390) await page.screenshot({ path: `${evidence}/settings-edit-390.png` });
-    await page.getByRole('button', { name: 'Annulla', exact: true }).click();
+    await page.getByRole('button', { name: 'Annulla modifiche al nome utente', exact: true }).click();
   }
   expect(errors).toEqual([]);
 });
 
 test('English is retained across reload; Italian change automatically persists', async ({ page }) => {
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-  await page.getByLabel('Language', { exact: true }).selectOption('it');
+  await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveText('English');
+  await chooseLanguage(page, 'it');
   await expect(page.getByRole('heading', { name: 'Profilo pubblico', exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Lingua', { exact: true })).toHaveValue('it');
-  await page.getByLabel('Lingua', { exact: true }).selectOption('en');
+  await expect(page.getByRole('combobox', { name: 'Lingua', exact: true })).toHaveText('Italiano');
+  await chooseLanguage(page, 'en');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Public profile', exact: true })).toBeVisible();
 });
@@ -182,9 +197,242 @@ test('profile is read-only until explicitly edited and preferences save without 
   await expect(page.getByText('Application', { exact: true })).toHaveCount(0);
   await page.getByLabel('Share completed workouts', { exact: true }).uncheck();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('qa-settings:qa-user-a'))?.preferences.workout_sharing)).toBe(false);
-  await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit username', exact: true }).click();
   await page.getByRole('textbox', { name: 'Username', exact: true }).fill('My_NAME');
   await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toHaveValue('my_name');
-  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Save username', exact: true }).click();
   await expect(page.getByText('@my_name', { exact: true })).toBeVisible();
+});
+
+
+test('unavailable reads never present defaults; retries are serialized and recover saved choices', async ({ page }) => {
+  await page.evaluate(() => {
+    localStorage.setItem('settings-read-fail', '1');
+    localStorage.setItem('qa-settings:qa-user-a', JSON.stringify({ profile: { username: 'saved_user' }, preferences: { language: 'en', workout_sharing: false, share_workout_notes: true } }));
+  });
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText(/Settings unavailable|Impostazioni non disponibili/);
+  await expect(page.getByRole('switch')).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Language', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Choose your username', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: /^(Retry settings|Riprova impostazioni)$/, exact: true }).click();
+  await expect(page.getByRole('switch')).toHaveCount(0);
+  await page.evaluate(() => { localStorage.removeItem('settings-read-fail'); localStorage.setItem('settings-read-delay', '300'); });
+  await page.getByRole('button', { name: /^(Retry settings|Riprova impostazioni)$/, exact: true }).click();
+  await expect(page.getByRole('button', { name: /^(Loading settings\.\.\.|Caricamento impostazioni\.\.\.)$/, exact: true })).toBeDisabled();
+  await expect(page.getByText('@saved_user', { exact: true })).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Share completed workouts', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Share set notes', exact: true })).toBeChecked();
+  expect(await page.evaluate(() => window.__settingsPreferenceWrites || 0)).toBe(0);
+});
+
+test('retry response cannot replace a different account', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('settings-read-fail', '1'));
+  await page.reload();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await page.evaluate(() => {
+    localStorage.removeItem('settings-read-fail'); localStorage.setItem('settings-read-delay', '400');
+    localStorage.setItem('qa-settings:qa-user-b', JSON.stringify({ profile: { username: 'member_b' }, preferences: { language: 'en', workout_sharing: false, share_workout_notes: true } }));
+  });
+  await page.getByRole('button', { name: /^(Retry settings|Riprova impostazioni)$/, exact: true }).click();
+  await page.evaluate(() => window.__qaSignIn('qa-user-b'));
+  await expect(page.getByText('@member_b', { exact: true })).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Share completed workouts', exact: true })).not.toBeChecked();
+});
+
+test('privacy descriptions explain history and retain notes consent while sharing is off', async ({ page }) => {
+  const sharing = page.getByRole('switch', { name: 'Share completed workouts', exact: true });
+  const notes = page.getByRole('switch', { name: 'Share set notes', exact: true });
+  await expect(sharing).toHaveAccessibleDescription(/signed-in members.*past workouts.*Rankings/);
+  await expect(notes).toHaveAccessibleDescription(/past workout and set notes/);
+  await notes.check();
+  await expect(notes).toBeEnabled();
+  await sharing.uncheck();
+  await expect(notes).toBeChecked();
+  await expect(notes).toHaveAccessibleDescription(/hidden now.*saved notes choice/);
+  await sharing.check();
+  await expect(notes).toBeChecked();
+  await expect(page.locator('#settings-notes-dependency')).toHaveCount(0);
+});
+
+test('username validation, uniqueness and keyboard focus follow explicit editing', async ({ page }) => {
+  const edit = page.getByRole('button', { name: 'Edit username', exact: true });
+  await edit.click();
+  const input = page.getByRole('textbox', { name: 'Username', exact: true });
+  await expect(input).toBeFocused();
+  await input.fill('a'); await input.press('Tab');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  await page.getByRole('button', { name: 'Save username', exact: true }).click();
+  expect(await page.evaluate(() => window.__settingsProfileWrites || 0)).toBe(0);
+  await expect(input).toBeFocused();
+  await input.fill('duplicate_name');
+  await page.evaluate(() => localStorage.setItem('settings-duplicate', '1'));
+  await page.getByRole('button', { name: 'Save username', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('That username is already taken.');
+  await expect(input).toHaveValue('duplicate_name');
+  await expect(input).toBeFocused();
+  await page.evaluate(() => localStorage.removeItem('settings-duplicate'));
+  await page.getByRole('button', { name: 'Save username', exact: true }).click();
+  await expect(edit).toBeFocused();
+  await expect(page.getByRole('status')).toHaveText('Username saved.');
+  await edit.click();
+  await page.getByRole('button', { name: 'Cancel username changes', exact: true }).click();
+  await expect(edit).toBeFocused();
+});
+
+test('saving feedback is local to the operation and excludes other writes', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('settings-delay', '450'));
+  await page.getByRole('switch', { name: 'Share set notes', exact: true }).check();
+  await expect(page.locator('#settings-notes-feedback')).toHaveText('Saving');
+  await expect(page.getByRole('button', { name: 'Edit username', exact: true })).toBeDisabled();
+  await expect(page.getByRole('switch', { name: 'Share completed workouts', exact: true })).toBeDisabled();
+  await expect(page.locator('#settings-notes-feedback')).toHaveText('Preference saved.');
+});
+
+test('larger text and accessibility preferences retain readable controls in both languages', async ({ page }) => {
+  test.setTimeout(90000); // Twelve viewport/photo cycles plus screenshots across both languages.
+  for (const language of ['en', 'it']) {
+    await chooseLanguage(page, language);
+    await expect(page.getByRole('combobox', { name: /^(Language|Lingua)$/ })).toBeEnabled();
+    for (const width of [360, 390, 430, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.evaluate(() => document.documentElement.style.fontSize = '200%');
+      await page.emulateMedia({ reducedMotion: 'reduce', contrast: 'more' });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await page.locator('.settings-section h2').first().evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBe(34);
+      await page.getByRole('button', { name: language === 'it' ? 'Modifica nome utente' : 'Edit username', exact: true }).click();
+      await page.getByRole('textbox', { name: language === 'it' ? 'Nome utente' : 'Username', exact: true }).fill('abcdefghijklmnopqrstuvwx');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: `${evidence}/settings-large-${language}-${width}.png`, fullPage: true });
+      await page.getByRole('button', { name: language === 'it' ? 'Annulla modifiche al nome utente' : 'Cancel username changes', exact: true }).click();
+      await page.getByRole('button', { name: language === 'it' ? 'Visualizza foto profilo' : 'View profile photo', exact: true }).click();
+      const dialog = page.getByRole('dialog');
+      expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await page.keyboard.press('Escape');
+    }
+    await page.evaluate(() => document.documentElement.style.fontSize = '');
+  }
+});
+
+
+test('press feedback is immediate, drag-away cancels, and the photo action regains focus', async ({ page }) => {
+  const edit = page.getByRole('button', { name: 'Edit username', exact: true });
+  const bounds = await edit.boundingBox();
+  const initial = await edit.evaluate(el => getComputedStyle(el).backgroundColor);
+  await page.mouse.move(bounds.x + 10, bounds.y + 10);
+  await page.mouse.down();
+  expect(await edit.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(initial);
+  await page.mouse.move(1, 1); await page.mouse.up();
+  await expect(page.getByRole('textbox', { name: 'Username', exact: true })).toHaveCount(0);
+  const photo = page.getByRole('button', { name: 'View profile photo', exact: true });
+  await photo.click();
+  await page.keyboard.press('Escape');
+  await expect(photo).toBeFocused();
+});
+
+
+test('profile hierarchy is compact and the viewer pencil opens the native file picker directly', async ({ page }) => {
+  await expect(page.getByText('Your profile is visible to signed-in members. Your email and private records stay private.', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.settings-photo-action')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit profile photo', exact: true })).toHaveCount(0);
+  for (const width of [360, 390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const nameSize = await page.locator('.settings-username').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    const edit = page.getByRole('button', { name: 'Edit username', exact: true });
+    expect(await edit.evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeLessThan(nameSize);
+    await expect(edit).toHaveText('Edit');
+    await edit.click();
+    const save = page.getByRole('button', { name: 'Save username', exact: true });
+    const cancel = page.getByRole('button', { name: 'Cancel username changes', exact: true });
+    await expect(save).toHaveText('Save'); await expect(cancel).toHaveText('Cancel');
+    const [a, b] = await Promise.all([save.boundingBox(), cancel.boundingBox()]);
+    expect(Math.abs(a.height - b.height)).toBeLessThan(1);
+    expect(Math.abs(a.width - b.width)).toBeLessThan(1);
+    expect(a.height).toBeCloseTo(44, 1);
+    await cancel.click();
+  }
+  await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Edit profile photo', exact: true }).click();
+  const native = await chooser;
+  expect(native.isMultiple()).toBe(false);
+  await native.setFiles([]);
+  await expect(page.getByRole('dialog', { name: 'Profile photo', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Edit profile photo', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Take photo', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add photo', exact: true })).toHaveCount(0);
+});
+
+test('custom language menu supports keyboard, dismissal, rollback and saved selection', async ({ page }) => {
+  const picker = page.getByRole('combobox', { name: 'Language', exact: true });
+  expect(await picker.evaluate(el => el.tagName)).toBe('BUTTON');
+  await picker.focus(); await picker.press('ArrowDown');
+  await expect(picker).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('option', { name: 'English', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await picker.press('Home');
+  await picker.press('Escape');
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await expect(picker).toBeFocused();
+  await picker.click();
+  await page.getByRole('heading', { name: 'Preferences', exact: true }).click();
+  await expect(page.getByRole('listbox')).toHaveCount(0);
+  await page.evaluate(() => localStorage.setItem('settings-preference-fail', '1'));
+  await chooseLanguage(page, 'it');
+  await expect(page.getByRole('alert')).toHaveText('Preferences could not be saved.');
+  await expect(picker).toHaveText('English');
+  await page.evaluate(() => localStorage.removeItem('settings-preference-fail'));
+  await picker.focus(); await picker.press('ArrowDown'); await picker.press('Home'); await picker.press('Enter');
+  await expect(page.getByRole('combobox', { name: 'Lingua', exact: true })).toHaveText('Italiano');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Lingua', exact: true })).toHaveText('Italiano');
+});
+
+test('photo opening and closing animate, keep modal focus, and honor reduced motion', async ({ page }) => {
+  await page.getByRole('button', { name: 'View profile photo', exact: true }).evaluate(button => {
+    button.addEventListener('click', () => {
+      const rect = button.getBoundingClientRect();
+      window.__clickedPhotoRect = { x: rect.x, y: rect.y, width: rect.width };
+    }, { once: true });
+  });
+  await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
+  const origin = await page.evaluate(() => window.__clickedPhotoRect);
+  const dialog = page.getByRole('dialog', { name: 'Profile photo', exact: true });
+  const sample = await dialog.evaluate(el => {
+    const animation = el.getAnimations().find(a => a.effect.target === el);
+    animation.pause(); animation.currentTime = 0;
+    const start = el.querySelector('.settings-photo-circle').getBoundingClientRect();
+    const startRect = { x: start.x, y: start.y, width: start.width };
+    animation.currentTime = 100;
+    return { duration: animation.effect.getTiming().duration, opacity: Number(getComputedStyle(el).opacity), startRect };
+  });
+  expect(sample.duration).toBe(240); expect(sample.opacity).toBe(1);
+  expect(sample.startRect.x).toBeCloseTo(origin.x, 0);
+  expect(sample.startRect.y).toBeCloseTo(origin.y, 0);
+  expect(sample.startRect.width).toBeCloseTo(origin.width, 0);
+  await dialog.screenshot({ path: `${evidence}/settings-photo-motion-midpoint.png`, animations: 'allow' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'View profile photo', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
+  await dialog.evaluate(async el => { await el.getAnimations().find(a => a.effect.target === el).finished; });
+  await page.keyboard.press('Escape');
+  const returned = await dialog.evaluate(el => {
+    const animation = el.getAnimations().find(a => a.effect.target === el);
+    animation.pause(); animation.currentTime = 0;
+    const rect = el.querySelector('.settings-photo-circle').getBoundingClientRect();
+    const source = document.querySelector('.settings-avatar-button').getBoundingClientRect();
+    const result = { x: rect.x - source.x, y: rect.y - source.y, width: rect.width - source.width, opacity: Number(getComputedStyle(el).opacity) };
+    animation.play();
+    return result;
+  });
+  expect(Math.abs(returned.x)).toBeLessThan(1);
+  expect(Math.abs(returned.y)).toBeLessThan(1);
+  expect(Math.abs(returned.width)).toBeLessThan(1);
+  expect(returned.opacity).toBe(1);
+  await expect(dialog).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
+  expect(await dialog.evaluate(el => el.getAnimations().find(a => a.effect.target === el).effect.getTiming().duration)).toBeLessThanOrEqual(100);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });

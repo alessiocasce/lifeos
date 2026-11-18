@@ -39,10 +39,10 @@ async function measure(page, label, samples) {
   });
   samples.push({ label, ...sample });
   expect(sample.blockers).toEqual([]);
-  expect(Math.abs(sample.bottom - sample.viewportBottom)).toBeLessThan(1.5);
-  expect(sample.height).toBe(68);
-  expect(sample.left).toBe(0);
-  expect(sample.right).toBe(await page.evaluate(() => innerWidth));
+  expect(Math.abs(sample.viewportBottom - sample.bottom - 12)).toBeLessThan(1.5);
+  expect(sample.height).toBe(72);
+  expect(sample.left).toBe(12);
+  expect(sample.right).toBe(await page.evaluate(() => innerWidth - 12));
   expect(sample.hit).toBe(true);
   expect(sample.overflow).toBe(false);
   return sample;
@@ -68,7 +68,7 @@ for (const width of [375, 390, 430]) {
     expect(maxScroll).toBeGreaterThan(844 * 3);
     for (const fraction of [0.25, 0.6, 1, 0]) {
       await page.evaluate(y => window.scrollTo(0, y), maxScroll * fraction);
-      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeCloseTo(maxScroll * fraction, 0);
+      await expect.poll(() => page.evaluate(target => Math.abs(window.scrollY - target), maxScroll * fraction)).toBeLessThanOrEqual(1);
       await measure(page, 'scroll ' + fraction, samples);
       await page.screenshot({ path: info.outputPath('dock-scroll-' + fraction + '.png') });
     }

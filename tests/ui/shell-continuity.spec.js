@@ -85,9 +85,16 @@ test('pull refresh defers waiting PWA activation even with an empty live logger'
     window.scrollTo(0, 0);
     const container = document.querySelector('.workspace-content').parentElement.parentElement;
     const target = document.querySelector('.workspace-content');
-    target.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [new Touch({ identifier: 1, target, clientX: 80, clientY: 30 })] }));
-    container.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [new Touch({ identifier: 1, target, clientX: 80, clientY: 200 })] }));
-    container.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [] }));
+    // Desktop WebKit exposes TouchEvent but disallows constructing Touch objects.
+    // Deliver the same synthetic touch boundary without relying on that constructor.
+    const touchEvent = (type, touches, cancelable = false) => {
+      const event = new Event(type, { bubbles: true, cancelable });
+      Object.defineProperty(event, 'touches', { value: touches });
+      return event;
+    };
+    target.dispatchEvent(touchEvent('touchstart', [{ clientX: 80, clientY: 30 }]));
+    container.dispatchEvent(touchEvent('touchmove', [{ clientX: 80, clientY: 200 }], true));
+    container.dispatchEvent(touchEvent('touchend', []));
   });
   await expect(page.getByText('Update ready - finish your workout first.', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => window.__qaActivationCount)).toBe(0);

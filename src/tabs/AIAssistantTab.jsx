@@ -2,17 +2,17 @@ import { getLocale, formatDate } from '../i18n';
 import { t } from '../i18n';
 import {
   Archive,
-  Bot,
+  ArrowUp,
   BrainCircuit,
+  Check,
   ChevronDown,
+  Copy,
   History,
   Loader2,
   MessageSquarePlus,
   RefreshCw,
   Save,
-  Send,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -22,6 +22,7 @@ import { Panel, PanelHeader, Tag } from '../components/ui';
 import { useLifeOS } from '../context/LifeOSContext';
 import { sendLifeOSAiMessage } from '../services/aiApi';
 import { addDays, localDate } from '../utils/date';
+import '../styles/companion.css';
 
 export function AIAssistantTab() {
   const {
@@ -59,7 +60,12 @@ export function AIAssistantTab() {
   } = useLifeOS();
   const [aiInput, setAiInput] = useState('');
   const [contextOpen, setContextOpen] = useState(false);
+  const [contextMounted, setContextMounted] = useState(false);
   const contextDialogRef = useRef(null);
+  const contextTriggerRef = useRef(null);
+  const contextMotionRef = useRef(null);
+  const composerRef = useRef(null);
+  const focusComposerRef = useRef(false);
   const [pendingMessages, setPendingMessages] = useState([]);
   const [aiStatus, setAiStatus] = useState('idle');
   const [aiError, setAiError] = useState(null);
@@ -90,6 +96,7 @@ export function AIAssistantTab() {
   const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const userPinnedToBottomRef = useRef(true);
+  const [showLatestMessages, setShowLatestMessages] = useState(false);
   const forceScrollRef = useRef(false);
   const sendingRef = useRef(false);
 
@@ -110,13 +117,72 @@ export function AIAssistantTab() {
   const brainActionLogs = showActionErrors ? aiActionLogs : successfulActionLogs;
 
   useEffect(() => {
-    if (contextOpen) contextDialogRef.current?.showModal();
-    else contextDialogRef.current?.close();
+    const dialog = contextDialogRef.current;
+    if (contextOpen) {
+      setContextMounted(true);
+      if (!dialog.open) {
+        dialog.showModal();
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        contextMotionRef.current?.cancel();
+        contextMotionRef.current = dialog.animate([
+          { opacity: 0, transform: reduced ? 'none' : 'translateX(24px) scale(.98)' },
+          { opacity: 1, transform: 'translateX(0) scale(1)' },
+        ], { duration: reduced ? 100 : 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'both' });
+      } else {
+        contextMotionRef.current?.updatePlaybackRate(1);
+        contextMotionRef.current?.play();
+      }
+      contextMotionRef.current.onfinish = null;
+    } else if (dialog.open) {
+      const animation = contextMotionRef.current;
+      const finishClosing = () => {
+        dialog.close();
+        setContextMounted(false);
+        if (focusComposerRef.current) {
+          focusComposerRef.current = false;
+          composerRef.current?.focus();
+        } else {
+          contextTriggerRef.current?.focus({ preventScroll: true });
+        }
+      };
+      if (Number(animation.currentTime) <= 0) finishClosing();
+      else {
+        // An opening finish event may already be queued when reversal begins.
+        animation.onfinish = () => {
+          if (animation.playbackRate < 0 && Number(animation.currentTime) <= 0) finishClosing();
+        };
+        animation.reverse();
+      }
+    }
   }, [contextOpen]);
+
+  useEffect(() => () => { contextMotionRef.current?.cancel(); }, []);
+
+  useEffect(() => {
+    if (!contextMounted) return undefined;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = overflow; };
+  }, [contextMounted]);
+
+  useEffect(() => {
+    const input = composerRef.current;
+    if (!input) return;
+    resizeMessageInput(input);
+  }, [aiInput]);
+
+  useEffect(() => {
+    const input = composerRef.current;
+    const observer = new ResizeObserver(() => resizeMessageInput(input));
+    observer.observe(input);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const updatePinnedState = () => {
-      userPinnedToBottomRef.current = isNearScrollBottom(messagesContainerRef.current);
+      const pinned = isNearScrollBottom(messagesContainerRef.current);
+      userPinnedToBottomRef.current = pinned;
+      setShowLatestMessages(!pinned);
     };
     const container = messagesContainerRef.current;
     if (!container) return undefined;
@@ -130,14 +196,21 @@ export function AIAssistantTab() {
   }, []);
 
   useEffect(() => {
-    const shouldScroll = forceScrollRef.current || userPinnedToBottomRef.current || aiStatus === 'loading' || Boolean(aiError);
-    if (!shouldScroll) return;
-    const behavior = forceScrollRef.current ? 'smooth' : 'auto';
-    forceScrollRef.current = false;
-    window.requestAnimationFrame(() => {
+    const shouldScroll = forceScrollRef.current || userPinnedToBottomRef.current;
+    if (!shouldScroll) { setShowLatestMessages(true); return; }
+    const behavior = forceScrollRef.current && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto';
+    const frame = window.requestAnimationFrame(() => {
       scrollMessagesToBottom(messagesContainerRef.current, behavior);
+      forceScrollRef.current = false;
     });
+    return () => window.cancelAnimationFrame(frame);
   }, [messageScrollKey, aiStatus, aiError]);
+
+  useEffect(() => {
+    userPinnedToBottomRef.current = true;
+    setShowLatestMessages(false);
+    scrollMessagesToBottom(messagesContainerRef.current);
+  }, [activeAiThreadId]);
 
   const submitAiMessage = (event) => {
     event.preventDefault();
@@ -221,7 +294,6 @@ export function AIAssistantTab() {
     } finally {
       setAiStatus('idle');
       sendingRef.current = false;
-      forceScrollRef.current = true;
     }
   };
 
@@ -344,6 +416,7 @@ export function AIAssistantTab() {
     setAiInput('');
     setLastFailedMessage(null);
     startNewAiChatDraft?.();
+    composerRef.current?.focus();
   };
 
   const beginMemoryEdit = (memory) => {
@@ -379,10 +452,12 @@ export function AIAssistantTab() {
 
   return (
     <div className="companion-workspace">
-      <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex min-w-0 items-center gap-2 border-b border-white/10 px-3 py-2">
+      <section className="companion-conversation">
+        <header className="companion-toolbar">
+          <div className="companion-mark" aria-hidden="true"><BrainCircuit size={23} /></div>
           <div className="mr-auto min-w-0">
-            <h2 className="truncate text-sm font-semibold text-zinc-100">{aiChatThreads.find((thread) => thread.id === activeAiThreadId)?.title || t("New conversation")}</h2>
+            <h2 className="companion-title">Companion</h2>
+            <p className="companion-thread-title">{aiChatThreads.find((thread) => thread.id === activeAiThreadId)?.title || t("New conversation")}</p>
           </div>
           <div className="flex min-w-0 items-center gap-2">
           <button
@@ -395,15 +470,17 @@ export function AIAssistantTab() {
           >
             <MessageSquarePlus size={17} />
           </button>
-          <button type="button" className="icon-button" aria-label={t("Open Companion context")} title={t("Companion context")} onClick={() => setContextOpen(true)}><SlidersHorizontal size={17} /></button>
+          <button ref={contextTriggerRef} type="button" className="icon-button" aria-label={t("Open Companion context")} title={t("Companion context")} aria-haspopup="dialog" aria-expanded={contextOpen} onClick={() => setContextOpen(true)}><SlidersHorizontal size={17} /></button>
           </div>
-        </div>
+        </header>
 
+        <div className="companion-transcript">
         <div
           ref={messagesContainerRef}
-          className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto overscroll-contain p-2 md:p-3"
+          className={`companion-messages ${!messages.length ? 'is-empty' : ''}`}
           aria-label={t("Brain conversation messages")}
           role="log"
+          tabIndex={-1}
           data-testid="brain-message-list"
         >
           {aiChatMessagesStatus === 'loading' && !messages.length ? (
@@ -413,12 +490,23 @@ export function AIAssistantTab() {
           ) : messages.length ? (
             messages.map((message) => <AssistantMessage key={message.id} message={message} onSaveToVault={openVaultSave} />)
           ) : (
-            <div className="grid min-h-64 place-items-center p-4 text-center">
-              <div className="max-w-sm">
-                <div className="mx-auto grid h-10 w-10 place-items-center text-zinc-500">
-                  <BrainCircuit size={21} />
+            <div className="companion-welcome">
+              <div>
+                <div className="companion-welcome-mark" aria-hidden="true">
+                  <BrainCircuit size={32} strokeWidth={1.4} />
                 </div>
-                <p className="mt-3 text-lg font-semibold text-zinc-200">{t("What's on your mind?")}</p>
+                <h3>{t("What's on your mind?")}</h3>
+                <p>{t('A thought, a plan, a little clarity.')}</p>
+                <div className="companion-starters" aria-label={t('Conversation starters')}>
+                  {[
+                    [t('Plan my day'), t('Help me plan my day.')],
+                    [t('Review my training'), t('Help me review my recent training.')],
+                    [t('Think it through'), t('Help me think through a decision: ')],
+                  ].map(([label, draft]) => <button key={label} type="button" onClick={() => {
+                    setAiInput(draft);
+                    composerRef.current?.focus();
+                  }}>{label}<ArrowUp size={15} aria-hidden="true" /></button>)}
+                </div>
               </div>
             </div>
           )}
@@ -427,6 +515,7 @@ export function AIAssistantTab() {
             <div
               className="companion-thinking mr-auto inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
               data-testid="brain-loading-indicator"
+              role="status"
             >
               <Loader2 size={13} className="animate-spin" />{t('Companion is thinking...')}</div>
           ) : null}
@@ -434,13 +523,20 @@ export function AIAssistantTab() {
           {aiError ? <AssistantError error={aiError} onRetry={lastFailedMessage ? retryLastFailedMessage : null} /> : null}
           <div ref={messagesEndRef} aria-hidden="true" />
         </div>
+        {showLatestMessages ? <button type="button" className="companion-latest" onClick={() => {
+          userPinnedToBottomRef.current = true;
+          scrollMessagesToBottom(messagesContainerRef.current, matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+          messagesContainerRef.current?.focus({ preventScroll: true });
+        }}><ChevronDown size={16} aria-hidden="true" />{t('Latest messages')}</button> : null}
+        </div>
 
         <form
           onSubmit={submitAiMessage}
-          className="shrink-0 border-t border-white/10 bg-[#111]/95 p-2 backdrop-blur md:p-3"
+          className="companion-composer"
         >
           <div className="flex min-w-0 items-end gap-2">
             <textarea
+              ref={composerRef}
               rows={1}
               value={aiInput}
               onChange={(event) => {
@@ -448,44 +544,43 @@ export function AIAssistantTab() {
                 setAiError(null);
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   if (aiStatus !== 'loading' && !sendingRef.current) {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }
               }}
-              placeholder={t("Message Companion...")}
+              placeholder={t('Message...')}
               aria-label={t("Brain message input")}
               data-testid="brain-message-input"
-              className="max-h-28 min-h-11 min-w-0 flex-1 resize-none rounded-md border border-white/10 bg-black/50 px-3 py-2.5 text-base leading-6 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-cyan-400/40"
+              className="companion-input"
             />
             <button
               type="submit"
               disabled={aiStatus === 'loading' || !aiInput.trim()}
-              className="companion-send grid h-12 w-12 shrink-0 place-items-center rounded-md border disabled:cursor-not-allowed"
+              className="companion-send"
               aria-label={t("Send Brain message")}
               title={aiStatus === 'loading' ? t("Brain is thinking") : t("Send message")}
               aria-busy={aiStatus === 'loading'}
               data-testid="brain-send-button"
             >
-              {aiStatus === 'loading' ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+              {aiStatus === 'loading' ? <Loader2 size={20} className="animate-spin" /> : <ArrowUp size={22} />}
             </button>
           </div>
         </form>
-      </Panel>
+      </section>
 
-      <dialog ref={contextDialogRef} className="companion-context-dialog" aria-labelledby="companion-context-title" onCancel={(event) => { if (event.target === event.currentTarget) setContextOpen(false); }} onClose={(event) => { if (event.target === event.currentTarget) setContextOpen(false); }}>
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-[#15181c] p-4">
+      <dialog ref={contextDialogRef} className="companion-context-dialog" aria-labelledby="companion-context-title" onCancel={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setContextOpen(false); } }} onPointerDown={() => { if (!contextOpen) setContextOpen(true); }} onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setContextOpen(false);
+      }}>
+        <header className="companion-context-header">
           <h2 id="companion-context-title" className="text-lg font-semibold">{t("Companion context")}</h2>
           <button type="button" className="icon-button" aria-label={t("Close Companion context")} onClick={() => setContextOpen(false)}><X size={18} /></button>
         </header>
-        <div className="grid min-w-0 gap-5 p-4">
-        {contextOpen ? <CompanionState onCorrect={(item) => {
-          setAiInput(`LifeOS, update your understanding of ${item.label.toLowerCase()}: `);
-          setContextOpen(false);
-          window.requestAnimationFrame(() => document.querySelector('[data-testid="brain-message-input"]')?.focus());
-        }} /> : null}
+        <div className="companion-context-body">
         <section aria-label={t("Recent conversations")}>
           <h3 className="mb-2 text-sm font-semibold">{t("Conversations")}</h3>
           {aiChatThreads.length ? aiChatThreads.slice(0, visibleConversationCount).map((thread) => <button key={thread.id} type="button" disabled={aiStatus === 'loading'} aria-current={thread.id === activeAiThreadId ? 'true' : undefined} className="flex min-h-11 w-full items-center border-b border-white/10 py-3 text-left text-sm text-zinc-300 disabled:opacity-40" onClick={() => {
@@ -498,6 +593,11 @@ export function AIAssistantTab() {
           {aiChatThreads.length > visibleConversationCount ? <button type="button" className="min-h-11 text-sm text-zinc-300" onClick={() => setVisibleConversationCount((count) => count + 20)}>{t("View more conversations")}</button> : null}
           {visibleConversationCount > 20 ? <button type="button" className="min-h-11 text-sm text-zinc-400" onClick={() => setVisibleConversationCount(20)}>{t("Show fewer conversations")}</button> : null}
         </section>
+        {contextMounted ? <CompanionState onCorrect={(item) => {
+          setAiInput(`LifeOS, update your understanding of ${item.label.toLowerCase()}: `);
+          focusComposerRef.current = true;
+          setContextOpen(false);
+        }} /> : null}
         <Panel>
           <PanelHeader eyebrow={t("Action History")} title={t("Recent Actions")} right={<History size={16} className="text-violet-300" />} />
           <div className="grid gap-2 p-3">
@@ -884,7 +984,7 @@ function VaultDetailModal({ document, busy, error, returnFocus, onClose, onArchi
 
 function AssistantError({ error, onRetry }) {
   return (
-    <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3" data-testid="brain-error">
+    <div className="rounded-md border border-red-400/20 bg-red-400/[0.06] p-3" data-testid="brain-error" role="alert">
       <p className="text-sm font-medium text-red-200">{error.message}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {error.providerStatus ? <Tag tone="amber">{t("Provider: ")}{error.providerStatus}</Tag> : null}
@@ -906,37 +1006,69 @@ function AssistantError({ error, onRetry }) {
 function AssistantMessage({ message, onSaveToVault }) {
   const isUser = message.role === 'user';
   const skill = !isUser ? normalizeMessageSkill(message.metadata?.selected_skill) : null;
+  const [copyState, setCopyState] = useState('idle');
+  const copyTimer = useRef(null);
+  const mounted = useRef(true);
+  const articleRef = useRef(null);
+  useEffect(() => {
+    mounted.current = true;
+    const animation = message.pending ? articleRef.current.animate([
+      { opacity: 0, transform: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'none' : 'translateY(6px)' },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' }) : null;
+    return () => { mounted.current = false; clearTimeout(copyTimer.current); animation?.cancel(); };
+  }, [message.id, message.pending]);
+  const copyMessage = async () => {
+    clearTimeout(copyTimer.current);
+    try {
+      await navigator.clipboard.writeText(message.content);
+      if (!mounted.current) return;
+      setCopyState('copied');
+      clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => { if (mounted.current) setCopyState('idle'); }, 2000);
+    } catch {
+      if (mounted.current) setCopyState('error');
+    }
+  };
   return (
-    <article className={`min-w-0 rounded-md border px-3 py-2 ${isUser ? 'ml-auto max-w-[92%] border-cyan-400/20 bg-cyan-400/10 sm:max-w-[78%]' : 'mr-auto max-w-full border-white/5 bg-black/25 sm:max-w-[92%]'}`}>
-      <div className="mb-2 flex items-center gap-2">
-        {isUser ? <Sparkles size={15} className="text-cyan-300" /> : <Bot size={15} className="text-emerald-300" />}
-        <span className="data-text text-[10px] uppercase tracking-wider text-zinc-500">{isUser ? t("You") : t("LifeOS")}</span>
+    <article ref={articleRef} aria-label={isUser ? t('Your message') : t('Companion reply')} className={`companion-message ${isUser ? 'is-user' : 'is-assistant'}`}>
+      {!isUser ? <header className="companion-message-meta">
+        <span className="companion-reply-mark" aria-hidden="true"><BrainCircuit size={16} /></span>
+        <span className="companion-message-author">Companion</span>
         {skill ? (
           <span
-            className="data-text max-w-28 truncate rounded border border-cyan-400/15 bg-cyan-400/[0.06] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-300"
+            className="companion-skill"
             title={skill.label}
           >
             {skill.badge}
           </span>
         ) : null}
-        <span className="ml-auto flex items-center gap-1">
-          {!isUser && onSaveToVault ? (
+      </header> : null}
+      <div className="companion-message-body">
+      {isUser
+        ? <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        : <AssistantMarkdown content={message.content} />}
+      </div>
+      <footer className="companion-message-footer">
+        {!isUser ? <div className="companion-message-actions">
+          <button type="button" className="companion-message-action" aria-label={t('Copy reply')} onClick={copyMessage}>
+            {copyState === 'copied' ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}<span>{copyState === 'copied' ? t('Copied') : t('Copy')}</span>
+          </button>
+          {onSaveToVault ? (
             <button
               type="button"
               onClick={() => onSaveToVault?.(message)}
-              className="icon-button"
+              className="companion-message-action"
               aria-label={t("Save assistant answer to Vault")}
               title={t("Save to Vault")}
             >
-              <Save size={13} />
+              <Save size={15} aria-hidden="true" /><span>{t('Save')}</span>
             </button>
           ) : null}
-          {message.created_at ? <span className="data-text text-[10px] text-zinc-600">{formatMessageTime(message.created_at)}</span> : null}
-        </span>
-      </div>
-      {isUser
-        ? <p className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100">{message.content}</p>
-        : <AssistantMarkdown content={message.content} />}
+        </div> : null}
+        {message.created_at ? <time className="companion-message-time" dateTime={message.created_at} title={formatShortDate(message.created_at)}>{formatMessageTime(message.created_at)}</time> : null}
+      </footer>
+      {!isUser ? <span className="companion-copy-status" role={copyState === 'error' ? 'alert' : 'status'}>{copyState === 'error' ? t('Could not copy. Try again.') : copyState === 'copied' ? t('Reply copied.') : ''}</span> : null}
     </article>
   );
 }
@@ -1000,6 +1132,11 @@ function normalizeMessageContent(value) {
 function createClientRequestId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function resizeMessageInput(input) {
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 144)}px`;
 }
 
 function scrollMessagesToBottom(container, behavior = 'auto') {

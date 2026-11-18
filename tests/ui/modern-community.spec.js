@@ -107,7 +107,7 @@ test('revoked detail evicts its cached Feed before returning', async ({ page }) 
   await page.evaluate(() => localStorage.setItem('qa-community-shares', '[]'));
   await page.getByRole('button', { name: /Recorded session 1.*View workout/ }).first().click();
   await expect(page.getByText('This workout is private or unavailable.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: /^Back to /, exact: false }).click();
   await expect(page.getByRole('article')).toHaveCount(0);
   await expect(page.getByText('No shared workouts yet.', { exact: true })).toBeVisible();
 });

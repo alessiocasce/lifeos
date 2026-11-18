@@ -1,5 +1,7 @@
 # Companion vNext Slice 2 Progress
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 ## Status
 
 Implementation and local validation complete. Production migration, Vercel deployment, connector re-link, and physical ChatGPT write QA remain manual. The execution brief is `docs/archive/CODEX_COMPANION_VNEXT_SECOND_SLICE.md`.

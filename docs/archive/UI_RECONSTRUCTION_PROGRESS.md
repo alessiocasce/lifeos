@@ -1,5 +1,7 @@
 # Frontend reconstruction
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 ## Scope and checkpoints
 
 User brief: `9807a46e-66d9-4dac-9880-1f7943a6112b/pasted-text-1.txt`.

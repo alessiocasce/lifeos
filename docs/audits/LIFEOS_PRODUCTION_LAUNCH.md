@@ -1,5 +1,7 @@
 # LifeOS Production Launch
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and [the documentation index](../README.md). Retain historical evidence; revalidate before operational use.
+
 ## Final Outcome (2026-11-09 03:52 UTC)
 
 **LIFEOS - PRODUCTION DEPLOYED, ACCEPTANCE PENDING.**

@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     ]));
   }, localDate());
 });
-const field = (page, name) => page.getByRole('textbox', { name, exact: true });
+const field = (page, name) => page.getByRole('textbox', { name: name === 'Weight (kg)' ? /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/ : name, exact: true });
 
 test('committed exercise and saved sets prefill targets, never outcomes or manual values', async ({ page }) => {
   await page.goto('/workout');
@@ -42,23 +42,24 @@ test('committed exercise and saved sets prefill targets, never outcomes or manua
   await page.reload();
   await expect(field(page,'Reps')).toHaveValue('7');
   await field(page,'Weight (kg)').fill('');await field(page,'Reps').fill('');
-  await page.getByRole('button',{name:'More options',exact:true}).click();
   await page.getByRole('checkbox',{name:'Warmup set'}).check();
-  await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
   await expect(field(page,'Weight (kg)')).toHaveValue('40');
   await expect(field(page,'Reps')).toHaveValue('10');
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
+  await expect(page.getByRole('checkbox',{name:'Warmup set'})).not.toBeChecked();
+  await field(page,'Weight (kg)').fill('');await field(page,'Reps').fill('');
+  await page.getByRole('checkbox',{name:'Warmup set'}).check();
   await expect(field(page,'Weight (kg)')).toHaveValue('60');
   await expect(field(page,'Reps')).toHaveValue('6');
 });
 
-test('rest timer is absent and a failed set save retains the workout draft', async ({page}) => {
+test('rest timer stays off and a failed set save retains the workout draft', async ({page}) => {
   await page.goto('/workout');
   await selectExercise(page,'Barbell Bench Press');
-  await expect(page.getByText(/Rest timer/)).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Rest timer',exact:true})).toBeVisible();
   await page.evaluate(()=>localStorage.setItem('qa-fail-save','true'));
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
-  await expect(page.getByRole('alert')).toContainText('Set not saved');
+  await expect(page.getByRole('alert')).toContainText('Test connection lost.');
   await expect(field(page,'Weight (kg)')).toHaveValue('80');
   await expect(page.getByRole('timer')).toHaveCount(0);
 });

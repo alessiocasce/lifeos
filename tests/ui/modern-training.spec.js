@@ -53,7 +53,7 @@ test('Last Time combines confirmed retired, EZ and text curl sets without mixing
   const logger=page.getByRole('region',{name:'Workout set logger',exact:true});
   await logger.getByRole('button',{name:'Exercise',exact:true}).click();
   const picker=page.getByRole('dialog');
-  await picker.getByRole('textbox',{name:'Exercise',exact:true}).fill('EZ Bar Curl');
+  await picker.getByRole('textbox',{name:'Search exercises...',exact:true}).fill('EZ Bar Curl');
   await picker.getByRole('button',{name:'Barbell Curl',exact:true}).click();
   await picker.waitFor({state:'detached'});
   const last=page.getByRole('region',{name:'Last time',exact:true});

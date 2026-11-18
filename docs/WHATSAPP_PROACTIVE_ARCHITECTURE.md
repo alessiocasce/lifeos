@@ -5,8 +5,7 @@
 The `training_active_identity_media` forward migration retires the rest producer
 triggers and RPCs, cancels only queued/claimed `workout_rest_timer` rows and rejects
 future rest enqueue/claim attempts. Poll-time delivery also rejects this source.
-The Training UI, hook and browser API are removed; old preferences are inert and
-not app-accessible. Historical sent rows keep notification-only metadata so they
+The legacy WhatsApp-rest UI, hook and browser API were removed; those old preferences are inert and not app-accessible. The separate PWA Web Push timer and new coordinator remain implemented; see [WORKOUT_WEB_PUSH.md](WORKOUT_WEB_PUSH.md). Historical sent rows keep notification-only metadata so they
 never steal memo/Health replies or consume autonomous attention budgets.
 No changes to memo/accountability/monitor scheduling or provider mappings, and no
 bridge restart required. Previously sent or in-flight physical messages cannot be

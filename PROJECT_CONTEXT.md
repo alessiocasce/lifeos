@@ -1,20 +1,42 @@
 # LifeOS Project Context
 
-## Current State (as of 2026-11-09)
+**Resuming after clear or session exit:** read [the current handoff](docs/agents/current-handoff.md) after this file. It records the approved UI decisions, current release checks, preview startup and private local-artifact boundary.
 
-Full release history, newest first, lives in [`docs/HISTORY.md`](docs/HISTORY.md). Read it when you need the rationale behind a past release; this file is the architecture and module reference.
+## Current State (2026-11-19 release batch)
 
-- **Production:** PR2 merged (SHA `87acd1ead077ce73ad4e35af96030bc826787242`), Vercel READY. Five forward migrations applied with a verified backup and isolated restore; 54 workouts / 564 sets preserved. Evidence: `docs/audits/LIFEOS_PRODUCTION_LAUNCH.md`.
-- **Foreground rest timer:** works. **Background Web Push is gated OFF**: hosted `pg_net` queue permissions cannot isolate a dispatch credential, the guard fails closed, and no VAPID/dispatch secret is provisioned. Owner deferred Oracle access. See `docs/WORKOUT_WEB_PUSH.md`.
-- **iPhone push correction:** display path no longer depends on network verification; immutable Declarative Web Push with a visible legacy fallback. Physical iPhone reacceptance (guarded update, reconnect, 60-second tests) is still pending, as is email acceptance.
-- **Migrations:** never broad-replay; apply targeted forward migrations only. Applied SQL is sealed by `supabase/catalog-migrations.json`. No schema rerun required for the latest changes.
-- **Frontend/backend date helpers are intentionally separate:** `src/utils/date.js` is the browser helper; `api/_utils/date.js` is the Europe/Rome source for backend "today" behavior. Do not merge them.
+- Accumulated Settings, mobile bar, Companion, Community, Training and durable
+  documentation changes are being released from `release/ui-refinements-20261118`
+  against `fe8b99c`. The user's current instruction authorizes all checks,
+  commit/push and merge to main. [Release evidence](docs/qa/ui-release-2026-11-19.md)
+  records final results and release status; [current handoff](docs/agents/current-handoff.md)
+  records the approved UI details and preview boundaries.
+- Create/Edit templates share one staged form. Add is blue, Create/Save green,
+  and confirmed Delete is equally large and red. The account-bound save helper
+  uses stable IDs, unique staging orders, readback/retry and external-order
+  conflict detection. It is a multistep client operation, not a DB transaction.
+- Full Node regression passes, including Brain and new template-draft coverage.
+  The previous attention fixed-clock failure was corrected in its isolated test
+  fixture; production expiry constraints are unchanged. Browser and deployment
+  results are recorded in the release evidence rather than older audit snapshots.
+- Rest tickets #6/#7/#8 were implemented through `fe8b99c` and production was
+  independently matched to that SHA on 2026-11-17. Physical iPhone push delivery
+  and current Oracle health remain separate acceptance gates. See the rest spec,
+  [rest QA](docs/qa/workout-rest-coordination.md) and [push runbook](docs/WORKOUT_WEB_PUSH.md).
+- Private Community snapshots/photos and screenshots stay ignored under
+  `test-results/`; generated Graphify output and rest-audit scratch stay local.
+  Rankings specs and simulations remain design-only. No rankings runtime ships.
+- No schema rerun required. Browser and backend Europe/Rome date helpers remain
+  intentionally separate. Review applied migration ledgers before any future DB
+  change; `supabase/catalog-migrations.json` seals catalog SQL, not every migration.
+
+Release history is newest first in [docs/HISTORY.md](docs/HISTORY.md). Dated audits,
+archives and plans retain their historical scope and do not override current code.
 
 ## Project Goal
 
 LifeOS is a high-density personal operating system for daily planning, health tracking, workout logging, finances, and an assistant-style review surface. The product direction is "Midnight Cyber-Athletics": a dark, command-center interface for personal performance with dense data, fast entry, and minimal visual noise.
 
-The app should feel like a practical daily-use tool, not a marketing page. The current priority is turning one vertical slice at a time from realistic mock UI into persistent Supabase-backed workflows.
+The app should feel like a practical daily-use tool, not a marketing page. The current priority is hardening the existing persistent workflows through scoped vertical slices.
 
 ## Tech Stack
 
@@ -23,7 +45,7 @@ The app should feel like a practical daily-use tool, not a marketing page. The c
 - Vite PWA support for installable app-shell caching
 - Tailwind CSS
 - Lucide React icons
-- Recharts for compact charts and sparklines
+- Existing CSS/SVG helpers for compact visuals; Recharts was removed.
 - Supabase JS v2 for auth and database access
 - Supabase Postgres with Row Level Security
 
@@ -43,28 +65,26 @@ npm.cmd run dev -- --host 0.0.0.0
 
 - `src/App.jsx` gates entry into the app. It shows Supabase setup, auth loading, or global auth screens before rendering `Shell`.
 - Top-level tabs use lightweight URL-based routing without React Router. Refreshing `/workout`, `/memos`, `/projects`, `/calendar`, and other tab paths preserves the active tab.
-- Canonical tab paths are `/`, `/calendar`, `/memos`, `/projects`, `/health`, `/workout`, `/finances`, and `/assistant`.
+- `src/utils/tabRoutes.js` owns canonical paths: `/`, `/community`, `/settings`, `/calendar`, `/memos`, `/projects`, `/health`, `/workout`, `/finances`, and `/assistant`.
 - Alias paths are supported: `/home` and `/pulse` open Home, `/ops` opens Projects, `/money` opens Finances, and `/ai` opens Assistant.
 - `vercel.json` rewrites non-API routes to the SPA entry while preserving `/api` serverless routes.
 - Major tab components except Home are lazy-loaded with `React.lazy`/`Suspense` to reduce the initial bundle.
-- `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, remaining local mock-backed state, Supabase auth state, persisted module state, and CRUD actions.
+- `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, account-scoped client drafts, Supabase auth state, persisted module state, and CRUD actions.
 - `src/components/AuthScreen.jsx` owns global sign in, sign up, loading, and Supabase setup screens.
 - `src/components/LifeOSLogo.jsx` contains the custom inline SVG logo used by the shell and favicon artwork.
-- `src/components/Shell.jsx` owns the global app shell:
-  - Desktop/tablet uses the fixed left sidebar and full top metrics header.
-  - Mobile uses a compact sticky top header that respects `env(safe-area-inset-top)` in iPhone PWA standalone mode, plus fixed bottom tab navigation.
-  - Sign out lives in the shell header, not in an individual tab.
-  - Header/sidebar metrics use persisted health, workout, and expense state where available instead of mock finance/training values.
-- `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag`, `ProgressRing`, `Sparkline`, and `MiniMetric`.
+- `src/components/Shell.jsx` owns the app shell: desktop primary navigation is Command, Training, Community, Projects and Companion; utilities include Health, Calendar, Memos, Finances and Settings. Mobile has Command, Community, Training, Companion and More; More contains Projects and utilities. Portaled fixed docks preserve active-workout resume and keyboard/safe-area geometry. There are no old dashboard metric boxes.
+- `src/tabs/SettingsTab.jsx`, `src/hooks/useUserSettings.js` and `src/components/ProfileCompletion.jsx` own profile/onboarding and account preferences. New/unset preferences default to Italian, workout sharing ON and notes sharing OFF; explicit saved choices are preserved. Password recovery is handled before the normal workspace.
+- `src/tabs/CommunityTab.jsx` and `src/utils/communityCache.js` expose sanitized authenticated-member workout projections, account-scoped browsing state and privacy revalidation. Read [Community](docs/COMMUNITY.md) before changing sharing.
+- `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag` and `MiniMetric`.
 - `src/services/lifeosApi.js` contains Supabase API wrappers.
 - `src/utils/workoutRestCoordinator.js` owns fixed account/workout rest-timer state, immutable confirmed snapshots, mutation exclusion and coalesced refresh readback. `src/hooks/useWorkoutRestCoordinator.js` attaches a fresh coordinator per React effect setup, initial read and browser events; `WorkoutRestTimer.jsx` retains sheet/display/countdown behavior. Unknown preferences display a neutral placeholder until readback confirms them. Successful notification registration followed by a failed preference save forces one readback under the mutation lock, retaining registration and the safe mutation error even if a lost write response is confirmed persisted. Readback failure remains separate; retries require explicit user action. Acceptance evidence: `docs/qa/workout-rest-coordination.md`. Logout cancellation/device detachment remain in `LifeOSContext.jsx`.
 - `api/_utils/date.js` is the shared backend source for Europe/Rome local date/time defaults. Backend code must not use UTC ISO slicing for user-facing "today" behavior.
 - `api/_utils/health.js` owns persisted sleep-hour recalculation from the previous day's `sleep_start` and the current day's `wake_time`.
 - `src/lib/supabaseClient.js` creates the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `api/actions.js` is the token-protected multiplexed Vercel Serverless Function for external automation. It routes `expense`, `health`, `wake`, `sleep-start`, `habit`, and `calendar` actions and uses `SUPABASE_SERVICE_ROLE_KEY` with explicit `LIFEOS_ACTION_USER_ID` writes.
-- `api/ai/chat.js` contains the in-app Gemini-powered LifeOS assistant endpoint. Gemini plans intent, while backend-controlled tools read/write Supabase. It is a thin entry (`handler`, `handleBrainChatMessage`) that re-exports every previously exported helper; the implementation lives in `api/_utils/chat/` (`chatPendingActions`, `chatPersistence`, `chatAutoVault`, `chatClassification`, `chatMemoryAnswers`, `chatResponse`, `chatCalendarPlanning`, `chatScheduleParsing`, `chatShared`). The split was verbatim extraction; keep new logic in the matching module, not in the entry.
+- `api/ai/chat.js` contains the in-app Gemini-powered LifeOS assistant endpoint. Gemini plans intent, while backend-controlled tools read/write Supabase. It retains `handler` and the main `handleBrainChatMessage` orchestration and re-exports existing public helpers; extracted helper implementations live in `api/_utils/chat/` (`chatPendingActions`, `chatPersistence`, `chatAutoVault`, `chatClassification`, `chatMemoryAnswers`, `chatResponse`, `chatCalendarPlanning`, `chatScheduleParsing`, `chatShared`). The split was verbatim extraction; keep new logic in the matching module, not in the entry.
 - `scripts/` is grouped: `scripts/tests/` (deterministic test scripts behind `npm test`/`test:*`), `scripts/smoke/` (live smoke checks), `scripts/tools/` (generators, audits, rollout rehearsals). `serve-ui-qa.js`, `workout-push-worker.js` (deployed to Oracle at this path) and `check-vercel-functions.js` stay at `scripts/` root.
-- Legacy `src/data/lifeosData.js` demonstration exports have been removed locally; real workspaces use persisted APIs and route validation no longer imports demo data.
+- Legacy demonstration data and mock finance actions were removed; real workspaces use persisted APIs. QA fixture substitutions live only in test servers/configuration, never the production Vite plugin graph.
 - Deployment docs live in `docs/DEPLOYMENT.md`, with deployed-app QA in `docs/QA_DEPLOYMENT.md`.
 - Action API docs live in `docs/ACTION_API.md`.
 - AI Assistant QA lives in `docs/QA_AI_ASSISTANT.md`.
@@ -114,7 +134,7 @@ Brain Vault semantic embeddings use the same server-only `GEMINI_API_KEY` with G
 
 The schema is in `supabase/schema.sql`.
 
-Current tables:
+Core tables (not an exhaustive catalog; consult `supabase/schema.sql` and reviewed forward migrations for current definitions):
 
 - `workouts`
 - `workout_templates`
@@ -141,6 +161,11 @@ Current tables:
 - `brain_whatsapp_inbound_receipts`
 - `brain_whatsapp_message_deliveries`
 - `brain_interaction_state`
+- `brain_beliefs`, `brain_external_sync_requests`, `brain_mcp_oauth_code_redemptions`
+- `brain_monitors`, `brain_attention_events`
+- `user_profiles`, `user_preferences`, `exercise_catalog`, `exercise_aliases`
+- `community_workout_shares` and its sanitized set projection
+- Web-rest preferences, timers and private push subscriptions defined by the targeted workout-push migrations
 
 App-facing tables have `user_id` columns defaulting to `auth.uid()` and referencing `auth.users(id) on delete cascade`. The three WhatsApp reliability tables require an explicit backend `user_id`; they are service-role-only and intentionally have no authenticated-client policy.
 
@@ -207,7 +232,7 @@ Real/persisted today:
   - `GET /api/ai/actions`
   - `POST /api/integrations/whatsapp/inbound`
   - `POST /api/integrations/whatsapp/outbox` with `action=evaluate|poll|ack|record_reply_delivery`
-  - Persistent Brain chat with a fresh New Chat draft by default. Old threads/messages persist in the backend, but old-thread selection is hidden from the normal UI for now.
+  - Persistent Companion chat with an unselected conversation on initial page load; selected app conversations survive tab navigation. Old threads/messages persist in the backend, but conversation selection is available in the Companion context sheet.
   - Assistant responses render through safe Markdown with controlled LifeOS callout tags.
   - Brain stays focused on assistant chat and Recent Actions; canned suggestions and Daily Review UI are not rendered.
 - AI Action History persisted in `ai_action_logs` for recent assistant/Shortcut writes and write failures.
@@ -218,9 +243,11 @@ Real/persisted today:
 - Vault chunks are embedded with Gemini Embedding 2 through the server-only `GEMINI_API_KEY` and Supabase pgvector. If Gemini embedding is missing, rate-limited, or fails, documents still save and chunks are marked skipped/failed.
 - Obsidian-style links such as `[[Back Day]]` are extracted into document `links` for future graph/backlink features; no graph UI exists yet.
 
-Still mostly mock/local:
+Design-only and test-only boundaries:
 
-- The real Workout tab no longer displays mock workout examples or archives.
+- Rankings/progression remains an isolated blueprint/prototype under `docs/plans/lifeos-rankings/`; it is not production scoring or enrollment.
+- Production Training uses persisted data; synthetic records/adapters belong to isolated QA servers.
+- `docs/LIFEOS_COMPANION_VNEXT.md` is a broader product roadmap, not proof that every proposed feature is implemented.
 
 ## PWA Current Status
 
@@ -244,8 +271,8 @@ Current behavior:
 - Pull-to-refresh physically translates the tab content downward with resisted, Safari-like feedback, holds it slightly lowered while refreshing, then smoothly snaps it back.
 - One pull globally reloads health, workouts/templates, expenses, calendar, memos, projects/sessions/money entries, Brain threads/current messages/memories/insights/Vault documents, and recent AI actions.
 - Pull-to-refresh also asks the service worker to check for a newly deployed app version.
-- A waiting app update activates and reloads automatically when there is no meaningful unsaved work.
-- A complete unsaved Workout set or meaningful Project session draft blocks only the app reload; persisted data still refreshes and the indicator asks the user to save first.
+- Discovery does not force activation. Explicit update application or the guarded pull-to-refresh path can activate a waiting update only when the shared guard permits it.
+- Workout loading, any active workout (even on another tab), and meaningful unsaved work block activation/reload. Persisted data can still refresh; finishing a set alone does not make an active workout safe to reload.
 - Incomplete half-written fields are intentionally not protected by the app-update guard.
 - Pull-to-refresh is touch/mobile focused, ignores form controls and open dialogs, and is disabled on desktop.
 - The shell header and fixed mobile bottom navigation remain stable while only the main tab content moves.
@@ -283,7 +310,7 @@ Current behavior:
 
 ## AI Assistant Current Status
 
-`src/tabs/AIAssistantTab.jsx` is a persistent Brain chat surface with a fresh-chat default, long-term memory, hidden Vault/Memory infrastructure, and compact desktop-only Recent Actions.
+`src/tabs/AIAssistantTab.jsx` is a persistent Companion conversation surface. Initial page load has no selected app conversation; tab navigation preserves an explicitly selected conversation. New Chat clears it. The context sheet exposes conversations, current understanding, watches, memories, saved reports and secondary Recent Actions.
 
 Architecture:
 
@@ -300,10 +327,10 @@ Architecture:
 - The endpoint can also accept `Authorization: Bearer <LIFEOS_ACTION_TOKEN>` for trusted server/tool callers.
 - App chat requests append user/assistant messages to `ai_chat_messages`; Shortcut/API calls do not create personal chat history by default.
 - WhatsApp chat requests append user/assistant messages to a persistent dedicated backend Brain thread per sender using `metadata.source = "whatsapp"` and `metadata.whatsapp_sender`.
-- WhatsApp threads are backend context only. They must not auto-open in the app and must not reintroduce old-thread selection into the normal Brain UI.
+- WhatsApp threads are backend context only. They must not auto-open in the app and must remain distinct from app conversation navigation in the Companion context sheet.
 - Threads are titled deterministically from the first meaningful user message without an extra Gemini title call.
-- Brain opens to a fresh empty `New Chat` draft by default. Old threads and messages remain persisted and reloadable through backend/context code, but the normal UI currently hides old-thread selection for minimum-friction chat-first use.
-- The empty New Chat state is intentionally minimal: `What do we solve?` plus `Ask, log, analyze, plan.`
+- Brain opens with an unselected conversation on initial page load. Old app conversations remain persisted and selectable in the Companion context sheet; the main conversation surface remains chat-first.
+- An unselected conversation shows the current `New conversation` title and `What's on your mind?` empty state. Tab navigation preserves a selected conversation; New Chat explicitly clears it.
 - The backend includes a bounded recent-thread history block so follow-up messages retain conversation context.
 - Active memories are loaded by importance/update time and recent insights are loaded separately. Both are advisory context and never permission to perform a write.
 - Brain uses AI-first semantic routing before planner writes. The router classifies mode, selected skill, needed data, write intent, ambiguity, and risk from the current message plus bounded conversation/memory context.
@@ -326,7 +353,7 @@ Architecture:
 - BrainTurn Pipeline Foundation lives in `api/_utils/brainTurn.js`. It centralizes per-turn state and trace updates for inbound metadata, thread/history attachment, memory context, Working Context, pending-action checks, proactive-before-pending arbitration, route/skill/vault trace stages, and pending-resolution trace state.
 - Brain Stage v2 adds a formal BrainTurn Contract in `api/_utils/brainTurnContract.js`. Each turn gets one explicit `winning_path`, `intent_type`, write-intent source, allowed context sources, disallowed subsystem steals, route override, and field policy before pending/proactive/operational/route/command-draft paths can handle the message.
 - Brain Turn Arbitration helpers live in `api/_utils/brainTurnArbitration.js`. They provide deterministic signals for explicit new commands, Working Context referents, agenda queries, operational follow-ups, true long-term memory recall, pending-vs-proactive priority, and memo-vs-calendar write-domain policy.
-- `api/ai/chat.js` still owns the main planner/execution pipeline, but early deterministic routing now consults the BrainTurn Contract. Pending actions, proactive replies, operational follow-ups, memory recall, Vault retrieval, and command drafts are blocked when the contract says that subsystem would steal the turn.
+- `api/ai/chat.js` is the entry/orchestration module; helpers in `api/_utils/chat/` and the dedicated stages consult the BrainTurn Contract. Pending actions, proactive replies, operational follow-ups, memory recall, Vault retrieval, and command drafts are blocked when the contract says that subsystem would steal the turn.
 - The AI Command Draft lifecycle is extracted into `api/_utils/brainCommandDraftStage.js`. The stage decides whether command draft should run, extracts with Gemini, applies deterministic reference/domain/field policy, validates, creates pending clarification state, or executes through the existing safe write path.
 - Brain Stage v3 extracts the legacy planner/read-only/action path into `api/_utils/brainPlannerStage.js`. The stage handles route clarification, casual/read-only answers, synthetic multi-event calendar paths, Gemini planner output, read context loading, safe write execution handoff, and planner trace steps.
 - Planner Stage validates every planner write against the BrainTurn Contract, route write intent, selected skill permissions, negative write intent, and destructive-action blocks. If the contract says the turn is read-only, operational, memory recall, follow-up transform, casual, or has no current-message write source, the planner output is repaired to read-only/clarification before any LifeOS tool can run.
@@ -410,7 +437,7 @@ Architecture:
 - Missing optional nullable health fields are ignored instead of being validated as invalid.
 - Successful and failed AI write actions are logged to `ai_action_logs` with source, request id, action type/count, sanitized action metadata, record references, and safe error messages.
 - AI Action History powers the Assistant Recent Actions preview. It is action history only; undo is not implemented yet. Home does not surface Recent AI Writes.
-- Brain UI is chat-first. The composer stays central, old-thread selection is hidden in the normal UI for now, Memory/Vault management is hidden behind diagnostics, Recent Actions stays compact on desktop, and Brain keeps Daily Review and canned Suggestions hidden.
+- Brain UI is chat-first. The composer stays central, conversation selection and Recent Actions live in the Companion context sheet, Memory/Vault management stays secondary, and Brain keeps Daily Review and canned Suggestions hidden.
 - Brain Recent Actions shows successful actions by default and hides old failed writes behind an Errors toggle to reduce visual noise. Logs remain stored in `ai_action_logs`.
 - WhatsApp inbound replies are concise and same-language for chat use, while preserving the same Brain action boundaries and backend validation as app chat.
 - Future proactive features such as Morning Briefing, Weekly Review, workouts, projects, and sleep/wake check-ins should build on Brain skills and the outbox pattern.
@@ -427,7 +454,7 @@ Architecture:
 - Expense amount validation tolerates currency wording/symbols such as `25 euro`, `€25`, `25 dollar`, `$25`, and comma decimals.
 - Simple successful create expense, create calendar event, create memo, and update health log requests return deterministic success messages without a second Gemini answer call.
 - Complex analysis and analyze-and-plan requests may still use multiple Gemini calls.
-- Proactive Morning Briefings, voice, external email, broad proactive messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase. Outbound WhatsApp v1A is memo-only.
+- Proactive Morning Briefings, voice, external email, broad proactive messaging, and autonomous dangerous/unconfirmed actions are not implemented in this phase. Current proactive delivery includes memo, accountability and explicitly permitted monitor flows through the shared outbox.
 
 Supported v1 intents/tools:
 
@@ -446,9 +473,15 @@ Current limitations:
 - No arbitrary SQL.
 - No destructive writes.
 - Pending actions support low-risk multi-turn confirmation and slot filling for supported Health, Calendar, Memo, Expense, and related action flows.
-- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. LifeOS MCP v1.1 exposes read-only context/debug access through one authenticated endpoint with static-token and ChatGPT Connector OAuth auth modes. Broader proactive nudges are not implemented yet.
+- External integrations: WhatsApp Bridge supports inbound Brain messages and Proactive WhatsApp v1A memo outbox delivery through the local bridge. LifeOS MCP exposes read-only context/debug tools plus separately scoped semantic `sync_context`; project-watch monitors require explicit standing permissions. These boundaries do not authorize general autonomous CRUD.
 - No frontend range/scope dropdowns; Gemini infers intent, range, and scope from natural language.
 - `GEMINI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only.
+
+## Companion State, Memory And Attention
+
+`brain_beliefs` owns current truth; `ai_memories` owns curated autobiographical history; insights are hypotheses and Vault is long-form context. Explicit MCP `sync_context` requires `lifeos.write`, bounded supported updates and idempotency; read tools and `search_memory` remain read-only. It cannot execute operational CRUD or send messages.
+
+Project Watch/attention uses grounded `project_staleness` monitors, explicit `companion.monitor` and separate default-off `companion.message` grants, bounded evaluation and delivery-time revalidation. This is not general autonomous outreach. the Companion context sheet exposes app conversations, current understanding, recent actions, reports and secondary memory/diagnostic controls. See [Brain architecture](docs/BRAIN_ARCHITECTURE.md), [MCP](docs/MCP.md) and [Companion QA](docs/QA_COMPANION_UI.md).
 
 ## Brain Trace Debugging
 
@@ -507,7 +540,7 @@ Current behavior:
 - The endpoint validates text-only message payloads, rejects empty/oversized bodies, rejects unsupported message types, and keeps group behavior closed unless explicitly whitelisted.
 - The local bridge only needs `LIFEOS_BASE_URL`, `LIFEOS_WHATSAPP_BRIDGE_SECRET`, and its own allowed sender config. It must not know Supabase service keys, Gemini keys, or database credentials.
 - WhatsApp messages use `source = "whatsapp"` and include sanitized sender/message id metadata.
-- Each allowed sender gets one persistent backend Brain thread. This preserves WhatsApp conversation context without surfacing old thread selection in the normal Brain UI.
+- Each allowed sender gets one persistent backend Brain thread. This preserves WhatsApp conversation context while app conversation navigation remains in the Companion context sheet.
 - WhatsApp replies are generated by the same Brain handler used by app chat, with WhatsApp-friendly concise response instructions.
 - WhatsApp inbound can return `debug.brain_trace` in JSON when called with `x-lifeos-debug: true`; the bridge should keep that out of the WhatsApp reply text.
 - Pending actions, confirmation/cancellation normalization, structured sleep-start logging, Working Context, Command Draft referent resolution, memory commands, follow-up transforms, Brain Vault retrieval/auto-save, and deterministic tool guards remain active for WhatsApp.
@@ -743,28 +776,13 @@ Current behavior:
 
 ## Home Module Current Status
 
-`src/tabs/HomeTab.jsx` is now a Today Command Center.
+`src/tabs/HomeTab.jsx` renders Command from persisted records, using `useLocalDay` for Europe/Rome midnight/resume behavior.
 
-Current behavior:
-
-- Uses persisted calendar events, memos, project sessions, health logs, and workout sessions/sets from context. Finance data stays in the Finances tab.
-- Loads today's calendar range without duplicating API wrappers.
-- Is signal-filtered: zero-value widgets, absence nags, and `no ... logged` cards are hidden completely instead of consuming space.
-- Shows a compact command strip only for meaningful logged values such as calculated sleep, logged habits, and due/today memos.
-- Shows one deterministic `Today Signal` card only when a real signal exists, combining at most two high-priority signals.
-- Shows Today Agenda only when events exist. Calendar editing, deletion, and status controls remain in the Calendar tab.
-- Shows Memos only when overdue/today/upcoming reminders matter. Memo editing remains in the Memos tab.
-- Sorts timed agenda events before untimed events and visually de-emphasizes cancelled events.
-- Shows Sleep only when meaningful calculated sleep/wake data exists.
-- Shows time-aware Daily Habits only when actually logged today: Shower, Creatine, and Skin cards show count/latest time; Brush, Journal, and Water are not shown.
-- Shows Training only when a workout is live or completed today, with today's session name, working sets, volume, and exercise count.
-- Workout set and volume summaries exclude warmup sets.
-- Shows Ops only when a project session is active or project work is greater than 0 today. It does not show `No project work logged today`, `today 0m project work`, active project count, or latest project just because projects exist.
-- Does not show Money/Finance on Home. Finances owns spend, categories, history, and finance analysis.
-- Does not show AI Recent Writes or Recent Actions on Home. Brain/action history owns AI activity.
-- Collapses empty states such as `No events planned today`, `No workout today`, `No memos due`, and `No project work logged today` into quiet absence.
-- Does not use mock agenda, mock health, mock workout status, or mock finance data inside the Home tab.
-- Remains mobile-first with compact cards and no wide fixed layout.
+- Active Training and project sessions expose direct resume links.
+- Today contains up to five non-cancelled calendar events; Open loops contains up to four open dated memos due today or overdue. Future memos stay in Memos. Tomorrow previews up to two events.
+- Recorded today contains persisted sleep, logged Shower/Creatine/Skin habits, and counts of completed workouts/project blocks. Home does not show Coffee/ADC counters, set/volume analytics, expense totals or AI action history.
+- Empty sections collapse. A quiet/loading/unavailable sentence distinguishes no dated commitments from failed or pending data loading; it is not an empty metric card.
+- Calendar/Memo editing stays in its workspace. [QA_HOME.md](docs/QA_HOME.md) and `tests/ui/command.spec.js` describe current behavior.
 
 ## Finances Module Current Status
 
@@ -846,84 +864,25 @@ Current behavior:
 
 ## Workout Module Current Status
 
-`src/tabs/WorkoutTab.jsx` has been refactored into smaller components:
+`src/tabs/WorkoutTab.jsx` renders Live, History and Manage from persisted sessions, templates and canonical exercise identities.
 
-- `ActiveWorkoutHeader`
-- `WorkoutSessionControl`
-- `SetLogger`
-- `TemplatePlanCard`
-- `PreviousPerformanceCard`
-- `TodaySetsLog`
-
-Current behavior:
-
-- Assumes the user is already authenticated by the global app gate.
-- Loads persisted workout sessions with nested sets, `template_id`, and `template_snapshot`.
-- Loads persisted workout templates with ordered template exercises.
-- The Workout tab is state-based:
-  - No active session: Start Workout is the first visible card, with template starts first, Start Empty Workout secondary, and advanced controls collapsed.
-  - Active session: the active command header, optional persisted Exercise Plan, Set Logger, current-session Logged Sets, and secondary session/template controls are shown.
-- No active-session state hides the active workout header, Set Logger, and Logged Sets panels.
-- Uses templates as the primary way to start a workout. The first question in Session Control is what the user is training today.
-- Starting from a template creates a new `workouts` row for today named after the template, with `#2`, `#3`, etc. suffixes when needed to avoid same-day duplicate names.
-- Starting from a template stores `template_id` plus an ordered `template_snapshot` on the workout row.
-- The template snapshot keeps the active exercise plan stable after refresh/backgrounding and after later template edits.
-- Starting from a template does not create any `workout_sets`.
-- The persisted `Exercise Plan` shows ordered template exercises near the logger. Tapping an exercise fills the Exercise input.
-- Starting empty remains available as a secondary action and creates a blank session named `Today Workout` or a user-provided name.
-- Template management is collapsed inside Workout and supports create/edit/delete templates plus add/edit/delete/reorder template exercises.
-- Template management shows clear validation/duplicate-name messages and compacts exercise order after deleting an exercise.
-- Advanced session switching and delete session controls are collapsed away from the primary logging flow.
-- On load, Workout prefers the latest unfinished session, then falls back to today's session.
-- End Workout remains in the active workout command header. Completed sessions
-  cannot be edited in Live; the logger directs the user to History.
-- Historical editing is separate from session completion and must never write
-  `ended_at` or select a past workout as the active Live session.
-- Deleting a session requires confirmation and cascades sets through the database relationship.
-- Sets belong to workout sessions.
-- Sets include exercise, internal set number, warmup flag, weight, reps, optional RPE, performed timestamp, and notes.
-- RPE is nullable. Blank RPE is stored as `null` and displayed as `RPE --`.
-- Set logging does not show a date field; new sets use the current timestamp.
-- Warmup sets are stored in `workout_sets.is_warmup`, display as repeated `W` rows before working sets, and do not increment the next working set number.
-- Warmup set numbers may use an internal 1000 offset, but that offset never appears in the UI.
-- Next working set number is automatic, ignores warmups and malformed high working-set numbers, and is recomputed when toggling out of warmup mode and before save.
-- Editing between warmup and working status resolves to a non-conflicting internal set number.
-- Weight and RPE parsing accepts both comma and dot decimals.
-- Validation runs before insert/update for exercise, weight, reps, and optional RPE.
-- The Exercise field suggests names from the current template snapshot, all templates, and prior logged sets.
-- Current active-session sets are shown immediately under the logger, grouped by exercise.
-- Active session logs keep exercises ordered by first logged, with sets displayed as warmups first, then Set 1, Set 2, Set 3.
-- Active workout UI keeps rest settings/countdown in the session header; it does not show legacy Start/Pause/Reset timer controls, PR flags, volume/count summaries, dates, or Other Sessions.
-- Previous performance is reduced to compact Heaviest and estimated 1RM values.
-- Deeper workout analysis is intentionally deferred to a separate analysis surface later.
-- Workout displays persisted/template data only; the previous mock workout archive was removed from the tab.
-- Login/register controls are intentionally absent from the Workout tab.
+- Live starts a template or a named empty workout. Template ID, ordered exercise snapshot and appearance persist independently of later template edits. Starting does not create sets.
+- A single exercise picker moves between plan/catalog views with Back and retained scroll. Logging uses convention-aware load labels, reps and optional RPE; warmup is a direct control. Successful save resets warmup/RPE/notes; a failed save retains the draft. Only persisted saves schedule rest.
+- Per-exercise drafts, active session and workspace selection survive navigation/reload under account scope. Last time uses canonical identity, not text-only matching. Warmups use W and are excluded from working-set progression/volume.
+- Active controls retain the rest settings/countdown in the header, selected exercise sets and End Workout. Legacy WhatsApp Start/Pause/Reset controls, PR/volume summary clutter and active-session date fields remain absent.
+- The rest coordinator and hook own async lifecycle/concurrency; construction/disposal do not cancel persisted timers. Notification opt-out is independent of automatic countdown. See [rest coordination evidence](docs/qa/workout-rest-coordination.md).
+- Completion acknowledges the saved workout, summary and appearance, provides Back to training and explicit Save as template, and persists dismissal. It does not award the proposed Rankings rewards.
+- History filters All/Week/Template through bounded server pages. Editing a historical session does not reopen it or replace the active Live session. Header drafts and independently saved set edits are separate; dirty inline edits need Save/Cancel. Owner editing/deletion uses shared confirmations.
+- Manage is the template library/editor, with ordered exercises, appearance and validation. It is not a collapsed legacy Session Control panel.
+- Input semantics, numeric limits, internal set numbering and catalog reconciliation remain owned by existing helpers/API/RLS. Consult [QA_WORKOUT.md](docs/QA_WORKOUT.md), [catalog rules](docs/EXERCISE_CATALOG_REVISION.md), and the corresponding browser tests before changes.
 
 ## Mobile/iPhone UI Direction
 
-The app shell is now mobile-first while preserving desktop:
-
-- Desktop/tablet keeps the fixed left sidebar and full header metrics.
-- Mobile hides the sidebar and uses a compact native-app style shell.
-- Mobile has a fixed bottom tab bar with Home, Calendar, Memos, Projects/Ops, Health, Workout, Finances, and Assistant.
-- Mobile content is full width with smaller padding and safe-area bottom padding.
-- Header metrics and sidebar pips are hidden on mobile.
-
-Workout mobile direction:
-
-- Prioritize fast set logging at the gym.
-- The active workout command header stays in normal document flow on mobile and desktop.
-- Workout does not add a second sticky safe-area offset below the shell header, so it does not create blank space or overlap the Exercise Plan, Set Logger, or Logged Sets.
-- The Workout root uses horizontal clipping instead of a sticky-breaking hidden overflow container.
-- End Workout remains visible in the active header without scrolling.
-- Exercise input is full-width.
-- Exercise suggestions are thumb-friendly and fill the logger when tapped.
-- Weight, reps, and RPE use a compact mobile grid.
-- Save Set is full-width and at least 48px tall.
-- Numeric inputs use `inputMode` to prevent poor mobile keyboard behavior.
-- Font sizes in inputs should stay at least 16px to avoid iOS zoom.
-- Secondary session/template controls are collapsed by default on mobile, while no-session Start Workout content opens immediately.
-- Avoid fixed desktop widths or wide grids that cause horizontal overflow.
+- Preserve the current dark, compact workspace hierarchy and five-destination mobile dock. More exposes secondary modules; desktop keeps primary and utility navigation.
+- Fixed app/workout docks are portaled outside containing-block ancestors. Keep shared dock geometry, safe-area padding and keyboard visibility across lazy workspaces.
+- Training sheets use shared visual-viewport-aware dialogs, internal scroll, safe initial button focus and no forced numeric keyboard. Preserve thumb-friendly controls and 16px input text.
+- Preserve account-scoped continuity, canonical exercise identities, existing History/Manage structure and guarded PWA activation. Do not redesign Workout incidentally to a reliability change.
+- Browser coverage is not physical iPhone/PWA acceptance. Test 360, 390, 430, 768, 1024 and 1440px when layout or error content changes; record real-device limits separately.
 
 ## Important UX Principles
 
@@ -1010,12 +969,12 @@ Workout mobile direction:
   - Workout analysis/advice remains read-only unless calendar creation is explicit.
   - Brain shows a viewport-contained chat without Daily Review or suggestion chips.
   - On mobile, the Assistant page itself should not require long scrolling to reach the composer; messages scroll inside the chat widget.
-  - Old thread selection is hidden from the default Brain UI for now, while old thread data persists in the backend.
+  - App conversations can be selected in the Companion context sheet; persisted WhatsApp continuity must remain channel-scoped.
 - Test WhatsApp Bridge v1 after deploying `LIFEOS_WHATSAPP_BRIDGE_SECRET` and `LIFEOS_WHATSAPP_ALLOWED_SENDERS`:
   - Valid bridge requests to `/api/integrations/whatsapp/inbound` return a concise `reply`.
   - Wrong secret returns `401`; unallowed sender returns `403`.
   - WhatsApp messages reuse one backend Brain thread per sender.
-  - Brain app UI still opens fresh New Chat by default and does not show old WhatsApp thread selection.
+  - Brain initially has no selected conversation; the context sheet allows explicit app conversation selection without automatically opening WhatsApp continuity.
   - Pending actions and Working Context work through WhatsApp, including nap-to-calendar follow-ups.
 - Test Proactive WhatsApp v1A after running the latest schema:
   - Create a timed memo, call outbox evaluate/poll/ack, and confirm the message is sent once.
@@ -1053,16 +1012,11 @@ Workout mobile direction:
 
 ## Next Recommended Steps
 
-1. Harden the workout vertical slice before expanding other tabs.
-2. Add focused tests or manual QA checklist for workout session/set CRUD with Supabase RLS.
-3. Test Health tab CRUD against a real Supabase project after applying the latest `health_logs` migration.
-4. QA the Finances tab against a real Supabase project.
-5. QA the Home dashboard against a real Supabase project after creating records in Health, Memos, Workout, and Projects/Ops.
-6. QA the Calendar tab against a real Supabase project after applying the `calendar_events` migration.
-7. Deploy the app and complete live iPhone QA against the real Supabase project.
-8. Live-test consolidated Action API calls from iPhone Shortcuts before relying on external automation.
-9. Live-test the Gemini in-app assistant with `docs/QA_AI_ASSISTANT.md`.
-10. Convert Chat Messages only after assistant transcript persistence is clearly defined and live QA has passed.
+1. Read `git status` before starting: existing local agent/spec/planning documents are not all committed. Preserve them and keep feature commits scoped.
+2. Use the current issue tracker and [documentation audit](docs/audits/DOCUMENTATION_STATUS.md), rather than interpreting old release snapshots as pending work. Rest-coordination tickets #6-#8 are complete.
+3. Keep physical iPhone notification display, installed-PWA lifecycle and real email delivery acceptance explicit. Recheck Oracle/hosted database state when an infrastructure task requires it.
+4. Repair the stale `training-prefill-rest` test locators in a scoped test-maintenance task; their recorded failures do not invalidate the passing 21-case rest/continuity batch.
+5. Completed-workout template saving and Brain planner deepening were later architecture candidates, not prerequisites or completed work of this refactor. Rankings remains design-only until separately authorized.
 
 ## Rules For Future Work
 

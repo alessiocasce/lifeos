@@ -1,0 +1,90 @@
+/* Reviewable palette trial. Keep layout, motion and semantic colours intact. */
+:root {
+  --ui-canvas: #0e1013;
+  --ui-surface: #191c21;
+  --ui-raised: #24282f;
+  --ui-line: #353b44;
+  --ui-ink: #f1f3f6;
+  --ui-muted: #abb3bf;
+  --ui-blue: #accbfa;
+  --ui-blue-soft: #accbfa16;
+  --ui-selected: #333e50;
+}
+
+.lifeos-shell[data-workspace]:is([data-workspace='community'], [data-workspace='workout'], [data-workspace='assistant'], [data-workspace='settings']) {
+  --canvas: var(--ui-canvas);
+  --surface: var(--ui-surface);
+  --raised: var(--ui-raised);
+  --line: var(--ui-line);
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --accent: var(--ui-blue);
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+}
+.lifeos-shell[data-workspace]:is([data-workspace='community'], [data-workspace='workout'], [data-workspace='assistant'], [data-workspace='settings']) .workspace-header {
+  background: color-mix(in srgb, var(--ui-canvas) 95%, transparent);
+  border-bottom-color: var(--ui-line);
+}
+.lifeos-shell[data-workspace] .header-date { color: var(--ui-muted); }
+
+/* Community */
+.lifeos-shell .community { --c-accent: var(--ui-blue); --c-accent-soft: var(--ui-blue-soft); }
+.lifeos-shell .community-segments { background: var(--ui-raised); }
+.lifeos-shell .community-segment-thumb { background: var(--ui-selected); }
+.lifeos-shell .community-search { background: var(--ui-raised); }
+.lifeos-shell .community-pill-button, .lifeos-shell .community-load-more { color: var(--ui-blue) !important; }
+
+/* Training: neutral containers; authored template colours stay on their icons. */
+.lifeos-shell .training-views { background: var(--ui-raised); border-color: var(--ui-line); }
+.lifeos-shell .training-views > button { color: var(--ui-muted); }
+.lifeos-shell .training-views > button[aria-pressed='true'] { background: var(--ui-selected); color: var(--ui-ink); border-color: var(--ui-line); }
+.lifeos-shell .training-intro, .lifeos-shell .training-empty-card, .lifeos-shell .training-template-card { background: var(--ui-surface); border-color: var(--ui-line); box-shadow: none; }
+.lifeos-shell .training-intro-icon { background: var(--ui-blue-soft); border-color: #accbfa33; color: var(--ui-blue); box-shadow: none; }
+.lifeos-shell .training-intro h2, .lifeos-shell .training-templates-heading h2, .lifeos-shell .training-template-name { color: var(--ui-ink); }
+.lifeos-shell .training-intro p, .lifeos-shell .training-templates-heading p, .lifeos-shell .training-template-detail, .lifeos-shell .training-template-chevron { color: var(--ui-muted); }
+.lifeos-shell .training-empty-card::before { border-color: var(--ui-line); }
+.lifeos-shell .training-empty-icon { background: var(--ui-blue); border-color: var(--ui-raised); color: var(--ui-canvas); box-shadow: none; }
+
+/* Settings and portaled profile/language controls */
+.lifeos-shell .settings-page { --settings-surface: var(--ui-surface); --settings-line: var(--ui-line); --settings-muted: var(--ui-muted); --settings-blue: var(--ui-blue); color: var(--ui-ink); }
+.lifeos-shell .settings-row-icon { background: var(--ui-blue-soft); color: var(--ui-blue); }
+.lifeos-shell .settings-primary { background: var(--ui-blue); color: #142033; }
+.lifeos-shell .settings-secondary, .lifeos-shell .settings-edit-username { color: var(--ui-blue); }
+.lifeos-shell .settings-profile-identity input, .lifeos-shell .settings-language-trigger, .settings-language-menu.settings-language-menu { background: var(--ui-raised); border-color: var(--ui-line); color: var(--ui-ink); }
+.settings-language-menu.settings-language-menu button[data-active='true'] { background: var(--ui-selected); }
+.settings-dialog:not(.settings-photo-viewer) { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-ink); }
+.settings-dialog .settings-photo-tools button { background: var(--ui-raised); border-color: var(--ui-line); }
+.settings-dialog .settings-photo-edit { color: var(--ui-blue); }
+
+/* Companion */
+.lifeos-shell .companion-workspace, .companion-context-dialog.companion-context-dialog { --companion-blue: var(--ui-blue); color: var(--ui-ink); }
+.lifeos-shell .companion-mark, .lifeos-shell .companion-welcome-mark, .lifeos-shell .companion-reply-mark { background: var(--ui-blue-soft); border-color: #accbfa26; color: var(--ui-blue); box-shadow: none; }
+.lifeos-shell .companion-title, .lifeos-shell .companion-welcome h3, .lifeos-shell .companion-input { color: var(--ui-ink); }
+.lifeos-shell .companion-thread-title, .lifeos-shell .companion-welcome p, .lifeos-shell .companion-message-time, .lifeos-shell .companion-message-action { color: var(--ui-muted); }
+.lifeos-shell .companion-starters button, .lifeos-shell .companion-toolbar .icon-button, .lifeos-shell .companion-thinking { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-muted); }
+.lifeos-shell .companion-message.is-user { background: var(--ui-selected); border-color: #accbfa26; }
+.lifeos-shell .companion-composer { background: var(--ui-raised); border-color: var(--ui-line); }
+.lifeos-shell .companion-workspace .companion-send { background: var(--ui-blue); color: #142033; }
+.lifeos-shell .companion-workspace .companion-send:disabled { background: var(--ui-line); color: var(--ui-muted); }
+.lifeos-shell .companion-latest, .companion-context-dialog.companion-context-dialog, .companion-context-dialog .companion-context-header { background: var(--ui-surface); border-color: var(--ui-line); }
+.companion-context-dialog .companion-context-body > :is(section,div) { background: var(--ui-raised); border-color: var(--ui-line); }
+.companion-context-dialog.companion-context-dialog button[aria-current='true'] { background: var(--ui-selected); color: var(--ui-blue); }
+
+/* Body-level navigation shares the same materials. */
+.shell-docks .mobile-dock.mobile-dock { background: color-mix(in srgb, var(--ui-surface) 94%, transparent); border-color: var(--ui-line); }
+.shell-docks .mobile-dock-selection { background: var(--ui-selected); border-color: #accbfa26; }
+.shell-docks .mobile-destination.mobile-destination { color: var(--ui-muted); }
+.shell-docks .mobile-destination[aria-current] { color: var(--ui-ink); }
+.shell-docks .mobile-destination[aria-current] .mobile-destination-icon { color: var(--ui-blue); }
+.shell-docks .training-dock.training-dock { background: var(--ui-raised); border-color: var(--ui-line); }
+.utility-sheet.utility-sheet[open] { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-ink); }
+.utility-sheet.utility-sheet .utility-link[aria-current] { color: var(--ui-blue); background: var(--ui-blue-soft); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .shell-docks .mobile-dock.mobile-dock,
+  .lifeos-shell[data-workspace] .workspace-header { background: var(--ui-canvas); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --ui-line: #8793a3; --ui-muted: #d0d6df; }
+}

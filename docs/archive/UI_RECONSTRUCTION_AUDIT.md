@@ -1,5 +1,7 @@
 # Reconstruction requirement audit
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 Audit baseline: `4358a76`; date: 2026-10-02. This maps the original 45 sections,
 not a smaller replacement brief. Source code and executed tests outrank docs.
 It separates implementation evidence from physical/deployment evidence.

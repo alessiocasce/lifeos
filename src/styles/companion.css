@@ -1,0 +1,135 @@
+/* Companion: calm conversation, with tools one level behind the conversation. */
+.companion-workspace,
+.companion-context-dialog {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-optical-sizing: auto;
+  --companion-blue: #8cbdff;
+}
+
+.companion-workspace { width: 100%; max-width: 960px; margin-inline: auto; }
+.companion-conversation { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.companion-toolbar { display: flex; align-items: center; gap: .75rem; padding: .25rem .25rem 1.25rem; }
+.companion-mark { display: grid; place-items: center; flex-shrink: 0; width: 2.75rem; height: 2.75rem; border-radius: 15px; background: #202a39; color: #b1cfff; border: 1px solid #ffffff0c; }
+.companion-title { color: #f5f6f8; font-size: 1.25rem; font-weight: 650; line-height: 1.25; letter-spacing: -.025em; }
+.companion-thread-title { margin-top: .25rem; color: #a6aebc; font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.companion-toolbar > div:last-child { flex-shrink: 0; }
+.companion-toolbar .icon-button { border: 0; border-radius: 50%; background: #ffffff08; width: 44px; height: 44px; color: #b9c6da; }
+.companion-transcript { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
+.companion-messages { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 1.5rem; padding: 1rem .25rem 1.5rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #39404c transparent; scroll-padding: 1rem; }
+.companion-messages > * { flex-shrink: 0; }
+.companion-messages > [aria-hidden='true'] { height: 1px; }
+.companion-messages.is-empty .companion-welcome { flex: 1; }
+.companion-welcome { display: grid; place-items: center; padding: 1.5rem .5rem; text-align: center; }
+.companion-welcome > div { width: 100%; max-width: 32rem; }
+.companion-welcome-mark { display: grid; place-items: center; margin: 0 auto 1.25rem; width: 4.5rem; height: 4.5rem; border-radius: 24px; color: #b0ceff; background: linear-gradient(145deg, #2c384c, #19212d); border: 1px solid #ffffff14; box-shadow: inset 0 1px #ffffff0a, 0 8px 32px #0002; }
+.companion-welcome h3 { font-size: clamp(1.65rem, 4vw, 2.25rem); font-weight: 650; line-height: 1.15; letter-spacing: -.035em; color: #f3f5f9; text-wrap: balance; }
+.companion-welcome p { margin-top: .75rem; font-size: .9375rem; line-height: 1.6; color: #a5adba; }
+.companion-starters { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem; margin-top: 1.75rem; }
+.companion-starters button { display: inline-flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 44px; padding: .625rem .875rem; border: 1px solid #ffffff12; border-radius: 14px; background: #1b2028; color: #d2d9e4; font-size: .8125rem; text-align: left; }
+.companion-starters svg { flex-shrink: 0; transform: rotate(45deg); color: #9caec8; }
+.companion-message { min-width: 0; max-width: 100%; }
+.companion-message.is-user { align-self: flex-end; width: fit-content; max-width: 88%; padding: .75rem 1rem .625rem; background: #263e5c; border: 1px solid #91bbf21c; border-radius: 22px 22px 7px 22px; }
+.companion-message.is-assistant { align-self: stretch; padding: .25rem .5rem .5rem; }
+.companion-message-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; min-height: 28px; margin-bottom: .75rem; }
+.companion-reply-mark { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid #ffffff0a; border-radius: 9px; background: #212c3d; color: #abcaff; }
+.companion-message-author { color: #c7d2e2; font-size: .8125rem; font-weight: 600; letter-spacing: -.01em; }
+.companion-skill { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: .125rem .5rem; border-radius: 7px; background: #ffffff06; color: #a8b7ca; font-size: .6875rem; }
+.companion-message-time { color: #a3afbf; font-size: .6875rem; font-variant-numeric: tabular-nums; }
+.companion-message-body, .companion-message-body > div { font-size: 1rem; line-height: 1.7; overflow-wrap: anywhere; }
+.companion-message-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .25rem .75rem; margin-top: .625rem; }
+.companion-message-footer time { margin-left: auto; }
+.companion-message-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; margin-left: -.5rem; }
+.companion-message-action { display: inline-flex; align-items: center; justify-content: center; gap: .375rem; min-height: 44px; padding: .5rem; border-radius: 12px; color: #a7b4c7; font-size: .75rem; }
+.companion-message-action svg { flex-shrink: 0; }
+.companion-copy-status:not([role='alert']) { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.companion-copy-status[role='alert'] { display: block; margin-top: .25rem; color: #ffb5b5; font-size: .8125rem; }
+.companion-message.is-user .companion-message-footer { margin-top: .375rem; }
+.companion-message.is-user .companion-message-time { color: #bacbe0; font-size: .625rem; }
+.companion-message pre { max-width: 100%; }
+.companion-message .data-text { font-family: inherit; letter-spacing: .015em; }
+.companion-message-body a { color: #a6caff; }
+.companion-latest { position: absolute; z-index: 2; left: 50%; bottom: .625rem; display: inline-flex; align-items: center; justify-content: center; gap: .375rem; min-height: 44px; width: max-content; max-width: calc(100% - 1rem); padding: .625rem 1rem; border: 1px solid #8094af55; border-radius: 24px; background: #293445ed; color: #e0ebfc; box-shadow: 0 4px 20px #0006; backdrop-filter: blur(16px); translate: -50% 0; font-size: .8125rem; font-weight: 500; }
+.companion-latest svg { flex-shrink: 0; }
+.companion-composer { position: relative; flex-shrink: 0; margin: .5rem 0 0; padding: .5rem; border: 1px solid #ffffff1c; border-radius: 26px; background: #222831e8; backdrop-filter: blur(20px) saturate(130%); box-shadow: inset 0 1px #ffffff05, 0 8px 30px #0002; }
+.companion-composer:focus-within { border-color: #91b7ec80; box-shadow: 0 0 0 3px #9dc6ff09, 0 8px 30px #0002; }
+.companion-input { display: block; flex: 1; min-width: 0; min-height: calc(1.5em + 1.5rem); max-height: 144px; padding: .75rem .75rem; resize: none; border: 0; border-radius: 18px; background: transparent; color: #f3f5f8; font-size: 1rem; line-height: 1.5; outline: none; }
+.companion-input::placeholder { color: #a3adbb; }
+.companion-workspace .companion-input:focus-visible { outline: none; }
+.companion-workspace .companion-send { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border: 0; border-radius: 50%; background: #a6caff; color: #12233e; }
+.companion-workspace .companion-send:disabled { background: #39414d; color: #a7b1be; border: 0; }
+.companion-workspace .companion-thinking { align-self: flex-start; min-height: 44px; border: 0; border-radius: 16px; background: #1d242e; padding: .75rem 1rem; color: #bdc9da; font-size: .8125rem; }
+.companion-workspace [data-testid='brain-error'] { border-radius: 18px; }
+.companion-workspace button,
+.companion-context-dialog button { transition: background-color 120ms, color 120ms, transform 120ms; }
+.companion-workspace button:not(:disabled):active,
+.companion-context-dialog button:not(:disabled):active { transform: scale(.96); transition-duration: 0ms; }
+.companion-workspace button:focus-visible,
+.companion-context-dialog :is(button,input,textarea,summary):focus-visible { outline: 2px solid #a6caff; outline-offset: 3px; }
+
+.companion-context-dialog { inset: 12px 12px 12px auto; width: min(540px, calc(100% - 24px)); height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); border: 1px solid #ffffff20; border-radius: 28px; background: #171c24; box-shadow: 0 20px 80px #0008; padding: 0; transform-origin: top right; scrollbar-width: thin; }
+.companion-context-dialog::backdrop { background: #0009; backdrop-filter: blur(6px); }
+.companion-context-header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.125rem 1.25rem; background: #171c24f5; backdrop-filter: blur(20px); border-bottom: 1px solid #ffffff0d; }
+.companion-context-header h2 { font-size: 1.125rem; line-height: 1.4; letter-spacing: -.02em; }
+.companion-context-header .icon-button { flex-shrink: 0; border: 0; border-radius: 50%; background: #ffffff0b; }
+.companion-context-body { display: grid; min-width: 0; gap: 1rem; padding: 1rem; }
+.companion-context-body > :is(section,div) { min-width: 0; padding: 1rem; border: 1px solid #ffffff0a; border-radius: 20px; background: #222832; }
+.companion-context-body > .terminal-card { padding: .25rem; }
+.companion-context-body > section > h3 { color: #b4c1d4; font-size: .8125rem; }
+.companion-context-dialog :is(p,dt,dd,h2,h3,button,label) { overflow-wrap: anywhere; }
+.companion-context-dialog .data-text { font-family: inherit; }
+.companion-context-dialog .text-xs { font-size: .8125rem; line-height: 1.6; }
+.companion-context-dialog .text-zinc-500 { color: #adb7c5; }
+.companion-context-dialog .text-zinc-600 { color: #a0adbf; }
+.companion-context-dialog button[aria-current='true'] { padding-inline: .75rem; border: 0; border-radius: 12px; background: #34445c; color: #d8e8ff; }
+.companion-context-dialog :is(input:not([type='checkbox']),textarea,select) { max-width: 100%; border-radius: 12px; }
+.companion-context-dialog input[type='checkbox'] { accent-color: #9bc3ff; width: 20px; height: 20px; flex-shrink: 0; }
+.companion-context-dialog .icon-button { min-height: 44px; min-width: 44px; border-radius: 12px; }
+
+@media (hover: hover) {
+  .companion-workspace button:not(:disabled):hover { filter: brightness(1.12); }
+  .companion-context-dialog button:not(:disabled):hover { background-color: #ffffff0b; }
+  .companion-message-action:hover { background: #ffffff0a; color: #e0eaff; }
+}
+@media (min-width: 768px) {
+  .companion-toolbar { padding-bottom: 1.5rem; }
+  .companion-messages { padding-inline: 1.5rem; }
+  .companion-composer { margin-inline: 1.5rem; }
+  .companion-message.is-user { max-width: 76%; }
+  .companion-message.is-assistant { max-width: 46rem; }
+}
+@media (max-width: 479px) {
+  .companion-toolbar { gap: .625rem; padding-bottom: .75rem; }
+  .companion-mark { display: none; }
+  .companion-title { font-size: 1.125rem; }
+  .companion-thread-title { font-size: .75rem; }
+  .companion-toolbar > div:last-child { gap: .25rem; }
+  .companion-messages { gap: 1rem; padding-top: .5rem; }
+  .companion-welcome { padding: 1rem 0; }
+  .companion-welcome-mark { width: 3.5rem; height: 3.5rem; border-radius: 19px; margin-bottom: 1rem; }
+  .companion-starters { margin-top: 1.25rem; }
+  .companion-starters button { flex: 1 1 100%; padding-block: .5rem; }
+  .companion-context-dialog { inset: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); width: calc(100% - 16px); height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom))); max-height: calc(100dvh - 16px); border-radius: 24px; }
+  .companion-context-body { padding: .75rem; gap: .75rem; }
+  .companion-context-body > :is(section,div) { padding: .875rem; }
+}
+@media (max-width: 767px) {
+  /* Outrank the legacy fixed-height rules, including after cold lazy imports. */
+  .lifeos-shell .companion-workspace { height: calc(100dvh - 104px - var(--lifeos-mobile-dock-height, 72px) - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .lifeos-shell .has-training-dock .companion-workspace { height: calc(100dvh - 116px - var(--lifeos-mobile-dock-height, 72px) - var(--lifeos-resume-dock-height, 64px) - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .companion-workspace *, .companion-context-dialog * { scroll-behavior: auto; transition: none; }
+  .companion-workspace button:not(:disabled):active, .companion-context-dialog button:not(:disabled):active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .companion-latest { background: #293445; backdrop-filter: none; }
+  .companion-composer { background: #222831; backdrop-filter: none; }
+  .companion-context-header { background: #171c24; backdrop-filter: none; }
+  .companion-context-dialog::backdrop { background: #080b10; backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  .companion-latest { background: #1d293b; border-color: #a6caff; backdrop-filter: none; }
+  .companion-composer, .companion-context-dialog { border-color: #8e9cb1; background: #171c24; backdrop-filter: none; }
+  .companion-starters button, .companion-message.is-user { border-color: #8298b4; }
+  .companion-context-dialog::backdrop { background: #080b10; backdrop-filter: none; }
+}

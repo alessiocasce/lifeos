@@ -9,7 +9,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto('/workout');
     await selectExercise(page,'Barbell Curl');
-    await page.getByRole('textbox', { name: /Weight/ }).fill('25');
+    await page.getByRole('textbox', { name: /Total load/ }).fill('25');
     await page.getByRole('textbox', { name: 'Reps', exact: true }).fill('8');
     await page.getByRole('textbox', { name: 'Reps', exact: true }).blur();
     await page.screenshot({ path: testInfo.outputPath('training.png'), fullPage: true });

@@ -1,5 +1,7 @@
 # Companion vNext First Slice Progress
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 ## Overall Status
 
 Implementation complete and locally validated. Milestones 1-4 (beliefs, semantic operations, compound runtime, MCP/context exposure, canonical database journey, and handoff docs) satisfy the first-slice execution brief. Production activation still requires applying the additive Supabase migration before deploying Vercel, followed by the documented physical Oracle/WhatsApp QA.

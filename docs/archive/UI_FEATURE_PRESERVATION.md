@@ -1,5 +1,7 @@
 # Reconstruction preservation evidence
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 Audit date: 2026-10-02. Compare against pre-reconstruction `4358a76`.
 This is a workflow evidence map; the full scope is reconciled separately in
 UI_RECONSTRUCTION_AUDIT.md and UI_RECONSTRUCTION_REPORT.md.

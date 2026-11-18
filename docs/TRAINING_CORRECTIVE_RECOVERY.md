@@ -1,5 +1,7 @@
 # Training corrective recovery audit - 3 November 2026
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [the documentation index](README.md). Retain historical evidence; revalidate before operational use.
+
 ## Recovery baseline
 
 - Local main and fetched origin/main: dfc122c, including e960299.

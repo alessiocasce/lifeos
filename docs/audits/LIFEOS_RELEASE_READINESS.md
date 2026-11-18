@@ -1,5 +1,7 @@
 # LifeOS Release Readiness
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and [the documentation index](../README.md). Retain historical evidence; revalidate before operational use.
+
 ## Released With Background Delivery Gated (2026-11-09)
 
 PR2 merged; production87acd1ead077ce73ad4e35af96030bc826787242 is READY, served

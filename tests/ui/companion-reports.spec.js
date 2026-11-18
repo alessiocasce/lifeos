@@ -21,6 +21,7 @@ async function openAnswer(page) {
 async function openReports(page) {
   await page.getByRole('button', { name: 'Open Companion context' }).click();
   const context = page.getByRole('dialog', { name: 'Companion context' });
+  await expect(context.getByRole('checkbox', { name: /Allow project monitoring/ })).toBeVisible();
   await context.getByRole('button', { name: /Brain Data/ }).click();
   const reports = context.getByRole('button', { name: /Saved Reports/ });
   if (await reports.getAttribute('aria-expanded') !== 'true') await reports.click();

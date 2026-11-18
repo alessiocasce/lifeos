@@ -1,89 +1,29 @@
-# Home Tab Manual QA
+# Command / Home Manual QA
 
-Run this after signing in through the global auth gate. Home itself has no schema change, but the reliability release requires the [targeted migration and deployment sequence](RELIABILITY_RELEASE.md).
+Reviewed against `src/tabs/HomeTab.jsx` on 2026-11-17. Use [QA_COMMAND_UI.md](QA_COMMAND_UI.md) and `tests/ui/command.spec.js` for the current UI. Verify required existing database objects; this checklist requires no schema change.
 
-## Reliability Checks
+## Agenda and open loops
 
-The agenda preview should show exactly the first four eligible entries, matching its displayed limit. Keep Home open across Europe/Rome midnight and return from a background tab; today's signals should refresh without reload. A completed/cancelled pending action must not reappear from an older snapshot in MCP Open Loops. Project totals should match completed-session edits/deletes after reload; see [project QA](QA_PROJECTS.md).
+1. Sign in and create/inspect eligible persisted data in an authorized test scope.
+2. Today shows at most five non-cancelled events, sorted by start time with untimed events last. More than five exposes View all; cancelled events are excluded rather than dimmed.
+3. Open loops shows at most four open dated memos due today or overdue, with View all when needed. Future/undated memos remain in Memos.
+4. Tomorrow shows at most two non-cancelled events. Links open the corresponding workspace; Home does not edit records.
+5. Cross Europe/Rome midnight or resume a background tab and verify local-day/range refresh. A calendar/memo failure shows an availability warning independently of an empty day; previously loaded rows stay visible.
 
-## Zero-Filtered Home
+## Active and recorded work
 
-1. Sign in with a user that has no relevant records for today.
-2. Open Home.
-3. Confirm Home does not show widgets/cards that say `No ... logged`, `No project work logged today`, `No workout today`, `No events planned today`, or similar absence nags.
-4. Confirm Home does not show zero-value cards such as `0`, `0m`, `0 sets`, `0 volume`, or `today 0m project work`.
-5. Confirm Home does not show an Ops Execution card merely because active projects exist.
-6. Confirm Home does not show active project count or latest project when no project work is active/logged today.
-7. Confirm Home does not show Money, Finance, Spend, expense totals, or category/vendor summaries.
-8. Confirm Home does not show AI Recent Writes, Recent AI Activity, or Recent Actions.
-9. Confirm no fake dashboard values are shown as real data.
+1. A live workout exposes a direct resume link to that session. An active project session shows project name/target output and opens Projects.
+2. Recorded today shows valid persisted sleep (including an actual zero), logged Shower/Creatine/Skin count/latest time, and counts of completed workouts/project blocks.
+3. Do not expect Coffee/ADC, working-set count, volume, moves, total project minutes or a Today Signal card here; these are not current Command components.
+4. Completing or deleting records and refreshing must update the corresponding signal. Other users' records/drafts must remain absent.
 
-## Logged Daily Signals
+## Quiet state and separation
 
-1. Add only a valid sleep calculation for today.
-2. Return to Home.
-3. Confirm only the meaningful Sleep signal appears; unrelated zero/empty sections stay hidden.
-4. Add one Shower, Creatine, or Skin habit with a timestamp.
-5. Confirm Daily Signals shows only the logged habit with count/time.
-6. Confirm unlogged habits are not shown.
-7. Add Coffee or ADC above zero.
-8. Confirm the value appears only when above zero.
-9. Leave optional health fields blank and confirm blank values do not render as `--` cards on Home.
+1. With no active work, today's events or due memos, show one quiet/loading/unavailable sentence as appropriate, without zero-metric cards or missing-health nags.
+2. Empty Today/Open loops/Tomorrow/Recorded sections collapse. Unlogged health/habits do not create empty cards.
+3. Expenses stay in Finances; Recent Actions stays in the Companion context sheet. Home has no finance totals, AI-write feed or inferred dashboard insights.
+4. A project merely existing must not create an active-work card. A completed block can appear in Recorded today without an invented duration/volume total.
 
-## Memos
+## Validation and limits
 
-1. Create an overdue memo.
-2. Confirm Home shows the Memos lane and/or Today Signal for the overdue memo.
-3. Create a memo due today and confirm it appears.
-4. Create a future/upcoming open memo and confirm Home can show the next memo.
-5. Complete, dismiss, or delete all relevant memos.
-6. Confirm the Memos lane disappears instead of showing `No memos due`.
-
-## Agenda
-
-1. Create a Calendar event for today.
-2. Confirm Agenda appears.
-3. Cancel or delete all today's visible events.
-4. Confirm Agenda disappears instead of showing an empty agenda card.
-5. Confirm cancelled events are not counted as visible agenda signals.
-
-## Training
-
-1. Start a workout for today.
-2. Confirm Training appears while the workout is live.
-3. Add at least one non-warmup set and confirm working sets, volume, and moves appear when above zero.
-4. Confirm warmup sets do not inflate working set count or volume.
-5. End the workout and confirm Training remains visible as logged today.
-6. Use a day with no workout and confirm Training disappears instead of showing `No workout today`.
-
-## Ops
-
-1. Create an active project but do not start/log any project work today.
-2. Open Home and confirm Ops does not appear.
-3. Confirm there is no `No project work logged today`, no `today 0m project work`, no active project count, and no latest-project card.
-4. Start a project session and confirm Ops appears.
-5. End a project session with duration above 0 and confirm Ops appears with today's project work.
-6. Refresh and confirm persisted project work reloads.
-
-## Finance And AI Activity Separation
-
-1. Create an expense dated today.
-2. Return to Home.
-3. Confirm no Money/Finance/Spend section appears on Home.
-4. Open Finances and confirm the expense appears there.
-5. Trigger a successful Brain/Action API write.
-6. Return to Home.
-7. Confirm no AI Recent Writes/Recent Actions section appears on Home.
-8. Open Brain and confirm action history remains available there when appropriate.
-
-## Persistence And Mobile
-
-1. Refresh the page.
-2. Return to Home after auth restoration.
-3. Confirm only meaningful logged signals reload from Supabase.
-4. Sign out and sign in again.
-5. Confirm only the current user's persisted signals appear.
-6. Open Home on iPhone Safari/PWA.
-7. Confirm cards are compact and readable.
-8. Confirm no horizontal scrolling.
-9. Confirm bottom navigation does not cover the last Home card.
+Run `npm.cmd run test:ui -- tests/ui/command.spec.js` for isolated fixture checks. Check mobile/desktop overflow and the active Training dock, including 360, 390, 430, 768, 1024 and 1440px where layout changes. These checks do not prove hosted RLS, a physical iPhone lifecycle or production data correctness. Related backend open-loop and project reliability checks live in [QA_PROJECTS.md](QA_PROJECTS.md), [MCP.md](MCP.md) and [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md).

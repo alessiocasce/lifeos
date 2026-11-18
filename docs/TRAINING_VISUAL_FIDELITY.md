@@ -1,5 +1,7 @@
 # Training Live Visual Fidelity
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [the documentation index](README.md). Retain historical evidence; revalidate before operational use.
+
 Reference: owner-supplied `Schermata Training_ Allenamento Live (1).png`.
 This overrides the earlier prose-only two-column design interpretation.
 

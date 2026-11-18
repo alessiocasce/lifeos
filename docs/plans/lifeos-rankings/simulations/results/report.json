@@ -1,0 +1,800 @@
+{
+  "version": "rankings-design-v1",
+  "anchor": "2026-11-03",
+  "seed": "patterns-v1-no-randomness",
+  "days": 365,
+  "synthetic": true,
+  "profiles": [
+    {
+      "id": "beginner_1",
+      "name": "Beginner / 1 day",
+      "frequency": 1,
+      "events": 10,
+      "xp": 4160,
+      "level": 15,
+      "lastWeekXP": 80,
+      "rp": 317,
+      "rawTier": "Silver",
+      "displayTier": "Silver",
+      "components": [
+        168,
+        149,
+        0
+      ],
+      "promotions": 16,
+      "demotions": 15,
+      "meanRP": 357,
+      "A": 341,
+      "C": 349
+    },
+    {
+      "id": "beginner_2",
+      "name": "Beginner / 2 days",
+      "frequency": 2,
+      "events": 22,
+      "xp": 8830,
+      "level": 23,
+      "lastWeekXP": 170,
+      "rp": 730,
+      "rawTier": "Platinum",
+      "displayTier": "Platinum",
+      "components": [
+        307,
+        273,
+        150
+      ],
+      "promotions": 12,
+      "demotions": 10,
+      "meanRP": 680,
+      "A": 683,
+      "C": 606
+    },
+    {
+      "id": "beginner_3",
+      "name": "Beginner / 3 days",
+      "frequency": 3,
+      "events": 26,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 1000,
+      "rawTier": "Apex",
+      "displayTier": "Apex",
+      "components": [
+        450,
+        400,
+        150
+      ],
+      "promotions": 15,
+      "demotions": 12,
+      "meanRP": 961,
+      "A": 995,
+      "C": 833
+    },
+    {
+      "id": "experienced_3",
+      "name": "Experienced / 3 days",
+      "frequency": 3,
+      "events": 10,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    },
+    {
+      "id": "experienced_5",
+      "name": "Experienced / 5 days",
+      "frequency": 5,
+      "events": 18,
+      "xp": 18890,
+      "level": 35,
+      "lastWeekXP": 360,
+      "rp": 1000,
+      "rawTier": "Apex",
+      "displayTier": "Apex",
+      "components": [
+        450,
+        400,
+        150
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 912,
+      "A": 1000,
+      "C": 765
+    },
+    {
+      "id": "inconsistent",
+      "name": "High volume / inconsistent",
+      "frequency": 4,
+      "events": 0,
+      "xp": 9310,
+      "level": 24,
+      "lastWeekXP": 80,
+      "rp": 445,
+      "rawTier": "Silver",
+      "displayTier": "Silver",
+      "components": [
+        236,
+        210,
+        0
+      ],
+      "promotions": 37,
+      "demotions": 12,
+      "meanRP": 580,
+      "A": 683,
+      "C": 512
+    },
+    {
+      "id": "plateau",
+      "name": "Consistent plateau",
+      "frequency": 3,
+      "events": 0,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 2,
+      "demotions": 0,
+      "meanRP": 846,
+      "A": 995,
+      "C": 747
+    },
+    {
+      "id": "rapid",
+      "name": "Rapid beginner gains",
+      "frequency": 3,
+      "events": 26,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 1000,
+      "rawTier": "Apex",
+      "displayTier": "Apex",
+      "components": [
+        450,
+        400,
+        150
+      ],
+      "promotions": 15,
+      "demotions": 12,
+      "meanRP": 961,
+      "A": 995,
+      "C": 802
+    },
+    {
+      "id": "advanced",
+      "name": "Advanced slow progress",
+      "frequency": 3,
+      "events": 10,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    },
+    {
+      "id": "deload",
+      "name": "Deload week",
+      "frequency": 3,
+      "events": 10,
+      "xp": 13960,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    },
+    {
+      "id": "recovery",
+      "name": "Two-week recovery",
+      "frequency": 3,
+      "events": 10,
+      "xp": 13460,
+      "level": 29,
+      "lastWeekXP": 270,
+      "rp": 968,
+      "rawTier": "Apex",
+      "displayTier": "Apex",
+      "components": [
+        450,
+        400,
+        118
+      ],
+      "promotions": 11,
+      "demotions": 8,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    },
+    {
+      "id": "inactive",
+      "name": "One month inactive",
+      "frequency": 3,
+      "events": 10,
+      "xp": 12860,
+      "level": 28,
+      "lastWeekXP": 0,
+      "rp": 0,
+      "rawTier": "Unranked",
+      "displayTier": "Unranked",
+      "components": [
+        0,
+        0,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 8,
+      "meanRP": 348,
+      "A": 300,
+      "C": 249
+    },
+    {
+      "id": "returning",
+      "name": "Return after 3 months",
+      "frequency": 3,
+      "events": 6,
+      "xp": 10580,
+      "level": 25,
+      "lastWeekXP": 270,
+      "rp": 567,
+      "rawTier": "Gold",
+      "displayTier": "Unranked",
+      "components": [
+        300,
+        267,
+        0
+      ],
+      "promotions": 5,
+      "demotions": 7,
+      "meanRP": 159,
+      "A": 186,
+      "C": 140
+    },
+    {
+      "id": "bodyweight",
+      "name": "Bodyweight rep progress",
+      "frequency": 3,
+      "events": 16,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 10,
+      "demotions": 8,
+      "meanRP": 846,
+      "A": 995,
+      "C": 747
+    },
+    {
+      "id": "irregular",
+      "name": "Irregular schedule",
+      "frequency": 3,
+      "events": 10,
+      "xp": 13820,
+      "level": 30,
+      "lastWeekXP": 190,
+      "rp": 823,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        436,
+        387,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 923,
+      "A": 989,
+      "C": 763
+    },
+    {
+      "id": "split",
+      "name": "Multiple workouts per day",
+      "frequency": 3,
+      "events": 10,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    },
+    {
+      "id": "farmer",
+      "name": "100 sets per day",
+      "frequency": 3,
+      "events": 10,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    },
+    {
+      "id": "backdate",
+      "name": "Late historical entries",
+      "frequency": 3,
+      "events": 0,
+      "xp": 13750,
+      "level": 29,
+      "lastWeekXP": 270,
+      "rp": 0,
+      "rawTier": "Unranked",
+      "displayTier": "Unranked",
+      "components": [
+        0,
+        0,
+        0
+      ],
+      "promotions": 0,
+      "demotions": 0,
+      "meanRP": 0,
+      "A": 0,
+      "C": 0
+    },
+    {
+      "id": "deletion",
+      "name": "Previously rewarded deletion",
+      "frequency": 3,
+      "events": 10,
+      "xp": 13480,
+      "level": 29,
+      "lastWeekXP": -270,
+      "rp": 290,
+      "rawTier": "Silver",
+      "displayTier": "Unranked",
+      "components": [
+        154,
+        137,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 6,
+      "meanRP": 920,
+      "A": 972,
+      "C": 753
+    },
+    {
+      "id": "years",
+      "name": "Multi-year member",
+      "frequency": 3,
+      "events": 10,
+      "xp": 14020,
+      "level": 30,
+      "lastWeekXP": 270,
+      "rp": 850,
+      "rawTier": "Diamond",
+      "displayTier": "Diamond",
+      "components": [
+        450,
+        400,
+        0
+      ],
+      "promotions": 7,
+      "demotions": 5,
+      "meanRP": 940,
+      "A": 995,
+      "C": 771
+    }
+  ],
+  "steady": [
+    {
+      "frequency": 1,
+      "weeklyXP": 80,
+      "yearXP": 4160,
+      "level": 15,
+      "meanRP": 290
+    },
+    {
+      "frequency": 2,
+      "weeklyXP": 170,
+      "yearXP": 8840,
+      "level": 23,
+      "meanRP": 580
+    },
+    {
+      "frequency": 3,
+      "weeklyXP": 270,
+      "yearXP": 14040,
+      "level": 30,
+      "meanRP": 846
+    },
+    {
+      "frequency": 4,
+      "weeklyXP": 360,
+      "yearXP": 18720,
+      "level": 35,
+      "meanRP": 850
+    },
+    {
+      "frequency": 5,
+      "weeklyXP": 360,
+      "yearXP": 18720,
+      "level": 35,
+      "meanRP": 850
+    }
+  ],
+  "decay": [
+    {
+      "inactiveDays": 0,
+      "rp": 1000,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 1,
+      "rp": 1000,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 3,
+      "rp": 915,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 7,
+      "rp": 710,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 14,
+      "rp": 352,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 21,
+      "rp": 94,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 28,
+      "rp": 0,
+      "xp": 3220,
+      "level": 13
+    },
+    {
+      "inactiveDays": 90,
+      "rp": 0,
+      "xp": 3220,
+      "level": 13
+    }
+  ],
+  "sensitivity": [
+    {
+      "target": 8,
+      "weights": [
+        0.4,
+        0.4,
+        0.2
+      ],
+      "mean": 925
+    },
+    {
+      "target": 8,
+      "weights": [
+        0.45,
+        0.4,
+        0.15
+      ],
+      "mean": 944
+    },
+    {
+      "target": 8,
+      "weights": [
+        0.5,
+        0.4,
+        0.1
+      ],
+      "mean": 963
+    },
+    {
+      "target": 9,
+      "weights": [
+        0.4,
+        0.4,
+        0.2
+      ],
+      "mean": 921
+    },
+    {
+      "target": 9,
+      "weights": [
+        0.45,
+        0.4,
+        0.15
+      ],
+      "mean": 940
+    },
+    {
+      "target": 9,
+      "weights": [
+        0.5,
+        0.4,
+        0.1
+      ],
+      "mean": 959
+    },
+    {
+      "target": 10.5,
+      "weights": [
+        0.4,
+        0.4,
+        0.2
+      ],
+      "mean": 827
+    },
+    {
+      "target": 10.5,
+      "weights": [
+        0.45,
+        0.4,
+        0.15
+      ],
+      "mean": 840
+    },
+    {
+      "target": 10.5,
+      "weights": [
+        0.5,
+        0.4,
+        0.1
+      ],
+      "mean": 852
+    },
+    {
+      "target": 12,
+      "weights": [
+        0.4,
+        0.4,
+        0.2
+      ],
+      "mean": 739
+    },
+    {
+      "target": 12,
+      "weights": [
+        0.45,
+        0.4,
+        0.15
+      ],
+      "mean": 746
+    },
+    {
+      "target": 12,
+      "weights": [
+        0.5,
+        0.4,
+        0.1
+      ],
+      "mean": 754
+    }
+  ],
+  "progressSensitivity": [
+    {
+      "threshold": 0.01,
+      "events": 10,
+      "meanRP": 940
+    },
+    {
+      "threshold": 0.02,
+      "events": 10,
+      "meanRP": 940
+    },
+    {
+      "threshold": 0.03,
+      "events": 10,
+      "meanRP": 940
+    },
+    {
+      "threshold": 0.05,
+      "events": 10,
+      "meanRP": 940
+    }
+  ],
+  "windowSensitivity": [
+    {
+      "window": 14,
+      "interpretation": "comparison: simple box window",
+      "cliffInRPForOneFullDay": 142
+    },
+    {
+      "window": 28,
+      "interpretation": "chosen: 14 flat + 14 fading days",
+      "cliffInRPForOneFullDay": 7
+    },
+    {
+      "window": 42,
+      "interpretation": "comparison: simple box window",
+      "cliffInRPForOneFullDay": 47
+    }
+  ],
+  "thresholdSensitivity": [
+    {
+      "apex": 850,
+      "profilesAtOrAbove": 12
+    },
+    {
+      "apex": 900,
+      "profilesAtOrAbove": 4
+    },
+    {
+      "apex": 950,
+      "profilesAtOrAbove": 4
+    }
+  ],
+  "distribution": {
+    "A": {
+      "Unranked": 2,
+      "Bronze": 0,
+      "Silver": 2,
+      "Gold": 1,
+      "Platinum": 2,
+      "Diamond": 0,
+      "Apex": 13
+    },
+    "B": {
+      "Unranked": 2,
+      "Bronze": 0,
+      "Silver": 3,
+      "Gold": 1,
+      "Platinum": 1,
+      "Diamond": 9,
+      "Apex": 4
+    },
+    "C": {
+      "Unranked": 2,
+      "Bronze": 0,
+      "Silver": 3,
+      "Gold": 1,
+      "Platinum": 12,
+      "Diamond": 2,
+      "Apex": 0
+    }
+  },
+  "tests": [
+    {
+      "name": "duplicate workout payload does not change XP or RP",
+      "status": "passed"
+    },
+    {
+      "name": "splitting sessions on same day does not mint base XP",
+      "status": "passed"
+    },
+    {
+      "name": "100 sets has no advantage over eight matching sets",
+      "status": "passed"
+    },
+    {
+      "name": "changing load alone cannot increase activity points",
+      "status": "passed"
+    },
+    {
+      "name": "warmups alone and trivial three-set day receive no points",
+      "status": "passed"
+    },
+    {
+      "name": "seven-day late entry never earns competitive credit",
+      "status": "passed"
+    },
+    {
+      "name": "workout revisions replace rewards rather than duplicate them",
+      "status": "passed"
+    },
+    {
+      "name": "deletion reverses XP and cannot leave an active rank after 28 days",
+      "status": "passed"
+    },
+    {
+      "name": "no lifetime decay and complete competitive expiry",
+      "status": "passed"
+    },
+    {
+      "name": "all scores stay in [0,1000]",
+      "status": "passed"
+    },
+    {
+      "name": "level thresholds invert exactly for first 10000 levels",
+      "status": "passed"
+    },
+    {
+      "name": "progress is corroborated, context-separated and cooldown-bound",
+      "status": "passed"
+    },
+    {
+      "name": "three-day sustainable program can reach Apex without five-day training",
+      "status": "passed"
+    },
+    {
+      "name": "52 full weeks obey 80/170/270/360/360 XP and four-day cap",
+      "status": "passed"
+    },
+    {
+      "name": "historical date corrections cannot move frozen competitive dates",
+      "status": "passed"
+    },
+    {
+      "name": "distinct rep ranges use a Pareto frontier without e1RM conversion",
+      "status": "passed"
+    }
+  ],
+  "multiYear": {
+    "years": 5,
+    "xp": 70370,
+    "level": 71,
+    "rp": 850
+  }
+}

@@ -1,0 +1,326 @@
+[
+  {
+    "screen": "overview",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "leaderboard",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "filters",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "lifetime",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "rank",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "profile",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "badges",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "customize",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "promotion",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "achievement",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "return",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "training",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 375
+  },
+  {
+    "screen": "overview",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "leaderboard",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "filters",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "lifetime",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "rank",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "profile",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "badges",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "customize",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "promotion",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "achievement",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "return",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "training",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 390
+  },
+  {
+    "screen": "overview",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "leaderboard",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "filters",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "lifetime",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "rank",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "profile",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "badges",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "customize",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "promotion",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "achievement",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "return",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  },
+  {
+    "screen": "training",
+    "dockBottom": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "shortButtons": 0,
+    "width": 430
+  }
+]

@@ -33,7 +33,7 @@ See [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md) for deployment and limitati
 
 Accountability notes never infer habit writes. Delivered IDs, user scope, current target state, and compare-and-swap updates constrain mutations; metadata cleanup is a separate transaction. `npm run test:reliability` exercises real schema-backed metadata through contract and dispatch, not just isolated intent parsing. Do not replace this with tests that call the accountability resolver directly and bypass the contract.
 
-Last updated: 2026-07-07
+Last implementation-boundary review: 2026-11-17
 
 This doc describes the current backend Brain pipeline as implemented in code. `PROJECT_CONTEXT.md` remains the high-level handoff, but `api/` is the source of truth.
 
@@ -53,11 +53,11 @@ Current order:
 8. Re-evaluate BrainTurn Contract with route context.
 9. Optionally retrieve Vault context.
 10. Run Command Draft Stage.
-11. Run memory/save/follow-up special branches that are still explicit in `chat.js`.
+11. Run memory/save/follow-up orchestration in `api/ai/chat.js` using the extracted chat helper modules.
 12. Run Planner Stage for route clarification, casual/read-only answers, planner output, read context, synthetic calendar plans, and safe write execution handoff.
 13. Persist sanitized response metadata and `brain_trace`.
 
-`api/ai/chat.js` still owns auth, thread/context setup, memory branches, Vault-save follow-ups, final persistence, and low-level LifeOS write helpers. Do not move more of it casually; extract one stage at a time with regression coverage.
+`api/ai/chat.js` retains HTTP auth and `handleBrainChatMessage` orchestration. Extracted helpers live in `api/_utils/chat/`: `chatPendingActions`, `chatPersistence`, `chatAutoVault`, `chatClassification`, `chatMemoryAnswers`, `chatResponse`, `chatCalendarPlanning`, `chatScheduleParsing` and `chatShared`. The entry re-exports its existing public helper API. Preserve this split and test one behavior at a time before moving additional orchestration.
 
 ## BrainTurn Contract
 
@@ -217,9 +217,9 @@ The harness covers BrainTurn Contract paths, command-draft stage policy, memo/ca
 It also covers Planner Stage contract enforcement: read-only/agenda/workout/product/casual turns cannot write even if a fake planner proposes a write, while explicit current-message memo/calendar writes still pass route and skill permission.
 Proactive coverage includes memo reminders and Proactive Accountability v1 candidate/reply behavior without live WhatsApp, Gemini, or Supabase writes.
 
-## Next Extraction
+## Extraction status
 
-The next useful extraction is the remaining memory/Vault-save/follow-up special branch group, or a lower-level LifeOS tool execution adapter. Do not extract either until tests cover explicit memory writes/forget, Vault save follow-ups, action logging, and final persistence.
+The chat helper extraction is already present. Further planner or tool-boundary deepening is separate from the completed rest-coordination work and needs its own scoped spec/tests. Do not treat the old extraction proposal as unimplemented helper work.
 
 ## Companion Monitor And Attention Boundary
 

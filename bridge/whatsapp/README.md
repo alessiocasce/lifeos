@@ -1,6 +1,6 @@
 # LifeOS WhatsApp Bridge
 
-The WhatsApp bridge is a local process that forwards whitelisted WhatsApp messages into LifeOS Brain.
+The WhatsApp bridge is a separately operated Node process (production Oracle/PM2; local execution is also supported) that forwards whitelisted WhatsApp messages into LifeOS Brain.
 
 LifeOS exposes:
 
@@ -50,7 +50,7 @@ The backend accepts either id, then uses the canonical sender for Brain threads 
 
 ## Proactive Outbox Loop
 
-Proactive WhatsApp v1A is memo-only. The bridge should poll LifeOS instead of expecting server push:
+The shared outbox delivers memo reminders, Health accountability and explicitly permitted monitor prompts. The original v1A memo-only rollout is historical. The bridge should poll LifeOS instead of expecting server push:
 
 1. Every `WHATSAPP_OUTBOX_POLL_SECONDS`, call `POST /api/integrations/whatsapp/outbox` with `{ "action": "evaluate", "recipient": "111780936298528@lid", "bridge_id": "local-main" }`.
 2. Call `POST /api/integrations/whatsapp/outbox` with `{ "action": "poll", "recipient": "111780936298528@lid", "bridge_id": "local-main" }`.

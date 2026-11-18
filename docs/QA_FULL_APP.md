@@ -1,12 +1,30 @@
 # LifeOS Full-App Manual QA
 
+Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
+
+Community redesign (2026-11-18): date-grouped inset Feed, segmented Feed/Members, hero profile, numbered exercise tables, A–Z members. No jump controls; no photo viewer. See [current Community evidence](qa/community-apple-design.md).
+
+Local Community redesign: verify Feed date sections, Feed/Members segments, search clear/Escape/recovery, own/other profiles and open workout tables using [Community QA](qa/community-apple-design.md). Both nested journeys must restore search/pages/scroll and control focus; check all six widths, English/Italian and enlarged text. Local, uncommitted and undeployed. No schema rerun required.
+
+Local Companion redesign: verify conversation navigation/retry, draft-only
+starters and corrections, multiline composer, context Escape/focus, permissions
+and memory recovery using [Companion QA](QA_COMPANION_UI.md). At 200% root text,
+the composer must clear the active-workout resume bar as well as navigation.
+This local UI is uncommitted and undeployed. No schema rerun required.
+
+Chat follow-up: verify Copy success/denial/retry, Save-to-Vault from the new
+message footer, reading-position preservation during an incoming answer and
+Latest messages returning to the end without opening the mobile keyboard.
+
 ## Reliability Release Gate
 
 Follow [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.md) before deploying this version: targeted SQL is required and old frontend project increments must not coexist with the database trigger. Run `npm test`, function count, and build. Manual cross-interface checks: reply twice to one accountability prompt; complete a queued target in Health before delivery; cancel a pending action and inspect Open Loops; edit/delete a completed project session; leave date-sensitive tabs open through Rome midnight; verify MCP truncation. See [QA_PROJECTS.md](QA_PROJECTS.md) for progress semantics. Live smoke is preview-only unless separately authorized to mutate.
 
-Run this after applying `supabase/schema.sql` to a Supabase project and setting `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+Run with the required objects/migrations already verified and safe frontend configuration set. For missing objects follow [the targeted deployment workflow](DEPLOYMENT.md); do not replay the full schema on production.
 
 ## Pre-Release Automated Checks
+
+November 17 audit: targeted Brain/rest checks, build and 28 Command/Companion browser cases pass. The broader `npm test` is currently blocked by the attention-monitor fixed-clock/DB-clock constraint failure documented in [DOCUMENTATION_STATUS.md](audits/DOCUMENTATION_STATUS.md); do not call the full suite green.
 
 For the reconstructed frontend, also run `npm run test:ui`. The cross-workspace
 audit waits for the real lazy-loaded screen (not just the Shell heading) on each
@@ -48,7 +66,7 @@ End Training and explicitly pull again to apply. Physical QA remains outstanding
 
 1. Open the app while signed out.
 2. Confirm the LifeOS shell and tabs are not visible.
-3. Create a fresh account or sign in with an existing account.
+3. Create a fresh account using an availability-checked username, or sign in with an existing account. Confirmed users missing a username must complete the existing profile gate; username races are resolved by the database, not auth metadata.
 4. If email confirmation is required, confirm the sign-up message is clear.
 5. After sign-in, confirm the shell and bottom mobile navigation render.
 
@@ -104,23 +122,11 @@ End Training and explicitly pull again to apply. Physical QA remains outstanding
 
 ## PWA Pull To Refresh
 
-1. In the installed iPhone PWA, pull down and confirm the main tab content visibly moves with the finger while the shell header and bottom navigation stay fixed.
-2. Release below the threshold and confirm the content smoothly snaps back without refreshing.
-3. Pull past the threshold and confirm the indicator moves through Pull and Release while being revealed above the translated content.
-4. Release past the threshold and confirm the content stays slightly lowered during Refreshing.
-5. Confirm Updated, Failed, or Update Ready remains visible briefly, then the content returns smoothly to its normal position before the indicator fades.
-6. Confirm the header/content do not overlap strangely and the bottom navigation never moves or covers content.
-7. Change Health and Finances on desktop, pull once from any iPhone tab, then confirm both modules show the new persisted data.
-8. Change a Memo from desktop or Shortcut, pull from another tab, and confirm Memos reloads.
-9. Start a Workout, pull refresh, and confirm the active workout, persisted sets, templates, and template snapshot remain active.
-10. Enter only an exercise or incomplete weight/reps and confirm incomplete logger input does not block an available app update.
-11. Enter a complete unsaved set with exercise, valid weight, and valid reps. With a new app version waiting, pull and confirm the app does not reload.
-12. Confirm the indicator says `Update ready - save current workout set first.`
-13. Save the set, pull again, and confirm the waiting update can activate and reload.
-14. Start a Project session, enter meaningful Proof of Work, and confirm a waiting update asks to save the project session draft first.
-15. Confirm pull does not trigger while typing in an input, textarea, select, contenteditable field, or while a dialog/editor is open.
-16. Confirm Health autosave, active Project sessions, URL routing, bottom navigation, and horizontal layout remain intact.
-17. Confirm no duplicate refresh runs start while one refresh is already active.
+1. Pull past the threshold from the page top; content moves while shell/docks stay fixed. Release below threshold snaps back without refreshing. Inputs/dialogs and concurrent pulls must not start another refresh.
+2. Reload persisted records across workspaces without losing an active workout or genuine drafts. Data refresh and app activation are separate operations.
+3. With workouts still loading, any active workout, or meaningful unsaved work, a waiting app update must remain blocked. This includes incomplete/clean logger forms while a workout is active and Training opened in another tab.
+4. Saving one set must not release the active-workout guard. Finish the workout, save/discard remaining genuine drafts intentionally, then apply the offered update through the guarded flow.
+5. Check failed/offline/update-ready feedback and touch/keyboard/safe-area behavior. Run `test:pwa` and the two-build harness in [PWA_TRAINING_CORRECTIONS.md](PWA_TRAINING_CORRECTIONS.md). Physical installed-device acceptance remains separate.
 
 ## Tab URL Routing
 
@@ -171,7 +177,7 @@ Run the focused checklists after the full flow:
 
 ## Workout Warmup Sets
 
-1. Run the latest `supabase/schema.sql`.
+1. Verify required objects/migrations; apply only an authorized missing forward migration, not a full schema replay.
 2. Start or select today's workout session.
 3. Log two warmups, disable Warmup, and confirm the next working set immediately displays `Set 1`.
 4. Log two working sets and confirm the current session log displays `W`, `W`, `Set 1`, `Set 2`.
@@ -206,15 +212,15 @@ Run the focused checklists after the full flow:
 
 ## Brain
 
-1. Run the latest `supabase/schema.sql`, then open Assistant/Brain.
-2. Confirm Brain opens to a fresh empty `New Chat` draft by default.
-3. Confirm old-thread selection is not visible in the normal Brain UI for now.
-4. Confirm old threads/messages still persist in the backend/context after sending messages, even though the default UI does not expose the selector.
-5. Leave Brain and return; confirm the default is a fresh `New Chat` again.
-6. Confirm there is only one visible New Chat affordance/title and no duplicate `New Chat` labels.
-7. Confirm the empty state copy is minimal: `What do we solve?` and `Ask, log, analyze, plan.`
+1. Verify the required Brain objects/migrations, then open Companion; do not replay the schema.
+2. Confirm Brain opens to a unselected `New conversation` on initial page load.
+3. Open the Companion context sheet and confirm saved app conversations are selectable; keep them out of the main composer area.
+4. Confirm old threads/messages still persist in the backend/context after sending messages, and can be selected from the Companion context sheet.
+5. Select a saved app conversation, leave Companion and return; confirm that selection remains. Only the explicit New Chat action clears it.
+6. Confirm there is one explicit New Chat control, with the `New conversation` title only when no thread is selected.
+7. Confirm the unselected empty state says `What's on your mind?` without canned write actions
 8. Confirm Memory and Vault panels are hidden from the default Brain UI.
-9. Confirm compact Recent Actions remains available on desktop and old errors are hidden by default.
+9. Confirm Recent Actions is available in the Companion context sheet on mobile and desktop; old errors remain behind the Errors toggle.
 10. Confirm Daily Review is not rendered.
 11. Confirm the main chat and composer are visually dominant on desktop and mobile.
 12. On mobile, confirm the Assistant page itself does not become a long scroll just to see the widget/composer.
@@ -235,7 +241,7 @@ Run the focused checklists after the full flow:
 27. Confirm a timed-out Brain request exits loading, restores the input, shows Retry, and does not leave an infinite spinner.
 28. Confirm browser automation can target `brain-message-input`, `brain-send-button`, `brain-message-list`, `brain-loading-indicator`, and `brain-error`.
 29. Pull to refresh and confirm threads, current messages, memories, insights, Vault documents, and Recent Actions reload without wiping typed Brain input.
-30. Confirm Recent Actions shows successful actions by default, hides old errors behind the Errors toggle, and can expand to more entries on desktop.
+30. In the Companion context sheet, confirm Recent Actions shows successes initially, hides errors behind the Errors toggle, and expands on either viewport.
 31. Open a Recent Action and confirm its detail view still works.
 32. Confirm assistant messages show a subtle selected skill badge such as Workout, Health, Calendar, Memo, Ops, Finance, Memory, Review, Product, or General.
 33. Confirm skill badges do not overflow on mobile and do not make Brain less chat-first.
@@ -279,8 +285,8 @@ Run the focused checklists after the full flow:
 1. With the deployed endpoint configured, send a valid WhatsApp bridge request to `/api/integrations/whatsapp/inbound`.
 2. Confirm the response includes a concise `reply`, `thread_id`, and `source: whatsapp`.
 3. Confirm WhatsApp messages persist in a backend Brain thread with `metadata.source = whatsapp`.
-4. Confirm the app Brain still opens to a fresh empty `New Chat` draft by default.
-5. Confirm the normal Brain UI still does not show old-thread selection or the WhatsApp backend thread.
+4. Confirm the app Brain still opens to a unselected `New conversation` on initial page load.
+5. Confirm the normal Brain UI still exposes app conversation selection in the context sheet without automatically opening a WhatsApp backend thread.
 6. Confirm Brain mobile internal-scroll layout remains intact after WhatsApp messages exist in the backend.
 7. Confirm WhatsApp integration does not change Home UI, does not add Money/Finance, and does not add AI Recent Writes to Home.
 8. Confirm app Brain chat still works normally through `/api/ai/chat`.
@@ -293,7 +299,7 @@ Run the focused checklists after the full flow:
 
 Before live QA, run `npm run test:brain` and confirm the outbox state machine, proactive reply resolver, and proactive candidate validator checks pass.
 
-1. Run the latest `supabase/schema.sql` and confirm `brain_outbox_messages` and `brain_proactive_rules` exist.
+1. Confirm `brain_outbox_messages` and `brain_proactive_rules` exist with the required contracts. Apply only an authorized missing forward migration; do not replay the schema.
 2. Create a timed open memo due soon.
 3. Trigger `/api/integrations/whatsapp/outbox` with `action=evaluate`, then `action=poll`, then `action=ack` with valid secret and allowed recipient.
 4. Confirm the outbox row moves through queued/claimed/sent without duplicate rows for the same memo due slot.
@@ -380,7 +386,7 @@ Before live QA, run `npm run test:brain` and confirm the outbox state machine, p
 17. Confirm no tags/categories appear in the Memos UI.
 18. Confirm the Memos tab appears in desktop sidebar and mobile bottom nav without horizontal overflow.
 19. Confirm keyboard open/close does not break taps in the memo editor on iPhone/PWA.
-20. Run `supabase/schema.sql` again before testing against a live Supabase project.
+20. Verify the required feature migration is already applied before live QA; never rerun the baseline schema for this test.
 
 ## Projects / Ops
 
@@ -406,12 +412,12 @@ Before live QA, run `npm run test:brain` and confirm the outbox state machine, p
 20. Confirm the UI prevents or clearly blocks starting a second active project session while one is already open.
 21. Confirm edit/delete project flows work and deleting a project removes its sessions and money entries.
 22. Confirm mobile create/edit uses a full-screen editor with visible X, 16px inputs, one scroll path, and no horizontal overflow.
-23. Run `supabase/schema.sql` again before testing against a live Supabase project.
+23. Verify the required feature migration is already applied before live QA; never rerun the baseline schema for this test.
 
 ## Summary Consistency
 
 1. Log a workout with warmups and working sets.
-2. Confirm Home and Assistant selected-date workout summaries count working sets and working volume, not warmups.
+2. Confirm Training/analysis working-set summaries exclude warmups. Command only shows completed-session counts; it has no set/volume summary.
 
 ## Wake Time Action API
 
@@ -514,3 +520,33 @@ production Supabase emails/authentication, password managers or physical iOS.
 - Setup-success/save-failure performs one readback and retains a visible safe save error; a lost response can confirm persisted consent without hiding the failure. Readback failure appears separately. Explicit retry replaces the previous mutation failure.
 - Recovery is read-only: no prompt, automatic retry, rollback or unregister. Notification opt-out retains enabled foreground timer and device registrations. Replaced/ended-workout lifetimes never advance another effect or update the new instance.
 - Deterministic, real-adapter and browser-fixture evidence and limits: [rest coordination acceptance](qa/workout-rest-coordination.md). Physical iPhone delivery acceptance remains separate.
+
+
+## Settings privacy, editing and accessibility
+
+Local implementation evidence: [Settings verification](qa/settings-apple-design.md). Run `npx playwright test tests/ui/modern-settings.spec.js tests/ui/profile-photo.spec.js`.
+
+- Fail settings reads: profile/language/switch values must remain unavailable until Retry succeeds; recovery must not write preferences. Switch accounts during Retry and verify isolation.
+- Read privacy implications without opening help. Enable notes, turn workout sharing off/on, and confirm retained consent and the hidden-notes explanation. Rankings enrollment remains separate.
+- Edit username with a keyboard: input gains focus; format and uniqueness failures retain the draft; successful save/cancel returns focus. Save a photo independently, cancel username changes, and confirm the saved photo remains.
+- Delay/fail each write: local pending/error/confirmation feedback, rollback, repeated-submit exclusion and photo crop retry must remain correct.
+- Check Italian/English at 360, 390, 430, 768, 1024 and 1440px; enlarge text to 200%, test browser zoom, dialog scrolling, press cancellation, reduced motion/transparency and increased contrast. Ensure controls scroll clear of the active-workout dock.
+- Manually verify screen-reader error/status announcements and physical iPhone/PWA keyboard/safe-area behavior; fixture passes do not establish those gates.
+
+No schema rerun required for these Settings changes.
+
+
+Settings visual follow-up: verify the desktop profile column beside the preference groups at 1024/1440px, stacked inset groups on mobile/tablet, the viewer-only pencil that opens the native image picker, custom wrapping language row and full-width mobile privacy explanations. Compare current screenshots in [Settings evidence](qa/settings-apple-design.md); older flat-row screenshots describe the baseline UI.
+
+
+Settings motion/native-picker follow-up:
+
+- Username must dominate the quiet Edit action; Save/Cancel have short labels and equal proportions at 360px and enlarged text. The public-profile visibility paragraph is intentionally removed.
+- The avatar opens an animated viewer. Only its pencil launches the native chooser directly. Cancel the OS chooser without changing the saved photo; select a file and verify crop Save/Cancel, upload failure/retry and confirmed removal. No camera shortcut or intermediate source-selection menu should appear. Test actual iPhone library/camera choices separately.
+- The Settings language control is a custom two-option menu: check selection/checkmark, keyboard arrows/Home/End/type selection, Enter/Space, Escape, Tab, click-away, save rollback, reload persistence and viewport fit. Auth's language control remains separate.
+- Inspect opening/closing motion and interruption; modal focus/body scrolling must restore after exit. With reduced motion, layout/translation motion should give way to short fades. See [current evidence](qa/settings-apple-design.md).
+
+
+## Floating bottom navigation
+
+See [current bottom-bar verification](qa/apple-bottom-bar.md). On mobile, verify the inset material, five equal destinations and spring-driven selected pill, More focus return, safe-area clearance, and workout resume/update notices above the bar. Test English/Italian, 200% text, reduced motion/transparency/contrast, cancelled navigation, keyboard dismissal and Companion composer clearance. At 768px and wider the existing desktop rail remains. Physical iPhone/PWA acceptance is separate. No schema rerun required.

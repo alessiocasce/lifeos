@@ -20,7 +20,7 @@ import { getSignupEmailRedirectTo } from '../lib/authRedirect';
 The existing `authApi.signUp` supplies the validated redirect:
 
 ```js
-async signUp({ email, password, username, language = 'en' }) {
+async signUp({ email, password, username, language = 'it' }) {
   return throwIfError(await requireSupabase().auth.signUp({
     email,
     password,

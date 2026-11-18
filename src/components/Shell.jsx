@@ -1,12 +1,13 @@
 import { getLocale } from '../i18n';
 import { t } from '../i18n';
-import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, MoreHorizontal, Settings, Target, Users, X } from 'lucide-react';
+import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, Settings, Target, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLifeOS } from '../context/LifeOSContext';
 import { useLocalDay } from '../hooks/useLocalDay';
 import { readWorkoutDraft } from '../utils/workoutContinuity';
 import { LifeOSLogo } from './LifeOSLogo';
+import { MobileNavigation } from './MobileNavigation';
 import { PullToRefresh } from './PullToRefresh';
 import { AppUpdateNotice } from './AppUpdates';
 import { appUpdate } from '../utils/pwaUpdate';
@@ -28,7 +29,6 @@ const destinations = {
 const primary = ['home', 'workout', 'community', 'projects', 'assistant'];
 const utilities = ['health', 'calendar', 'memos', 'finances', 'settings'];
 const moreDestinations = ['projects', ...utilities];
-const mobile = ['home', 'community', 'workout', 'assistant', 'more'];
 
 export function Shell({ children }) {
   const { activeTab, activeWorkoutSession, authUser, userSettings, setActiveTab, setActiveWorkoutId, signOut, workoutSessions, workoutSessionsStatus, meaningfulUnsavedWork } = useLifeOS();
@@ -162,16 +162,7 @@ export function Shell({ children }) {
           <span className="flex items-center gap-2 text-sm font-semibold">{t("Resume")}<ArrowUpRight size={18} /></span>
         </button>
       ) : null}
-      <nav className="mobile-dock" aria-label={t("Mobile navigation")} data-keyboard-open={keyboardOpen}>
-        {mobile.map((id) => {
-          const item = destinations[id] || { label: 'More', icon: MoreHorizontal };
-          const Icon = item.icon;
-          const active = id === 'more' ? moreDestinations.includes(activeTab) : activeTab === id;
-          return <button key={id} className={'mobile-destination ' + (id === 'workout' ? 'training-destination' : '')} aria-current={active ? 'page' : undefined} onClick={event => { if (id === 'more') { moreTrigger.current = event.currentTarget; setMoreOpen(true); } else navigate(id); }}>
-            <span className="mobile-destination-icon"><Icon size={21} strokeWidth={active ? 2 : 1.65} /></span><span>{t(item.label)}</span>
-          </button>;
-        })}
-      </nav>
+      <MobileNavigation destinations={destinations} activeTab={activeTab} moreDestinations={moreDestinations} keyboardOpen={keyboardOpen} moreOpen={moreOpen} hasResume={Boolean(liveSession && activeTab !== 'workout')} onNavigate={navigate} onMore={trigger => { moreTrigger.current = trigger; setMoreOpen(true); }} />
       </div>, document.body)}
       <dialog ref={sheetRef} className="utility-sheet" data-closing={!moreOpen} aria-labelledby="utility-title"
         onCancel={event => { event.preventDefault(); setMoreOpen(false); }}

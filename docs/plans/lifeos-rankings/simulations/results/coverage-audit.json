@@ -1,0 +1,32 @@
+{
+  "observed_at_local_date": "2026-11-03",
+  "project_ref": "wrqscqhclepwxxkazbnc",
+  "read_only": true,
+  "scope": "aggregate dataset, no user or source identifiers",
+  "catalog_rows": 224,
+  "active_catalog_rows": 79,
+  "total_sets": 512,
+  "completed_sets": 512,
+  "valid_working_sets": 489,
+  "free_candidate_sets": 124,
+  "bw_candidate_sets": 36,
+  "candidate_sets": 160,
+  "candidate_percent_working": 32.719836400818,
+  "candidate_percent_all": 31.25,
+  "supported_exact_points": 43,
+  "supported_exercise_dates": 43,
+  "baseline_ready_points": 13,
+  "baseline_ready_exercise_dates": 13,
+  "sets_in_ready_points": 36,
+  "valid_machine_sets": 265,
+  "valid_bodyweight_assisted_sets": 39,
+  "unmapped_sets": 0,
+  "trusted_context_receipt_columns": 0,
+  "verified_competitive_eligibility": "not established; secure receipt/context protocol absent",
+  "limitations": [
+    "Potential catalog coverage is not awarded progress.",
+    "Exact supporting pairs are conservative, not full Pareto extraction.",
+    "Baseline-ready groups do not prove a later novel corroborated milestone.",
+    "No per-member distribution or fairness percentage inferred."
+  ]
+}

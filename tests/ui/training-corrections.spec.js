@@ -14,7 +14,7 @@ test.beforeEach(async({page})=>{
     ]));
   },{today:localDate(),a:resolveExercise('Barbell Curl')});
 });
-const field=(page,name)=>page.getByRole('textbox',{name,exact:true});
+const field=(page,name)=>page.getByRole('textbox',{name: name === 'Weight (kg)' ? /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/ : name === 'Peso (kg)' ? /(?:Peso|Carico totale|Per mano) \(kg\)/ : name,exact:true});
 const close=async page=>{await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);};
 
 test('caret is at end on each tap, decimal typing and steppers remain usable',async({page})=>{
@@ -27,7 +27,7 @@ test('caret is at end on each tap, decimal typing and steppers remain usable',as
       await expect.poll(()=>input.evaluate(e=>[e.selectionStart,e.selectionEnd])).toEqual([value.length,value.length]);
     }
   }
-  await field(page,'Weight (kg)').fill('57.5');await page.getByRole('button',{name:'Increase Weight (kg)',exact:true}).click();await expect(field(page,'Weight (kg)')).toHaveValue('60');
+  await field(page,'Weight (kg)').fill('57.5');await page.getByRole('button',{name:/Increase (?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/,exact:true}).click();await expect(field(page,'Weight (kg)')).toHaveValue('60');
   await field(page,'Weight (kg)').click();await field(page,'Weight (kg)').press('ArrowLeft');await field(page,'Weight (kg)').press('Backspace');await expect(field(page,'Weight (kg)')).toHaveValue('0');
 });
 
@@ -38,16 +38,16 @@ test('RPE single selector, null save, integer save, legacy fractional edits and 
   for(const n of [6,7,8,9,10]){const choice=page.getByRole('button',{name:'RPE '+n,exact:true});await choice.click();await expect(choice).toHaveAttribute('aria-pressed','true');}
   await page.getByRole('button',{name:'None',exact:true}).click();await close(page);
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
-  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].rpe)).toBeNull();
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0]?.rpe)).toBeNull();
   await page.getByRole('button',{name:'More options',exact:true}).click();await page.getByRole('button',{name:'RPE 8',exact:true}).click();await close(page);
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
-  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[1].rpe)).toBe(8);
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[1]?.rpe)).toBe(8);
   await field(page,'Weight (kg)').fill('60');
   let confirmations=0;page.on('dialog',d=>{confirmations++;d.dismiss();});
-  await page.getByRole('button',{name:'End Workout',exact:true}).click();await expect(page.getByText('Session complete',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'End Workout',exact:true}).click();await expect(page.getByRole('heading',{name:'Workout completed!',exact:true})).toBeVisible();
   expect(confirmations).toBe(0);
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets.length)).toBe(2);
-  await page.getByRole('button',{name:'History',exact:true}).click();await page.getByRole('button',{name:/Past/}).click();await expect(page.getByText('RPE 7.5',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'History',exact:true}).click();await page.getByRole('button',{name:/Past/}).click();await page.getByRole('button', {name: /Show Barbell Curl/}).click();await expect(page.getByText('RPE 7.5',{exact:true})).toBeVisible();
 });
 
 test('legacy set edit preserves fractional RPE until explicitly cleared',async({page})=>{
@@ -59,7 +59,7 @@ test('legacy set edit preserves fractional RPE until explicitly cleared',async({
   await edit.getByRole('textbox',{name:'Reps',exact:true}).fill('9');await edit.getByRole('button',{name:'Save edit',exact:true}).click();
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].rpe)).toBe(7.5);
   await page.getByRole('button',{name:'Edit set',exact:true}).click();await edit.getByRole('button',{name:'None',exact:true}).click();await edit.getByRole('button',{name:'Save edit',exact:true}).click();
-  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0].rpe)).toBeNull();
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0]?.rpe)).toBeNull();
 });
 
 test('baseline is clean, deliberate edits survive reload, and repeated Escape restores focus',async({page})=>{
@@ -74,10 +74,10 @@ test('baseline is clean, deliberate edits survive reload, and repeated Escape re
   await page.getByRole('button',{name:'History',exact:true}).click();await page.getByRole('button',{name:'Live',exact:true}).click();await expect(field(page,'Weight (kg)')).toHaveValue('60');
 });
 
-test('Italian Training options and Application updates preserve the workout draft',async({page},info)=>{
+test('Italian Training options and Settings preserve the workout draft',async({page},info)=>{
   await page.goto('/workout');await expect(field(page,'Weight (kg)')).toHaveValue('55');await field(page,'Weight (kg)').fill('57.5');
-  await page.goto('/settings');await page.getByRole('combobox',{name:'Language',exact:true}).selectOption('it');
-  await expect(page.getByRole('button',{name:'Cerca aggiornamenti',exact:true})).toBeVisible();
+  await page.goto('/settings');await page.getByRole('combobox',{name:'Language',exact:true}).click();await page.getByRole('option',{name:'Italiano',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Impostazioni',exact:true})).toBeVisible();
   await page.goto('/workout');await expect(field(page,'Peso (kg)')).toHaveValue('57.5');
   await page.getByRole('button',{name:'Altre opzioni',exact:true}).click();
   await expect(page.getByRole('dialog')).toContainText('Note della serie');await expect(page.getByRole('button',{name:'RPE 7',exact:true})).toBeVisible();
@@ -101,7 +101,7 @@ for(const count of [1,2,5,10,20]) test('content-sized compact picker '+count+' e
 for(const width of [375,390,430,768,1024,1440]) test('stable sheets and creation at '+width,async({page},info)=>{
   await page.setViewportSize({width,height:844});await page.goto('/workout');
   for(const name of ['More options','Workout options','Exercise']){
-    await page.getByRole('button',{name,exact:true}).click();
+    await page.getByRole('button',{name: name === 'Weight (kg)' ? /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/ : name === 'Peso (kg)' ? /(?:Peso|Carico totale|Per mano) \(kg\)/ : name,exact:true}).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.getByRole('dialog').evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
     const rect=await page.getByRole('dialog').boundingBox();expect(rect.x).toBeGreaterThanOrEqual(0);expect(rect.y).toBeGreaterThanOrEqual(0);expect(rect.x+rect.width).toBeLessThanOrEqual(width+1);expect(rect.y+rect.height).toBeLessThanOrEqual(845);
@@ -110,6 +110,8 @@ for(const width of [375,390,430,768,1024,1440]) test('stable sheets and creation
   expect(await page.evaluate(()=>visualViewport.scale)).toBe(1);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.getByRole('button',{name:'Manage',exact:true}).click();await page.getByRole('button',{name:'Create template',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Purple',exact:true})).toHaveCount(0);
+  await page.locator('summary').filter({hasText:'Choose color'}).click();
   await expect(page.getByRole('button',{name:'Purple',exact:true})).toBeVisible();
   await page.screenshot({path:info.outputPath('create.png'),fullPage:true});
 });

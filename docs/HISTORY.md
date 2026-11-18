@@ -3,6 +3,30 @@
 Newest-first release and handoff log moved verbatim from `PROJECT_CONTEXT.md`.
 The current architecture and module reference stays in `PROJECT_CONTEXT.md`.
 
+## UI refinement release (2026-11-19)
+
+Accumulated Settings, mobile navigation, Companion, Community and Training UI
+changes, plus the documentation audit/handoff, were validated on
+`release/ui-refinements-20261118` for push and fast-forward merge to main. Template creation/editing now share the staged
+builder, custom exercise menus and a green final action; confirmed Delete matches
+Save in full-width red styling. Release review corrected external-order conflicts.
+See [release checks and deployment status](qa/ui-release-2026-11-19.md).
+No schema rerun required. Older unreleased notes below describe earlier snapshots.
+
+## Local Community UI implementation (2026-11-17, unreleased)
+
+Visual follow-up: removed exercise-index/jump controls at the user's request; Community profiles now reuse Settings' actual profile card, avatar sizing, username typography and compact Edit action. Workout details use a clear title/preview/count summary, Feed-level exercise headings and stronger data hierarchy. Notes follow the exercise log. See current Community evidence for validation timing.
+
+Implemented the complete approved Community redesign: Feed/Members, profiles, authorized read-only photo viewer, open workout tables and contextual navigation/focus restoration. Existing sharing/notes/account boundaries remain. Frontend, translations, isolated tests and handoff documentation only; uncommitted and undeployed. No schema rerun required. See [Community evidence](qa/community-apple-design.md).
+
+## Rest-timer coordination (2026-11-17)
+
+Implemented tickets #6 -> #7 -> #8 in four reviewed commits: `b2c213d`, `84a3b82`, `10c52a1`, `fe8b99c`. The integration branch was pushed and fast-forward merged/pushed to `main` at `fe8b99c70c7487500883954fd515f13a5cb487c8`. Production deployment `dpl_7o4x396sDEX2mGhK6dcFvB43qPxs` is READY for that SHA; the public build-version endpoint was independently checked on 2026-11-17.
+
+The coordinator owns fixed lifetimes, immutable confirmed snapshots, mutation exclusion, coalesced refreshes, explicit outcomes and partial-notification-save reconciliation. The thin hook owns attachment/events and the view retains its sheet/countdown. Production/fixture owner guards and stable error codes protect multistage setup without changing logout ownership, schema, worker transport or network-independent display.
+
+Coordinator/adapter/rest/push/Brain/build/Italian/diff checks passed; focused Chromium passed 21/21. Standards review found no documented breaches; its optional error-protocol finding was fixed/rechecked. Spec review found no actionable gap. Two unrelated prefill cases have stale Weight locators. Physical iPhone delivery remains pending; new hosted-RLS or Oracle-health acceptance was not performed. No schema rerun required. See [acceptance evidence](qa/workout-rest-coordination.md).
+
 ## iPhone Push Reliability Correction (2026-11-09)
 
 The correction removes network verification from the display path and

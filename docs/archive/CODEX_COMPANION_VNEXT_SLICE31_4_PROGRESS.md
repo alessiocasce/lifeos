@@ -1,5 +1,7 @@
 # Companion Slice 3.1 / Slice 4 Progress
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 ## Checkpoint A: memory hardening
 
 - Phase: Slice 3.1 complete locally; Slice 4 not started at this checkpoint.

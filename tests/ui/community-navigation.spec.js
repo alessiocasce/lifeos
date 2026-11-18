@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-const back = page => page.getByRole('button', { name: 'Back', exact: true }).click();
+const back = page => page.getByRole('button', { name: /^Back to /, exact: false }).click();
 const member = page => page.getByRole('button', { name: '@degra', exact: true }).first().click();
 const workout = page => page.getByRole('button', { name: /Workout 0/ }).click();
 
@@ -63,7 +63,7 @@ test('Feed profile origin and workout-author origin unwind one level at a time',
 for (const hash of ['member=qa-user-b', 'share=share-0', 'share=missing', 'member=missing']) {
   test(`direct ${hash} refresh has a safe Feed fallback`, async ({ page }) => {
     await page.goto('/community#' + hash);
-    await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Back to /, exact: false })).toBeVisible();
     await page.reload();
     await back(page);
     await expect(page.getByRole('tab', { name: 'Feed', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -92,9 +92,9 @@ test('directory restores scroll and search after profile navigation', async ({ p
   await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - y)).toBeLessThan(5);
 });
 
-test('username-only identities refresh on profile events; only own profile offers Settings', async ({ page }) => {
+test('username-only identities refresh on profile events; no profile offers an edit shortcut', async ({ page }) => {
   await page.goto('/community#member=qa-user-b');
-  await expect(page.getByRole('button', { name: 'Public profile', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit profile', exact: true })).toHaveCount(0);
   await expect(page.getByText('@degra', { exact: true }).first()).toBeVisible();
   await page.evaluate(() => {
     const profiles = JSON.parse(localStorage.getItem('qa-community-members'));
@@ -103,10 +103,10 @@ test('username-only identities refresh on profile events; only own profile offer
     window.dispatchEvent(new Event('lifeos:profile-updated'));
   });
   await expect(page.getByText('@renamed', { exact: true })).toBeVisible();
-  await expect(page.locator('strong').filter({ hasText: '@renamed' })).toHaveText('@renamed');
+  await expect(page.getByRole('heading', { name: '@renamed', exact: true })).toHaveText('@renamed');
   await page.goto('/community#member=qa-user-a');
-  await page.getByRole('button', { name: 'Public profile', exact: true }).click();
-  await expect(page).toHaveURL('/settings');
+  await expect(page.getByRole('heading', { level: 2 })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit profile', exact: true })).toHaveCount(0);
 });
 
 test('account switch drops navigation/search state and ignores a delayed old feed', async ({ page }) => {
@@ -118,7 +118,7 @@ test('account switch drops navigation/search state and ignores a delayed old fee
     localStorage.removeItem('qa-community-delay');
     window.__qaSignIn('qa-user-b');
   });
-  await expect(page.getByRole('button', { name: 'Public profile', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '@degra', level: 2 })).toBeVisible();
   await back(page);
   await expect(page.getByRole('tab', { name: 'Feed', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Members', exact: true }).click();

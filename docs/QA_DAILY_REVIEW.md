@@ -1,5 +1,7 @@
 # Daily Review Manual QA
 
+> Legacy UI checklist, retained as historical behavior reference. Daily Review tables/service/context remain for compatibility, but the current Companion screen does not render this workflow. Do not reintroduce it to satisfy the old steps below. Current user-facing QA is [QA_COMPANION_UI.md](QA_COMPANION_UI.md).
+
 Run this after signing in through the global auth gate. No schema migration should be needed if `daily_reviews` already exists from `supabase/schema.sql`.
 
 ## Create Today's Review

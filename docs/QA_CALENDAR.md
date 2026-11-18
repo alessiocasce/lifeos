@@ -189,7 +189,7 @@ not persisted across process death; Training continuity is a separate contract.
 ## Migration / Error States
 
 1. Test against a Supabase project where `public.calendar_events` has not been created yet.
-2. Confirm the Calendar tab shows a clear message telling you to apply `supabase/schema.sql`.
+2. Confirm Calendar shows a clear missing-table/setup error. Resolve the reviewed missing migration using [DEPLOYMENT.md](DEPLOYMENT.md), not a production baseline replay.
 3. Restore the migration and confirm loading recovers after refresh.
 4. Temporarily force a create/update/delete failure, such as by disabling network, and confirm a clear error appears.
 

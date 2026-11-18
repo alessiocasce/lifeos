@@ -1,0 +1,110 @@
+[
+  {
+    "screen": "overview",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "leaderboard",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "filters",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "lifetime",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "rank",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "profile",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "badges",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "customize",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "promotion",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "achievement",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "return",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  },
+  {
+    "screen": "training",
+    "buttons": 0,
+    "dock": 844.0000114440918,
+    "height": 844,
+    "images": true,
+    "overflow": false,
+    "width": 390
+  }
+]

@@ -1,5 +1,7 @@
 # Training / PWA corrective release (2026-11-03)
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [the documentation index](README.md). Retain historical evidence; revalidate before operational use.
+
 No schema rerun required. No production workout/profile data or rest-timer
 infrastructure is changed by this release. Rest timers remain retired.
 

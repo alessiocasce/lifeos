@@ -11,8 +11,7 @@ completed workouts are visible to authenticated members while sharing is ON.
 ON reconciles all eligible completed history; OFF withdraws all projections
 immediately in the same transaction. Re-enabling restores eligible history.
 Notes ON includes permitted historical session/set notes; OFF removes them.
-History has only View in Community, not individual publication controls. Details
-are read-only, including for their author. Owner editing stays in Training.
+History has no per-workout publication controls or View in Community action in the current UI. Community details are read-only, including for their author. Owner editing stays in Training; the account sharing/notes preferences control projection.
 
 ## Database lifecycle
 
@@ -104,3 +103,12 @@ Back returns to that origin, including nested profile/workout navigation; direct
 links fall back safely to Feed. Refresh preserves valid same-account history.
 Automatic global sharing and read-time privacy RLS are unchanged. See
 TRAINING_PROFILE_RELEASE.md and community-navigation.spec.js for focused QA.
+
+
+## Settings privacy presentation
+
+Settings now explains authenticated audience, historical workout/note sharing and separate Rankings enrollment inline. A saved notes choice is retained while workout sharing is off; notes stay hidden until sharing resumes. Failed reads show unavailable values and Retry, never apparent saved defaults. Sharing reconciliation/policy is unchanged. See [Settings QA](qa/settings-apple-design.md) for local verification and device/accessibility limits. No schema rerun required.
+
+## Local Apple-style Community UI (2026-11-17)
+
+The complete frontend redesign is implemented locally and is uncommitted/undeployed. Feed/Members, profiles, photo viewing and open exercise/set logs share the local Settings/Companion design language. Existing-capability boundaries, sanitized projections, privacy revalidation and account isolation remain. Contextual Back restores originating controls as well as search/pages/scroll. Read [implementation evidence and QA](qa/community-apple-design.md). No schema rerun required.

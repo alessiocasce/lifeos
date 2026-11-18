@@ -1,8 +1,29 @@
 # LifeOS Deployment QA
 
-## User-Armed Workout Rest Timer
+Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
-Apply only `20261004134735_workout_rest_timer.sql` before deploying this slice.
+Community profile/workout visual follow-up remains local: verify actual Settings-style profile rendering and the revised workout hierarchy without exercise-jump controls. No schema rerun required.
+
+Local Community redesign (2026-11-17): before a separately authorized release, run the focused [Community checks](qa/community-apple-design.md), including privacy revocation, notes consent, account switching, signed-photo fallback and nested Back/Forward restoration. No backend, schema or dependency changes. No schema rerun required.
+
+Local-only Companion redesign (2026-11-17): UI/CSS, translations and isolated
+browser tests; no backend, dependency or schema change. Before any separately
+authorized release, rerun [Companion QA](QA_COMPANION_UI.md), verify the deployed
+SHA and preserve the existing Settings/dock work. Physical iPhone/PWA acceptance
+is separate from browser-engine checks. No schema rerun required.
+
+The follow-up chat UI also moves message actions to footers, adds browser
+clipboard feedback and preserves scroll position while reading older replies.
+Include `companion-chat.spec.js` and `companion-reports.spec.js` in release QA;
+clipboard permission behavior on physical devices remains a manual check.
+
+## Current release checks
+
+For the current implemented PWA timer use [WORKOUT_WEB_PUSH.md](WORKOUT_WEB_PUSH.md) and [rest-coordination evidence](qa/workout-rest-coordination.md). Verify the intended deployment SHA with `/build-version.json`; live November 17 evidence is in [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md). Older rollout sections below are dated prerequisites/evidence, not instructions to reapply migrations. Use [DEPLOYMENT.md](DEPLOYMENT.md) for forward-only changes.
+
+## Historical WhatsApp User-Armed Rest Timer (retired)
+
+The original slice used `20261004134735_workout_rest_timer.sql`; it is historical and the WhatsApp-rest path was retired. Do not re-enable it or apply it as a prerequisite for the PWA coordinator.
 Production applied it via targeted Supabase `apply_migration` on 2026-10-04.
 The connector assigned version `20261004134735`; the original local filename was
 `20261002175702_workout_rest_timer.sql`. Repository identity matches the applied
@@ -48,7 +69,7 @@ Use the exact staged procedure in [RELIABILITY_RELEASE.md](RELIABILITY_RELEASE.m
 
 Run `npm test`, `npm run check:functions`, and `npm run build`. New `test:schema` and `test:reliability` execute embedded PostgreSQL locally, not Supabase RLS or physical WhatsApp. Smoke opt-in alone is preview-only; `LIFEOS_SMOKE_MUTATE=1` is required for real evaluate/poll/ACK and must use a dedicated recipient with the bridge paused. Verify live RLS, delayed ACK/claim attempts, backlog spacing, and PWA reload before calling this deployed.
 
-Run this against the deployed URL after applying `supabase/schema.sql` to the target Supabase project and setting deployment environment variables.
+Run against the intended deployed SHA after verifying required objects and environment configuration. Follow [the targeted deployment workflow](DEPLOYMENT.md); do not rerun baseline SQL against production.
 
 Core Brain/automation env vars include:
 
@@ -113,8 +134,8 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 ## Brain Persistence And Memory
 
 1. Open Assistant.
-2. Send a Brain message and refresh; confirm Brain opens a fresh New Chat draft while old messages remain persisted in Supabase/backend context.
-3. Confirm old-thread selection remains hidden in the normal UI for now.
+2. Send a Brain message and refresh; confirm Brain opens a an unselected conversation on initial page load while old messages remain persisted in Supabase/backend context.
+3. Confirm saved app conversations can be selected from the Companion context sheet.
 4. Add an explicit durable memory and confirm it can be recalled by asking Brain what it remembers or through diagnostics if exposed.
 5. Archive/forget the memory through supported controls or commands and confirm it is no longer active AI context.
 6. Verify RLS with a second user: threads, messages, memories, insights, Vault documents, and Vault chunks must remain user-scoped.
@@ -130,7 +151,7 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 ## Home
 
 1. Open Home.
-2. Confirm Home reflects persisted Health, Workout, Expense, Calendar-adjacent shell state, and recent AI actions where applicable.
+2. Confirm Command reflects active work, today/tomorrow calendar, due memos and recorded sleep/habits/completed blocks. Expense and AI action history remain in their workspaces.
 3. Confirm empty states do not show for records just created.
 
 ## Direct Tab Routes
@@ -189,7 +210,7 @@ Run it locally before deployment when Brain, WhatsApp, pending-action, command-d
 
 ## Brain Schema Deployment
 
-1. Run the latest `supabase/schema.sql` before testing Brain persistence.
+1. Verify the required Brain persistence objects/migrations before testing; do not replay the schema.
 2. Confirm `ai_chat_threads`, `ai_chat_messages`, `ai_memories`, `ai_insights`, `ai_vault_documents`, and `ai_vault_chunks` exist.
 3. Confirm authenticated users can only read/write their own rows.
 4. Confirm the composite thread/message ownership foreign key rejects cross-user message insertion.
@@ -295,7 +316,7 @@ Expected:
 
 ## Proactive WhatsApp Memo Outbox Deployment
 
-Schema must be rerun before this QA because v1A adds `brain_outbox_messages` and `brain_proactive_rules`.
+Verify the existing outbox/rule objects. The original v1A setup requirement is historical; do not rerun the baseline schema on an existing installation.
 The outbox API is intentionally consolidated into one Vercel serverless function, `POST /api/integrations/whatsapp/outbox`, to stay under the Hobby plan function limit. Run `npm run check:functions` before deployment and keep the count at 12 or lower. Legacy `/outbox/evaluate`, `/outbox/poll`, and `/outbox/ack` paths are compatibility rewrites only; new bridge code should call the combined endpoint.
 
 1. Confirm Vercel env vars are set:
@@ -557,3 +578,14 @@ Rollback: deploy the previous backend before removing either additive migration.
 - Before release, rerun coordinator, real-adapter, push transport/display/lifecycle and focused browser checks in [rest coordination acceptance](qa/workout-rest-coordination.md).
 - In a controlled deployed session, verify setup-success/save-failure and lost-response readback leave registration intact, preserve the save error, show separate readback errors, and require explicit retry. No schema rerun required. Local harnesses do not establish hosted RLS or physical-device display.
 - Obtain physical iPhone notification display confirmation separately; do not treat registration, provider acceptance or local Chromium as delivery acceptance.
+
+
+## Settings release candidate
+
+The [Settings implementation](qa/settings-apple-design.md) is local and uncommitted, not a production release. When a release is authorized, verify the intended SHA and replay read-failure recovery, privacy off/on with retained notes consent, username focus/error handling and independent photo persistence against the intended environment. Check physical iPhone/PWA and screen-reader behavior separately. No schema rerun required.
+
+
+For the Settings motion follow-up, also verify the custom language menu (including keyboard and rollback), compact username actions, animated viewer dismissal/focus return and viewer-pencil-to-native-picker flow on the intended deployment. Physical iPhone action-sheet/camera/library acceptance is separate from Chromium's filechooser-event test. No schema rerun required.
+
+
+The local [floating bottom-bar redesign](qa/apple-bottom-bar.md) needs its intended deployed SHA verified before release acceptance. Recheck cold/lazy navigation, More guards, resume/PWA-notice/composer clearance, enlarged text and actual iPhone safe-area/keyboard/toolbar behavior. This UI change requires no schema rerun.

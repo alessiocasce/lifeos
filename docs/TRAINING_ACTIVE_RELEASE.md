@@ -1,5 +1,7 @@
 # Active Training, Identity and Media Release
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) and [the documentation index](README.md). Retain historical evidence; revalidate before operational use.
+
 ## Runtime
 
 The 3 November active-workout reference governs logging, not the unchanged Live

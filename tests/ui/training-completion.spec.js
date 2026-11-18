@@ -46,7 +46,8 @@ for (const width of [375,390,430]) test('persisted completion and History naviga
   await expect(completed.getByRole('button', { name: /Save set|Edit set/ })).toHaveCount(0);
   if (width === 390) await page.screenshot({ path: info.outputPath('completion-short.png') });
   const before = await page.evaluate(() => localStorage.getItem('qa-workouts'));
-  await completed.getByRole('button', { name: 'View history', exact: true }).click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.getByRole('button', { name: /Chest/ }).click();
   await expect(page.getByLabel('Historical workout detail', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Live', exact: true }).click();
   await completed.getByRole('button', { name: 'Back to training', exact: true }).click();
@@ -68,7 +69,7 @@ test('long completion uses recorded exercises, omits unreliable volume and clear
   await page.screenshot({ path: info.outputPath('completion-long.png') });
   await page.evaluate(() => scrollTo(0,document.documentElement.scrollHeight));
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const bottom = await completed.getByRole('button', { name: 'View history', exact: true }).boundingBox();
+  const bottom = await completed.getByRole('button', { name: 'Save as template', exact: true }).boundingBox();
   const dock = await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox();
   expect(bottom.y + bottom.height).toBeLessThan(dock.y);
   await page.screenshot({ path: info.outputPath('completion-long-bottom.png') });

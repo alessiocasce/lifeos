@@ -16,6 +16,9 @@ import { selectBrainTurnInteraction } from '../../api/_utils/brainInteractionSel
 
 const { db, client } = await createReliabilityDatabase();
 const now = new Date('2026-09-26T12:00:00.000Z');
+// Application helpers use this deterministic clock. Give the isolated DB the
+// same insertion clock while retaining the real expires_at > created_at check.
+await db.query(`alter table brain_monitors alter column created_at set default '${now.toISOString()}'::timestamptz`);
 const project = (await db.query(`insert into projects(user_id,name,goal_type,current_value,target_value)
   values ($1,'LifeOS','units',0,10) returning id`, [fixtureUser])).rows[0];
 const proposal = { monitor_type: 'project_staleness', project_id: project.id,

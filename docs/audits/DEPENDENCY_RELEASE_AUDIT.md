@@ -1,5 +1,7 @@
 # Dependency release audit
 
+> Dated release/QA record. Counts, deployment IDs, pending gates and local-only wording below describe that recorded phase. For the latest source/release state use [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and [the documentation index](../README.md). Retain historical evidence; revalidate before operational use.
+
 Captured 2026-11-08T22:28:23.561Z; checked after compatible npm audit fix at 2026-11-08T22:30:29.264Z.
 
 17 findings (7 high, 6 moderate, 4 low) became 6 (0 high, 4 moderate, 2 low).

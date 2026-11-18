@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('qa-templates','[]');
   },{today:localDate(),a:resolveExercise('Incline Barbell Bench Press'),b:resolveExercise('Dumbbell Bench Press')});
 });
-const field=(page,name)=>page.getByRole('textbox',{name,exact:true});
+const field=(page,name)=>page.getByRole('textbox',{name: name === 'Weight (kg)' ? /(?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/ : name === 'Peso (kg)' ? /(?:Peso|Carico totale|Per mano) \(kg\)/ : name,exact:true});
 async function switchPlan(page,name) {
   await page.getByRole('button',{name:'Exercise',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:new RegExp(name)}).click();
@@ -35,15 +35,15 @@ test('exercise drafts are independent, durable, with own prefill and outcome sta
   await page.getByRole('button',{name:'More options',exact:true}).click();
   await page.getByRole('button',{name:'RPE 7',exact:true}).click();
   await field(page,'Set notes').fill('Only A');
-  await page.getByRole('checkbox',{name:'Warmup set'}).check();
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
+  await page.getByRole('checkbox',{name:'Warmup set'}).check();
   await switchPlan(page,'Dumbbell Bench Press');
   await expect(field(page,'Weight (kg)')).toHaveValue('30');
   await page.getByRole('button',{name:'More options',exact:true}).click();
   await expect(field(page,'Set notes')).toHaveValue('');
   await expect(page.getByRole('button',{name:'None',exact:true})).toHaveAttribute('aria-pressed','true');
-  await expect(page.getByRole('checkbox',{name:'Warmup set'})).not.toBeChecked();
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
+  await expect(page.getByRole('checkbox',{name:'Warmup set'})).not.toBeChecked();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await field(page,'Reps').fill('11');
   await page.reload();
@@ -54,8 +54,8 @@ test('exercise drafts are independent, durable, with own prefill and outcome sta
   await expect(field(page,'Set notes')).toHaveValue('Only A');
   await expect(page.getByRole('button',{name:'RPE 7',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.getByRole('button',{name:'None',exact:true}).click();
-  await page.getByRole('checkbox',{name:'Warmup set'}).uncheck();
   await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
+  await page.getByRole('checkbox',{name:'Warmup set'}).uncheck();
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
   await expect(page.getByRole('region',{name:'Sets logged',exact:true})).toContainText('57.5');
   const set=await page.evaluate(()=>JSON.parse(localStorage.getItem('qa-workouts'))[0].workout_sets[0]);
@@ -63,7 +63,7 @@ test('exercise drafts are independent, durable, with own prefill and outcome sta
   await switchPlan(page,'Dumbbell Bench Press');
   await expect(page.getByRole('region',{name:'Sets logged',exact:true})).not.toContainText('57.5');
   await expect(page.getByRole('timer')).toHaveCount(0);
-  await expect(page.getByText(/Rest timer/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Rest timer', exact: true })).toBeVisible();
 });
 
 test('last time, counters, catalog override, options, set editing/deletion, end and History',async({page})=>{
@@ -72,7 +72,7 @@ test('last time, counters, catalog override, options, set editing/deletion, end 
   await expect(last).not.toHaveAttribute('open','');
   await last.locator('summary').click();
   await expect(last).toContainText('20 kg × 10');await expect(last).toContainText('RPE 7.5');
-  await page.getByRole('button',{name:'Increase Weight (kg)',exact:true}).click();
+  await page.getByRole('button',{name:/Increase (?:Weight(?: per dumbbell| per implement)?|Total load) \(kg\)/,exact:true}).click();
   await expect(field(page,'Weight (kg)')).toHaveValue('57.5');
   await field(page,'Weight (kg)').fill('56.25');
   await page.getByRole('button',{name:'Save Set',exact:true}).click();
@@ -81,9 +81,11 @@ test('last time, counters, catalog override, options, set editing/deletion, end 
   await edit.getByRole('textbox',{name:/Weight/}).fill('58.5');
   await edit.getByRole('button',{name:'Save edit'}).click();
   await expect(page.getByRole('region',{name:'Sets logged'})).toContainText('58.5');
-  page.once('dialog',d=>d.dismiss());await page.getByRole('button',{name:'Delete set',exact:true}).click();
+  await page.getByRole('button',{name:'Delete set',exact:true}).click();
+  await page.getByRole('dialog', { name: 'Delete set?' }).getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('button',{name:'Edit set',exact:true})).toHaveCount(1);
-  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Delete set',exact:true}).click();
+  await page.getByRole('button',{name:'Delete set',exact:true}).click();
+  await page.getByRole('dialog', { name: 'Delete set?' }).getByRole('button', { name: 'Delete set', exact: true }).click();
   await expect(page.getByRole('button',{name:'Edit set',exact:true})).toHaveCount(0);
   await selectExercise(page,'Barbell Curl');
   await expect(field(page,'Weight (kg)')).toHaveValue('');
@@ -94,7 +96,7 @@ test('last time, counters, catalog override, options, set editing/deletion, end 
   await page.getByRole('button',{name:'Save changes'}).click();
   await expect(page.getByRole('heading',{name:'Renamed workout'})).toBeVisible();
   page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'End Workout',exact:true}).click();
-  await expect(page.getByText('Session complete',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Workout completed!',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'History',exact:true}).click();
   await expect(page.getByRole('button',{name:/Renamed workout/})).toBeVisible();
 });
@@ -106,12 +108,12 @@ test('Manage is a saved-template library with a focused notes-free editor',async
   const create=page.getByRole('form',{name:'Create workout template'});
   await create.getByLabel('Template name').fill('My actual plan');
   await expect(create.getByLabel('Notes',{exact:true})).toHaveCount(0);
+  await create.locator('summary').filter({hasText:'Choose color'}).click();
   await create.getByRole('button',{name:'Blue',exact:true}).click();
+  await create.locator('summary').filter({hasText:'Choose icon'}).click();
   await create.getByRole('button',{name:'Back',exact:true}).click();
+  await selectExercise(page,'Barbell Curl',{label:'Add exercise',scope:create});
   await create.getByRole('button',{name:'Create template',exact:true}).click();
-  const add=page.getByRole('group',{name:'Add template exercise'});
-  await selectExercise(page,'Barbell Curl',{label:'Add exercise',scope:add});
-  await add.getByRole('button',{name:'Add exercise',exact:true}).filter({hasNot:page.locator('span')}).click();
   await page.getByRole('button',{name:'Your templates',exact:true}).click();
   await expect(page.getByRole('group',{name:'Add template exercise'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:/My actual plan/})).toContainText('1 exercises');

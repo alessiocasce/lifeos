@@ -1,5 +1,7 @@
 # Codex Execution Prompt — LifeOS Companion vNext, Slice 2.5 + Slice 3
 
+> Historical archive; not current implementation instructions. Read [PROJECT_CONTEXT.md](../../PROJECT_CONTEXT.md) and the parent archive index before using this record.
+
 You are working in the existing repository alessiocasce/lifeos.
 
 This is one continuous execution run with two strictly ordered milestones:
