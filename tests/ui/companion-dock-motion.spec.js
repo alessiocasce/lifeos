@@ -62,10 +62,16 @@ test('the rendered dock sits lower and at identical coordinates across mobile ta
   expect(returned.y).toBe(positions[0].y);
 });
 
-test('Companion cannot pan its document or translate a pull-refresh ancestor on focus', async ({ page }) => {
+test('idle Companion fills the document in normal flow without page scrolling', async ({ page }) => {
   await page.goto('/assistant');
   await expect(page.getByTestId('brain-message-input')).toBeVisible();
-  await expect(page.locator('.lifeos-shell')).toHaveCSS('position', 'fixed');
+  const shell = page.locator('.lifeos-shell');
+  const size = await shell.evaluate(element => ({
+    height: element.offsetHeight,
+    viewportHeight: window.innerHeight,
+    position: getComputedStyle(element).position,
+  }));
+  expect(size).toEqual({ height: size.viewportHeight, viewportHeight: size.viewportHeight, position: 'static' });
   await expect(page.locator('.pull-refresh')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 200));
   expect(await page.evaluate(() => window.scrollY)).toBe(0);

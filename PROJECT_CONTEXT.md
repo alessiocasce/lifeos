@@ -4,6 +4,8 @@
 
 ## Current State (2026-11-19 release batch)
 
+- An iPhone recording after the dock follow-up showed the dock about 40 video pixels higher on Companion than on Training. Companion now contributes a full-height box to normal document flow across the keyboard cycle. Only the inner chat workspace follows the keyboard's visual viewport while it is moving or open. See [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md). No schema rerun required.
+
 - After `def68a0`, the Companion dock was still reported higher. The shared dock now uses the browser's fixed bottom edge and the safe-area inset directly. Visual viewport measurements still size Companion and keyboard-aware dialogs. See [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md) for the regression and installed iPhone check. No schema rerun required.
 
 - After `aa9cb18`, Companion's raised dock was reopened on iPhone. The shared dock frame now uses the measured visual viewport's top and explicit height, instead of `fixed; inset: 0` and its implicit layout-viewport bottom. The new regression fails on the old frame when visual/layout heights differ, and compares actual dock coordinates across tabs for both taller and shorter visible viewports. This reproduces a coordinate-space defect, not the physical iPhone paint offset; device acceptance remains open. See [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md). No schema rerun required.

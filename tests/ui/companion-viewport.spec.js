@@ -1,15 +1,17 @@
 import { test, expect } from '@playwright/test';
 
 test.use({ isMobile: true, hasTouch: true });
-test('Companion keeps one layout through keyboard animation instead of switching modes', async ({ page }) => {
+test('Companion keeps its document height through keyboard animation', async ({ page }) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await page.goto('/assistant');
   const shell = page.locator('.lifeos-shell');
+  const workspace = shell.locator('.workspace');
   const input = page.getByTestId('brain-message-input');
   await expect(input).toHaveAttribute('inputmode', 'text');
   await expect(input).toHaveAttribute('enterkeyhint', 'send');
-  const closedHeight = (await shell.boundingBox()).height;
-  await expect(shell).toHaveCSS('position', 'fixed');
+  const documentHeight = (await shell.boundingBox()).height;
+  const closedHeight = (await workspace.boundingBox()).height;
+  await expect(workspace).toHaveCSS('position', 'static');
   const initialComposerHeight = (await page.locator('.companion-composer').boundingBox()).height;
   await input.tap();
   for (const [height, top] of [[800, 0], [740, 10], [680, 30], [560, 50], [440, 60], [560, 40], [740, 10], [844, 0]]) {
@@ -19,7 +21,8 @@ test('Companion keeps one layout through keyboard animation instead of switching
       visualViewport.dispatchEvent(new Event('resize'));
       visualViewport.dispatchEvent(new Event('scroll'));
     }, { height, top });
-    await expect.poll(async () => (await shell.boundingBox()).height).toBe(Math.min(height, closedHeight));
+    expect((await shell.boundingBox()).height).toBe(documentHeight);
+    await expect.poll(async () => (await workspace.boundingBox()).height).toBeCloseTo(Math.min(height, closedHeight), 1);
     if (height < 724) await expect(page.locator('.companion-toolbar')).toBeHidden();
     const composer = await page.locator('.companion-composer').boundingBox();
     expect(composer.height).toBeCloseTo(initialComposerHeight, 0);

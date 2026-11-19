@@ -22,6 +22,20 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Companion document layout after `8e4388d`
+
+The supplied 384×832 iPhone recording shows the dock's lower edge at about
+y=808 on Training and y=768 on idle Companion. It also shows the dock briefly
+moving down during a swipe with the keyboard closed. The recording does not
+show the installed build version.
+
+Companion now occupies a full viewport-height box in normal document flow.
+The inner workspace reserves dock clearance while idle and follows the visual
+viewport only during keyboard adjustment. The regression checks that the outer
+shell contributes its height before, during and after keyboard movement, and
+that the standalone chat does not add page scroll. On iPhone, compare dock
+coordinates between Training and Companion at rest and after swiping.
+
 ### Browser-anchored dock after `def68a0`
 
 Production served `def68a0` when the user reported the dock still sat higher

@@ -4,16 +4,20 @@
   html[data-keyboard-open='true'] :is(input, textarea, select) { scroll-margin-block: 16px; }
 
   html, body, #root { height: 100%; }
-  /* Keep the dock's document layout consistent across tabs. Only Companion's
-     workspace is fixed, with chat scrolling inside its own viewport. */
+  /* Keep a full-height box in document flow across the keyboard cycle. */
   .lifeos-shell[data-workspace='assistant'] {
-    position: fixed; inset: var(--lifeos-viewport-top, 0px) 0 auto;
-    height: calc(var(--lifeos-viewport-height, 100dvh) - max(0px, var(--lifeos-mobile-dock-clearance) - var(--lifeos-keyboard-inset, 0px))); min-height: 0; overflow: hidden; overscroll-behavior: none;
+    height: 100dvh; min-height: 0; overflow: clip;
   }
-  html[data-keyboard-open='false'] .lifeos-shell[data-workspace='assistant'] {
+  .lifeos-shell[data-workspace='assistant'] .workspace {
+    height: calc(100% - var(--lifeos-mobile-dock-clearance)); min-height: 0; display: flex; flex-direction: column;
+  }
+  html[data-keyboard-viewport] .lifeos-shell[data-workspace='assistant'] .workspace {
+    position: fixed; inset: var(--lifeos-viewport-top, 0px) 0 auto;
+    height: calc(var(--lifeos-viewport-height, 100dvh) - max(0px, var(--lifeos-mobile-dock-clearance) - var(--lifeos-keyboard-inset, 0px))); overflow: hidden;
+  }
+  html[data-keyboard-viewport][data-keyboard-open='false'] .lifeos-shell[data-workspace='assistant'] .workspace {
     max-height: calc(100% - var(--lifeos-viewport-top, 0px) - var(--lifeos-mobile-dock-clearance));
   }
-  .lifeos-shell[data-workspace='assistant'] .workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .lifeos-shell[data-workspace='assistant'] .workspace-header { display: none; }
   .lifeos-shell[data-workspace='assistant'] .companion-viewport-content { display: flex; flex: 1; min-height: 0; }
   .lifeos-shell[data-workspace='assistant'] .workspace-content { display: flex; flex: 1; min-height: 0; width: 100%; padding: max(4px, env(safe-area-inset-top)) 12px 4px; }

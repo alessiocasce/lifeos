@@ -21,10 +21,12 @@ export function useMobileViewport() {
       // Blur precedes dismissal. Keep geometry until the keyboard actually
       // leaves, including between pointerdown and click on the Send button.
       const open = Boolean(scale === 1 && (keyboardVisible ? inset > 2 : editing && inset > 120));
+      const keyboardInset = scale === 1 && (editing || open) ? inset : 0;
       keyboardVisible = open;
       root.style.setProperty('--lifeos-viewport-height', `${height}px`);
       root.style.setProperty('--lifeos-viewport-top', `${viewport?.offsetTop || 0}px`);
-      root.style.setProperty('--lifeos-keyboard-inset', `${scale === 1 && (editing || open) ? inset : 0}px`);
+      root.style.setProperty('--lifeos-keyboard-inset', `${keyboardInset}px`);
+      root.toggleAttribute('data-keyboard-viewport', keyboardInset > 2);
       root.dataset.keyboardOpen = String(open);
       setKeyboardOpen(open);
     };
@@ -44,6 +46,7 @@ export function useMobileViewport() {
       root.style.removeProperty('--lifeos-viewport-top');
       root.style.removeProperty('--lifeos-keyboard-inset');
       delete root.dataset.keyboardOpen;
+      root.removeAttribute('data-keyboard-viewport');
     };
   }, []);
   return keyboardOpen;
