@@ -22,6 +22,18 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Companion workspace positioning after `56e5ae0`
+
+Opening Companion used to switch the body to fixed positioning and hide root
+overflow. The mobile dock is mounted directly under that body, so it still saw
+a tab-specific document layout even with a shared viewport calculation.
+Companion now fixes only its workspace and keeps scrolling inside the chat.
+
+The browser regression compares document positioning and dock rectangles across
+Command, Companion, Community and Training, then checks dock recovery after a
+keyboard cycle. On an installed iPhone, compare the dock when opening Companion
+directly, switching to it from a scrolled tab and dismissing the keyboard.
+
 ### Visible-viewport dock frame after `aa9cb18`
 
 The user again reports a higher Companion dock. Investigation ruled out active

@@ -4,13 +4,11 @@
   html[data-keyboard-open='true'] :is(input, textarea, select) { scroll-margin-block: 16px; }
 
   html, body, #root { height: 100%; }
-  html:has(.lifeos-shell[data-workspace='assistant']) { overflow: hidden; }
-  html:has(.lifeos-shell[data-workspace='assistant']) body { position: fixed; inset: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
-  /* Lock document panning and give chat one viewport height. Dock clearance is
-     subtracted in that same calculation, never animated independently of it. */
+  /* Keep the dock's document layout consistent across tabs. Only Companion's
+     workspace is fixed, with chat scrolling inside its own viewport. */
   .lifeos-shell[data-workspace='assistant'] {
-    position: absolute; inset: auto 0; top: var(--lifeos-viewport-top, 0px);
-    height: calc(var(--lifeos-viewport-height, 100dvh) - max(0px, var(--lifeos-mobile-dock-clearance) - var(--lifeos-keyboard-inset, 0px))); min-height: 0; overflow: hidden;
+    position: fixed; inset: var(--lifeos-viewport-top, 0px) 0 auto;
+    height: calc(var(--lifeos-viewport-height, 100dvh) - max(0px, var(--lifeos-mobile-dock-clearance) - var(--lifeos-keyboard-inset, 0px))); min-height: 0; overflow: hidden; overscroll-behavior: none;
   }
   .lifeos-shell[data-workspace='assistant'] .workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .lifeos-shell[data-workspace='assistant'] .workspace-header { display: none; }

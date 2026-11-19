@@ -153,8 +153,10 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     await page.goto('/assistant');
     const composer = page.getByTestId('brain-message-input');
     await expect(composer).toBeVisible();
-    const box = await composer.boundingBox();
-    expect(box.y + box.height).toBeLessThan(height - (width < 768 ? 155 : 75));
+    const box = await page.locator('.companion-composer').boundingBox();
+    const dock = width < 768 ? await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox() : null;
+    if (width < 768) expect(dock).not.toBeNull();
+    expect(box.y + box.height).toBeLessThan(dock?.y ?? height);
     await page.screenshot({ path: info.outputPath('companion.png') });
     await page.getByRole('button', { name: 'Open Companion context' }).click();
     const panel = page.getByRole('dialog', { name: 'Companion context' });

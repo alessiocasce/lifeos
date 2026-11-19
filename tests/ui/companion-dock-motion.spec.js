@@ -41,11 +41,17 @@ test('the rendered dock sits lower and at identical coordinates across mobile ta
   await page.evaluate(() => document.documentElement.style.setProperty('--lifeos-safe-bottom', '34px'));
   const nav = page.getByRole('navigation', { name: 'Mobile navigation' });
   const positions = [];
+  const documentLayout = () => page.evaluate(() => [document.documentElement, document.body].map(element => {
+    const { position, overflowY } = getComputedStyle(element);
+    return { position, overflowY };
+  }));
+  const commandLayout = await documentLayout();
   for (const name of ['Command', 'Companion', 'Community', 'Training', 'Companion', 'Command']) {
     await nav.getByRole('button', { name, exact: true }).tap();
     await expect(nav).toBeVisible();
     const box = await nav.boundingBox();
     positions.push({ y: box.y, bottom: box.y + box.height, height: box.height });
+    expect(await documentLayout(), name).toEqual(commandLayout);
   }
   expect(positions.every(position => position.y === positions[0].y && position.height === positions[0].height)).toBe(true);
   expect(positions[0].bottom).toBe(844 - 22);
@@ -66,9 +72,7 @@ test('the rendered dock sits lower and at identical coordinates across mobile ta
 test('Companion cannot pan its document or translate a pull-refresh ancestor on focus', async ({ page }) => {
   await page.goto('/assistant');
   await expect(page.getByTestId('brain-message-input')).toBeVisible();
-  const body = await page.locator('body').evaluate(el => ({ position: getComputedStyle(el).position, height: el.getBoundingClientRect().height }));
-  expect(body.position).toBe('fixed');
-  expect(body.height).toBe(844);
+  await expect(page.locator('.lifeos-shell')).toHaveCSS('position', 'fixed');
   await expect(page.locator('.pull-refresh')).toHaveCount(0);
   await page.evaluate(() => window.scrollTo(0, 200));
   expect(await page.evaluate(() => window.scrollY)).toBe(0);

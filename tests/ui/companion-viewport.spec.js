@@ -9,7 +9,7 @@ test('Companion keeps one layout through keyboard animation instead of switching
   await expect(input).toHaveAttribute('inputmode', 'text');
   await expect(input).toHaveAttribute('enterkeyhint', 'send');
   const closedHeight = (await shell.boundingBox()).height;
-  expect(await page.locator('body').evaluate(el => getComputedStyle(el).position)).toBe('fixed');
+  await expect(shell).toHaveCSS('position', 'fixed');
   const initialComposerHeight = (await page.locator('.companion-composer').boundingBox()).height;
   await input.tap();
   for (const [height, top] of [[800, 0], [740, 10], [680, 30], [560, 50], [440, 60], [560, 40], [740, 10], [844, 0]]) {
