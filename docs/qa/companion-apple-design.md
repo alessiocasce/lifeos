@@ -1,5 +1,7 @@
 # Companion Apple-style redesign
 
+Local keyboard follow-up: [mobile fixes](mobile-bugfixes-2026-11-19.md). Companion fits the visual viewport while typing and retains the latest reply when the reader was at the bottom. The cross-tab workout banner is removed; older two-bar measurements below describe the earlier release.
+
 Final accumulated release evidence: [2026-11-19 checks](ui-release-2026-11-19.md).
 This supersedes earlier deferred-validation and local-only status notes below.
 

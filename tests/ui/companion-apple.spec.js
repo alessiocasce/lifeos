@@ -62,8 +62,8 @@ for (const language of ['en', 'it']) {
           expect(send.y + send.height).toBeLessThanOrEqual(dock.y);
           await expect.poll(async () => {
             const composer = await page.locator('.companion-composer').boundingBox();
-            const resume = await page.locator('.training-dock').boundingBox();
-            return composer.y + composer.height <= resume.y;
+            const navigation = await page.locator('.mobile-dock').boundingBox();
+            return composer.y + composer.height <= navigation.y;
           }).toBe(true);
         }
         await page.screenshot({ path: `${evidence}/companion-apple-${language}-${width}-${size === '100%' ? 'normal' : 'large'}.png` });

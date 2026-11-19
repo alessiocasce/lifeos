@@ -63,7 +63,8 @@ test('reconnection refresh retains visible draft and browser back retains user a
   await expect(exercise(page)).toContainText('Barbell Curl');
   await page.goForward();
   await expect(page).toHaveURL(/\/$/);
-  await page.getByRole('button', { name: /Training in progress/ }).click();
+  await expect(page.locator('.training-dock')).toHaveCount(0);
+  await dock(page).getByRole('button', { name: 'Training', exact: true }).click();
   await expect(exercise(page)).toContainText('Barbell Curl');
   expect(errors).toEqual([]);
 });

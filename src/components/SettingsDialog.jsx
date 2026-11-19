@@ -35,7 +35,9 @@ export function SettingsDialog({ title, onClose, children, className = '', busy 
       photoReturnFrames.current = photoFrames;
       if (previous?.style) previous.style.visibility = 'hidden';
     }
-    const animation = element.animate(photoViewer ? photoFrames(source) : [
+    const animatedElement = photoViewer ? element.querySelector('.settings-photo-circle') : element;
+    if (photoViewer) animatedElement.style.transformOrigin = '0 0';
+    const animation = animatedElement.animate(photoViewer ? photoFrames(source) : [
       { opacity: 0, transform: reduced ? 'none' : 'translateY(10px) scale(.94)' },
       { opacity: 1, transform: 'translateY(0) scale(1)' },
     ], { duration: reduced ? (photoViewer ? 1 : 100) : 240, easing: photoViewer ? 'cubic-bezier(.22,1,.36,1)' : 'cubic-bezier(.2,.75,.25,1)', fill: 'both' });

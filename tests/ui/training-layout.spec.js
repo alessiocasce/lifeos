@@ -20,8 +20,8 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     await expect(page.getByRole('status').filter({ hasText: 'Saved: Barbell Curl' })).toBeVisible();
     const nav = page.getByRole('navigation', { name: width < 768 ? 'Mobile navigation' : 'Primary navigation', exact: true });
     await nav.getByRole('button', { name: 'Command', exact: true }).click();
-    await expect(page.getByRole('button', { name: /Training in progress.*Barbell Curl.*Resume/ })).toBeVisible();
-    await page.getByRole('button', { name: /Training in progress.*Resume/ }).click();
+    await expect(page.locator('.training-dock')).toHaveCount(0);
+    await nav.getByRole('button', { name: 'Training', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Exercise', exact: true })).toContainText('Barbell Curl');
     expect(errors).toEqual([]);
   });

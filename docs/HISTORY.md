@@ -5,6 +5,15 @@ The current architecture and module reference stays in `PROJECT_CONTEXT.md`.
 
 ## UI refinement release (2026-11-19)
 
+Mobile bug follow-up: preserve workout-card taps through small finger movements,
+animate only the profile photo and remove its modal outline, lower navigation by
+6px and track the visual viewport from startup, fit chat/forms above the keyboard,
+retain latest replies during resize, and remove the cross-tab training banner.
+User authorized commit/push and production deployment through `main`. Build,
+Brain, function-count, whitespace and focused Chromium/WebKit checks passed;
+physical iPhone acceptance remains separate. See [mobile checks and release target](qa/mobile-bugfixes-2026-11-19.md).
+No schema rerun required.
+
 Accumulated Settings, mobile navigation, Companion, Community and Training UI
 changes, plus the documentation audit/handoff, were validated on
 `release/ui-refinements-20261118` for push and fast-forward merge to main. Template creation/editing now share the staged

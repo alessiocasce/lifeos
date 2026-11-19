@@ -8,6 +8,7 @@ const PULL_THRESHOLD = 72;
 const MAX_PULL = 112;
 const REFRESH_HOLD_OFFSET = 56;
 const SNAP_BACK_DURATION = 220;
+const DRAG_THRESHOLD = 10;
 
 export function PullToRefresh({ children }) {
   const { activeWorkoutSession, meaningfulUnsavedWork, refreshLifeOS } = useLifeOS();
@@ -42,7 +43,6 @@ export function PullToRefresh({ children }) {
         startY: touch.clientY,
         active: true,
       };
-      setIsDragging(true);
     };
 
     const handleTouchMove = (event) => {
@@ -51,6 +51,8 @@ export function PullToRefresh({ children }) {
       const touch = event.touches[0];
       const deltaX = touch.clientX - gesture.startX;
       const deltaY = touch.clientY - gesture.startY;
+      // Finger jitter is still a tap. Preventing it cancels Safari's click.
+      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < DRAG_THRESHOLD && !gesture.dragging) return;
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         gesture.active = false;
         resetPull();
@@ -62,6 +64,8 @@ export function PullToRefresh({ children }) {
       }
 
       event.preventDefault();
+      gesture.dragging = true;
+      setIsDragging(true);
       const distance = Math.min(MAX_PULL, deltaY * 0.62);
       pullDistanceRef.current = distance;
       setContentOffset(distance);
@@ -173,7 +177,7 @@ export function PullToRefresh({ children }) {
   const indicatorOffset = Math.max(-40, contentOffset - 48);
   const indicatorOpacity = visible ? Math.min(1, Math.max(0.2, contentOffset / 36)) : 0;
   return (
-    <div ref={containerRef} className="relative min-w-0">
+    <div ref={containerRef} className="pull-refresh relative min-w-0">
       <div
         aria-live="polite"
         className="pointer-events-none absolute inset-x-0 top-0 z-[9] flex justify-center px-3 transition-opacity duration-150 md:hidden"
@@ -191,6 +195,7 @@ export function PullToRefresh({ children }) {
         </div>
       </div>
       <div
+        className="pull-refresh-content"
         style={{
           transform: contentOffset > 0 ? `translate3d(0, ${contentOffset}px, 0)` : 'none',
           transition: isDragging ? 'none' : `transform ${SNAP_BACK_DURATION}ms cubic-bezier(0.22, 1, 0.36, 1)`,

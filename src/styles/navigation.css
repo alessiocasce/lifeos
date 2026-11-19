@@ -29,7 +29,7 @@
 .mobile-dock-selection[data-ready='true'] { opacity: 1; }
 @media (max-width: 767px) {
   .shell-docks .mobile-dock {
-    position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+    position: fixed; left: 12px; right: 12px; bottom: calc(6px + env(safe-area-inset-bottom) + var(--lifeos-dock-viewport-gap, 0px));
     height: auto; min-height: 72px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0; padding: 6px; overflow: hidden; border: 1px solid #a9bad02e; border-radius: 28px;
     background: rgb(25 31 41 / 91%); backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);

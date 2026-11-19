@@ -1,5 +1,19 @@
 # Current session handoff
 
+## Mobile bug follow-up, 2026-11-19
+
+The mobile follow-up fixes pull-to-refresh swallowing small workout-card
+taps, isolate photo animation to the circle and remove its container outline,
+lower the mobile bar by 6px with visual-viewport tracking from startup, fit
+Companion/modal forms above the keyboard, preserve bottom-pinned chat during
+resize, and remove the cross-tab workout banner plus Command's Training-in-progress
+headline. Training navigation and Command's active-work card still resume the
+session. See [mobile bug evidence and device checks](../qa/mobile-bugfixes-2026-11-19.md).
+No schema rerun required. Native iPhone keyboard/photo/cold-PWA behavior still
+needs physical-device acceptance. The user explicitly authorized committing and
+deploying this follow-up. Release through `main` and the existing Vercel Git
+integration; confirm READY status and the public build-version SHA for completion.
+
 ## Release batch: 2026-11-18 to 2026-11-19
 
 The user explicitly requested the final Delete-button correction, all checks,

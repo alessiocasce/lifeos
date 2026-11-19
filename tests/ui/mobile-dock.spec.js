@@ -18,16 +18,13 @@ for (const language of ['en', 'it']) test(`floating navigation fits all breakpoi
     await expect(dock(page).getByRole('button')).toHaveCount(5);
     await expect(dock(page).locator('[aria-current="page"]')).toHaveCount(1);
     const nav = await dock(page).boundingBox();
-    expect(nav.x).toBe(12); expect(nav.x + nav.width).toBe(width - 12); expect(nav.y + nav.height).toBe(832);
+    expect(nav.x).toBe(12); expect(nav.x + nav.width).toBe(width - 12); expect(nav.y + nav.height).toBe(838);
     for (const button of await dock(page).getByRole('button').all()) {
       const box = await button.boundingBox();
       expect(box.height).toBeGreaterThanOrEqual(44); expect(box.width).toBeGreaterThanOrEqual(44);
       expect(await button.locator('.mobile-destination-label').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     }
-    await expect.poll(async () => {
-      const resume = await page.locator('.training-dock').boundingBox();
-      return nav.y - resume.y - resume.height;
-    }).toBeGreaterThanOrEqual(11);
+    await expect(page.locator('.training-dock')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`dock-${language}-${width}.png`) });
   }
@@ -70,7 +67,7 @@ test('press feedback cancels on drag-away; reduced motion and More focus remain 
   await expect(more).toBeFocused();
 });
 
-test('larger text grows the dock and reserves room above both bars', async ({ page }) => {
+test('larger text grows the dock and reserves room above the bar', async ({ page }) => {
   for (const language of ['en', 'it']) {
     await page.evaluate(language => localStorage.setItem('qa-settings:qa-user-a', JSON.stringify({ profile: { user_id: 'qa-user-a', username: 'qa_user' }, preferences: { language, workout_sharing: true, share_workout_notes: false } })), language);
     await page.reload();
@@ -79,19 +76,15 @@ test('larger text grows the dock and reserves room above both bars', async ({ pa
       await page.setViewportSize({ width, height: 844 });
       await page.evaluate(() => document.documentElement.style.fontSize = '200%');
       await expect.poll(() => dock(page).evaluate(el => el.offsetHeight)).toBeGreaterThan(72);
-      await expect.poll(async () => {
-        const nav = await dock(page).boundingBox();
-        const resume = await page.locator('.training-dock').boundingBox();
-        return nav.y - resume.y - resume.height;
-      }).toBeGreaterThanOrEqual(11);
+      await expect(page.locator('.training-dock')).toHaveCount(0);
       for (const button of await dock(page).getByRole('button').all()) {
         expect(await button.locator('.mobile-destination-label').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.locator('#settings-notes').scrollIntoViewIfNeeded();
       const notes = await page.locator('#settings-notes').boundingBox();
-      const resume = await page.locator('.training-dock').boundingBox();
-      expect(notes.y + notes.height).toBeLessThan(resume.y);
+      const nav = await dock(page).boundingBox();
+      expect(notes.y + notes.height).toBeLessThan(nav.y);
     }
   }
 });

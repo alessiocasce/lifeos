@@ -4,6 +4,8 @@
 
 ## Current State (2026-11-19 release batch)
 
+- Mobile bug follow-up removes the cross-tab workout banner, lowers the dock 6px, adds shared visual-viewport keyboard geometry, keeps photo animation on the circle and preserves native card taps until a deliberate pull gesture. See [mobile bug QA and release target](docs/qa/mobile-bugfixes-2026-11-19.md). Commit/push and production deployment were authorized on 2026-11-19; verify current Git/Vercel status and the public build-version SHA. Physical iPhone acceptance remains separate. No schema rerun required.
+
 - Accumulated Settings, mobile bar, Companion, Community, Training and durable
   documentation changes are being released from `release/ui-refinements-20261118`
   against `fe8b99c`. The user's current instruction authorizes all checks,
@@ -72,7 +74,7 @@ npm.cmd run dev -- --host 0.0.0.0
 - `src/context/LifeOSContext.jsx` is the central state layer. It owns active tab state, account-scoped client drafts, Supabase auth state, persisted module state, and CRUD actions.
 - `src/components/AuthScreen.jsx` owns global sign in, sign up, loading, and Supabase setup screens.
 - `src/components/LifeOSLogo.jsx` contains the custom inline SVG logo used by the shell and favicon artwork.
-- `src/components/Shell.jsx` owns the app shell: desktop primary navigation is Command, Training, Community, Projects and Companion; utilities include Health, Calendar, Memos, Finances and Settings. Mobile has Command, Community, Training, Companion and More; More contains Projects and utilities. Portaled fixed docks preserve active-workout resume and keyboard/safe-area geometry. There are no old dashboard metric boxes.
+- `src/components/Shell.jsx` owns the app shell: desktop primary navigation is Command, Training, Community, Projects and Companion; utilities include Health, Calendar, Memos, Finances and Settings. Mobile has Command, Community, Training, Companion and More; More contains Projects and utilities. The portaled navigation bar tracks keyboard/visual-viewport/safe-area geometry. The cross-tab workout banner is removed locally; Training navigation and Command's active-work card retain resume access. There are no old dashboard metric boxes.
 - `src/tabs/SettingsTab.jsx`, `src/hooks/useUserSettings.js` and `src/components/ProfileCompletion.jsx` own profile/onboarding and account preferences. New/unset preferences default to Italian, workout sharing ON and notes sharing OFF; explicit saved choices are preserved. Password recovery is handled before the normal workspace.
 - `src/tabs/CommunityTab.jsx` and `src/utils/communityCache.js` expose sanitized authenticated-member workout projections, account-scoped browsing state and privacy revalidation. Read [Community](docs/COMMUNITY.md) before changing sharing.
 - `src/components/ui.jsx` contains shared UI primitives such as `Panel`, `PanelHeader`, `Tag` and `MiniMetric`.

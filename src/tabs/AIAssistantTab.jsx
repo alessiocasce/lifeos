@@ -188,10 +188,16 @@ export function AIAssistantTab() {
     if (!container) return undefined;
     updatePinnedState();
     container.addEventListener('scroll', updatePinnedState, { passive: true });
-    window.addEventListener('resize', updatePinnedState);
+    const observer = new ResizeObserver(() => {
+      // Keyboard/composer resizing must retain the reader's existing intent.
+      // Recomputing pinned state first would strand the latest reply below view.
+      if (userPinnedToBottomRef.current) scrollMessagesToBottom(container);
+      updatePinnedState();
+    });
+    observer.observe(container);
     return () => {
       container.removeEventListener('scroll', updatePinnedState);
-      window.removeEventListener('resize', updatePinnedState);
+      observer.disconnect();
     };
   }, []);
 

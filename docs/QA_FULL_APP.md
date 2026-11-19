@@ -2,6 +2,8 @@
 
 Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
+Mobile bug follow-up: [tap, photo, dock and keyboard checks](qa/mobile-bugfixes-2026-11-19.md). The cross-tab Training banner is removed; use Training navigation to resume. Companion must fit above the native keyboard, and modal forms must remain reachable without app-wide zoom. This follow-up is local and awaits physical iPhone acceptance.
+
 Community redesign (2026-11-18): date-grouped inset Feed, segmented Feed/Members, hero profile, numbered exercise tables, A–Z members. No jump controls; no photo viewer. See [current Community evidence](qa/community-apple-design.md).
 
 Local Community redesign: verify Feed date sections, Feed/Members segments, search clear/Escape/recovery, own/other profiles and open workout tables using [Community QA](qa/community-apple-design.md). Both nested journeys must restore search/pages/scroll and control focus; check all six widths, English/Italian and enlarged text. Local, uncommitted and undeployed. No schema rerun required.
@@ -9,7 +11,7 @@ Local Community redesign: verify Feed date sections, Feed/Members segments, sear
 Local Companion redesign: verify conversation navigation/retry, draft-only
 starters and corrections, multiline composer, context Escape/focus, permissions
 and memory recovery using [Companion QA](QA_COMPANION_UI.md). At 200% root text,
-the composer must clear the active-workout resume bar as well as navigation.
+the composer must clear navigation; the cross-tab workout banner has been removed.
 This local UI is uncommitted and undeployed. No schema rerun required.
 
 Chat follow-up: verify Copy success/denial/retry, Save-to-Vault from the new

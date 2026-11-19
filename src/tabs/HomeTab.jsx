@@ -40,7 +40,7 @@ export function HomeTab() {
   return <div className="command-surface">
     <header className="command-intro">
       <p className="text-sm text-zinc-400">{formatDay(today)}</p>
-      <h2 className="mt-2 text-2xl font-semibold text-zinc-100">{liveWorkout ? t("Training in progress.") : activeProjectSession ? t("One block at a time.") : nextEvent ? t("Your day, in view.") : dueMemos.length ? t("A few open loops.") : t("Room to focus.")}</h2>
+      <h2 className="mt-2 text-2xl font-semibold text-zinc-100">{activeProjectSession ? t("One block at a time.") : nextEvent ? t("Your day, in view.") : dueMemos.length ? t("A few open loops.") : t("Room to focus.")}</h2>
       <button className="mt-4 flex min-h-11 items-center gap-2 text-sm text-zinc-300 hover:text-white" onClick={() => setActiveTab('assistant')}><MessageSquare size={17} />{t("Talk to Companion")}<ArrowUpRight size={15} /></button>
     </header>
 

@@ -1,11 +1,11 @@
 import { getLocale } from '../i18n';
 import { t } from '../i18n';
-import { ArrowUpRight, Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, Settings, Target, Users, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronRight, Command, Dumbbell, HeartPulse, Hexagon, Landmark, LogOut, MessageSquare, Settings, Target, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLifeOS } from '../context/LifeOSContext';
 import { useLocalDay } from '../hooks/useLocalDay';
-import { readWorkoutDraft } from '../utils/workoutContinuity';
+import { useMobileViewport } from '../hooks/useMobileViewport';
 import { LifeOSLogo } from './LifeOSLogo';
 import { MobileNavigation } from './MobileNavigation';
 import { PullToRefresh } from './PullToRefresh';
@@ -13,6 +13,7 @@ import { AppUpdateNotice } from './AppUpdates';
 import { appUpdate } from '../utils/pwaUpdate';
 import { clearCommunitySession, invalidateCommunity } from '../utils/communityCache';
 import '../styles/navigation.css';
+import '../styles/mobileViewport.css';
 
 const destinations = {
   community: { label: 'Community', icon: Users },
@@ -31,7 +32,7 @@ const utilities = ['health', 'calendar', 'memos', 'finances', 'settings'];
 const moreDestinations = ['projects', ...utilities];
 
 export function Shell({ children }) {
-  const { activeTab, activeWorkoutSession, authUser, userSettings, setActiveTab, setActiveWorkoutId, signOut, workoutSessions, workoutSessionsStatus, meaningfulUnsavedWork } = useLifeOS();
+  const { activeTab, authUser, userSettings, setActiveTab, signOut, workoutSessions, workoutSessionsStatus, meaningfulUnsavedWork } = useLifeOS();
   const updateGuard = useRef(null);
   updateGuard.current = workoutSessionsStatus !== 'ready' ? 'loading-workouts' : workoutSessions.some(session => !session.ended_at) ? 'active-workout' : meaningfulUnsavedWork?.length ? 'unsaved-work' : null;
   useEffect(() => { appUpdate.setGuard(() => updateGuard.current); return () => appUpdate.setGuard(() => null); }, []);
@@ -39,35 +40,20 @@ export function Shell({ children }) {
   const [accountError, setAccountError] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const keyboardOpen = useMobileViewport();
   const sheetRef = useRef(null);
   const moreTrigger = useRef(null);
   const today = useLocalDay();
   const destination = destinations[activeTab] || destinations.home;
-  const liveSession = activeWorkoutSession && !activeWorkoutSession.ended_at
-    ? activeWorkoutSession : workoutSessions.find((session) => !session.ended_at);
-  const currentDraft = liveSession ? readWorkoutDraft(authUser?.id, liveSession.id) : null;
   useEffect(() => { setMoreOpen(false); }, [activeTab]);
 
   useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
-    const updateKeyboard = (event) => {
-      const focusedElement = event?.type === 'focusout' ? event.relatedTarget : document.activeElement;
-      const inputFocused = /INPUT|TEXTAREA|SELECT/.test(focusedElement?.tagName || '');
-      setKeyboardOpen(inputFocused && Boolean(window.visualViewport) && window.innerHeight - window.visualViewport.height > 120);
-    };
     window.addEventListener('online', updateOnline);
     window.addEventListener('offline', updateOnline);
-    window.visualViewport?.addEventListener('resize', updateKeyboard);
-    document.addEventListener('focusin', updateKeyboard);
-    document.addEventListener('focusout', updateKeyboard);
-    updateKeyboard();
     return () => {
       window.removeEventListener('online', updateOnline);
       window.removeEventListener('offline', updateOnline);
-      window.visualViewport?.removeEventListener('resize', updateKeyboard);
-      document.removeEventListener('focusin', updateKeyboard);
-      document.removeEventListener('focusout', updateKeyboard);
     };
   }, []);
 
@@ -113,10 +99,6 @@ export function Shell({ children }) {
     try { await signOut(); } catch { setAccountError(t("Could not sign out. Try again.")); }
     finally { setSigningOut(false); }
   };
-  const resume = () => {
-    setActiveWorkoutId(liveSession.id);
-    navigate('workout');
-  };
 
   return (
     <div className="lifeos-shell" data-workspace={activeTab}>
@@ -134,7 +116,7 @@ export function Shell({ children }) {
         </div>
       </aside>
       <main className="workspace">
-      <AppUpdateNotice hasResume={Boolean(liveSession && activeTab !== 'workout')} />
+      <AppUpdateNotice />
         <header className="workspace-header">
           <div className="flex min-w-0 items-center gap-3">
             <span className="mobile-brand">{activeTab === 'workout' ? <span className="training-brand"><Hexagon size={26} strokeWidth={1.3} /><Dumbbell size={15} strokeWidth={1.8} /></span> : <LifeOSLogo size={23} />}</span>
@@ -147,7 +129,7 @@ export function Shell({ children }) {
           </div>
         </header>
         <PullToRefresh>
-          <div className={'workspace-content ' + (liveSession && activeTab !== 'workout' ? 'has-training-dock' : '')}>
+          <div className="workspace-content">
             {userSettings?.status === 'ready' && !userSettings.profile && activeTab !== 'settings' ? <button className="mb-5 min-h-11 border-b border-white/10 text-sm text-zinc-300" onClick={() => navigate('settings')}>{t("Set up your profile and language")}</button> : null}
             {children}
           </div>
@@ -155,14 +137,7 @@ export function Shell({ children }) {
       </main>
       {/* Keep fixed docks outside app ancestors that can establish containing blocks. */}
       {createPortal(<div className="shell-docks" data-workspace={activeTab}>
-      {liveSession && activeTab !== 'workout' ? (
-        <button className="training-dock" data-keyboard-open={keyboardOpen} onClick={resume}>
-          <span className="training-dock-icon"><Dumbbell size={20} /></span>
-          <span className="min-w-0 flex-1 text-left"><span className="block text-xs text-zinc-400">{t("Training in progress")}</span><strong className="block truncate text-sm">{currentDraft?.exercise || liveSession.name}</strong></span>
-          <span className="flex items-center gap-2 text-sm font-semibold">{t("Resume")}<ArrowUpRight size={18} /></span>
-        </button>
-      ) : null}
-      <MobileNavigation destinations={destinations} activeTab={activeTab} moreDestinations={moreDestinations} keyboardOpen={keyboardOpen} moreOpen={moreOpen} hasResume={Boolean(liveSession && activeTab !== 'workout')} onNavigate={navigate} onMore={trigger => { moreTrigger.current = trigger; setMoreOpen(true); }} />
+      <MobileNavigation destinations={destinations} activeTab={activeTab} moreDestinations={moreDestinations} keyboardOpen={keyboardOpen} moreOpen={moreOpen} onNavigate={navigate} onMore={trigger => { moreTrigger.current = trigger; setMoreOpen(true); }} />
       </div>, document.body)}
       <dialog ref={sheetRef} className="utility-sheet" data-closing={!moreOpen} aria-labelledby="utility-title"
         onCancel={event => { event.preventDefault(); setMoreOpen(false); }}

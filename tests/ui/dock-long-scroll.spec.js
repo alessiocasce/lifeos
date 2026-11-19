@@ -39,7 +39,7 @@ async function measure(page, label, samples) {
   });
   samples.push({ label, ...sample });
   expect(sample.blockers).toEqual([]);
-  expect(Math.abs(sample.viewportBottom - sample.bottom - 12)).toBeLessThan(1.5);
+  expect(Math.abs(sample.viewportBottom - sample.bottom - 6)).toBeLessThan(1.5);
   expect(sample.height).toBe(72);
   expect(sample.left).toBe(12);
   expect(sample.right).toBe(await page.evaluate(() => innerWidth - 12));
@@ -87,7 +87,7 @@ for (const width of [375, 390, 430]) {
 
 test('fixed docks escape transformed app containing blocks', async ({ page }, info) => {
   await page.goto('/');
-  await expect(page.locator('.training-dock')).toBeVisible();
+  await expect(page.locator('.training-dock')).toHaveCount(0);
   // Fault injection reproduces the fixed-position containing-block failure without
   // changing application CSS or pretending this is real Safari browser chrome.
   await page.locator('#root').evaluate(element => { element.style.transform = 'translate3d(0, 0, 0)'; });
@@ -109,11 +109,9 @@ test('fixed docks escape transformed app containing blocks', async ({ page }, in
     await page.evaluate(top => window.scrollTo(0, top), y);
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
     const nav = await measure(page, 'transformed root scroll ' + y, samples);
-    const resume = await page.locator('.training-dock').boundingBox();
-    expect(resume.y + resume.height).toBeLessThan(nav.top);
-    expect(resume.y).toBeGreaterThan(0);
+    expect(nav.top).toBeGreaterThan(0);
   }
-  await page.locator('.training-dock').click();
+  await dock(page).getByRole('button', { name: 'Training', exact: true }).click();
   await expect(page).toHaveURL(/\/workout$/);
   await info.attach('containing-block-measurements', { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
 });

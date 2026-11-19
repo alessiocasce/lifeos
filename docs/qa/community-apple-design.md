@@ -1,5 +1,7 @@
 # Community Apple-style implementation and QA
 
+Local mobile follow-up: [tap and photo fixes](mobile-bugfixes-2026-11-19.md). Pull-to-refresh ignores finger jitter before claiming a drag; profile motion animates only the photo circle, with no dialog-container outline. Physical iPhone acceptance remains pending.
+
 Final accumulated release evidence: [2026-11-19 checks](ui-release-2026-11-19.md).
 This supersedes earlier deferred-validation and local-only status notes below.
 

@@ -136,7 +136,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     await expect(page.getByText('Gym membership', { exact: true })).toBeVisible();
     if (width < 640) {
       const save = await page.getByRole('button', { name: 'Save expense', exact: true }).boundingBox();
-      const dock = await page.locator('.training-dock').boundingBox();
+      const dock = await page.locator('.mobile-dock').boundingBox();
       expect(save.y + save.height).toBeLessThanOrEqual(dock.y);
     }
     await page.screenshot({ path: info.outputPath('finances.png'), fullPage: true });
@@ -149,7 +149,7 @@ for (const [width, height] of [[375, 812], [390, 844], [393, 852], [430, 932], [
     const bounds = await edit.getByRole('button', { name: 'Save changes' }).boundingBox();
     expect(bounds.height).toBeGreaterThanOrEqual(44);
     if (width < 640) {
-      const dock = await page.locator('.training-dock').boundingBox();
+      const dock = await page.locator('.mobile-dock').boundingBox();
       expect(bounds.y + bounds.height).toBeLessThanOrEqual(dock.y);
     }
     expect(errors).toEqual([]);

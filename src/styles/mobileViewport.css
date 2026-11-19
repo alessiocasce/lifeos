@@ -1,0 +1,28 @@
+@media (max-width: 767px) {
+  /* Keep text inputs at iOS's non-zooming size, including portaled dialogs. */
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), textarea, select) { font-size: max(16px, 1em); }
+  html[data-keyboard-open='true'] :is(input, textarea, select) { scroll-margin-block: 16px; }
+
+  /* Chat owns its scroll area. Shrink it above the keyboard instead of allowing
+     Safari to pan the entire tall document to reach the composer. */
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] {
+    position: fixed; inset: auto 0; top: var(--lifeos-viewport-top, 0px);
+    height: var(--lifeos-viewport-height, 100dvh); min-height: 0; overflow: hidden;
+  }
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .workspace-header { flex: none; }
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .workspace > .pull-refresh,
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .pull-refresh-content { display: flex; flex: 1; min-height: 0; }
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .workspace-content { display: flex; flex: 1; min-height: 0; width: 100%; padding: 8px 16px; }
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .companion-workspace { height: 100%; min-height: 0; }
+  html[data-keyboard-open='true'] .companion-toolbar { flex: none; padding-bottom: .5rem; }
+  html[data-keyboard-open='true'] .companion-composer { flex: none; }
+
+  /* All remaining modal forms fit the same visible area. Training sheets already
+     track visualViewport directly and retain their own anchored positioning. */
+  html[data-keyboard-open='true'] dialog:not(.training-sheet) {
+    top: calc(var(--lifeos-viewport-top, 0px) + 8px); bottom: auto;
+    max-height: calc(var(--lifeos-viewport-height, 100dvh) - 16px);
+    margin-block: 0; overflow-y: auto;
+  }
+}

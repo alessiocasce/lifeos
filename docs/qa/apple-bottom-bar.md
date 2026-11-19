@@ -1,5 +1,7 @@
 # Apple-style mobile bottom bar
 
+Local mobile follow-up: [tap/photo/dock/keyboard fixes](mobile-bugfixes-2026-11-19.md). The bar now sits 6px above the safe area, tracks visual viewport changes from startup, and the cross-tab workout banner is removed. Older measurements below describe the earlier release.
+
 Final accumulated release evidence: [2026-11-19 checks](ui-release-2026-11-19.md).
 This supersedes earlier deferred-validation and local-only status notes below.
 
