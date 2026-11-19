@@ -58,6 +58,10 @@ both six-width/large-text cases then passed. Earlier navigation failures include
 function guard and whitespace checks passed. No schema rerun required.
 Confirm the installed client's build in Settings' LifeOS version display before
 native acceptance; active workouts/drafts still guard service-worker activation.
+The Settings renderer had stopped including the existing ApplicationUpdates
+component. Its build display and guarded update controls are restored under a
+collapsed Application section, with no duplicate heading. The Settings browser
+check and PWA manager/upgrade harness cover visibility and preserved update guards.
 
 ### Usable keyboard space and pointer activation after `a1cd972`
 

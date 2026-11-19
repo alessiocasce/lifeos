@@ -5,6 +5,7 @@ import { useLifeOS } from '../context/LifeOSContext';
 import { ProfilePhotoEditor } from '../components/ProfilePhotoEditor';
 import { SettingsDialog } from '../components/SettingsDialog';
 import { SettingsLanguagePicker } from '../components/SettingsLanguagePicker';
+import { ApplicationUpdates } from '../components/AppUpdates';
 import { normalizeUsername } from '../utils/userSettingsIdentity';
 import '../styles/settings.css';
 
@@ -142,6 +143,10 @@ function SettingsForm({ authUser, settings }) {
         </div>
       </div>
     </section>
+    <details className="settings-section settings-application">
+      <summary className="min-h-11 cursor-pointer py-3 text-sm text-zinc-400">{t('Application')}</summary>
+      <ApplicationUpdates showHeading={false} />
+    </details>
     <p role="status" className="sr-only">{t(feedback.error ? '' : feedback.message || '')}</p>
   </div>;
 }

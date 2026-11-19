@@ -51,7 +51,7 @@ try {
   await page.getByRole('complementary',{name:'LifeOS update available'}).waitFor({timeout:30000});
   await mkdir(root,{recursive:true});await page.screenshot({path:root+'/desktop-update-ready.png'});
   await page.getByRole('complementary',{name:'LifeOS update available'}).getByRole('button',{name:'Update now',exact:true}).click();
-  await page.getByText('Update ready - finish your workout first.',{exact:true}).waitFor();
+  await page.getByRole('complementary',{name:'LifeOS update available'}).getByText('Update ready - finish your workout first.',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>Boolean(navigator.serviceWorker.controller)),true);
   await page.getByRole('button',{name:'Training',exact:true}).click();
   await page.getByRole('button',{name:'End Workout',exact:true}).click();

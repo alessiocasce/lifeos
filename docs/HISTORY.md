@@ -11,6 +11,10 @@ and calculate chat height with dock clearance once. Remove independently animate
 keyboard height/padding/toolbar changes and Companion's translated pull-refresh
 container. New regressions compare actual coordinates and staged keyboard frames.
 Physical iPhone acceptance remains separate. No schema rerun required.
+Settings' existing installed-version and guarded-update controls are restored in
+a collapsed Application section, so native acceptance can identify the client
+build. The production-mode Workbox A-to-B upgrade harness confirms active-workout
+blocking, storage retention and no forced reload of another tab.
 
 Keyboard usability correction after `a1cd972`: keep editing geometry until actual
 keyboard dismissal, preserve Send pointer focus, remove the extra dock offset,

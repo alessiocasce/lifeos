@@ -11,10 +11,10 @@ function UpdateMessage({state}) {
 function UpdateNow({state}) {
   return state.available ? <button type="button" className="min-h-11 rounded-lg border border-white/20 px-3 text-sm" disabled={['activating','loading'].includes(state.status)} onClick={() => void appUpdate.apply()}>{t('Update now')}</button> : null;
 }
-export function ApplicationUpdates() {
+export function ApplicationUpdates({ showHeading = true }) {
   const state = useAppUpdate();
   return <section aria-label={t('Application')} className="grid gap-3 border-t border-white/10 pt-5">
-    <h2 className="text-lg font-semibold">{t('Application')}</h2>
+    {showHeading ? <h2 className="text-lg font-semibold">{t('Application')}</h2> : null}
     <p className="text-sm text-zinc-400">{t('LifeOS version:')} <code>{state.buildId}</code></p>
     {state.confirmedVersion === state.buildId ? <p role="status" className="text-sm text-zinc-400">{t('The new LifeOS version is running.')}</p> : null}
     <div className="flex flex-wrap gap-2"><button type="button" className="flex min-h-11 items-center gap-2 rounded-lg border border-white/20 px-3 text-sm" disabled={['checking','downloading','activating','loading'].includes(state.status)} onClick={() => void appUpdate.check()}><RefreshCw size={16} />{t('Check for updates')}</button><UpdateNow state={state} /></div>

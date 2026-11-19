@@ -15,6 +15,9 @@
   padding-top: .25rem;
 }
 .settings-section { min-width: 0; }
+.settings-application { grid-column: 1 / -1; }
+.settings-application code { overflow-wrap: anywhere; }
+.settings-application > section { border: 0; padding-top: 8px; }
 .settings-heading { display: flex; align-items: center; gap: .375rem; min-height: 44px; margin: 0 .25rem .5rem; }
 .settings-section h2 { font-family: inherit; font-size: 1.0625rem; font-weight: 600; letter-spacing: -.015em; line-height: 1.4; }
 .settings-group, .settings-profile-card { background: var(--settings-surface); border: 1px solid var(--settings-line); border-radius: 20px; }
