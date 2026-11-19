@@ -1,5 +1,16 @@
 # Companion app controls
 
+## iPhone typing usability follow-up (2026-11-19)
+
+Use the after-`a1cd972` checks in [mobile evidence](qa/mobile-bugfixes-2026-11-19.md).
+Mobile Companion omits its duplicate shell heading and collapses the conversation
+toolbar while typing. The single-line composer is 54px high with a 44px Send
+target. Verify readable conversation space, first-touch Send without dismissing
+the keyboard, no write on press/drag cancellation, draft retention, a consistent
+bottom dock inset and eased recovery only after the keyboard actually closes.
+Native iPhone behavior requires user confirmation; desktop containment does not
+establish acceptance. No schema rerun required.
+
 ## Local Apple-style redesign (2026-11-17)
 
 Chat refinement: populated messages now keep text separate from metadata. User

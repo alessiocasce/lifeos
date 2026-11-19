@@ -62,8 +62,7 @@ test('Companion stays within the visual viewport when the keyboard opens and pan
     const box = await input.boundingBox();
     return box.y + box.height;
   }).toBeLessThanOrEqual(500);
-  const box = await page.locator('.companion-toolbar').boundingBox();
-  expect(box.y).toBeGreaterThanOrEqual(60);
+  await expect(page.locator('.companion-toolbar')).toBeHidden();
   await page.screenshot({ path: info.outputPath('companion-keyboard.png') });
   await input.blur();
   await page.evaluate(() => {
@@ -88,7 +87,9 @@ test('cold Command dock keeps its bottom position after navigation and viewport 
     Object.defineProperty(visualViewport, 'height', { configurable: true, value: 760 });
     visualViewport.dispatchEvent(new Event('resize'));
   });
-  await expect.poll(bottom).toBe(754);
+  // Native fixed positioning handles browser chrome; do not add this visual
+  // viewport difference a second time to the dock's bottom inset.
+  expect(await dock.evaluate(el => getComputedStyle(el).bottom)).toBe('6px');
 });
 
 test('exercise search stays visible with usable results above a panned keyboard', async ({ page }) => {

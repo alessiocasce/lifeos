@@ -2,6 +2,12 @@
 
 Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
+Keyboard usability release gate after `a1cd972`: verify first-touch Send with the
+keyboard open, no redundant Companion headers while typing, consistent dock inset,
+eased dismissal and a substantial exercise results area on the active-workout
+Choose another exercise path. See [measured regressions](qa/mobile-bugfixes-2026-11-19.md).
+Native iPhone acceptance is still required. No schema rerun required.
+
 Before releasing the local mobile fixes, run the [tap/photo/dock/keyboard checks](qa/mobile-bugfixes-2026-11-19.md), then verify cold Command startup and native keyboard/photo dismissal on an installed iPhone PWA. No schema rerun required.
 
 The first mobile release (`3f7b6dd`) did not resolve photo magnification or Companion keyboard compression on the user's installed iPhone. For the corrective release, verify the full-viewport photo dialog, permanent Companion layout and text/Send keyboard hints. Native arrows/tick toolbar removal is unsupported by Safari; do not mark it implemented. Browser passes and a matched production SHA are release checks, not on-device acceptance.

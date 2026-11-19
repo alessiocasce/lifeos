@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ListFilter } from 'lucide-react';
 import { t } from '../i18n';
 
 // Kept inside the sheet's native dialog so the choices remain in its top layer.
@@ -13,7 +13,11 @@ export function ExerciseCategoryPicker({ value, categories, onChange }) {
   const trigger = useRef(null), menu = useRef(null), motion = useRef(null), closing = useRef(false);
   const id = useId();
   const dismiss = () => setOpen(false);
-  const choose = index => { onChange(choices[index].value); dismiss(); trigger.current?.focus({ preventScroll: true }); };
+  const choose = index => {
+    const searchFocused = trigger.current?.closest('.exercise-catalog-controls')?.querySelector('input') === document.activeElement;
+    onChange(choices[index].value); dismiss();
+    if (!searchFocused) trigger.current?.focus({ preventScroll: true });
+  };
   const reveal = () => { setActive(selected); setOpen(true); };
   useLayoutEffect(() => {
     const element = menu.current;
@@ -58,7 +62,7 @@ export function ExerciseCategoryPicker({ value, categories, onChange }) {
     else if (bottom > menu.current.scrollTop + menu.current.clientHeight) menu.current.scrollTop = bottom - menu.current.clientHeight;
   }, [active, open]);
   return <div className="exercise-category-control">
-    <button ref={trigger} type="button" role="combobox" aria-label={t('Exercise category')} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? id : undefined} aria-activedescendant={open ? `${id}-${active}` : undefined} className="exercise-category-trigger" onClick={() => open ? dismiss() : reveal()} onKeyDown={event => {
+    <button ref={trigger} type="button" role="combobox" aria-label={t('Exercise category')} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? id : undefined} aria-activedescendant={open ? `${id}-${active}` : undefined} className="exercise-category-trigger" onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onClick={() => open ? dismiss() : reveal()} onKeyDown={event => {
       const key = event.key;
       if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(key)) {
         event.preventDefault(); event.stopPropagation();
@@ -72,9 +76,9 @@ export function ExerciseCategoryPicker({ value, categories, onChange }) {
         const index = choices.findIndex(choice => choice.label.toLocaleLowerCase().startsWith(key.toLocaleLowerCase()));
         if (index >= 0) { event.preventDefault(); setActive(index); }
       }
-    }}><span>{choices[selected].label}</span><ChevronDown size={16} /></button>
+    }}><ListFilter size={18} className="exercise-category-compact-icon" /><span>{choices[selected].label}</span><ChevronDown size={16} /></button>
     {(open || present) && <div ref={menu} id={id} role="listbox" aria-label={t('Exercise category')} aria-hidden={!open} inert={!open ? '' : undefined} className="exercise-category-menu" data-above={placement.above} style={{ maxHeight: placement.height }}>
-      {choices.map((choice, index) => <button key={choice.value} id={`${id}-${index}`} data-index={index} type="button" role="option" tabIndex={-1} aria-selected={choice.value === value} data-active={active === index} onPointerDown={event => event.preventDefault()} onPointerMove={() => setActive(index)} onClick={() => choose(index)}><span>{choice.label}</span>{choice.value === value && <Check size={16} />}</button>)}
+      {choices.map((choice, index) => <button key={choice.value} id={`${id}-${index}`} data-index={index} type="button" role="option" tabIndex={-1} aria-selected={choice.value === value} data-active={active === index} onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onPointerMove={() => setActive(index)} onClick={() => choose(index)}><span>{choice.label}</span>{choice.value === value && <Check size={16} />}</button>)}
     </div>}
   </div>;
 }

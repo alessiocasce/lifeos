@@ -22,6 +22,48 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Usable keyboard space and pointer activation after `a1cd972`
+
+The user reports that the previous release still leaves too little conversation/
+exercise space, raises the Companion dock, snaps when dismissing the keyboard,
+and requires dismissing it before Send works. Five new browser regressions all
+failed against that release. The old exercise results area measured only 38px
+with a 360px visual viewport; containment was not sufficient acceptance.
+
+Corrections:
+
+- Hold keyboard state/occlusion through blur until the visual viewport recovers.
+  Send preserves textarea focus on pointerdown and submits only on click. This
+  prevents layout changes between pointerdown and pointerup without sending on
+  a canceled press or drag. Restore Companion height/padding with a 220ms ease;
+  reduced-motion users get no added transition.
+- Use the same 6px-plus-safe-area navigation inset on all tabs. Remove the extra
+  visual-viewport bottom-gap correction that could lift the dock twice on iOS.
+- Remove the duplicate mobile Companion shell heading. Collapse its conversation
+  toolbar while typing and use a 54px one-line composer with a 44px Send target.
+  Messages keep their type size; the mobile textarea caps at 96px for long drafts.
+- Mobile catalog search uses the full visible viewport, rather than 65% minus
+  controls. During search, the header/handle/footer give way to one row containing
+  Search, category filter and Close. Results measured about 276px out of 360px.
+  Custom exercise creation remains available as a result row while typing.
+  Result presses preserve search focus until selection completes.
+- Acceptance includes a first-click Send request (exactly once), draft retention,
+  delayed dock restoration, eased closing, minimum chat/results space and the
+  actual active-workout Choose another exercise path. Test real iPhone taps,
+  scrolling, category/custom selection and keyboard dismiss/reopen before closing
+  these device reports. Native keyboard rendering is still outside emulation.
+
+Usability validation: all five original regressions failed against `a1cd972`.
+The broader Chromium batch passed 38/39 and exposed a compact-filter focus
+transition; the WebKit batch passed 21/22 and exposed compatibility mouse-focus
+handling on filter taps. After those fixes, the final Chromium usability/catalog
+batch passed 12/12 and final WebKit usability batch passed 7/7, including native
+touch Send, filter/custom-name selection and the active-plan search path. The
+earlier broad batches also cover drafts, latest-reply pinning, safe navigation,
+keyboard recovery, Training persistence and large text. Populated-chat and exercise
+screenshots were visually inspected. Brain, build, seven-function guard and
+whitespace checks passed; the existing large-chunk build warning remains.
+
 ### Reopened iPhone defects after `3f7b6dd`
 
 The user reports whole-page magnification when opening a Community photo in the

@@ -5,6 +5,14 @@ The current architecture and module reference stays in `PROJECT_CONTEXT.md`.
 
 ## UI refinement release (2026-11-19)
 
+Keyboard usability correction after `a1cd972`: keep editing geometry until actual
+keyboard dismissal, preserve Send pointer focus, remove the extra dock offset,
+collapse redundant Companion headings while typing and use a smaller composer.
+Exercise catalog search now occupies the visible viewport with a compact search/
+filter/close row and custom names available in results. New regressions reproduce
+the first-tap failure, premature dock return and 38px exercise results region.
+Physical iPhone acceptance remains separate. No schema rerun required.
+
 Corrective iPhone follow-up after the user reported that `3f7b6dd` still magnifies
 the page on Community photo opening and compresses Companion during keyboard
 opening: use a full-viewport photo dialog with a stable native dismissal control,

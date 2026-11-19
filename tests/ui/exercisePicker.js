@@ -13,8 +13,10 @@ export async function selectExercise(page, query, options={}) {
   const dialog=page.getByRole('dialog',{name:/^(Choose exercise|Scegli esercizio)$/,exact:true});
   if(exercise?.active) await dialog.getByRole('button',{name:exerciseLabel({exercise_id:exercise.id},language),exact:true}).click();
   else {
-    await dialog.getByRole('button',{name:language === 'it' ? 'Altro esercizio' : 'Other exercise',exact:true}).click();
-    await dialog.getByRole('textbox').fill(query);
+    if (!await dialog.getByRole('button',{name:language === 'it' ? 'Usa esercizio personalizzato' : 'Use custom exercise',exact:true}).isVisible()) {
+      await dialog.getByRole('button',{name:language === 'it' ? 'Altro esercizio' : 'Other exercise',exact:true}).click();
+      await dialog.getByRole('textbox').fill(query);
+    }
     await dialog.getByRole('button',{name:language === 'it' ? 'Usa esercizio personalizzato' : 'Use custom exercise',exact:true}).click();
   }
   await dialog.waitFor({state:'detached'});

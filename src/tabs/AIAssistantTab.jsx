@@ -573,6 +573,8 @@ export function AIAssistantTab() {
             />
             <button
               type="submit"
+              onPointerDown={event => { if (event.isPrimary && event.button === 0) event.preventDefault(); }}
+              onMouseDown={event => event.preventDefault()}
               disabled={aiStatus === 'loading' || !aiInput.trim()}
               className="companion-send"
               aria-label={t("Send Brain message")}

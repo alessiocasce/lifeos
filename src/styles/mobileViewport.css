@@ -11,14 +11,24 @@
     height: var(--lifeos-viewport-height, 100dvh); min-height: 0; overflow: hidden;
   }
   .lifeos-shell[data-workspace='assistant'] .workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
-  .lifeos-shell[data-workspace='assistant'] .workspace-header { flex: none; }
+  .lifeos-shell[data-workspace='assistant'] .workspace-header { display: none; }
   .lifeos-shell[data-workspace='assistant'] .workspace > .pull-refresh,
   .lifeos-shell[data-workspace='assistant'] .pull-refresh-content { display: flex; flex: 1; min-height: 0; }
-  .lifeos-shell[data-workspace='assistant'] .workspace-content { display: flex; flex: 1; min-height: 0; width: 100%; padding: 12px 16px max(8px, calc(var(--lifeos-mobile-dock-height, 72px) + 24px + env(safe-area-inset-bottom) - var(--lifeos-keyboard-inset, 0px))); }
+  .lifeos-shell[data-workspace='assistant'] .workspace-content { display: flex; flex: 1; min-height: 0; width: 100%; padding: max(4px, env(safe-area-inset-top)) 12px max(4px, calc(var(--lifeos-mobile-dock-height, 72px) + 16px + env(safe-area-inset-bottom) - var(--lifeos-keyboard-inset, 0px))); }
   .lifeos-shell[data-workspace='assistant'] .companion-workspace { height: 100%; min-height: 0; }
-  .lifeos-shell[data-workspace='assistant'] .companion-toolbar { flex: none; }
-  .lifeos-shell[data-workspace='assistant'] .companion-composer { flex: none; }
-  .lifeos-shell[data-workspace='assistant'] .companion-input { scroll-margin: 0; }
+  .lifeos-shell[data-workspace='assistant'] .companion-toolbar { flex: none; height: 44px; min-height: 0; padding: 0; overflow: hidden; transition: height 180ms ease, opacity 140ms ease; }
+  .lifeos-shell[data-workspace='assistant'] .companion-composer { flex: none; margin-top: 4px; padding: 4px; border-radius: 25px; }
+  .lifeos-shell[data-workspace='assistant'] .companion-input { min-height: 44px; max-height: 96px; padding: 10px 12px; scroll-margin: 0; overflow-y: auto; }
+  .lifeos-shell[data-workspace='assistant'] .companion-send { width: 44px; height: 44px; }
+  .lifeos-shell[data-workspace='assistant'] .companion-messages { padding: 4px 2px 8px; gap: 1rem; }
+  html[data-keyboard-open='true'] .lifeos-shell[data-workspace='assistant'] .companion-toolbar { height: 0; opacity: 0; visibility: hidden; pointer-events: none; }
+  html[data-keyboard-open='true'] .companion-welcome-mark,
+  html[data-keyboard-open='true'] .companion-starters { display: none; }
+  html[data-keyboard-motion='closing'] .lifeos-shell[data-workspace='assistant'] { transition: height 220ms cubic-bezier(.2,.75,.25,1); }
+  html[data-keyboard-motion='closing'] .lifeos-shell[data-workspace='assistant'] .workspace-content { transition: padding-bottom 220ms cubic-bezier(.2,.75,.25,1); }
+  @media (prefers-reduced-motion: reduce) {
+    .lifeos-shell[data-workspace='assistant'], .lifeos-shell[data-workspace='assistant'] .workspace-content, .lifeos-shell[data-workspace='assistant'] .companion-toolbar { transition: none; }
+  }
 
   /* All remaining modal forms fit the same visible area. Training sheets already
      track visualViewport directly and retain their own anchored positioning. */

@@ -9,7 +9,6 @@ test('Companion keeps one layout through keyboard animation instead of switching
   await expect(input).toHaveAttribute('inputmode', 'text');
   await expect(input).toHaveAttribute('enterkeyhint', 'send');
   expect(await shell.evaluate(el => getComputedStyle(el).position)).toBe('fixed');
-  const toolbarY = (await page.locator('.companion-toolbar').boundingBox()).y;
   const initialComposerHeight = (await page.locator('.companion-composer').boundingBox()).height;
   await input.tap();
   for (const [height, top] of [[800, 0], [740, 10], [680, 30], [560, 50], [440, 60], [560, 40], [740, 10], [844, 0]]) {
@@ -21,7 +20,7 @@ test('Companion keeps one layout through keyboard animation instead of switching
     }, { height, top });
     await expect.poll(async () => (await shell.boundingBox()).height).toBe(height);
     expect(await shell.evaluate(el => getComputedStyle(el).position)).toBe('fixed');
-    expect((await page.locator('.companion-toolbar').boundingBox()).y - top).toBeCloseTo(toolbarY, 0);
+    if (height < 724) await expect(page.locator('.companion-toolbar')).toBeHidden();
     const composer = await page.locator('.companion-composer').boundingBox();
     expect(composer.height).toBeCloseTo(initialComposerHeight, 0);
     expect(composer.y + composer.height).toBeLessThanOrEqual(top + height);

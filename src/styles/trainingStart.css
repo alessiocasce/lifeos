@@ -1,4 +1,5 @@
 /* Approved Training reference: scoped to Training, never the active logger. */
+.exercise-picker-keyboard-close, .exercise-keyboard-custom, .exercise-category-compact-icon { display: none; }
 .training-template-create.is-primary.is-create { min-height: 50px; background: #7ed6a0; color: #102a1b; border-color: transparent; }
 .training-template-create.is-primary.is-delete { min-height: 50px; background: #f08089; color: #351219; border-color: transparent; }
 .training-draft-actions-clip { overflow: hidden; }
@@ -201,4 +202,24 @@
 @media (prefers-reduced-motion: reduce) {
   .training-template-card, .training-empty-card { transition: none; }
   .training-views > button { transition: none; }
+}
+
+@media (max-width: 767px) {
+  /* Catalog search owns the available screen, rather than allocating 65% to a
+     panel and then subtracting headers, filters and footer from that again. */
+  .training-sheet.training-picker-catalog-sheet { --picker-anchor: 0px; --sheet-bottom-gap: max(8px, env(safe-area-inset-bottom)); top: calc(var(--sheet-viewport-top, 0px) + max(8px, env(safe-area-inset-top))); height: calc(var(--sheet-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top)) - var(--sheet-bottom-gap)); max-height: calc(var(--sheet-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top)) - var(--sheet-bottom-gap)); padding: 8px; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) { --sheet-bottom-gap: 8px; }
+  .training-picker-catalog-sheet > .training-sheet-content { flex: 1; }
+  .training-picker-catalog-sheet .training-picker-viewport { flex: 1 1 0%; transition: none; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) > :is(header, .training-sheet-handle) { display: none; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-catalog-controls { grid-template-columns: minmax(0, 1fr) 44px 44px; gap: 6px; padding: 0 0 8px; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-catalog-search { min-height: 44px; padding-inline: 10px; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-catalog-search input { height: 44px; scroll-margin: 0; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-category-trigger { width: 44px; height: 44px; padding: 0; justify-content: center; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-category-trigger > :is(span, svg:last-child) { display: none; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-category-compact-icon { display: block; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-category-menu { inset-inline: auto 0; width: min(300px, calc(100vw - 40px)); }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-picker-keyboard-close { display: grid; place-items: center; grid-column: -2 / -1; width: 44px; height: 44px; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .training-picker-catalog > footer { display: none; }
+  :is(html[data-keyboard-open='true'] .training-picker-catalog-sheet, .training-picker-catalog-sheet:has(.exercise-catalog-search input:focus)) .exercise-keyboard-custom { display: block; }
 }

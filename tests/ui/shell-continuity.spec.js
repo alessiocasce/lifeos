@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 const exercise = (page) => page.getByRole('button', { name: 'Exercise', exact: true });
 const dock = (page) => page.getByRole('navigation', { name: 'Mobile navigation' });
 
-test('keyboard focus after viewport resize hides dock, blur restores it', async ({ page }) => {
+test('keyboard focus hides dock and viewport recovery restores it after blur', async ({ page }) => {
   await page.goto('/workout');
   await expect(exercise(page)).toBeVisible();
   await page.evaluate(() => {
@@ -20,6 +20,11 @@ test('keyboard focus after viewport resize hides dock, blur restores it', async 
   await page.getByRole('textbox',{name:'Reps',exact:true}).focus();
   await expect(dock(page)).toBeHidden();
   await page.evaluate(() => document.activeElement.blur());
+  await expect(dock(page)).toBeHidden();
+  await page.evaluate(() => {
+    delete visualViewport.height;
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
   await expect(dock(page)).toBeVisible();
 });
 

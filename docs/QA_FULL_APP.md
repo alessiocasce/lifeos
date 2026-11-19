@@ -9,6 +9,12 @@ page and Companion still jumps/compresses. Verify the full-viewport photo overla
 and permanently fixed Companion layout on-device. Safari's native arrows/tick
 toolbar cannot be suppressed by this PWA; do not report it removed.
 
+Further keyboard acceptance: Companion must remove redundant headers while
+typing, retain usable message space, send on the first tap without keyboard
+dismissal and restore its dock only when the viewport recovers. Exercise search
+must provide a substantial results area, not merely fit its outer dialog above
+the keyboard. See the after-`a1cd972` section in the mobile evidence.
+
 Community redesign (2026-11-18): date-grouped inset Feed, segmented Feed/Members, hero profile, numbered exercise tables, A–Z members. No jump controls; no photo viewer. See [current Community evidence](qa/community-apple-design.md).
 
 Local Community redesign: verify Feed date sections, Feed/Members segments, search clear/Escape/recovery, own/other profiles and open workout tables using [Community QA](qa/community-apple-design.md). Both nested journeys must restore search/pages/scroll and control focus; check all six widths, English/Italian and enlarged text. Local, uncommitted and undeployed. No schema rerun required.

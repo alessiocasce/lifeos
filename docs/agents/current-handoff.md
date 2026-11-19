@@ -2,6 +2,16 @@
 
 ## Mobile bug follow-up, 2026-11-19
 
+After `a1cd972`, the user reports insufficient typing space, Send requiring prior
+keyboard dismissal, Companion's raised dock and cramped exercise results. The
+correction holds keyboard state through blur until viewport recovery, preserves
+pointer focus, removes duplicate mobile Companion headings and collapses the
+toolbar while typing, uses a 54px composer, and gives exercise catalog search the
+full visible viewport with one Search/filter/Close row. Acceptance must check
+usable space and first-tap actions, not just whether a box fits above the keyboard.
+The previous implementation's exercise results measured only 38px in a 360px
+visual viewport. Native iPhone acceptance remains open.
+
 The user reopened the iPhone photo zoom and Companion keyboard defects after
 `3f7b6dd` reached production. The next correction uses a full-viewport photo
 overlay with a native close control, plus a permanent Companion viewport layout

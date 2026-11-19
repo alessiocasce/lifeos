@@ -1,5 +1,12 @@
 # LifeOS Workout QA
 
+Keyboard usability follow-up: [mobile evidence](qa/mobile-bugfixes-2026-11-19.md).
+While training, open Exercise → Choose another exercise and type. Search/filter/
+Close must share a compact row; the results must occupy at least two thirds of a
+360px visible viewport with 44px-or-larger selection targets. Check scrolling,
+category selection, custom-name creation and one-tap selection with the keyboard
+open. A visible search box alone does not pass this check. No schema rerun required.
+
 Current local Manage editor revision and focused evidence:
 [existing-template editing](qa/training-manage-apple-design.md). This supersedes
 older Manage edit/save/control expectations below; the overall feedback-batch

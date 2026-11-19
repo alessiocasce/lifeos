@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Search, Dumbbell, Repeat2, Plus } from 'lucide-react';
+import { Check, ChevronDown, Search, Dumbbell, Repeat2, Plus, X } from 'lucide-react';
 import { TrainingSheet } from './TrainingSheet';
 import { ExerciseCategoryPicker } from './ExerciseCategoryPicker';
 import { getLanguage, t } from '../i18n';
@@ -72,7 +72,7 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
   },[open,showPlan]);
   const navigate = event => {
     if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key)) return;
-    const buttons = [...list.current.querySelectorAll('[data-exercise-option]')];
+    const buttons = [...list.current.querySelectorAll('[data-exercise-option]')].filter(button => button.getClientRects().length);
     if (!buttons.length) return;
     event.preventDefault();
     const current = buttons.indexOf(document.activeElement);
@@ -96,7 +96,7 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
         className="exercise-trigger min-h-12 min-w-0 flex-1 bg-transparent text-left text-base font-medium text-zinc-100"
         onClick={begin}><span>{exerciseLabel({exercise:value,exercise_id:exerciseId},language) || emptyLabel}</span><span aria-hidden="true">{compact ? <Repeat2 size={22} /> : <ChevronDown size={18} />}</span></button>
     </div>}
-    {open && <TrainingSheet title={showPlan ? 'Choose exercise' : 'All exercises'} ariaLabel="Choose exercise" onBack={!showPlan && hasPlan ? back : undefined} backRef={backButton} onClose={() => setOpen(false)} requestCloseRef={requestClose} triggerRef={trigger} className="training-picker-sheet">
+    {open && <TrainingSheet title={showPlan ? 'Choose exercise' : 'All exercises'} ariaLabel="Choose exercise" onBack={!showPlan && hasPlan ? back : undefined} backRef={backButton} onClose={() => setOpen(false)} requestCloseRef={requestClose} triggerRef={trigger} className={`training-picker-sheet${showPlan ? '' : ' training-picker-catalog-sheet'}`}>
       <div className="training-picker-viewport" data-view={view} style={{height:panelHeight}}>
       <div ref={planScroll} className="training-picker-view training-picker-plan" aria-hidden={!showPlan} inert={!showPlan ? '' : undefined}>
         <div ref={planContent} className="training-exercise-plan" role="group" aria-label={t('Workout exercises')}>{(templatePlan || []).map((exercise,index) => <button key={exercise.exercise_id || exercise.exercise} type="button" className="training-row" aria-pressed={exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value} onClick={() => commit({ exercise: exercise.exercise, exercise_id: exercise.exercise_id || null })}><span className="training-exercise-number">{String(index+1).padStart(2,'0')}</span><span className="min-w-0 flex-1 break-words text-left">{exerciseLabel(exercise,language)}</span>{(exerciseId ? exercise.exercise_id === exerciseId : exercise.exercise === value) ? <Check size={19} /> : null}</button>)}<button ref={anotherExercise} type="button" className="training-row training-another-exercise" onClick={openCatalog}><Plus size={20} />{t('Choose another exercise')}</button></div>
@@ -112,12 +112,14 @@ export function ExerciseSelector({ value, exerciseId=null, onCommit, suggestions
             } }} />
         </label>
         {!custom ? <ExerciseCategoryPicker value={category} categories={categories} onChange={next => { setCategory(next); if (list.current) list.current.scrollTop = 0; }} /> : null}
+        <button type="button" className="exercise-picker-keyboard-close icon-button" aria-label={t('Close')} onPointerDown={event => event.preventDefault()} onClick={close}><X size={20} /></button>
       </div>
-      <div ref={list} role="group" aria-label={t('Exercise suggestions')} onKeyDown={navigate} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div ref={list} role="group" aria-label={t('Exercise suggestions')} onKeyDown={navigate} onPointerDown={event => { if (event.target.closest('[data-exercise-option]')) event.preventDefault(); }} onMouseDown={event => { if (event.target.closest('[data-exercise-option]')) event.preventDefault(); }} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {custom ? <button type="button" data-exercise-option disabled={!query.trim()} onClick={() => commit({exercise:query.trim(),exercise_id:null})} className="min-h-16 w-full px-4 text-left font-medium disabled:text-zinc-500">{t('Use custom exercise')}</button>
           : <>{showRecent ? <><div role="group" aria-label={t('Recent')}><h3 className="px-4 pb-1 pt-4 text-xs text-zinc-400">{t('Recent')}</h3>{recent.map(row)}</div><h3 className="px-4 pb-1 pt-5 text-xs text-zinc-400">{t('All exercises')}</h3></> : null}
             {matches.filter(e => !recentIds.has(e.id)).map(row)}
-            {!matches.length ? <p className="px-4 py-8 text-sm text-zinc-400">{t('No matching exercises')}</p> : null}</>}
+            {!matches.length ? <p className="px-4 py-8 text-sm text-zinc-400">{t('No matching exercises')}</p> : null}
+            {query.trim() ? <button type="button" data-exercise-option aria-label={t('Use custom exercise')} className="exercise-keyboard-custom min-h-16 w-full px-4 text-left" onClick={() => commit({ exercise: query.trim(), exercise_id: null })}><span className="block text-sm text-zinc-400">{t('Use custom exercise')}</span><span className="block text-base">{query.trim()}</span></button> : null}</>}
       </div>
       <footer className="shrink-0 border-t border-white/10 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
         <button type="button" onClick={() => {setCustom(!custom);setQuery('');}} className="min-h-12 w-full rounded border border-white/15 text-sm font-medium">{t(custom ? 'Choose from catalog' : 'Other exercise')}</button>

@@ -8,17 +8,34 @@ export function useMobileViewport() {
     const root = document.documentElement;
     const viewport = window.visualViewport;
     let baseline = window.innerHeight;
+    let keyboardVisible = false;
+    let layoutWidth = window.innerWidth;
+    let previousHeight = viewport?.height || window.innerHeight;
+    let motionTimer;
     const update = event => {
       const focused = event?.type === 'focusout' ? event.relatedTarget : document.activeElement;
       const editing = focused?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, [contenteditable="true"]');
       const height = viewport?.height || window.innerHeight;
       const scale = viewport?.scale || 1;
-      if (!editing) baseline = window.innerHeight;
-      const open = Boolean(editing && scale === 1 && Math.max(baseline, window.innerHeight) - height > 120);
+      if (window.innerWidth !== layoutWidth) { layoutWidth = window.innerWidth; baseline = window.innerHeight; }
+      if (!editing && !keyboardVisible) baseline = window.innerHeight;
+      const inset = Math.max(0, Math.max(baseline, window.innerHeight) - height);
+      // Blur precedes dismissal. Keep geometry until the keyboard actually
+      // leaves, including between pointerdown and click on the Send button.
+      const open = Boolean(scale === 1 && (keyboardVisible ? inset > 2 : editing && inset > 120));
+      if (height > previousHeight + 1 && keyboardVisible) {
+        root.dataset.keyboardMotion = 'closing';
+        clearTimeout(motionTimer);
+        motionTimer = setTimeout(() => { delete root.dataset.keyboardMotion; }, 240);
+      } else if (height < previousHeight - 1 && open) {
+        clearTimeout(motionTimer);
+        delete root.dataset.keyboardMotion;
+      }
+      previousHeight = height;
+      keyboardVisible = open;
       root.style.setProperty('--lifeos-viewport-height', `${height}px`);
       root.style.setProperty('--lifeos-viewport-top', `${viewport?.offsetTop || 0}px`);
-      root.style.setProperty('--lifeos-keyboard-inset', `${editing && scale === 1 ? Math.max(0, baseline - height) : 0}px`);
-      root.style.setProperty('--lifeos-dock-viewport-gap', `${scale === 1 ? Math.max(0, window.innerHeight - height - (viewport?.offsetTop || 0)) : 0}px`);
+      root.style.setProperty('--lifeos-keyboard-inset', `${scale === 1 && (editing || open) ? inset : 0}px`);
       root.dataset.keyboardOpen = String(open);
       setKeyboardOpen(open);
     };
@@ -37,7 +54,8 @@ export function useMobileViewport() {
       root.style.removeProperty('--lifeos-viewport-height');
       root.style.removeProperty('--lifeos-viewport-top');
       root.style.removeProperty('--lifeos-keyboard-inset');
-      root.style.removeProperty('--lifeos-dock-viewport-gap');
+      clearTimeout(motionTimer);
+      delete root.dataset.keyboardMotion;
       delete root.dataset.keyboardOpen;
     };
   }, []);
