@@ -5,6 +5,14 @@ The current architecture and module reference stays in `PROJECT_CONTEXT.md`.
 
 ## UI refinement release (2026-11-19)
 
+Corrective iPhone follow-up after the user reported that `3f7b6dd` still magnifies
+the page on Community photo opening and compresses Companion during keyboard
+opening: use a full-viewport photo dialog with a stable native dismissal control,
+bound actual image dimensions, keep one fixed Companion layout through keyboard
+resize, and stop composer height-observer churn. The input requests text/Send;
+Safari's native form assistant bar cannot be disabled by this PWA. Physical-device
+acceptance remains open. No schema rerun required.
+
 Mobile bug follow-up: preserve workout-card taps through small finger movements,
 animate only the profile photo and remove its modal outline, lower navigation by
 6px and track the visual viewport from startup, fit chat/forms above the keyboard,

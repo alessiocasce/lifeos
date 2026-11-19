@@ -173,7 +173,14 @@ export function AIAssistantTab() {
 
   useEffect(() => {
     const input = composerRef.current;
-    const observer = new ResizeObserver(() => resizeMessageInput(input));
+    let previousWidth;
+    const observer = new ResizeObserver(([entry]) => {
+      // Height changes are produced by the auto-grow helper itself. Resetting
+      // height to auto again on every height notification causes visible churn.
+      if (entry.contentRect.width === previousWidth) return;
+      previousWidth = entry.contentRect.width;
+      resizeMessageInput(input);
+    });
     observer.observe(input);
     return () => observer.disconnect();
   }, []);
@@ -544,6 +551,8 @@ export function AIAssistantTab() {
             <textarea
               ref={composerRef}
               rows={1}
+              inputMode="text"
+              enterKeyHint="send"
               value={aiInput}
               onChange={(event) => {
                 setAiInput(event.target.value);

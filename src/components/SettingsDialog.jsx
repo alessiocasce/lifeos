@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { t } from '../i18n';
 
 export function SettingsDialog({ title, onClose, children, className = '', busy = false, triggerRef, showHeader = true }) {
+  const photoViewer = className.split(' ').includes('settings-photo-viewer');
   const dialog = useRef(null);
   const close = useRef(onClose);
   const motion = useRef(null);
@@ -17,11 +18,12 @@ export function SettingsDialog({ title, onClose, children, className = '', busy 
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     element.showModal();
-    element.focus({ preventScroll: true });
+    // The photo overlay's first control spans the stable viewport. Let native
+    // modal focus land there; never focus the small animated photo container.
+    if (!photoViewer) element.focus({ preventScroll: true });
     const target = element.getBoundingClientRect();
     if (source) element.style.transformOrigin = `${Math.max(0, Math.min(target.width, source.x + source.width / 2 - target.x))}px ${Math.max(0, Math.min(target.height, source.y + source.height / 2 - target.y))}px`;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const photoViewer = element.classList.contains('settings-photo-viewer');
     const previousVisibility = previous?.style?.visibility;
     const photoFrames = (origin = previous?.getBoundingClientRect?.()) => {
       const destination = element.querySelector('.settings-photo-circle')?.getBoundingClientRect() || element.getBoundingClientRect();
@@ -62,12 +64,15 @@ export function SettingsDialog({ title, onClose, children, className = '', busy 
     closing.current = true;
     motion.current.reverse();
   };
-  return createPortal(<dialog ref={dialog} tabIndex={-1} className={`settings-dialog ${className}`} aria-label={t(title)} aria-modal="true" onPointerDown={() => {
+  return createPortal(<dialog ref={dialog} tabIndex={photoViewer ? undefined : -1} className={`settings-dialog ${className}`} aria-label={t(title)} aria-modal="true" onPointerDown={() => {
     // A new interaction can reverse an in-progress dismissal without a jump.
     if (closing.current) { closing.current = false; motion.current.updatePlaybackRate(1); motion.current.play(); }
   }} onCancel={event => { event.preventDefault(); dismiss(); }} onClick={event => {
     if (event.target !== event.currentTarget || busy) return;
     const rect = event.currentTarget.getBoundingClientRect();
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dismiss();
-  }}>{showHeader && <header><h2>{t(title)}</h2><button type="button" className="icon-button" aria-label={t('Close')} disabled={busy} onClick={dismiss}><X size={22} /></button></header>}{children}</dialog>, document.body);
+  }}>{photoViewer ? <>
+    <button type="button" className="settings-photo-dismiss" aria-label={t('Close profile photo')} disabled={busy} onClick={dismiss} />
+    <div className="settings-photo-content">{children}</div>
+  </> : <>{showHeader && <header><h2>{t(title)}</h2><button type="button" className="icon-button" aria-label={t('Close')} disabled={busy} onClick={dismiss}><X size={22} /></button></header>}{children}</>}</dialog>, document.body);
 }

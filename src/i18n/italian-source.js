@@ -137,6 +137,7 @@ export default {
   'Profile saved.': 'Profilo salvato.',
   'Preferences saved.': 'Preferenze salvate.',
   'View profile photo': 'Visualizza foto profilo',
+  'Close profile photo': 'Chiudi foto profilo',
   'Edit profile photo': 'Modifica foto profilo',
   'Use photo': 'Usa foto',
   'Changes could not be saved. Try again.': 'Impossibile salvare le modifiche. Riprova.',

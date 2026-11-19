@@ -398,7 +398,7 @@ test('photo opening and closing animate, keep modal focus, and honor reduced mot
   const origin = await page.evaluate(() => window.__clickedPhotoRect);
   const dialog = page.getByRole('dialog', { name: 'Profile photo', exact: true });
   const sample = await dialog.evaluate(el => {
-    const animation = el.getAnimations().find(a => a.effect.target === el);
+    const animation = el.querySelector('.settings-photo-circle').getAnimations()[0];
     animation.pause(); animation.currentTime = 0;
     const start = el.querySelector('.settings-photo-circle').getBoundingClientRect();
     const startRect = { x: start.x, y: start.y, width: start.width };
@@ -414,10 +414,10 @@ test('photo opening and closing animate, keep modal focus, and honor reduced mot
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'View profile photo', exact: true })).toBeFocused();
   await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
-  await dialog.evaluate(async el => { await el.getAnimations().find(a => a.effect.target === el).finished; });
+  await dialog.evaluate(async el => { await el.querySelector('.settings-photo-circle').getAnimations()[0].finished; });
   await page.keyboard.press('Escape');
   const returned = await dialog.evaluate(el => {
-    const animation = el.getAnimations().find(a => a.effect.target === el);
+    const animation = el.querySelector('.settings-photo-circle').getAnimations()[0];
     animation.pause(); animation.currentTime = 0;
     const rect = el.querySelector('.settings-photo-circle').getBoundingClientRect();
     const source = document.querySelector('.settings-avatar-button').getBoundingClientRect();
@@ -432,7 +432,7 @@ test('photo opening and closing animate, keep modal focus, and honor reduced mot
   await expect(dialog).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByRole('button', { name: 'View profile photo', exact: true }).click();
-  expect(await dialog.evaluate(el => el.getAnimations().find(a => a.effect.target === el).effect.getTiming().duration)).toBeLessThanOrEqual(100);
+  expect(await dialog.evaluate(el => el.querySelector('.settings-photo-circle').getAnimations()[0].effect.getTiming().duration)).toBeLessThanOrEqual(100);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 });

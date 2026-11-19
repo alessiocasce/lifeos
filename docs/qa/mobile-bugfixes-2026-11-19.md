@@ -22,6 +22,45 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Reopened iPhone defects after `3f7b6dd`
+
+The user reports whole-page magnification when opening a Community photo in the
+installed iPhone PWA, plus Companion moving/compressing during keyboard opening.
+The earlier browser pass did **not** establish that either native defect was fixed.
+
+Follow-up changes:
+
+- Photo viewer uses a fixed full-viewport native modal and a transparent, normally
+  focusable dismissal button. It no longer assigns `tabindex` to the photo modal
+  or explicitly focuses the small photo dialog. Only the bounded photo circle
+  animates; real image dimensions and inline baseline spacing cannot size its box.
+- Real square and portrait PNGs now exercise Community photo opening, closing,
+  focus return and geometry at all six target widths; previous generic mobile
+  viewer tests used an initials fallback. Native iPhone zoom remains an acceptance
+  gate, not something desktop WebKit emulation can establish.
+- Companion keeps one fixed viewport layout even before the keyboard opens.
+  The old implementation switched layout mode at the 120px keyboard threshold.
+  Bottom navigation clearance now decreases with keyboard occlusion; the header,
+  toolbar and composer retain their own sizes while the message scroll area shrinks.
+  Composer auto-grow reacts to text/width changes instead of observing its own
+  height writes. The input requests the text keyboard and a Send return key.
+- The arrows/tick strip is Safari's native form assistant bar. The PWA cannot
+  suppress it through a supported web API. See the [W3C Editing discussion](https://github.com/w3c/editing/issues/545)
+  and [WebKit report](https://bugs.webkit.org/show_bug.cgi?id=319762). Do not claim
+  that `inputmode`, `enterkeyhint`, or replacing a textarea can remove that strip.
+
+Recheck on the installed iPhone after deploying this follow-up before closing the
+reported defects. Browser geometry checks cover the implementation, not UIKit zoom
+or keyboard animation acceptance.
+
+Corrective validation: final Chromium target batch 16/16 and WebKit photo/chat/
+viewport batch 23/23 passed. The initial broader Chromium batch passed 56/58;
+the old zero-padding expectation was retained by removing unnecessary overlay
+padding, and a one-off reduced-motion dismissal timeout passed three isolated
+rechecks plus the final target batch. Loaded Community photo screenshots were
+inspected. Build, Brain, seven-function route guard, Italian dictionary generation
+and whitespace checks passed. The existing large-bundle build warning remains.
+
 - Cold-open installed iPhone PWA on Command, then switch tabs and return: the bar stays at the same lower position without a jump.
 - On Feed and member profiles, tap workout titles, counts and card bodies with ordinary finger movement; verify each opens once. Deliberate pull-to-refresh still works.
 - Open Settings and Community photos: only the circular photo appears in Community, without a rectangular outline or page magnification; outside tap dismisses. Verify Settings edit/removal still work.

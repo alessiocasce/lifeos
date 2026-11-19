@@ -17,6 +17,7 @@ export function useMobileViewport() {
       const open = Boolean(editing && scale === 1 && Math.max(baseline, window.innerHeight) - height > 120);
       root.style.setProperty('--lifeos-viewport-height', `${height}px`);
       root.style.setProperty('--lifeos-viewport-top', `${viewport?.offsetTop || 0}px`);
+      root.style.setProperty('--lifeos-keyboard-inset', `${editing && scale === 1 ? Math.max(0, baseline - height) : 0}px`);
       root.style.setProperty('--lifeos-dock-viewport-gap', `${scale === 1 ? Math.max(0, window.innerHeight - height - (viewport?.offsetTop || 0)) : 0}px`);
       root.dataset.keyboardOpen = String(open);
       setKeyboardOpen(open);
@@ -35,6 +36,7 @@ export function useMobileViewport() {
       document.removeEventListener('focusout', update);
       root.style.removeProperty('--lifeos-viewport-height');
       root.style.removeProperty('--lifeos-viewport-top');
+      root.style.removeProperty('--lifeos-keyboard-inset');
       root.style.removeProperty('--lifeos-dock-viewport-gap');
       delete root.dataset.keyboardOpen;
     };

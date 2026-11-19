@@ -4,6 +4,8 @@
 
 ## Current State (2026-11-19 release batch)
 
+- The user reopened photo-page magnification and Companion keyboard compression on the installed iPhone after `3f7b6dd`. The correction uses a full-viewport photo overlay with a stable native dismiss control and a permanently fixed Companion layout; loaded-photo and staged keyboard-resize tests cover both. Safari's arrows/tick form assistant bar has no supported web opt-out. See the reopened iPhone section in [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md); physical acceptance remains open.
+
 - Mobile bug follow-up removes the cross-tab workout banner, lowers the dock 6px, adds shared visual-viewport keyboard geometry, keeps photo animation on the circle and preserves native card taps until a deliberate pull gesture. See [mobile bug QA and release target](docs/qa/mobile-bugfixes-2026-11-19.md). Commit/push and production deployment were authorized on 2026-11-19; verify current Git/Vercel status and the public build-version SHA. Physical iPhone acceptance remains separate. No schema rerun required.
 
 - Accumulated Settings, mobile bar, Companion, Community, Training and durable

@@ -4,6 +4,8 @@ Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-
 
 Before releasing the local mobile fixes, run the [tap/photo/dock/keyboard checks](qa/mobile-bugfixes-2026-11-19.md), then verify cold Command startup and native keyboard/photo dismissal on an installed iPhone PWA. No schema rerun required.
 
+The first mobile release (`3f7b6dd`) did not resolve photo magnification or Companion keyboard compression on the user's installed iPhone. For the corrective release, verify the full-viewport photo dialog, permanent Companion layout and text/Send keyboard hints. Native arrows/tick toolbar removal is unsupported by Safari; do not mark it implemented. Browser passes and a matched production SHA are release checks, not on-device acceptance.
+
 Community profile/workout visual follow-up remains local: verify actual Settings-style profile rendering and the revised workout hierarchy without exercise-jump controls. No schema rerun required.
 
 Local Community redesign (2026-11-17): before a separately authorized release, run the focused [Community checks](qa/community-apple-design.md), including privacy revocation, notes consent, account switching, signed-photo fallback and nested Back/Forward restoration. No backend, schema or dependency changes. No schema rerun required.

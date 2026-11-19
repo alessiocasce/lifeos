@@ -2,6 +2,14 @@
 
 ## Mobile bug follow-up, 2026-11-19
 
+The user reopened the iPhone photo zoom and Companion keyboard defects after
+`3f7b6dd` reached production. The next correction uses a full-viewport photo
+overlay with a native close control, plus a permanent Companion viewport layout
+instead of switching positioning modes during keyboard opening. Test loaded square
+and portrait photos, not just initials. Safari's native arrows/tick form assistant
+bar has no supported PWA opt-out. Preserve that limitation and await user iPhone
+acceptance; see the reopened-defect section in the mobile evidence below.
+
 The mobile follow-up fixes pull-to-refresh swallowing small workout-card
 taps, isolate photo animation to the circle and remove its container outline,
 lower the mobile bar by 6px with visual-viewport tracking from startup, fit
