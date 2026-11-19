@@ -5,35 +5,28 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
 });
 
-test('dock follows the visible viewport when its bottom differs from the layout viewport', async ({ page }) => {
+test('idle dock ignores visual viewport reports and follows the native viewport bottom', async ({ page }) => {
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Mobile navigation' });
   await expect(nav).toBeVisible();
-  // Mobile Safari can retain a taller layout viewport with no keyboard open.
-  // The normal 844px emulation hides this distinction entirely.
-  for (const height of [878, 810]) {
+  await page.evaluate(() => document.documentElement.style.setProperty('--lifeos-safe-bottom', '34px'));
+  const bottom = async () => { const box = await nav.boundingBox(); return box.y + box.height; };
+  expect(await bottom()).toBe(844 - 22);
+  await nav.getByRole('button', { name: 'Companion', exact: true }).tap();
+  // Inject viewport reports without moving the browser's actual fixed-position edge.
+  for (const height of [810, 878]) {
     await page.evaluate(height => {
-      document.documentElement.style.setProperty('--lifeos-safe-bottom', '34px');
       Object.defineProperty(visualViewport, 'height', { configurable: true, value: height });
       Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 8 });
       visualViewport.dispatchEvent(new Event('resize'));
       visualViewport.dispatchEvent(new Event('scroll'));
     }, height);
-    for (const name of ['Command', 'Companion', 'Community', 'Training', 'Companion', 'Command']) {
-      await nav.getByRole('button', { name, exact: true }).tap();
-      await expect.poll(async () => {
-        const box = await nav.boundingBox();
-        return box.y + box.height;
-      }).toBe(8 + height - 22);
-    }
+    expect(await bottom()).toBe(844 - 22);
+    const composer = await page.locator('.companion-composer').boundingBox();
+    expect(composer.y + composer.height).toBeLessThan((await nav.boundingBox()).y);
   }
-  // Recovery must update the same frame without a tab switch or an input focus.
-  await page.evaluate(() => {
-    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 844 });
-    Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 0 });
-    visualViewport.dispatchEvent(new Event('resize'));
-  });
-  await expect.poll(async () => { const box = await nav.boundingBox(); return box.y + box.height; }).toBe(844 - 22);
+  await page.setViewportSize({ width: 390, height: 780 });
+  await expect.poll(bottom).toBe(780 - 22);
 });
 
 test('the rendered dock sits lower and at identical coordinates across mobile tabs', async ({ page }) => {

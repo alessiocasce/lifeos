@@ -4,6 +4,8 @@
 
 ## Current State (2026-11-19 release batch)
 
+- After `def68a0`, the Companion dock was still reported higher. The shared dock now uses the browser's fixed bottom edge and the safe-area inset directly. Visual viewport measurements still size Companion and keyboard-aware dialogs. See [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md) for the regression and installed iPhone check. No schema rerun required.
+
 - After `aa9cb18`, Companion's raised dock was reopened on iPhone. The shared dock frame now uses the measured visual viewport's top and explicit height, instead of `fixed; inset: 0` and its implicit layout-viewport bottom. The new regression fails on the old frame when visual/layout heights differ, and compares actual dock coordinates across tabs for both taller and shorter visible viewports. This reproduces a coordinate-space defect, not the physical iPhone paint offset; device acceptance remains open. See [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md). No schema rerun required.
 
 - After `2ef0d8d`, the dock/keyboard correction replaces tab-dependent fixed positioning with one body-level navigation frame, lowers the pill to `max(2px, safe-area-bottom - 12px)` on all tabs, locks Companion's document panning and gives chat one effective viewport-height calculation. Extra keyboard height/padding/toolbar animations and Companion's pull-refresh wrapper are removed. See the after-`2ef0d8d` section of [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md). Physical iPhone acceptance remains open. No schema rerun required.

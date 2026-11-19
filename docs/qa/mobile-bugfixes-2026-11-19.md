@@ -22,6 +22,19 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Browser-anchored dock after `def68a0`
+
+Production served `def68a0` when the user reported the dock still sat higher
+on Companion. The dock now uses its own fixed bottom edge and safe-area inset.
+Companion and keyboard-aware dialogs still use visual viewport measurements.
+With the keyboard closed, Companion's workspace also reserves dock clearance
+against the browser's fixed viewport edge.
+
+The regression injects shorter and taller visual viewport reports on Companion
+with the keyboard closed. The dock must stay at the Command position and only
+move when the browser viewport itself changes. This exercises the app's
+positioning dependency. The installed iPhone still needs a device check.
+
 ### Companion workspace positioning after `56e5ae0`
 
 Opening Companion used to switch the body to fixed positioning and hide root
