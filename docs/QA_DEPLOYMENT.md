@@ -2,6 +2,11 @@
 
 Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
+Dock correction after `aa9cb18`: confirm production CSS anchors `.shell-docks`
+from `--lifeos-viewport-top` with explicit `--lifeos-viewport-height`, then match
+the public build SHA. Require separate iPhone comparison across tabs; the new
+unequal-viewport regression verifies coordinates, not native compositor painting.
+
 Latest dock/motion gate after `2ef0d8d`: compare actual navigation rectangles on
 Command/Companion/Community/Training and after a keyboard cycle. Confirm the lower
 global position and a single viewport-driven focus/blur movement. Earlier easing

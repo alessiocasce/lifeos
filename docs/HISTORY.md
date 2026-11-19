@@ -5,6 +5,11 @@ The current architecture and module reference stays in `PROJECT_CONTEXT.md`.
 
 ## UI refinement release (2026-11-19)
 
+Dock-only correction after `aa9cb18`: replace the implicit fixed frame bottom
+with measured visual viewport top/height. New regression exposes the prior wrong
+bottom when visual and layout viewports differ, across navigation and viewport
+recovery. Native Companion dock acceptance remains open. No schema rerun required.
+
 Dock/motion follow-up after `2ef0d8d`: use one fixed navigation frame across tabs,
 lower its safe-area-adjusted position globally, lock Companion document panning,
 and calculate chat height with dock clearance once. Remove independently animated

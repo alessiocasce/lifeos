@@ -2,6 +2,11 @@
 
 ## iPhone typing usability follow-up (2026-11-19)
 
+Dock follow-up after `aa9cb18`: compare physical Command/Companion bar position
+before typing and after dismissal. The shared frame uses measured visual height/
+top even when they differ from the layout viewport; test both larger and smaller
+visible heights. Browser geometry alone does not prove native iPhone acceptance.
+
 Use the after-`a1cd972` checks in [mobile evidence](qa/mobile-bugfixes-2026-11-19.md).
 Mobile Companion omits its duplicate shell heading and collapses the conversation
 toolbar while typing. The single-line composer is 54px high with a 44px Send

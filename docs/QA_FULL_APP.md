@@ -2,6 +2,11 @@
 
 Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
+After `aa9cb18`, verify identical dock position on the installed iPhone across
+Command/Companion/Community/Training, including cold launch and keyboard recovery.
+The frame now uses measured visible height/top; browser coverage must separate
+visual and layout viewport dimensions. See [current evidence](qa/mobile-bugfixes-2026-11-19.md).
+
 Latest dock/motion check after `2ef0d8d`: compare actual navigation coordinates
 across tabs and after a keyboard cycle. The lower shared frame and one effective
 chat height replace independently animated height/padding. Verify no second up/

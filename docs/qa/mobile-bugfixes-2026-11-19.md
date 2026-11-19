@@ -22,6 +22,38 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Visible-viewport dock frame after `aa9cb18`
+
+The user again reports a higher Companion dock. Investigation ruled out active
+label font weight causing an intrinsic-height change (360/375/390/393/430px,
+16-32px root text in quarter-pixel increments). The remaining tab-specific
+boundary is Companion's fixed document body. The prior shared dock still used
+`position: fixed; inset: 0`, implicitly positioning its bottom against the layout
+viewport rather than the visible viewport already measured by the shell hook.
+
+The new regression separates those viewport dimensions with no focused field:
+the old dock bottom was 822px instead of the expected 796px for an 810px visible
+height, 8px top and 22px safe-area-adjusted gap. The frame now has an explicit
+measured visible height/top; the pill's existing lower safe-area gap is unchanged.
+Coverage includes taller (878px) and shorter (810px) visible heights against an
+844px layout, all primary tabs, and recovery without switching tabs or focusing.
+Keyboard detection, chat positioning, body locking and composer behavior are
+unchanged by this correction.
+
+This establishes the coordinate-space defect and its correction in browser
+geometry. It does not reproduce or prove the cause of the user's native paint
+offset. WebKit tracks related standalone fixed-position/viewport discrepancies
+([237961](https://bugs.webkit.org/show_bug.cgi?id=237961),
+[312149](https://bugs.webkit.org/show_bug.cgi?id=312149)); these are supporting
+platform context, not evidence of the exact device cause. On the installed iPhone,
+compare Command/Companion/Community/Training before typing, after a keyboard cycle,
+and after cold launch. Native acceptance remains open. No schema rerun required.
+
+Validation: 21 focused dock/long-scroll/typing checks passed in Chromium and 21
+in WebKit. The taller-visible-viewport case was then added and the expanded
+regression passed in both engines. Brain regressions, production build and
+`git diff --check` passed; the build retains its existing large-chunk warning.
+
 ### Shared dock frame and single keyboard motion after `2ef0d8d`
 
 The user reports that Companion's dock remains higher and its input/chat move up

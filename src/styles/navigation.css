@@ -33,8 +33,9 @@
     --lifeos-mobile-dock-bottom: max(2px, calc(var(--lifeos-safe-bottom) - 12px));
     --lifeos-mobile-dock-clearance: calc(var(--lifeos-mobile-dock-height, 72px) + var(--lifeos-mobile-dock-bottom) + 10px);
   }
-  /* One viewport reference for every destination, independent of tab content. */
-  .shell-docks { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+  /* Anchor from the visible viewport's top with an explicit measured height.
+     Safari's fixed bottom/inset frame can differ when Companion locks the body. */
+  .shell-docks { position: fixed; inset: var(--lifeos-viewport-top, 0px) 0 auto; height: var(--lifeos-viewport-height, 100dvh); z-index: 40; pointer-events: none; }
   .shell-docks .mobile-dock {
     position: absolute; left: 12px; right: 12px; bottom: var(--lifeos-mobile-dock-bottom); pointer-events: auto;
     height: auto; min-height: 72px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -2,6 +2,15 @@
 
 ## Mobile bug follow-up, 2026-11-19
 
+After `aa9cb18`, the user again reports Companion's dock higher on iPhone.
+The shared dock frame now anchors from the measured visual viewport top with an
+explicit height, bypassing the implicit fixed-position layout-viewport bottom.
+The regression covers a visible viewport both taller and shorter than layout,
+across actual tab navigation and recovery without focus. The old equal-viewport
+tests missed this coordinate-space defect. Physical iPhone rendering remains
+unverified; do not claim this browser reproduction proves native acceptance.
+This changes navigation CSS only; Companion/keyboard behavior is preserved.
+
 Latest correction after `2ef0d8d`: one fixed body-level frame positions the lower
 navigation on every tab; its safe-area-adjusted bottom is lower globally.
 Companion locks document panning and uses one effective chat height rather than
