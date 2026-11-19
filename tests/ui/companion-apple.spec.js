@@ -58,8 +58,12 @@ for (const language of ['en', 'it']) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         const send = await page.getByTestId('brain-send-button').boundingBox();
         if (width < 768) {
+          // Root text changes resize the navigation too. Wait for its measured
+          // height to reach the shared layout variable before comparing boxes.
+          await expect.poll(() => page.locator('.mobile-dock').evaluate(el => Math.abs(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lifeos-mobile-dock-height')) - el.getBoundingClientRect().height))).toBe(0);
           const dock = await page.locator('.mobile-dock').boundingBox();
-          expect(send.y + send.height).toBeLessThanOrEqual(dock.y);
+          const settledSend = await page.getByTestId('brain-send-button').boundingBox();
+          expect(settledSend.y + settledSend.height).toBeLessThanOrEqual(dock.y);
           await expect.poll(async () => {
             const composer = await page.locator('.companion-composer').boundingBox();
             const navigation = await page.locator('.mobile-dock').boundingBox();

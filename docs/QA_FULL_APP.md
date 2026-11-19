@@ -2,6 +2,11 @@
 
 Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
+Latest dock/motion check after `2ef0d8d`: compare actual navigation coordinates
+across tabs and after a keyboard cycle. The lower shared frame and one effective
+chat height replace independently animated height/padding. Verify no second up/
+down movement on focus or blur; see [current mobile evidence](qa/mobile-bugfixes-2026-11-19.md).
+
 Mobile bug follow-up: [tap, photo, dock and keyboard checks](qa/mobile-bugfixes-2026-11-19.md). The cross-tab Training banner is removed; use Training navigation to resume. Companion must fit above the native keyboard, and modal forms must remain reachable without app-wide zoom. This follow-up is local and awaits physical iPhone acceptance.
 
 Reopened on iPhone after the first deployed fix: photo opening still magnifies the

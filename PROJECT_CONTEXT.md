@@ -4,6 +4,8 @@
 
 ## Current State (2026-11-19 release batch)
 
+- After `2ef0d8d`, the dock/keyboard correction replaces tab-dependent fixed positioning with one body-level navigation frame, lowers the pill to `max(2px, safe-area-bottom - 12px)` on all tabs, locks Companion's document panning and gives chat one effective viewport-height calculation. Extra keyboard height/padding/toolbar animations and Companion's pull-refresh wrapper are removed. See the after-`2ef0d8d` section of [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md). Physical iPhone acceptance remains open. No schema rerun required.
+
 - After `a1cd972`, the user rejected keyboard usability and reported first-tap Send failure and a raised Companion dock. The next correction holds keyboard geometry through blur, preserves Send/search pointer focus, removes duplicate mobile Companion headings/collapses its toolbar while typing, compacts the composer and expands mobile exercise catalog search to the full visible viewport. Acceptance now measures usable chat/results space and actual selection/submit taps; see the after-`a1cd972` section in [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md). No schema rerun required.
 
 - The user reopened photo-page magnification and Companion keyboard compression on the installed iPhone after `3f7b6dd`. The correction uses a full-viewport photo overlay with a stable native dismiss control and a permanently fixed Companion layout; loaded-photo and staged keyboard-resize tests cover both. Safari's arrows/tick form assistant bar has no supported web opt-out. See the reopened iPhone section in [mobile QA](docs/qa/mobile-bugfixes-2026-11-19.md); physical acceptance remains open.

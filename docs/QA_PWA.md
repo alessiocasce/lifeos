@@ -1,5 +1,11 @@
 # LifeOS PWA QA
 
+Mobile keyboard/dock follow-up: [latest evidence](qa/mobile-bugfixes-2026-11-19.md).
+Check the lower shared dock across tabs before and after Companion typing, and
+verify one focus/blur movement without a second app animation. Companion uses its
+own locked conversation viewport and no pull-to-refresh translation; other tabs
+retain pull-to-refresh. Native iPhone acceptance remains separate from emulation.
+
 Run this against the deployed HTTPS URL after a production build has been deployed.
 
 ## Installability

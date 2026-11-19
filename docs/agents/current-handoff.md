@@ -2,6 +2,14 @@
 
 ## Mobile bug follow-up, 2026-11-19
 
+Latest correction after `2ef0d8d`: one fixed body-level frame positions the lower
+navigation on every tab; its safe-area-adjusted bottom is lower globally.
+Companion locks document panning and uses one effective chat height rather than
+separate animated height/padding. Its pull-refresh wrapper and app-added keyboard
+motion are removed. Compare rendered rectangles across tabs and a focus/blur cycle,
+not only CSS inset values. Earlier "eased dismissal" notes are superseded. Native
+iPhone acceptance remains open; see the newest mobile evidence section.
+
 After `a1cd972`, the user reports insufficient typing space, Send requiring prior
 keyboard dismissal, Companion's raised dock and cramped exercise results. The
 correction holds keyboard state through blur until viewport recovery, preserves

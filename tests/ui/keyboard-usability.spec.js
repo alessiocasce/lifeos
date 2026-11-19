@@ -59,10 +59,11 @@ test('send also works on the first native touch tap with the keyboard open', asy
   await expect(input).toBeFocused();
 });
 
-test('blur does not restore the dock before the keyboard closes; restoration eases', async ({ page }) => {
+test('blur does not restore the dock early or add a second restoration animation', async ({ page }) => {
   await page.goto('/assistant');
   const input = page.getByTestId('brain-message-input');
   await input.fill('Keep this draft');
+  const closedHeight = await page.locator('.lifeos-shell').evaluate(el => el.getBoundingClientRect().height);
   await viewport(page, 360);
   await input.blur();
   await expect(page.locator('.mobile-dock')).toBeHidden();
@@ -72,9 +73,7 @@ test('blur does not restore the dock before the keyboard closes; restoration eas
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return document.querySelector('.lifeos-shell').getBoundingClientRect().height;
   });
-  expect(sample).toBeGreaterThan(360);
-  expect(sample).toBeLessThan(844);
-  await expect.poll(() => page.locator('.lifeos-shell').evaluate(el => el.getBoundingClientRect().height)).toBe(844);
+  expect(sample).toBe(closedHeight);
   await expect(page.locator('.mobile-dock')).toBeVisible();
   await expect(input).toHaveValue('Keep this draft');
 });
@@ -83,9 +82,9 @@ test('dock uses the same bottom inset on Companion and other tabs', async ({ pag
   await page.goto('/');
   await viewport(page, 780);
   const bottom = () => page.locator('.mobile-dock').evaluate(el => getComputedStyle(el).bottom);
-  expect(await bottom()).toBe('6px');
+  expect(await bottom()).toBe('2px');
   await page.getByRole('navigation', { name: 'Mobile navigation' }).getByRole('button', { name: 'Companion', exact: true }).tap();
-  expect(await bottom()).toBe('6px');
+  expect(await bottom()).toBe('2px');
 });
 
 test('exercise search reserves at least two thirds of the small visible screen for results', async ({ page }, info) => {

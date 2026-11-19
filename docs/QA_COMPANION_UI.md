@@ -7,7 +7,9 @@ Mobile Companion omits its duplicate shell heading and collapses the conversatio
 toolbar while typing. The single-line composer is 54px high with a 44px Send
 target. Verify readable conversation space, first-touch Send without dismissing
 the keyboard, no write on press/drag cancellation, draft retention, a consistent
-bottom dock inset and eased recovery only after the keyboard actually closes.
+lower shared dock position and one viewport-driven movement through focus/blur.
+The after-`2ef0d8d` correction removes independently animated recovery; compare
+actual input/dock rectangles before and after keyboard cycles.
 Native iPhone behavior requires user confirmation; desktop containment does not
 establish acceptance. No schema rerun required.
 

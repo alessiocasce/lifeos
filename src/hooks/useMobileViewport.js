@@ -10,8 +10,6 @@ export function useMobileViewport() {
     let baseline = window.innerHeight;
     let keyboardVisible = false;
     let layoutWidth = window.innerWidth;
-    let previousHeight = viewport?.height || window.innerHeight;
-    let motionTimer;
     const update = event => {
       const focused = event?.type === 'focusout' ? event.relatedTarget : document.activeElement;
       const editing = focused?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, [contenteditable="true"]');
@@ -23,15 +21,6 @@ export function useMobileViewport() {
       // Blur precedes dismissal. Keep geometry until the keyboard actually
       // leaves, including between pointerdown and click on the Send button.
       const open = Boolean(scale === 1 && (keyboardVisible ? inset > 2 : editing && inset > 120));
-      if (height > previousHeight + 1 && keyboardVisible) {
-        root.dataset.keyboardMotion = 'closing';
-        clearTimeout(motionTimer);
-        motionTimer = setTimeout(() => { delete root.dataset.keyboardMotion; }, 240);
-      } else if (height < previousHeight - 1 && open) {
-        clearTimeout(motionTimer);
-        delete root.dataset.keyboardMotion;
-      }
-      previousHeight = height;
       keyboardVisible = open;
       root.style.setProperty('--lifeos-viewport-height', `${height}px`);
       root.style.setProperty('--lifeos-viewport-top', `${viewport?.offsetTop || 0}px`);
@@ -54,8 +43,6 @@ export function useMobileViewport() {
       root.style.removeProperty('--lifeos-viewport-height');
       root.style.removeProperty('--lifeos-viewport-top');
       root.style.removeProperty('--lifeos-keyboard-inset');
-      clearTimeout(motionTimer);
-      delete root.dataset.keyboardMotion;
       delete root.dataset.keyboardOpen;
     };
   }, []);

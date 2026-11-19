@@ -28,8 +28,15 @@
 .mobile-dock-selection { position: absolute; left: 0; top: 6px; bottom: 6px; border-radius: 22px; background: #354154; border: 1px solid #ffffff14; pointer-events: none; opacity: 0; }
 .mobile-dock-selection[data-ready='true'] { opacity: 1; }
 @media (max-width: 767px) {
+  :root {
+    --lifeos-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --lifeos-mobile-dock-bottom: max(2px, calc(var(--lifeos-safe-bottom) - 12px));
+    --lifeos-mobile-dock-clearance: calc(var(--lifeos-mobile-dock-height, 72px) + var(--lifeos-mobile-dock-bottom) + 10px);
+  }
+  /* One viewport reference for every destination, independent of tab content. */
+  .shell-docks { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
   .shell-docks .mobile-dock {
-    position: fixed; left: 12px; right: 12px; bottom: calc(6px + env(safe-area-inset-bottom));
+    position: absolute; left: 12px; right: 12px; bottom: var(--lifeos-mobile-dock-bottom); pointer-events: auto;
     height: auto; min-height: 72px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0; padding: 6px; overflow: hidden; border: 1px solid #a9bad02e; border-radius: 28px;
     background: rgb(25 31 41 / 91%); backdrop-filter: blur(22px) saturate(140%); -webkit-backdrop-filter: blur(22px) saturate(140%);

@@ -8,7 +8,8 @@ test('Companion keeps one layout through keyboard animation instead of switching
   const input = page.getByTestId('brain-message-input');
   await expect(input).toHaveAttribute('inputmode', 'text');
   await expect(input).toHaveAttribute('enterkeyhint', 'send');
-  expect(await shell.evaluate(el => getComputedStyle(el).position)).toBe('fixed');
+  const closedHeight = (await shell.boundingBox()).height;
+  expect(await page.locator('body').evaluate(el => getComputedStyle(el).position)).toBe('fixed');
   const initialComposerHeight = (await page.locator('.companion-composer').boundingBox()).height;
   await input.tap();
   for (const [height, top] of [[800, 0], [740, 10], [680, 30], [560, 50], [440, 60], [560, 40], [740, 10], [844, 0]]) {
@@ -18,8 +19,7 @@ test('Companion keeps one layout through keyboard animation instead of switching
       visualViewport.dispatchEvent(new Event('resize'));
       visualViewport.dispatchEvent(new Event('scroll'));
     }, { height, top });
-    await expect.poll(async () => (await shell.boundingBox()).height).toBe(height);
-    expect(await shell.evaluate(el => getComputedStyle(el).position)).toBe('fixed');
+    await expect.poll(async () => (await shell.boundingBox()).height).toBe(Math.min(height, closedHeight));
     if (height < 724) await expect(page.locator('.companion-toolbar')).toBeHidden();
     const composer = await page.locator('.companion-composer').boundingBox();
     expect(composer.height).toBeCloseTo(initialComposerHeight, 0);

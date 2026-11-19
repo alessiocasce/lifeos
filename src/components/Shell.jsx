@@ -99,6 +99,10 @@ export function Shell({ children }) {
     try { await signOut(); } catch { setAccountError(t("Could not sign out. Try again.")); }
     finally { setSigningOut(false); }
   };
+  const content = <div className="workspace-content">
+    {userSettings?.status === 'ready' && !userSettings.profile && activeTab !== 'settings' ? <button className="mb-5 min-h-11 border-b border-white/10 text-sm text-zinc-300" onClick={() => navigate('settings')}>{t("Set up your profile and language")}</button> : null}
+    {children}
+  </div>;
 
   return (
     <div className="lifeos-shell" data-workspace={activeTab}>
@@ -128,12 +132,7 @@ export function Shell({ children }) {
             {activeTab !== 'assistant' ? <button className="icon-button hidden md:inline-flex" title={t("Open Companion")} aria-label={t("Open Companion")} onClick={() => navigate('assistant')}><MessageSquare size={18} /></button> : null}
           </div>
         </header>
-        <PullToRefresh>
-          <div className="workspace-content">
-            {userSettings?.status === 'ready' && !userSettings.profile && activeTab !== 'settings' ? <button className="mb-5 min-h-11 border-b border-white/10 text-sm text-zinc-300" onClick={() => navigate('settings')}>{t("Set up your profile and language")}</button> : null}
-            {children}
-          </div>
-        </PullToRefresh>
+        {activeTab === 'assistant' ? <div className="companion-viewport-content">{content}</div> : <PullToRefresh>{content}</PullToRefresh>}
       </main>
       {/* Keep fixed docks outside app ancestors that can establish containing blocks. */}
       {createPortal(<div className="shell-docks" data-workspace={activeTab}>

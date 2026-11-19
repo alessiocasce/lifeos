@@ -18,7 +18,7 @@ for (const language of ['en', 'it']) test(`floating navigation fits all breakpoi
     await expect(dock(page).getByRole('button')).toHaveCount(5);
     await expect(dock(page).locator('[aria-current="page"]')).toHaveCount(1);
     const nav = await dock(page).boundingBox();
-    expect(nav.x).toBe(12); expect(nav.x + nav.width).toBe(width - 12); expect(nav.y + nav.height).toBe(838);
+    expect(nav.x).toBe(12); expect(nav.x + nav.width).toBe(width - 12); expect(nav.y + nav.height).toBe(842);
     for (const button of await dock(page).getByRole('button').all()) {
       const box = await button.boundingBox();
       expect(box.height).toBeGreaterThanOrEqual(44); expect(box.width).toBeGreaterThanOrEqual(44);

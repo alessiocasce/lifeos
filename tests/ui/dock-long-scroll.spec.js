@@ -39,7 +39,7 @@ async function measure(page, label, samples) {
   });
   samples.push({ label, ...sample });
   expect(sample.blockers).toEqual([]);
-  expect(Math.abs(sample.viewportBottom - sample.bottom - 6)).toBeLessThan(1.5);
+  expect(Math.abs(sample.viewportBottom - sample.bottom - 2)).toBeLessThan(1.5);
   expect(sample.height).toBe(72);
   expect(sample.left).toBe(12);
   expect(sample.right).toBe(await page.evaluate(() => innerWidth - 12));

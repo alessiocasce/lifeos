@@ -79,17 +79,17 @@ test('cold Command dock keeps its bottom position after navigation and viewport 
   const dock = page.locator('.mobile-dock');
   await expect(dock).toBeVisible();
   const bottom = async () => { const box = await dock.boundingBox(); return box.y + box.height; };
-  expect(await bottom()).toBe(838);
+  expect(await bottom()).toBe(842);
   await dock.getByRole('button', { name: 'Community', exact: true }).tap();
   await dock.getByRole('button', { name: 'Command', exact: true }).tap();
-  expect(await bottom()).toBe(838);
+  expect(await bottom()).toBe(842);
   await page.evaluate(() => {
     Object.defineProperty(visualViewport, 'height', { configurable: true, value: 760 });
     visualViewport.dispatchEvent(new Event('resize'));
   });
   // Native fixed positioning handles browser chrome; do not add this visual
   // viewport difference a second time to the dock's bottom inset.
-  expect(await dock.evaluate(el => getComputedStyle(el).bottom)).toBe('6px');
+  expect(await dock.evaluate(el => getComputedStyle(el).bottom)).toBe('2px');
 });
 
 test('exercise search stays visible with usable results above a panned keyboard', async ({ page }) => {

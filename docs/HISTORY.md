@@ -5,6 +5,13 @@ The current architecture and module reference stays in `PROJECT_CONTEXT.md`.
 
 ## UI refinement release (2026-11-19)
 
+Dock/motion follow-up after `2ef0d8d`: use one fixed navigation frame across tabs,
+lower its safe-area-adjusted position globally, lock Companion document panning,
+and calculate chat height with dock clearance once. Remove independently animated
+keyboard height/padding/toolbar changes and Companion's translated pull-refresh
+container. New regressions compare actual coordinates and staged keyboard frames.
+Physical iPhone acceptance remains separate. No schema rerun required.
+
 Keyboard usability correction after `a1cd972`: keep editing geometry until actual
 keyboard dismissal, preserve Send pointer focus, remove the extra dock offset,
 collapse redundant Companion headings while typing and use a smaller composer.

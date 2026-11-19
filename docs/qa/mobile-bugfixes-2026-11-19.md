@@ -22,6 +22,43 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Shared dock frame and single keyboard motion after `2ef0d8d`
+
+The user reports that Companion's dock remains higher and its input/chat move up
+then down on both focus and blur. The prior independent 220ms height/padding
+transitions are removed; they produced a measurable lag during staged viewport
+recovery (about 29px in the failing regression). This supersedes the earlier
+"eased dismissal" expectation below.
+
+- A single body-level fixed frame now positions navigation for every tab. Its pill
+  is an absolute child, independent of each workspace's positioning/scroll model.
+  All mobile tabs use `max(2px, safe-area-bottom - 12px)`: 22px with a 34px safe
+  area, versus the previous 40px; without an inset it is 2px versus 6px.
+- Companion locks document scrolling and uses an absolute chat viewport inside
+  that fixed document. Its effective height subtracts remaining dock clearance in
+  the same calculation; height and bottom padding no longer animate separately.
+  No app-added toolbar height animation runs during keyboard changes.
+- Companion no longer sits inside the translated pull-to-refresh container.
+  Conversation scrolling remains local; other tabs retain pull-to-refresh.
+- Regressions compare actual dock rectangles across Command, Companion,
+  Community and Training and after a keyboard cycle, with a simulated iPhone safe
+  area. Opening/closing samples must follow the viewport on the next rendered
+  frame and return to the original input rectangle, without a second movement.
+- Preserve first-touch Send, compact typing space and exercise search behavior.
+  Native iPhone viewport/keyboard acceptance remains required; these regressions
+  verify app geometry and do not emulate UIKit's own keyboard animation.
+
+Validation: all three new regressions failed against `2ef0d8d`, then passed with
+the shared frame/single-height model. WebKit's final focused batch passed 31/31.
+Chromium covered the same geometry/usability paths plus shell/Companion controls;
+the fresh 25-case batch passed 23, with two font-resize timing assertions corrected
+to compare the measured fractional dock height after ResizeObserver delivery;
+both six-width/large-text cases then passed. Earlier navigation failures included
+`ERR_NETWORK_IO_SUSPENDED` and passed in the fresh runner. Brain, production build,
+function guard and whitespace checks passed. No schema rerun required.
+Confirm the installed client's build in Settings' LifeOS version display before
+native acceptance; active workouts/drafts still guard service-worker activation.
+
 ### Usable keyboard space and pointer activation after `a1cd972`
 
 The user reports that the previous release still leaves too little conversation/

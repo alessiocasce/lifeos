@@ -2,6 +2,11 @@
 
 Current accumulated UI release evidence: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 
+Latest dock/motion gate after `2ef0d8d`: compare actual navigation rectangles on
+Command/Companion/Community/Training and after a keyboard cycle. Confirm the lower
+global position and a single viewport-driven focus/blur movement. Earlier easing
+expectations are superseded; see [current mobile evidence](qa/mobile-bugfixes-2026-11-19.md).
+
 Keyboard usability release gate after `a1cd972`: verify first-touch Send with the
 keyboard open, no redundant Companion headers while typing, consistent dock inset,
 eased dismissal and a substantial exercise results area on the active-workout
