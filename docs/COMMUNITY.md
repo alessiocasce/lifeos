@@ -97,7 +97,10 @@ prove physical iPhone background or WhatsApp rest delivery. No rankings added.
 ## Username and Navigation Update
 
 Public identities use usernames only. Photos are private Storage paths signed
-for authenticated readers; own-profile Edit photo links to Settings. Each
+for authenticated readers. Uploaded photos are downloaded and decoded before
+display, then reused in memory for the signed-in session. Signing still
+revalidates access. The avatar shows an initial or icon during loading and
+retries a failed download. Own-profile Edit photo links to Settings. Each
 Community browser entry records its origin, Members search and scroll state.
 Back returns to that origin, including nested profile/workout navigation; direct
 links fall back safely to Feed. Refresh preserves valid same-account history.

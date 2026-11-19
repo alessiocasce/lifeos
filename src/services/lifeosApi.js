@@ -416,7 +416,7 @@ export const profilePhotoApi = {
     // the new reference; a cleanup failure never erases the saved replacement.
     if (previous.avatar_path) await bucket.remove([previous.avatar_path]);
     const next = throwIfError(await client.from('user_profiles').select(profileFields).eq('user_id', userId).single());
-    await avatarCache.load(userId, next, profilePhotoApi.signedUrl).catch(() => null);
+    void avatarCache.load(userId, next, profilePhotoApi.signedUrl).catch(() => null);
     return next;
   },
   async remove(expectedUserId) {

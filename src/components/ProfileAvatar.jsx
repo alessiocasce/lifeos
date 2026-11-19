@@ -3,7 +3,7 @@ import { UserRound } from 'lucide-react';
 import { useLifeOS } from '../context/LifeOSContext';
 import * as api from '../services/lifeosApi';
 import { t } from '../i18n';
-import { avatarCache } from '../utils/avatarCache';
+import { avatarCache, isAvatarAccessDenied } from '../utils/avatarCache';
 
 export function ProfileAvatar({ profile, className = 'h-10 w-10' }) {
   const { authUser } = useLifeOS();
@@ -19,20 +19,20 @@ export function ProfileAvatar({ profile, className = 'h-10 w-10' }) {
     let failures = 0;
     const refresh = async () => {
       if (!userId || (!path && !legacy)) return;
+      window.clearTimeout(timer);
       try {
         const url = await avatarCache.load(userId, profile, api.profilePhotoApi.signedUrl);
         if (active) {
           failures = 0;
           setPhoto({ url, userId, path, legacy }); setFailed('');
-          window.clearTimeout(timer);
           timer = window.setTimeout(refresh, Math.max(1000, avatarCache.remaining(userId, profile) - 30000));
         }
       } catch (error) {
         if (!active) return;
-        if ([401,403].includes(Number(error?.statusCode || error?.status))) setPhoto(null);
+        if (isAvatarAccessDenied(error)) setPhoto(null);
         else {
           // Keep a still-authorized image during transient network failures.
-          if (failures++ < 2) timer = window.setTimeout(refresh, 15000);
+          if (failures < 2) timer = window.setTimeout(refresh, failures++ === 0 ? 1000 : 15000);
         }
       }
     };
