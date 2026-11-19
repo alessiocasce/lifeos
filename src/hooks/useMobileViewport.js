@@ -10,10 +10,14 @@ export function useMobileViewport() {
     let baseline = window.innerHeight;
     let keyboardVisible = false;
     let layoutWidth = window.innerWidth;
+    let recoveryTimer;
+    let measuredHeight;
+    const readHeight = () => viewport?.height || window.innerHeight;
     const update = event => {
       const focused = event?.type === 'focusout' ? event.relatedTarget : document.activeElement;
       const editing = focused?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select, [contenteditable="true"]');
-      const height = viewport?.height || window.innerHeight;
+      const height = readHeight();
+      measuredHeight = height;
       const scale = viewport?.scale || 1;
       if (window.innerWidth !== layoutWidth) { layoutWidth = window.innerWidth; baseline = window.innerHeight; }
       if (!editing && !keyboardVisible) baseline = window.innerHeight;
@@ -29,6 +33,17 @@ export function useMobileViewport() {
       root.toggleAttribute('data-keyboard-viewport', keyboardInset > 2);
       root.dataset.keyboardOpen = String(open);
       setKeyboardOpen(open);
+
+      // WebKit can finish restoring the height without a final resize event.
+      // Keep listening after blur until the viewport actually recovers.
+      if (keyboardInset > 2) {
+        recoveryTimer ??= window.setInterval(() => {
+          if (readHeight() !== measuredHeight) update();
+        }, 100);
+      } else {
+        window.clearInterval(recoveryTimer);
+        recoveryTimer = undefined;
+      }
     };
     update();
     viewport?.addEventListener('resize', update);
@@ -37,6 +52,7 @@ export function useMobileViewport() {
     document.addEventListener('focusin', update);
     document.addEventListener('focusout', update);
     return () => {
+      window.clearInterval(recoveryTimer);
       viewport?.removeEventListener('resize', update);
       viewport?.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);

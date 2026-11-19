@@ -22,6 +22,14 @@ Follow-up to the UI release, authorized for commit/push and production deploymen
 
 ## Physical-device checks
 
+### Companion keyboard recovery after `8ffc2a9`
+
+After dismissing the keyboard, Companion could remain in its typing layout
+until a tap or scroll delivered a fresh viewport event. While keyboard geometry
+is active, the viewport hook also checks for a height change every 100 ms. It
+stops after recovery. The regression dismisses the input, silently restores
+viewport height and checks the dock, toolbar, workspace layout and chat draft.
+
 ### Companion document layout after `8e4388d`
 
 The supplied 384×832 iPhone recording shows the dock's lower edge at about
