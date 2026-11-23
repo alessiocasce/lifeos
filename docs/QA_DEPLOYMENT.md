@@ -609,3 +609,14 @@ For the Settings motion follow-up, also verify the custom language menu (includi
 
 
 The local [floating bottom-bar redesign](qa/apple-bottom-bar.md) needs its intended deployed SHA verified before release acceptance. Recheck cold/lazy navigation, More guards, resume/PWA-notice/composer clearance, enlarged text and actual iPhone safe-area/keyboard/toolbar behavior. This UI change requires no schema rerun.
+
+## Jarvis Companion Step 1 Deployment (`COMPANION_AGENT`)
+
+Order matters: migrations first, code second, flag last.
+
+1. Apply `supabase/migrations/20261122150000_companion_usage_ledger.sql` (usage ledger) and `supabase/migrations/20261123120000_companion_step1_commitments.sql` (commitment columns on `memos`, `brain_action_ledger`, `brain_turn_locks` with service-only lock RPCs). Both are additive. Do not rerun `schema.sql`.
+2. Verify: `select kind, count(*) from memos group by kind;` shows only `reminder` for existing rows. `select * from companion_try_turn_lock('<user>', 'probe', 5);` returns `acquired = true`; then `select * from companion_release_turn_lock('<user>', 'probe');`.
+3. Deploy the code with `COMPANION_AGENT` unset. WhatsApp must behave exactly as before.
+4. Set `COMPANION_AGENT=true` in Vercel and redeploy. The env var is read on every request, but Vercel applies env changes only on a new deployment.
+5. Rollback: unset `COMPANION_AGENT` (or set it to `false`) and redeploy. Commitments, ledger rows and locks stay and are harmless to the legacy pipeline.
+6. Watch `brain_trace.companion` latency (p95 target < 20s) and `brain_usage_ledger` spend during the 5–7 day real-use gate.

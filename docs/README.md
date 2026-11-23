@@ -20,7 +20,7 @@ Current UI release: [2026-11-19 checks](qa/ui-release-2026-11-19.md).
 | Release and PWA | [Deployment](DEPLOYMENT.md), [Web Push](WORKOUT_WEB_PUSH.md) | [Deployment QA](QA_DEPLOYMENT.md), [PWA QA](QA_PWA.md) |
 | Training and rest coordination | [Completed rest spec](specs/workout-rest-coordination.md), [catalog](EXERCISE_CATALOG_REVISION.md) | [Workout QA](QA_WORKOUT.md), [rest evidence](qa/workout-rest-coordination.md) |
 | Command / Home | `src/tabs/HomeTab.jsx` | [Command QA](QA_COMMAND_UI.md), [Home QA](QA_HOME.md) |
-| Brain / Companion | [Brain architecture](BRAIN_ARCHITECTURE.md), [MCP](MCP.md) | [Companion controls](QA_COMPANION_UI.md), [AI behavior](QA_AI_ASSISTANT.md) |
+| Brain / Companion | [Brain architecture](BRAIN_ARCHITECTURE.md), [MCP](MCP.md); approved next design: [Jarvis Companion spec](specs/jarvis-companion.md) (not implemented) | [Companion controls](QA_COMPANION_UI.md), [AI behavior](QA_AI_ASSISTANT.md) |
 | WhatsApp | [Bridge](../bridge/whatsapp/README.md), [outbox](WHATSAPP_PROACTIVE_ARCHITECTURE.md), [reply ownership](WHATSAPP_BRIDGE_RELIABILITY_PATCH.md) | [Reliability release](RELIABILITY_RELEASE.md), `test:brain`, `test:reliability`, `test:bridge` |
 | Local Settings UI | [Current handoff](agents/current-handoff.md), `src/tabs/SettingsTab.jsx` | [Settings verification](qa/settings-apple-design.md) |
 | Local mobile navigation | `src/components/MobileNavigation.jsx`, `src/styles/navigation.css` | [Bottom-bar verification](qa/apple-bottom-bar.md) |
@@ -37,7 +37,7 @@ QA checklists describe tests to perform; they are not proof that every step has 
 - **Community was redesigned from `main` on 2026-11-18**, replacing the Codex implementation; see the top of [Community evidence](qa/community-apple-design.md).
 - [Community Apple-style plan](plans/community-apple-design.md) (visual decisions superseded) preserves the complete end-to-end UI plan and confirmed choices: existing capabilities, full-page member/workout drill-down and open exercise/set logs. The complete design is implemented locally; see [Community evidence](qa/community-apple-design.md) before continuing. No commit or deployment.
 - [Settings Apple design audit](audits/SETTINGS_APPLE_DESIGN.md) records the baseline Settings findings. Slices 1-4 of its [implementation plan](plans/settings-apple-design.md) are implemented locally; see [verification and remaining acceptance gates](qa/settings-apple-design.md). They are not committed or deployed.
-- [Companion vNext](LIFEOS_COMPANION_VNEXT.md) is a living product roadmap, broader than the implemented beliefs/memory/sync/monitor boundaries.
+- [Companion vNext](LIFEOS_COMPANION_VNEXT.md) is a living product roadmap, broader than the implemented beliefs/memory/sync/monitor boundaries. Its approved implementation plan is the [Jarvis Companion spec](specs/jarvis-companion.md) (2026-11-22, design only). That spec replaces the €0 constraint and the Phase A–H order and defines build steps 0–6.
 - [Rankings blueprint](plans/lifeos-rankings/README.md) remains design-only and awaits its own approvals. Its production-scoring/enrollment/reward proposals were not implemented by the timer refactor.
 - [Archived handoffs](archive/README.md) and the Rankings archive retain point-in-time briefs/progress. Their old commands/statuses are not current implementation instructions.
 - Dated release audits and Training/PWA design reports preserve what was checked then. New banners point to the current handoff; historical measurements and deployment IDs remain intact.

@@ -31,10 +31,15 @@
     "test:attention": "node scripts/tests/test-companion-monitors.js && node scripts/tests/test-companion-app.js",
     "test:mcp-write": "node scripts/tests/test-mcp-write.js",
     "test:schema": "node scripts/tests/test-schema-contracts.js",
-    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-oauth && npm run test:mcp-write && npm run test:memory && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion && npm run test:attention && npm run test:template-draft",
-    "preview": "vite preview --host 127.0.0.1"
+    "test": "npm run test:brain && npm run test:mcp && npm run test:mcp-oauth && npm run test:mcp-write && npm run test:memory && npm run test:schema && npm run test:reliability && npm run test:bridge && npm run test:workout && npm run test:companion && npm run test:companion-foundations && npm run test:companion-agent && npm run test:attention && npm run test:template-draft",
+    "preview": "vite preview --host 127.0.0.1",
+    "test:companion-foundations": "node scripts/tests/test-companion-foundations.js",
+    "test:companion-agent": "node scripts/tests/test-companion-agent.js",
+    "eval:companion": "node scripts/evals/run-companion-evals.js",
+    "eval:companion:export": "node scripts/evals/export-companion-eval-candidates.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
     "@supabase/supabase-js": "^2.105.4",
     "@vitejs/plugin-react": "^5.0.0",
     "lucide-react": "^0.468.0",

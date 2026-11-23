@@ -48,6 +48,7 @@ class Query {
   gte(key, value) { this.filters.push(`${identifier(key)} >= ${this.bind(value)}`); return this; }
   lte(key, value) { this.filters.push(`${identifier(key)} <= ${this.bind(value)}`); return this; }
   lt(key, value) { this.filters.push(`${identifier(key)} < ${this.bind(value)}`); return this; }
+  gt(key, value) { this.filters.push(`${identifier(key)} > ${this.bind(value)}`); return this; }
   not(key, op, value) { if (op !== 'is' || value !== null) throw new Error('Unsupported test filter'); this.filters.push(`${identifier(key)} is not null`); return this; }
   in(key, values) { this.filters.push(`${identifier(key)} in (${values.map((value) => this.bind(value)).join(',')})`); return this; }
   is(key, value) { if (value !== null) throw new Error('Only null is supported'); this.filters.push(`${identifier(key)} is null`); return this; }
@@ -65,6 +66,7 @@ class Query {
   limit(n) { this.max = Number(n); return this; }
   update(payload) { this.mode = 'update'; this.payload = payload; return this; }
   insert(payload) { this.mode = 'insert'; this.payload = payload; return this; }
+  delete() { this.mode = 'delete'; return this; }
   upsert(payload, { onConflict } = {}) { this.mode = 'upsert'; this.payload = payload; this.conflict = onConflict; return this; }
   single() { this.one = true; return this; }
   maybeSingle() { this.one = true; return this; }
@@ -79,6 +81,9 @@ class Query {
           ? ` on conflict (${String(this.conflict || '').split(',').map(identifier).join(',')}) do update set ${entries.map(([key, value]) => `${identifier(key)}=${this.bind(value)}`).join(',')}`
           : '';
         sql = `insert into ${this.table} (${entries.map(([key]) => identifier(key)).join(',')}) values (${entries.map(([, value]) => this.bind(value)).join(',')})${conflict} returning *`;
+      } else if (this.mode === 'delete') {
+        if (!this.filters.length) throw new Error('Refusing an unfiltered test delete');
+        sql = `delete from ${this.table}${where} returning *`;
       } else if (this.mode === 'update') {
         sql = `update ${this.table} set ${Object.entries(this.payload).map(([key, value]) => `${identifier(key)}=${this.bind(value)}`).join(',')} ${where} returning *`;
       } else {

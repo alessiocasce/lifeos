@@ -7,7 +7,9 @@ import { compareOutboxRowsForDelivery } from './brainOutboxStateMachine.js';
 import { evaluateDueMonitors } from './brainMonitorEvaluation.js';
 import { decideAccountabilityAttention, recordAttentionDecision, recordAttentionOutbox, recordAttentionSuppression } from './brainAttentionEngine.js';
 
-const MEMO_SELECT = 'id, user_id, title, memo_date, memo_time, notes, status, created_at, updated_at';
+// '*' so commitment columns (kind) are read when the step 1 migration is
+// applied, without breaking reminders before it is.
+const MEMO_SELECT = '*';
 const DEFAULT_MAX_PER_DAY = 6;
 const DEFAULT_MIN_GAP_MINUTES = 60;
 const DEFAULT_QUIET_START = '23:00';
@@ -98,6 +100,7 @@ export function buildMemoProactiveCandidates({ memo, now = new Date(), recipient
 
   const language = detectLanguage(`${normalized.title} ${normalized.notes}`);
   const candidates = [];
+  if (normalized.kind === 'checkin') return buildCompanionCheckinCandidates({ memo: normalized, nowDate, recipient, language });
   if (normalized.memo_time) {
     const dueAt = localDateTimeToUtcDate(normalized.memo_date, normalized.memo_time);
     if (nowDate >= dueAt && nowDate <= addHours(dueAt, TIMED_MEMO_EXPIRY_HOURS)) {
@@ -165,6 +168,31 @@ export function buildMemoProactiveCandidates({ memo, now = new Date(), recipient
   }
 
   return candidates;
+}
+
+// A Brain-scheduled check-in (Companion step 1) is sent once, at its time, as
+// the question itself. It has no overdue or date-only nags, and its reply is
+// left to the agent Brain rather than the memo done/snooze resolver.
+function buildCompanionCheckinCandidates({ memo, nowDate, recipient, language }) {
+  if (!memo.memo_time) return [];
+  const dueAt = localDateTimeToUtcDate(memo.memo_date, memo.memo_time);
+  if (nowDate < dueAt || nowDate > addHours(dueAt, TIMED_MEMO_EXPIRY_HOURS)) return [];
+  return [buildMemoCandidate({
+    memo,
+    recipient,
+    ruleKey: 'companion_checkin_due',
+    priority: 'normal',
+    scheduledFor: dueAt,
+    expiresAt: addHours(dueAt, TIMED_MEMO_EXPIRY_HOURS),
+    idempotencyKey: buildMemoIdempotencyKey('companion_checkin', memo, dueAt),
+    body: memo.title,
+    metadata: {
+      exact_due_reminder: false,
+      expected_reply_type: 'companion_checkin',
+      due_at: dueAt.toISOString(),
+    },
+    language,
+  })];
 }
 
 export async function loadMemoProactiveContext({ userId = getActionUserId(), now = new Date() } = {}) {
@@ -370,6 +398,7 @@ export function normalizeMemoForProactive(memo) {
     memo_time: normalizeTimeString(memo.memo_time),
     notes: cleanText(memo.notes, 500),
     status: cleanText(memo.status, 40) || 'open',
+    kind: cleanText(memo.kind, 40) || 'reminder',
   };
 }
 

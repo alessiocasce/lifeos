@@ -10,6 +10,12 @@
 
 ---
 
+## 0. Current Direction (2026-11-22)
+
+The approved implementation plan for this roadmap is [LifeOS Jarvis Companion](specs/jarvis-companion.md). It supersedes the €0 constraint (§2.6, §9, §17, §18), the WhatsApp-call-first transport (§9.2, Phase G) and the Phase A–H order (§15). The rest of this document remains the product vision and principles.
+
+---
+
 ## 1. North Star
 
 LifeOS should stop feeling like a dashboard with an AI tab and become a **persistent personal companion / butler / accountability partner**.
@@ -158,6 +164,8 @@ LifeOS should be able to create a monitor because it notices something worth mon
 For consequential actions, autonomy remains narrower. In particular, financial monitoring may alert/escalate but must not silently execute a trade.
 
 ### 2.6 Provider/model independence + zero-cash operation
+
+> **Superseded 2026-11-22:** the €0 constraint below is replaced by a €30 measured trial and real phone calls. See [Jarvis Companion](specs/jarvis-companion.md). Provider independence through a model adapter still applies.
 
 Companion vNext must not make the identity of the companion depend on OpenAI, Gemini, Claude, or any single model/provider.
 
@@ -744,6 +752,8 @@ This is a core product goal, not a gimmick.
 
 ### Zero-cash constraint
 
+> **Superseded 2026-11-22:** the €0 constraint below is replaced by a €30 measured trial and real phone calls. See [Jarvis Companion](specs/jarvis-companion.md). Provider independence through a model adapter still applies.
+
 **Current product constraint: LifeOS must be buildable and usable without new recurring monetary spend.**
 
 Do not make OpenAI Realtime API, Twilio, ElevenLabs, Meta Cloud API, or any other paid cloud provider a required dependency.
@@ -1223,6 +1233,8 @@ Track high-value context imported from ChatGPT or other intelligence surfaces wi
 
 ## 15. Implementation Phases — Current Draft
 
+> **Superseded 2026-11-22:** the build order is now steps 0–6 in [Jarvis Companion](specs/jarvis-companion.md) §10. The phases below are kept as history and long-range vision.
+
 This order can change as this living spec evolves.
 
 ### Phase A — Make the existing Brain feel alive
@@ -1442,6 +1454,8 @@ the same underlying update should occur.
 
 ## 17. Non-Negotiables
 
+> **Updated 2026-11-22:** the "no new required recurring paid service" item no longer applies; see [Jarvis Companion](specs/jarvis-companion.md) §9 for the budget and spend guard. All other items still apply.
+
 - No exact-phrase UX for normal conversation.
 - No repeated nagging when evidence says the world model is stale.
 - No separate personalities per channel.
@@ -1460,6 +1474,8 @@ the same underlying update should occur.
 ---
 
 ## 18. Open Questions / Decisions to Refine
+
+> **Updated 2026-11-22:** paid budget, WhatsApp transport, ChatGPT sync mode and voice/call transport are decided in [Jarvis Companion](specs/jarvis-companion.md). Its §11 lists the remaining review questions.
 
 This section should evolve with future discussions.
 
@@ -1540,6 +1556,12 @@ That is the level this project is aiming for.
 ---
 
 ## 20. Changelog
+
+### 2026-11-22 — Jarvis direction approved
+- Design session with the user produced [Jarvis Companion](specs/jarvis-companion.md), which supersedes the €0 constraint, the WhatsApp-call-first transport and the Phase A–H order.
+- Budget: €30 trial month. Real two-way phone calls via ElevenLabs + Twilio. The agent loop replaces the router/planner pipeline.
+- The commitment object replaces memos. Ideas, a daily morning call, Gmail and calendar triggers, and Brain-judged critical calls are all in scope.
+- Build order: steps 0–6 with done-criteria in the spec.
 
 ### 2026-09-25 — Slice 2 execution brief: explicit semantic MCP sync
 - Defined the next Companion vertical slice as the first write-capable ChatGPT/LifeOS bridge.
