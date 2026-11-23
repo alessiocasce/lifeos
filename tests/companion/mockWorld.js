@@ -6,6 +6,7 @@
 // pending confirmations instead of executing them.
 
 import { getCompanionTool, validateCompanionToolInput } from '../../api/_utils/companionTools.js';
+import { createTrainingMatcher, filterTrainingSession } from '../../api/_utils/companionTraining.js';
 
 export const DEFAULT_EVAL_NOW = '2026-11-20T17:30:00.000Z'; // Friday 18:30 in Rome
 
@@ -140,16 +141,16 @@ export function createMockWorld({ world = {}, now = DEFAULT_EVAL_NOW } = {}) {
         // Like the real reader: only past sessions inside the requested window.
         const today = romeDate(now);
         const since = addDays(today, -(input.days ?? 30));
+        const matcher = createTrainingMatcher(input.exercise);
+        const sessions = state.training
+          .filter((session) => session.date <= today && session.date >= since)
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .map((session) => filterTrainingSession({ ...session, name: session.name ?? session.focus ?? '' }, matcher))
+          .filter(Boolean);
         return {
-          sessions: state.training
-            .filter((session) => session.date <= today && session.date >= since)
-            .map((session) => ({
-              ...session,
-              exercises: !input.exercise || overlaps(session.focus ?? '', input.exercise)
-                ? session.exercises
-                : session.exercises.filter((exercise) => overlaps(exercise.name, input.exercise)),
-            }))
-            .filter((session) => session.exercises.length),
+          sessions: sessions.slice(0, 20),
+          total_sessions: sessions.length,
+          ...(matcher ? { filter: { query: input.exercise, groups: matcher.groups } } : {}),
         };
       }
       default:

@@ -20,6 +20,10 @@ import { searchAutobiographicalMemory } from './brainAutobiographicalMemory.js';
 import { applyBeliefTransition, listCurrentBeliefs } from './brainBeliefs.js';
 import { searchBrainVault } from './brainVault.js';
 import { estimateOneRepMax } from './workoutIntelligence.js';
+import { createTrainingMatcher, filterTrainingSession } from './companionTraining.js';
+
+const TRAINING_WORKOUT_LIMIT = 120;
+const TRAINING_SESSION_LIMIT = 20;
 import {
   assertTimeOrder, normalizeExpenseCategory, normalizeTimeRange, optionalDate, optionalText, optionalTime,
   requiredNumber, requiredText,
@@ -187,14 +191,14 @@ export function createCompanionToolExecutor({
   async function getTrainingSummary({ days = 30, exercise }) {
     const since = addDays(today, -Number(days));
     const workouts = await selectRows(client.from('workouts').select('id, name, performed_on, ended_at').eq('user_id', userId)
-      .gte('performed_on', since).lte('performed_on', today).order('performed_on', { ascending: false }).limit(40));
-    if (!workouts.length) return { sessions: [], note: 'No workouts in this window.' };
+      .gte('performed_on', since).lte('performed_on', today).order('performed_on', { ascending: false }).limit(TRAINING_WORKOUT_LIMIT));
+    if (!workouts.length) return { sessions: [], total_sessions: 0, note: 'No workouts in this window.' };
     const sets = await selectRows(client.from('workout_sets').select('workout_id, exercise, set_number, is_warmup, weight, reps').eq('user_id', userId)
-      .in('workout_id', workouts.map((workout) => workout.id)).limit(1500));
+      .in('workout_id', workouts.map((workout) => workout.id)).limit(5000));
+    const matcher = createTrainingMatcher(exercise);
     const byWorkout = new Map();
     for (const set of sets) {
       if (set.is_warmup) continue;
-      if (exercise && !matchesWords(set.exercise, exercise)) continue;
       if (!byWorkout.has(set.workout_id)) byWorkout.set(set.workout_id, new Map());
       const exercises = byWorkout.get(set.workout_id);
       const best = exercises.get(set.exercise);
@@ -213,8 +217,16 @@ export function createCompanionToolExecutor({
           name, working_sets: entry.sets, best_set: `${entry.best.weight}kg x ${entry.best.reps}`,
         })),
       }))
-      .filter((session) => session.exercises.length);
-    return { sessions: sessions.slice(0, 15) };
+      .map((session) => filterTrainingSession(session, matcher))
+      .filter(Boolean);
+    return {
+      sessions: sessions.slice(0, TRAINING_SESSION_LIMIT),
+      // Count questions ("quante volte…") must use total_sessions, not the list length.
+      total_sessions: sessions.length,
+      ...(matcher ? { filter: { query: exercise, groups: matcher.groups } } : {}),
+      ...(sessions.length > TRAINING_SESSION_LIMIT ? { note: `Showing the ${TRAINING_SESSION_LIMIT} most recent of ${sessions.length} sessions.` } : {}),
+      ...(workouts.length >= TRAINING_WORKOUT_LIMIT ? { window_truncated: true } : {}),
+    };
   }
 
   // -------------------------------------------------------------------------

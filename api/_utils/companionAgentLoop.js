@@ -11,6 +11,14 @@ export const COMPANION_FALLBACK_REPLIES = Object.freeze({
   stuck: 'Mi sono incartato, puoi ripetermelo in un altro modo?',
 });
 
+export const COMPANION_FINAL_ANSWER_NOTE = 'Hai finito le chiamate agli strumenti per questo messaggio. Rispondi ora, in breve, solo con quello che hai già letto. Se qualcosa non è chiaro, dillo e fai una sola domanda.';
+
+// Appended after the cached system blocks so the cache prefix is unchanged.
+function withFinalAnswerNote(system) {
+  const blocks = typeof system === 'string' ? [{ text: system, cache: true }] : [...(system ?? [])];
+  return [...blocks, { text: COMPANION_FINAL_ANSWER_NOTE, cache: false }];
+}
+
 export async function runCompanionTurn({
   generate,
   executeTool,
@@ -60,6 +68,15 @@ export async function runCompanionTurn({
     messages.push({ role: 'tool_results', results });
   }
 
+  // Step budget spent on tool calls: one last call with tools forbidden, so the
+  // model answers from what it already gathered instead of the stuck fallback.
+  try {
+    const turn = await generate({ system: withFinalAnswerNote(system), messages, tools, toolChoice: 'none' });
+    steps.push({ latencyMs: turn.latencyMs, costUsd: turn.costUsd, usage: turn.usage, stopReason: turn.stopReason, toolCalls: 0, final: true });
+    if (turn.stopReason !== 'refusal' && turn.text) return finish('max_steps_answered', turn.text);
+  } catch {
+    // Fall through to the fallback; the turn must still produce a reply.
+  }
   return finish('max_steps', lastText || COMPANION_FALLBACK_REPLIES.stuck);
 
   function finish(stopReason, reply) {

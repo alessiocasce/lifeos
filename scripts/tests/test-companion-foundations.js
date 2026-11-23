@@ -10,6 +10,7 @@ import {
   buildAnthropicRequest, buildGeminiRequest, generateCompanionTurn, parseModelSpec, resolveTierModel, toGeminiSchema,
 } from '../../api/_utils/companionModel.js';
 import { runCompanionTurn, COMPANION_FALLBACK_REPLIES } from '../../api/_utils/companionAgentLoop.js';
+import { createTrainingMatcher, filterTrainingSession } from '../../api/_utils/companionTraining.js';
 import { COMPANION_TOOLS, getCompanionTool, isCompanionWriteTool } from '../../api/_utils/companionTools.js';
 import { COMPANION_PERSONA, companionSystemBlocks, renderCompanionContext } from '../../api/_utils/companionPersona.js';
 import {
@@ -222,9 +223,82 @@ await check('agent loop contains unknown tools, tool exceptions, refusals and ru
     generate: scriptedGenerate([{ toolCalls: [{ id: 'z', name: 'get_today', input: {} }], stopReason: 'tool_use' }]),
     executeTool: async () => ({}), system: 's', message: 'x', tools, maxSteps: 3,
   });
+  // 3 tool steps, then one forced final call that still produced no text.
   assert.equal(runaway.stopReason, 'max_steps');
-  assert.equal(runaway.steps.length, 3);
+  assert.equal(runaway.steps.length, 4);
   assert.equal(runaway.reply, COMPANION_FALLBACK_REPLIES.stuck);
+});
+
+await check('agent loop answers from gathered results when the step budget runs out', async () => {
+  const requests = [];
+  const base = { provider: 'fake', model: 'fake', raw: null, usage: { inputTokens: 10, outputTokens: 5 }, costUsd: 0.001, latencyMs: 5 };
+  const toolTurn = { ...base, text: '', toolCalls: [{ id: 'z', name: 'get_today', input: {} }], stopReason: 'tool_use' };
+  const result = await runCompanionTurn({
+    generate: async (request) => {
+      requests.push(request);
+      return request.toolChoice === 'none'
+        ? { ...base, text: 'Questo mese gambe una volta, il 9.', toolCalls: [], stopReason: 'end' }
+        : toolTurn;
+    },
+    executeTool: async () => ({ events: [] }), system: 's', message: 'x', tools, maxSteps: 2,
+  });
+  assert.equal(result.stopReason, 'max_steps_answered');
+  assert.equal(result.reply, 'Questo mese gambe una volta, il 9.');
+  assert.equal(result.steps.length, 3);
+  assert.equal(requests.at(-1).toolChoice, 'none');
+  assert.ok(requests.at(-1).tools.length, 'declarations stay so the tool calls in history remain valid');
+  assert.ok(requests.at(-1).system.at(-1).text.includes('Rispondi ora'));
+  assert.ok(requests.slice(0, -1).every((request) => request.toolChoice === undefined));
+
+  const throwing = await runCompanionTurn({
+    generate: async (request) => {
+      if (request.toolChoice === 'none') throw new Error('deadline');
+      return toolTurn;
+    },
+    executeTool: async () => ({}), system: 's', message: 'x', tools, maxSteps: 1,
+  });
+  assert.equal(throwing.stopReason, 'max_steps');
+  assert.equal(throwing.reply, COMPANION_FALLBACK_REPLIES.stuck);
+});
+
+await check('training filter matches Italian muscle groups by session name or exercise', () => {
+  const session = (name, ...exercises) => ({ name, exercises: exercises.map((exercise) => ({ name: exercise })) });
+  const sessions = [
+    session('gambe', 'Hack Squat Machine', 'leg curl seduto', 'Leg Extension'),
+    session('lower 2', 'Barbell Bench Press', 'deadlift', 'Leg Extension'),
+    session('Spalle + Gambe', 'Dumbbell Lateral Raise', 'Machine Shoulder Press'),
+    session('Chest', 'Dumbbell Bench Press', 'Pectoral Machine'),
+    session('Full body', 'Squat', 'Pull-Up'),
+    session('Schiena + bic', 'Barbell Curl', 'Lat Machine', 'Pulley'),
+    session('Back + Biceps', 'Chest-Supported T-Bar Row', 'Incline Pistol Pulley'),
+  ];
+  const run = (query) => sessions.map((item) => filterTrainingSession(item, createTrainingMatcher(query))).filter(Boolean);
+
+  const legs = run('gambe');
+  assert.deepEqual(legs.map((item) => item.name), ['gambe', 'lower 2', 'Spalle + Gambe', 'Full body']);
+  assert.deepEqual(legs[1].exercises.map((item) => item.name), ['deadlift', 'Leg Extension']);
+  assert.equal(legs[2].exercises.length, 2, 'a session named for the group keeps its exercises when none match');
+  assert.deepEqual(legs[3].exercises.map((item) => item.name), ['Squat']);
+  assert.deepEqual(run('petto').map((item) => item.name), ['lower 2', 'Chest'], 'chest-supported rows are back work');
+  assert.deepEqual(run('schiena').map((item) => item.name), ['lower 2', 'Full body', 'Schiena + bic', 'Back + Biceps']);
+  assert.deepEqual(run('bicipiti').map((item) => item.name), ['Schiena + bic', 'Back + Biceps'], 'leg curl is not a biceps curl');
+  assert.deepEqual(run('braccia').map((item) => item.name), ['Schiena + bic', 'Back + Biceps']);
+  assert.deepEqual(run('squat').map((item) => item.name), ['gambe', 'Full body']);
+  assert.equal(run('').length, sessions.length);
+  assert.equal(createTrainingMatcher('  '), null);
+});
+
+await check('request builders forbid new tool calls when toolChoice is none', () => {
+  const toolDefs = [{ name: 'get_today', description: 'd', inputSchema: { type: 'object', properties: {}, additionalProperties: false } }];
+  const messages = [{ role: 'user', content: 'x' }];
+  const gemini = parseModelSpec('gemini:gemini-3.8-flash');
+  const none = buildGeminiRequest({ spec: gemini, systemBlocks: [], messages, tools: toolDefs, toolChoice: 'none', maxOutputTokens: 10 });
+  assert.equal(none.toolConfig.functionCallingConfig.mode, 'NONE');
+  assert.equal(none.tools[0].functionDeclarations.length, 1);
+  assert.equal(buildGeminiRequest({ spec: gemini, systemBlocks: [], messages, tools: toolDefs, maxOutputTokens: 10 }).toolConfig.functionCallingConfig.mode, 'AUTO');
+  const anthropic = buildAnthropicRequest({ spec: parseModelSpec('anthropic:claude-sonnet-5-5'), systemBlocks: [], messages, tools: toolDefs, toolChoice: 'none', maxOutputTokens: 10 });
+  assert.deepEqual(anthropic.params.tool_choice, { type: 'none' });
+  assert.equal(anthropic.params.tools.length, 1);
 });
 
 await check('tool catalog declares unique tools with autonomy classes and strict object schemas', () => {

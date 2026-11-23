@@ -47,7 +47,15 @@ Spec: [jarvis-companion.md](../specs/jarvis-companion.md). Parent issue #9, step
     - the deploy;
     - 5–7 days of real use with traces reviewed (zero P1);
     - p95 latency on real data.
-- **Next:** ask the user whether to commit step 1, then whether to deploy it (merge to `main` deploys production).
+- **Deployed 2026-11-23:** step 1 committed as `7415862`, merged to `main` as `c774b16` (Vercel success). Migrations `20261122150000` and `20261123120000` applied to production in one transaction, recorded in `supabase_migrations.schema_migrations`, verified (19 memos all `reminder`, lock probe OK). `COMPANION_AGENT` is still unset; the user sets it in the Vercel dashboard and redeploys (no Vercel CLI here).
+- **`COMPANION_AGENT=true` set in Vercel Production** via the CLI (folder now linked with `vercel link`, team `lifeos2`, project `lifeos`) and redeployed. The first live WhatsApp turns were served by the Companion (7.3s, $0.007, correct answer).
+- **Step 1 follow-up (built, UNCOMMITTED):**
+  - the agent loop makes one final tool-less call (`toolChoice: 'none'`) when the 6 steps run out (`stop_reason: max_steps_answered`);
+  - the training reader filters by Italian muscle group via the new `api/_utils/companionTraining.js` (session name or exercise keywords), shared with the eval mock; it returns `total_sessions` and allows 120 workouts / 20 listed sessions;
+  - the history window is 40 messages × 1500 characters;
+  - persona rule (user decision): workout counts use only logged workouts (`total_sessions`), never done gym reminders; "questo/sto/ultimo mese" = last 30 days. Covered by the public case `training-count-ignores-reminders`.
+  - Eval: 86/87, with the one miss a Gemini 503 (rerun 2/2 pass); `real-legs-this-month` now passes. p50 8.4s, p95 21.5s (above the 20s target, watch on real data). About $0.62.
+  - **Caution:** `workouts` holds other Community accounts' rows. Always filter by `user_id` when checking an answer.
 
 ## Mobile bug follow-up, 2026-11-19
 

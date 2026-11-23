@@ -881,3 +881,9 @@ Automated: `npm run test:companion-agent` (PGlite, scripted model, no network) a
 - [ ] `ai_chat_messages.metadata.brain_trace.companion` shows the model, steps, tool calls, cost and latency, with no chain-of-thought.
 - [ ] With `x-lifeos-debug: true`, debug appears only in the HTTP JSON, never in WhatsApp text.
 - [ ] `COMPANION_AGENT` off (unset, `false` or a typo) routes WhatsApp to the legacy pipeline.
+
+Step 1 follow-up (2026-11-23):
+
+- [ ] Training questions by muscle group ("quante volte ho fatto gambe/petto/schiena sto mese?") count sessions named for the group ("gambe", "lower 1") and sessions with matching exercises ("Leg Extension", "Bench Press"); a chest-supported row is back work, a leg curl is not biceps. The count comes from `total_sessions` over the last 30 days. A gym reminder just confirmed as done is never added to a workout count. Check the answer against **this user's** `workouts` rows only (the table holds other Community accounts).
+- [ ] When a turn spends all 6 tool steps, Brain still answers from what it read (`stop_reason: max_steps_answered`, one extra step in the trace) instead of "Mi sono incartato".
+- [ ] Follow-ups refer back across about 20 exchanges (history window 40 messages, 1500 characters each); `context.history_entries` in the trace shows the count.

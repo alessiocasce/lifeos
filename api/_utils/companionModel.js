@@ -67,6 +67,7 @@ export async function generateCompanionTurn({
   system,
   messages,
   tools = [],
+  toolChoice = 'auto',
   maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   usageSink,
@@ -83,8 +84,8 @@ export async function generateCompanionTurn({
   const startedAt = Date.now();
 
   const result = spec.provider === 'anthropic'
-    ? await callAnthropic({ spec, systemBlocks, messages, tools, maxOutputTokens, timeoutMs, client: clients.anthropic })
-    : await callGemini({ spec, systemBlocks, messages, tools, maxOutputTokens, timeoutMs, env, fetchImpl: clients.fetch ?? fetch });
+    ? await callAnthropic({ spec, systemBlocks, messages, tools, toolChoice, maxOutputTokens, timeoutMs, client: clients.anthropic })
+    : await callGemini({ spec, systemBlocks, messages, tools, toolChoice, maxOutputTokens, timeoutMs, env, fetchImpl: clients.fetch ?? fetch });
 
   const latencyMs = Date.now() - startedAt;
   const occurredAt = now();
@@ -143,7 +144,9 @@ function anthropicClient(injected) {
   return sharedAnthropicClient;
 }
 
-export function buildAnthropicRequest({ spec, systemBlocks, messages, tools, maxOutputTokens }) {
+// toolChoice 'none' keeps the declarations (the history may hold tool calls)
+// but forbids new calls, so the model must answer in text.
+export function buildAnthropicRequest({ spec, systemBlocks, messages, tools, toolChoice = 'auto', maxOutputTokens }) {
   const params = {
     model: spec.model,
     max_tokens: maxOutputTokens,
@@ -155,6 +158,7 @@ export function buildAnthropicRequest({ spec, systemBlocks, messages, tools, max
     messages: toAnthropicMessages(messages, spec),
     ...(tools.length ? {
       tools: tools.map((tool) => ({ name: tool.name, description: tool.description, input_schema: tool.inputSchema })),
+      ...(toolChoice === 'none' ? { tool_choice: { type: 'none' } } : {}),
     } : {}),
     ...(spec.effort ? { output_config: { effort: spec.effort } } : {}),
   };
@@ -164,8 +168,8 @@ export function buildAnthropicRequest({ spec, systemBlocks, messages, tools, max
     : { beta: false, params };
 }
 
-async function callAnthropic({ spec, systemBlocks, messages, tools, maxOutputTokens, timeoutMs, client }) {
-  const request = buildAnthropicRequest({ spec, systemBlocks, messages, tools, maxOutputTokens });
+async function callAnthropic({ spec, systemBlocks, messages, tools, toolChoice, maxOutputTokens, timeoutMs, client }) {
+  const request = buildAnthropicRequest({ spec, systemBlocks, messages, tools, toolChoice, maxOutputTokens });
   const api = anthropicClient(client);
   let response;
   try {
@@ -256,7 +260,7 @@ function anthropicError(error, spec) {
 // ---------------------------------------------------------------------------
 // Gemini (REST, same style as api/_utils/gemini.js)
 
-export function buildGeminiRequest({ spec, systemBlocks, messages, tools, maxOutputTokens }) {
+export function buildGeminiRequest({ spec, systemBlocks, messages, tools, toolChoice = 'auto', maxOutputTokens }) {
   return {
     systemInstruction: { parts: systemBlocks.map((block) => ({ text: block.text })) },
     contents: toGeminiContents(messages, spec),
@@ -268,7 +272,7 @@ export function buildGeminiRequest({ spec, systemBlocks, messages, tools, maxOut
           parameters: toGeminiSchema(tool.inputSchema),
         })),
       }],
-      toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      toolConfig: { functionCallingConfig: { mode: toolChoice === 'none' ? 'NONE' : 'AUTO' } },
     } : {}),
     generationConfig: {
       maxOutputTokens,
@@ -277,10 +281,10 @@ export function buildGeminiRequest({ spec, systemBlocks, messages, tools, maxOut
   };
 }
 
-async function callGemini({ spec, systemBlocks, messages, tools, maxOutputTokens, timeoutMs, env, fetchImpl }) {
+async function callGemini({ spec, systemBlocks, messages, tools, toolChoice, maxOutputTokens, timeoutMs, env, fetchImpl }) {
   const apiKey = String(env?.GEMINI_API_KEY ?? '').trim();
   if (!apiKey) throw new CompanionModelError('Gemini API key is not configured.', { provider: 'gemini', model: spec.model });
-  const body = buildGeminiRequest({ spec, systemBlocks, messages, tools, maxOutputTokens });
+  const body = buildGeminiRequest({ spec, systemBlocks, messages, tools, toolChoice, maxOutputTokens });
   let response;
   try {
     response = await fetchImpl(`${GEMINI_ENDPOINT}/${encodeURIComponent(spec.model)}:generateContent`, {

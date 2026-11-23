@@ -286,6 +286,30 @@ export const PUBLIC_EVAL_CASES = Object.freeze([
     expect: { calls: [{ name: 'get_training_summary' }], noWrites: true, replyMatches: ['80'] },
   },
   {
+    id: 'training-count-ignores-reminders',
+    tags: ['read', 'training'],
+    now: '2026-11-20T19:00:00.000Z',
+    world: {
+      training: [
+        { date: '2026-11-04', name: 'Push', exercises: [{ name: 'Bench Press', best_set: '70kg x 6' }] },
+        { date: '2026-11-11', name: 'lower 1', exercises: [{ name: 'Squat', best_set: '90kg x 5' }, { name: 'Leg Extension', best_set: '50kg x 12' }] },
+      ],
+    },
+    history: [
+      { role: 'assistant', content: 'Promemoria: Palestra GAMBE. Fatto?' },
+      { role: 'user', content: 'si' },
+      { role: 'assistant', content: 'Fatto. Ho segnato il promemoria come completato: Palestra GAMBE.' },
+    ],
+    message: 'quante volte ho fatto gambe sto mese?',
+    expect: {
+      calls: [{ name: 'get_training_summary' }],
+      notCalls: ['list_commitments'],
+      noWrites: true,
+      replyMatches: ['\\b1\\b|una sola|una volta|una sessione|un allenamento'],
+      replyNotMatches: ['\\b2\\b|due volte|conferm|promemoria'],
+    },
+  },
+  {
     id: 'remember-fact',
     tags: ['memory', 'write'],
     message: 'ricordati che sono allergico ai crostacei',

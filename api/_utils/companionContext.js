@@ -12,8 +12,10 @@ import { listRecentCompanionActions } from './companionActionLedger.js';
 import { searchAutobiographicalMemory } from './brainAutobiographicalMemory.js';
 import { listCurrentBeliefs } from './brainBeliefs.js';
 
-export const TIMELINE_LIMIT = 20;
-const HISTORY_ENTRY_MAX_CHARS = 700;
+// About 20 exchanges of WhatsApp/app conversation; older context comes from
+// memories, beliefs and quoted replies.
+export const TIMELINE_LIMIT = 40;
+const HISTORY_ENTRY_MAX_CHARS = 1500;
 const COMMITMENT_LIMIT = 25;
 const RECENT_ACTION_HOURS = 24;
 
