@@ -34,3 +34,6 @@ Thumbs.db
 # Local generated architecture analysis and rest-implementation audit scratch.
 /graphify-out/
 /lifeos-rest-implementation-notes/
+
+# Companion evals: private cases from real conversations and run results. Never commit (public repo).
+/evals/
