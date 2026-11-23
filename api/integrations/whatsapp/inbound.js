@@ -9,6 +9,8 @@ import {
 } from '../../_utils/http.js';
 import { getDebugFlags, sanitizeTraceValue } from '../../_utils/brainTrace.js';
 import { handleBrainChatMessage } from '../../ai/chat.js';
+import { isCompanionCapabilityEnabled } from '../../_utils/companionFlags.js';
+import { handleCompanionChatMessage } from '../../_utils/companionTurn.js';
 import { describeWhatsappSender, requireWhatsappBridgeSecret, validateWhatsappSender } from '../../_utils/whatsappBridge.js';
 import { getActionUserId } from '../../_utils/supabaseAdmin.js';
 import {
@@ -95,8 +97,10 @@ export default async function handler(req, res) {
       recipient: canonicalSender,
       providerMessageId: payload.message_id,
     }) || buildWhatsappClientRequestId({ ...payload, from: canonicalSender }, context.requestId);
+    const brain = selectWhatsappBrainHandler();
+    endpointTrace.brain_engine = brain.engine;
     brainExecutionStarted = true;
-    const result = await handleBrainChatMessage({
+    const result = await brain.handler({
       message: payload.body,
       source: 'whatsapp',
       requestId: context.requestId,
@@ -165,6 +169,14 @@ export default async function handler(req, res) {
     }
     return handleApiError(res, error, context);
   }
+}
+
+// COMPANION_AGENT switches WhatsApp text to the agent Brain (spec step 1).
+// Off, missing or mistyped means the legacy pipeline, read on every request.
+export function selectWhatsappBrainHandler(env = process.env) {
+  return isCompanionCapabilityEnabled('agent', env)
+    ? { engine: 'companion_agent', handler: handleCompanionChatMessage }
+    : { engine: 'legacy_pipeline', handler: handleBrainChatMessage };
 }
 
 function normalizeWhatsappPayload(body = {}) {

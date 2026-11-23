@@ -1,5 +1,54 @@
 # Current session handoff
 
+## Jarvis Companion, 2026-11-23 (read first)
+
+Spec: [jarvis-companion.md](../specs/jarvis-companion.md). Parent issue #9, steps #10–#16.
+
+- **Step 0 (#10) is done and closed.**
+  - It is committed as `a2f97ec` on branch `jarvis/step-0-foundations`, pushed but **not merged**.
+  - A push to `main` deploys production, so merge this branch together with step 1.
+  - Work continues on this branch. Check `git status` and `git branch` first.
+- **What exists:**
+  - the agent loop, persona, tool catalog v1, model adapter, usage ledger with spend guard, and flags (`api/_utils/companion*.js`);
+  - the eval bench (`tests/companion/`, `scripts/evals/`).
+  - Step 0 itself was inert. Step 1 (below) wires it to WhatsApp and real data, behind `COMPANION_AGENT` (off by default). The old Brain still serves the app.
+- **Models** (spec §5.1 and §10):
+  - fast tier `gemini:gemini-3.8-flash`, chosen for zero P1 across 174 runs and a p95 of 18.0s, close to the 20s target;
+  - deep tier `gemini:gemini-3.8-flash@high`, provisional;
+  - Claude is not measured, because the user declined to add `ANTHROPIC_API_KEY` for now.
+- **Budget:**
+  - The Gemini API has about $60 of credits plus $5 of the user's own money. About $3.5 has been spent.
+  - Estimate the cost before each eval run. A full run with 3 models over 87 cases costs about $1.
+- **Not done yet:**
+  - The usage-ledger migration `20261122150000` is NOT applied. Apply it with the step 1 deploy, after explaining it to the user in plain terms.
+  - The private eval cases live in gitignored `evals/private/` (the repo is public). Never commit them or quote them in issues.
+- **User rules:**
+  - Logging a wake or sleep time that the user stated is correct, not an unwanted write.
+  - Keep the real WhatsApp ID in `bridge/whatsapp/README.md` for now.
+- **Step 1 (#11) is built and tested locally (2026-11-23). It is UNCOMMITTED** on `jarvis/step-0-foundations`. The user did not ask for a commit. Run `git status` first; the work lives only in the working tree.
+  - New:
+    - `api/_utils/companionToolExecutors.js`, `companionActionLedger.js`, `companionContext.js` and `companionTurn.js`;
+    - migration `supabase/migrations/20261123120000_companion_step1_commitments.sql`;
+    - `scripts/tests/test-companion-agent.js` (`npm run test:companion-agent`, 13 checks, wired into `npm test`).
+  - Changed:
+    - `inbound.js` (`selectWhatsappBrainHandler`, flag read on each request);
+    - `beginBrainChat` (optional injected `client`/`userId`);
+    - `brainProactiveRules.js` (memo select `*`; `kind='checkin'` goes out once as the question, rule `companion_checkin_due`);
+    - `companionTools.js` (shared `validateCompanionToolInput`; `upsert_commitment` no longer requires title/kind, so updates don't rename);
+    - the persona (refs, open threads, replying-to);
+    - the PGlite test adapter (`delete`, `gt`).
+  - Validation: `npm test` (including `test:brain`), `npm run build` and `git diff --check` all pass. The functions count is still 7.
+  - Eval run (mock world, `gemini-3.8-flash`, 87 cases × 1 run, about $0.62):
+    - 86/87 passed, 0 P1, guarantees 100%, p50 7.0s, p95 15.6s;
+    - the one failure is a private training-history case that ran out of steps (P2). Look at it next.
+    - Budget spent so far is now about $4.1.
+  - Deploy order is in `docs/QA_DEPLOYMENT.md` ("Jarvis Companion Step 1 Deployment"): migrations `20261122150000` and `20261123120000`, then the code with the flag unset, then `COMPANION_AGENT=true` and a redeploy. Explain both migrations to the user in plain terms before applying them. **No schema.sql rerun.**
+  - Still open for #11:
+    - the deploy;
+    - 5–7 days of real use with traces reviewed (zero P1);
+    - p95 latency on real data.
+- **Next:** ask the user whether to commit step 1, then whether to deploy it (merge to `main` deploys production).
+
 ## Mobile bug follow-up, 2026-11-19
 
 After `aa9cb18`, the user again reports Companion's dock higher on iPhone.

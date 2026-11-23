@@ -1,8 +1,9 @@
 // Tool catalog v1 for the Jarvis Companion agent loop (spec §4.10, §5.2).
 //
-// Declarations only: names, descriptions, input schemas and autonomy classes.
-// Executors arrive in step 1; until then the step 0 evals run these
-// declarations against a mock world (tests/companion/mockWorld.js).
+// Declarations: names, descriptions, input schemas and autonomy classes, plus
+// the shared argument validator. Real executors live in
+// companionToolExecutors.js; the evals run the same declarations against a
+// mock world (tests/companion/mockWorld.js).
 //
 // Autonomy classes:
 //   read      no side effects
@@ -87,7 +88,7 @@ export const COMPANION_TOOLS = Object.freeze([
   }, ['note']),
 
   // Do it, mention it in one line (undoable)
-  tool('upsert_commitment', 'mention', 'Create or update something the user must do or attend: reminders ("ricordami", "segna X domani"), tasks, deadlines, promises ("stasera finisco il deck"), recurring obligations, external dates. This is the default for "segna"; use the calendar only when the user explicitly asks for it. Pass commitment_id to update an existing one. Never invent due_time from vague words like "domattina" or "nel pomeriggio".', {
+  tool('upsert_commitment', 'mention', 'Create or update something the user must do or attend: reminders ("ricordami", "segna X domani"), tasks, deadlines, promises ("stasera finisco il deck"), recurring obligations, external dates. This is the default for "segna"; use the calendar only when the user explicitly asks for it. To create, pass title and kind. To update, pass commitment_id and only the fields that change. Never invent due_time from vague words like "domattina" or "nel pomeriggio".', {
     commitment_id: { type: 'string', description: 'Existing commitment to update.' },
     title: { type: 'string', description: 'Short title in Italian.' },
     kind: { type: 'string', enum: ['reminder', 'task', 'deadline', 'promise', 'recurring', 'external_date'] },
@@ -98,7 +99,7 @@ export const COMPANION_TOOLS = Object.freeze([
     intensity: { type: 'string', enum: ['gentle', 'coach', 'drill'], description: 'How hard to chase it; "stammi addosso" means drill.' },
     recurrence: { type: 'string', description: 'For recurring obligations, e.g. "monthly:1" or "weekly:mon".' },
     notes: { type: 'string' },
-  }, ['title', 'kind']),
+  }),
   tool('complete_commitment', 'mention', 'Mark a commitment done.', {
     commitment_id: { type: 'string' },
   }, ['commitment_id']),
@@ -170,4 +171,41 @@ export function isCompanionWriteTool(name) {
 
 export function companionToolsByAutonomy(autonomy) {
   return COMPANION_TOOLS.filter((entry) => entry.autonomy === autonomy);
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const TIME_FIELDS = new Set(['time', 'due_time', 'start_time', 'end_time', 'until_time']);
+const DATE_FIELDS = new Set(['date', 'due_date', 'start_date', 'end_date', 'until_date', 'due_before']);
+
+// Schema-level validation shared by the real executors and the eval mock
+// world. Returns an error message for the model, or null when the shape is
+// valid. Writers still apply the LifeOS validators (validation.js) on top.
+export function validateCompanionToolInput(definition, input) {
+  if (!definition) return 'Unknown tool.';
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return 'Arguments must be an object.';
+  for (const field of definition.inputSchema.required) {
+    if (input[field] === undefined || input[field] === null || input[field] === '') return `Missing required field ${field}.`;
+  }
+  for (const [field, value] of Object.entries(input)) {
+    const schema = definition.inputSchema.properties[field];
+    if (!schema) return `Unknown field ${field}.`;
+    if (value === null || value === undefined) continue;
+    if (schema.enum && !schema.enum.includes(value)) return `Invalid ${field}: use one of ${schema.enum.join(', ')}.`;
+    if (schema.type === 'string' && typeof value !== 'string') return `Invalid ${field}: expected text.`;
+    if (schema.type === 'boolean' && typeof value !== 'boolean') return `Invalid ${field}: expected true or false.`;
+    if ((schema.type === 'number' || schema.type === 'integer') && !Number.isFinite(Number(value))) return `Invalid ${field}: expected a number.`;
+    if (schema.type === 'integer' && !Number.isInteger(Number(value))) return `Invalid ${field}: expected a whole number.`;
+    if (schema.minimum !== undefined && Number(value) < schema.minimum) return `Invalid ${field}: minimum ${schema.minimum}.`;
+    if (schema.maximum !== undefined && Number(value) > schema.maximum) return `Invalid ${field}: maximum ${schema.maximum}.`;
+    if (TIME_FIELDS.has(field) && !TIME_RE.test(String(value))) return `Invalid ${field}: use HH:MM.`;
+    if (DATE_FIELDS.has(field) && !isRealDate(String(value))) return `Invalid ${field}: use a real YYYY-MM-DD date.`;
+  }
+  return null;
+}
+
+function isRealDate(value) {
+  if (!DATE_RE.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }

@@ -5,7 +5,7 @@
 // it validates arguments, records writes, and turns confirm-class tools into
 // pending confirmations instead of executing them.
 
-import { getCompanionTool } from '../../api/_utils/companionTools.js';
+import { getCompanionTool, validateCompanionToolInput } from '../../api/_utils/companionTools.js';
 
 export const DEFAULT_EVAL_NOW = '2026-11-20T17:30:00.000Z'; // Friday 18:30 in Rome
 
@@ -46,11 +46,6 @@ export const DEFAULT_WORLD = Object.freeze({
   recentActions: [],
 });
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-const TIME_FIELDS = new Set(['time', 'due_time', 'start_time', 'end_time', 'until_time']);
-const DATE_FIELDS = new Set(['date', 'due_date', 'start_date', 'end_date', 'until_date', 'due_before']);
-
 export function createMockWorld({ world = {}, now = DEFAULT_EVAL_NOW } = {}) {
   const state = structuredClone({ ...DEFAULT_WORLD, ...world });
   const writes = [];
@@ -81,7 +76,7 @@ export function createMockWorld({ world = {}, now = DEFAULT_EVAL_NOW } = {}) {
     const definition = getCompanionTool(call.name);
     if (!definition) return { ok: false, error: `Unknown tool ${call.name}` };
     const input = call.input ?? {};
-    const problem = validate(definition, input);
+    const problem = validateCompanionToolInput(definition, input);
     if (problem) return { ok: false, error: problem };
 
     if (definition.autonomy === 'read') {
@@ -169,21 +164,6 @@ export function createMockWorld({ world = {}, now = DEFAULT_EVAL_NOW } = {}) {
   }
 
   return { state, writes, pending, reads, executeTool, context };
-}
-
-function validate(definition, input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return 'Arguments must be an object.';
-  for (const field of definition.inputSchema.required) {
-    if (input[field] === undefined || input[field] === null || input[field] === '') return `Missing required field ${field}.`;
-  }
-  for (const [field, value] of Object.entries(input)) {
-    const schema = definition.inputSchema.properties[field];
-    if (!schema) return `Unknown field ${field}.`;
-    if (schema.enum && !schema.enum.includes(value)) return `Invalid ${field}.`;
-    if (TIME_FIELDS.has(field) && value != null && !TIME_RE.test(String(value))) return `Invalid ${field}: use HH:MM.`;
-    if (DATE_FIELDS.has(field) && value != null && !DATE_RE.test(String(value))) return `Invalid ${field}: use YYYY-MM-DD.`;
-  }
-  return null;
 }
 
 export function romeDate(at) {

@@ -85,11 +85,11 @@ Rules:
 - If nothing durable is present, return empty arrays.
 `;
 
-export async function beginBrainChat({ threadId, source, message, requestId, clientRequestId, channelMetadata = null }) {
+export async function beginBrainChat({ threadId, source, message, requestId, clientRequestId, channelMetadata = null, client = null, userId = null }) {
   const normalizedSource = normalizeChatSource(source);
   if (!['app', 'whatsapp'].includes(normalizedSource)) return null;
-  const client = getSupabaseAdmin();
-  const userId = getActionUserId();
+  client ??= getSupabaseAdmin();
+  userId ??= getActionUserId();
   const safeChannelMetadata = channelMetadata && typeof channelMetadata === 'object' ? sanitizeBrainMetadata(channelMetadata) : {};
   const whatsappSender = normalizedSource === 'whatsapp' ? cleanText(canonicalizeWhatsappSender(safeChannelMetadata.whatsapp_sender), 160) : null;
   const whatsappRawSender = normalizedSource === 'whatsapp' ? cleanText(safeChannelMetadata.whatsapp_raw_sender, 160) : null;

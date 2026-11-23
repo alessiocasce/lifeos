@@ -387,6 +387,19 @@ Each step is a GitHub sub-issue of [#9](https://github.com/alessiocasce/lifeos/i
 **Step 1: Agent Brain on WhatsApp (text).** Builds on 0.
 - Scope: agent loop, persona, context assembly, tool catalog v1 with autonomy classes, confirmation guard, action ledger with undo, commitments (memos evolved, plus migration), automatic capture, shared timeline, trace. Behind `COMPANION_AGENT`, WhatsApp only.
 - Done when: evals pass including the guarantees in section 7, p95 < 20s, undo works on every write tool, and 5–7 days of real use have zero P1.
+- Status (2026-11-23): built and tested locally, uncommitted, not deployed.
+  - **Built:**
+    - real tool executors with per-turn idempotency (`companionToolExecutors.js`);
+    - the action ledger with undo, including "annulla" by description (`companionActionLedger.js`);
+    - context assembly with short per-turn refs (c1, e1, a1) instead of UUIDs (`companionContext.js`);
+    - the WhatsApp turn: replay, per-user lock, confirmation gate, quote validation, legacy proactive replies, bare "annulla", agent loop and trace (`companionTurn.js`);
+    - `inbound.js` switching on `COMPANION_AGENT`;
+    - migration `20261123120000` (memo → commitment columns, `brain_action_ledger`, `brain_turn_locks`).
+  - **Decisions:**
+    - Brain-scheduled check-ins are commitments of kind `checkin`. The legacy memo rule sends them once, as the question.
+    - Replies to legacy health/memo check-ins keep the old deterministic resolver until step 2.
+    - The agent path skips the old per-turn memory-extraction model call; durable facts go through `remember`.
+  - **Still open:** the deploy, then the real-use gate and the latency check.
 
 **Step 2: Proactive v2 (text).** Builds on 1.
 - Scope:

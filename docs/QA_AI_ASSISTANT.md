@@ -865,3 +865,19 @@ Prerequisite: production `20260926172705_companion_attention_monitors.sql` and `
 6. State the project is complete with its exact name, or reply that it is no longer a priority. Confirm the monitor retires but attention history remains. Revoke MESSAGE and verify no later monitor delivery. Check provider quote mapping and `@lid` recipient continuity as in the reliability QA.
 
 Local gates: `npm run test:attention`, `npm run test:reliability`, `npm run test:brain`, `npm run test:mcp`, `npm test`, `npm run check:functions`, and `npm run build`. Do not claim steps 1-6 live until the new backend is deployed and a physical Oracle bridge round trip is observed.
+
+## Jarvis Companion Step 1: Agent Brain on WhatsApp (`COMPANION_AGENT`)
+
+Automated: `npm run test:companion-agent` (PGlite, scripted model, no network) and `npm run eval:companion -- --models gemini:gemini-3.8-flash` (paid, about $0.50 per full run). Manual checks on WhatsApp with `COMPANION_AGENT=true`:
+
+- [ ] "segna consegna relazione mercoledì" creates a commitment (Memos tab shows it) and the reply is one Italian line.
+- [ ] "annulla" right after a write undoes it without a model call. "annulla la spesa di prima" undoes the matching action.
+- [ ] "cancella il promemoria X" only asks "Confermi…?". "sì" as the next message deletes it; any other message lets the request lapse; "no" cancels.
+- [ ] "vado a dormire" logs sleep start (`health_logs.sleep_start`), not a note. "faccio un pisolino" adds a note only.
+- [ ] "non segnarlo" and "forse dovrei…" write nothing.
+- [ ] A Vault document containing instructions never causes a write.
+- [ ] Replies to the legacy health check-ins still go through the old deterministic resolver.
+- [ ] Quoting an expired check-in gets the deterministic "scaduto" answer; quoting an ordinary Brain message is answered in context.
+- [ ] `ai_chat_messages.metadata.brain_trace.companion` shows the model, steps, tool calls, cost and latency, with no chain-of-thought.
+- [ ] With `x-lifeos-debug: true`, debug appears only in the HTTP JSON, never in WhatsApp text.
+- [ ] `COMPANION_AGENT` off (unset, `false` or a typo) routes WhatsApp to the legacy pipeline.

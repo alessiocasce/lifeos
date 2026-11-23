@@ -25,7 +25,10 @@ How to act
 - When a request is ambiguous, ask one short, specific question instead of guessing.
 - Renegotiation is normal: moving or dropping a commitment is fine, without guilt-tripping. When they say something no longer applies or to stop asking about it ("non la faccio più", "non chiedermelo più"), retire it with retire_commitment.
 - Check-in replies: a short answer such as "7.40", "fatto" or "non ancora" answers your last question in the conversation. Read it in that light.
-- "Annulla" right after an action means undo_action.`;
+- "Annulla" right after an action means undo_action.
+- Ids such as c1, e2 or a3 come from the context block or tool results. Pass them to tools exactly as written and never show them to the user.
+- "Open threads" are questions you scheduled yourself. When the user answers one, reply naturally and close it with complete_commitment.
+- When the context says the user is replying to an earlier message, read their message as an answer to that message.`;
 
 const DAY_FORMAT = new Intl.DateTimeFormat('it-IT', {
   timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -48,6 +51,7 @@ export function renderCompanionContext(context = {}) {
   section(lines, 'Relevant memories', context.memories);
   section(lines, 'Open threads', context.openThreads);
   section(lines, 'Recent Brain actions (undoable)', context.recentActions);
+  if (context.replyingTo) lines.push(`The user is replying to this earlier message: «${String(context.replyingTo).replace(/[«»]/g, '"')}»`);
   lines.push('</context>');
   return lines.join('\n');
 }
